@@ -29,8 +29,8 @@ visual = ["pillow","pillow_heif","scikit-image","opencv-contrib-python-headless"
 ml = ["scikit-learn","xgboost"]
 web = ["requests-html","beautifulsoup4","lxml[html_clean]","playwright","cssselect"]
 ui = ["gradio","gradio-client","spaces"]
-all = ["definers[ai]","definers[audio]","definers[visual]","definers[ml]","definers[web]","definers[ui]","definers[gpu]"]
 gpu = ["cupy-cuda12x","cuml-cu12","cudf-cu12"]
+all = ["definers[ai]","definers[audio]","definers[visual]","definers[ml]","definers[web]","definers[ui]","definers[gpu]"]
 
 [project.urls]
 "Homepage" = "https://github.com/YaronKoresh/definers"
