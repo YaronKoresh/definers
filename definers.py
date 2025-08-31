@@ -40,6 +40,35 @@ import urllib.request
 import asyncio
 import concurrent
 from concurrent.futures import ProcessPoolExecutor
+from urllib.parse import quote
+import ctypes
+from ctypes.util import find_library
+import io
+import tarfile
+import hashlib
+
+import collections
+import collections.abc
+collections.MutableSequence = collections.abc.MutableSequence
+
+def init_cupy_numpy():
+    import numpy as _np
+    try:
+        import cupy as np
+    except Exception as e:
+        catch(e)
+        import numpy as np
+
+init_cupy_numpy()
+
+if not hasattr(np,float):
+    np.float = np.float64
+if not hasattr(np,int):
+    np.int = np.int32
+
+language_codes = {'af': 'afrikaans', 'sq': 'albanian', 'am': 'amharic', 'ar': 'arabic', 'hy': 'armenian', 'as': 'assamese', 'ay': 'aymara', 'az': 'azerbaijani', 'bm': 'bambara', 'eu': 'basque', 'be': 'belarusian', 'bn': 'bengali', 'bho': 'bhojpuri', 'bs': 'bosnian', 'bg': 'bulgarian', 'ca': 'catalan', 'ceb': 'cebuano', 'ny': 'chichewa', 'zh-CN': 'chinese (simplified)', 'zh-TW': 'chinese (traditional)', 'co': 'corsican', 'hr': 'croatian', 'cs': 'czech', 'da': 'danish', 'dv': 'dhivehi', 'doi': 'dogri', 'nl': 'dutch', 'en': 'english', 'eo': 'esperanto', 'et': 'estonian', 'ee': 'ewe', 'tl': 'filipino', 'fi': 'finnish', 'fr': 'french', 'fy': 'frisian', 'gl': 'galician', 'ka': 'georgian', 'de': 'german', 'el': 'greek', 'gn': 'guarani', 'gu': 'gujarati', 'ht': 'haitian creole', 'ha': 'hausa', 'haw': 'hawaiian', 'iw': 'hebrew', 'he': 'hebrew', 'hi': 'hindi', 'hmn': 'hmong', 'hu': 'hungarian', 'is': 'icelandic', 'ig': 'igbo', 'ilo': 'ilocano', 'id': 'indonesian', 'ga': 'irish', 'it': 'italian', 'ja': 'japanese', 'jw': 'javanese', 'kn': 'kannada', 'kk': 'kazakh', 'km': 'khmer', 'rw': 'kinyarwanda', 'gom': 'konkani', 'ko': 'korean', 'kri': 'krio', 'ku': 'kurdish (kurmanji)', 'ckb': 'kurdish (sorani)', 'ky': 'kyrgyz', 'lo': 'lao', 'la': 'latin', 'lv': 'latvian', 'ln': 'lingala', 'lt': 'lithuanian', 'lg': 'luganda', 'lb': 'luxembourgish', 'mk': 'macedonian', 'mai': 'maithili', 'mg': 'malagasy', 'ms': 'malay', 'ml': 'malayalam', 'mt': 'maltese', 'mi': 'maori', 'mr': 'marathi', 'mni-Mtei': 'meiteilon (manipuri)', 'lus': 'mizo', 'mn': 'mongolian', 'my': 'myanmar', 'ne': 'nepali', 'no': 'norwegian', 'or': 'odia (oriya)', 'om': 'oromo', 'ps': 'pashto', 'fa': 'persian', 'pl': 'polish', 'pt': 'portuguese', 'pa': 'punjabi', 'qu': 'quechua', 'ro': 'romanian', 'ru': 'russian', 'sm': 'samoan', 'sa': 'sanskrit', 'gd': 'scots gaelic', 'nso': 'sepedi', 'sr': 'serbian', 'st': 'sesotho', 'sn': 'shona', 'sd': 'sindhi', 'si': 'sinhala', 'sk': 'slovak', 'sl': 'slovenian', 'so': 'somali', 'es': 'spanish', 'su': 'sundanese', 'sw': 'swahili', 'sv': 'swedish', 'tg': 'tajik', 'ta': 'tamil', 'tt': 'tatar', 'te': 'telugu', 'th': 'thai', 'ti': 'tigrinya', 'ts': 'tsonga', 'tr': 'turkish', 'tk': 'turkmen', 'ak': 'twi', 'uk': 'ukrainian', 'ur': 'urdu', 'ug': 'uyghur', 'uz': 'uzbek', 'vi': 'vietnamese', 'cy': 'welsh', 'xh': 'xhosa', 'yi': 'yiddish', 'yo': 'yoruba', 'zu': 'zulu'}
+
+FFMPEG_URL = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
 
 SYSTEM_MESSAGE = "You are a helpful and concise AI assistant. Provide accurate and relevant information to the user's queries in a friendly and clear manner."
 
@@ -50,6 +79,8 @@ tasks = {
     "answer": "microsoft/Phi-4-multimodal-instruct",
     "summary": "t5-large",
     "music": "facebook/magnet-medium-30secs",
+    "speech-recognition": "openai/whisper-large-v3",
+    "audio-classification": "MIT/ast-finetuned-audioset-10-10-0.4593",
 }
 
 MODELS = {
@@ -60,6 +91,9 @@ MODELS = {
     "answer": None,
     "summary": None,
     "music": None,
+    "speech-recognition": None,
+    "audio-classification": None,
+    "tts": None,
 }
 
 TOKENIZERS = {
@@ -154,6 +188,196 @@ random.shuffle(negative_keywords)
 _negative_prompt_ = ", ".join(negative_keywords)
 
 _base_prompt_ = "cinematic masterpiece, ultra realistic, 8k, best quality, sharp focus, professional color grading"
+
+def get_os_name():
+    return platform.system()
+
+def is_admin_windows():
+    try:
+        return ctypes.windll.shell32.IsUserAnAdmin()
+    except:
+        return False
+
+def _install_ffmpeg_windows():
+    print("[INFO] Running FFmpeg installer for Windows...")
+
+    if not is_admin_windows():
+        print("[ERROR] This script requires Administrator privileges to run on Windows.")
+        print("[INFO] Please re-run this script from a terminal with Administrator rights.")
+        sys.exit(1)
+
+    print("\n[INFO] Attempting to install using Winget (Windows Package Manager)...")
+    try:
+        result = subprocess.run(
+            [
+                "winget", "install", "--id=Gyan.FFmpeg.Essentials", "-e",
+                "--accept-source-agreements", "--accept-package-agreements"
+            ],
+            check=True,
+            capture_output=True,
+            text=True
+        )
+        print("[SUCCESS] FFmpeg has been installed via Winget.")
+        print("[INFO] You may need to restart your terminal for the PATH changes to take effect.")
+        return
+    except FileNotFoundError:
+        print("[WARN] Winget command not found. It might not be installed or in the PATH.")
+    except subprocess.CalledProcessError as e:
+        print(f"[WARN] Winget installation failed with exit code {e.returncode}.")
+        print(f"[DEBUG] Winget stderr: {e.stderr}")
+
+    print("\n[INFO] Winget installation failed or was not available. Attempting manual download...")
+
+    temp_dir = tempfile.gettempdir()
+    zip_path = os.path.join(temp_dir, "ffmpeg.zip")
+    extract_path = os.path.join(temp_dir, "ffmpeg_extracted")
+    program_files = os.environ.get("ProgramFiles", "C:\\Program Files")
+    ffmpeg_install_dir = os.path.join(program_files, "ffmpeg")
+
+    try:
+        print(f"[INFO] Downloading latest FFmpeg essentials build from {FFMPEG_URL}...")
+        with requests.get(FFMPEG_URL, stream=True) as r:
+            r.raise_for_status()
+            with open(zip_path, 'wb') as f:
+                for chunk in r.iter_content(chunk_size=8192):
+                    f.write(chunk)
+        print("[SUCCESS] Download complete.")
+
+        print(f"[INFO] Extracting FFmpeg to {extract_path}...")
+        if os.path.exists(extract_path):
+            shutil.rmtree(extract_path)
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(extract_path)
+        print("[SUCCESS] Extraction complete.")
+
+        extracted_files = os.listdir(extract_path)
+        if not extracted_files:
+            raise IOError("Extraction failed, no files found in temporary directory.")
+        
+        ffmpeg_build_dir = os.path.join(extract_path, extracted_files[0])
+        ffmpeg_bin_dir = os.path.join(ffmpeg_build_dir, "bin")
+
+        print(f"[INFO] Moving FFmpeg binaries to {ffmpeg_install_dir}...")
+        if os.path.exists(ffmpeg_install_dir):
+            shutil.rmtree(ffmpeg_install_dir)
+        shutil.move(ffmpeg_bin_dir, ffmpeg_install_dir)
+        print("[SUCCESS] Binaries moved.")
+
+        print("[INFO] Adding FFmpeg to the system PATH...")
+        subprocess.run(["setx", "/M", "PATH", f"%PATH%;{ffmpeg_install_dir}"], check=True)
+        print("[SUCCESS] FFmpeg added to system PATH.")
+        print("[INFO] IMPORTANT: You must restart your terminal or PC for the new PATH to be recognized.")
+
+    except Exception as e:
+        print(f"\n[ERROR] An error occurred during manual installation: {e}")
+        sys.exit(1)
+    finally:
+        print("[INFO] Cleaning up temporary files...")
+        if os.path.exists(zip_path):
+            os.remove(zip_path)
+        if os.path.exists(extract_path):
+            shutil.rmtree(extract_path)
+        print("[INFO] Cleanup complete.")
+
+def _install_ffmpeg_linux():
+    print("[INFO] Running FFmpeg installer for Linux...")
+    
+    if os.geteuid() != 0:
+        print("[WARN] This script needs sudo privileges to install packages.")
+        print("[INFO] It will likely prompt you for your password.")
+
+    package_managers = {
+        'apt': {
+            'update_cmd': ['sudo', 'apt-get', 'update'],
+            'install_cmd': ['sudo', 'apt-get', 'install', 'ffmpeg', '-y']
+        },
+        'dnf': {
+            'install_cmd': ['sudo', 'dnf', 'install', 'ffmpeg', '-y']
+        },
+        'pacman': {
+            'install_cmd': ['sudo', 'pacman', '-S', 'ffmpeg', '--noconfirm']
+        }
+    }
+
+    selected_pm = None
+    for pm in package_managers:
+        if shutil.which(pm):
+            selected_pm = pm
+            break
+
+    if not selected_pm:
+        print("[ERROR] Could not detect a supported package manager (apt, dnf, pacman).")
+        print("[INFO] Please install FFmpeg manually.")
+        sys.exit(1)
+
+    print(f"[INFO] Detected package manager: {selected_pm}")
+
+    try:
+        pm_cmds = package_managers[selected_pm]
+        
+        if 'update_cmd' in pm_cmds:
+            print(f"[INFO] Running package list update ({selected_pm})...")
+            subprocess.run(pm_cmds['update_cmd'], check=True)
+
+        print(f"[INFO] Installing FFmpeg using {selected_pm}...")
+        subprocess.run(pm_cmds['install_cmd'], check=True)
+        
+        print("\n[SUCCESS] FFmpeg installed successfully.")
+
+    except subprocess.CalledProcessError as e:
+        print(f"\n[ERROR] The installation command failed with exit code {e.returncode}.")
+        print("[INFO] Please check the output above for errors from the package manager.")
+        sys.exit(1)
+    except Exception as e:
+        print(f"\n[ERROR] An unexpected error occurred: {e}")
+        sys.exit(1)
+
+def install_ffmpeg():
+    system = get_os_name()
+    if system == "Windows":
+        _install_ffmpeg_windows()
+    elif system == "Linux":
+        _install_ffmpeg_linux()
+    else:
+        print(f"[ERROR] Unsupported operating system: {system}.")
+        print("[INFO] This script only supports Windows and Linux.")
+        sys.exit(1)
+
+def install_audio_deps():
+    os_name = get_os_name()
+    install_dir = os.path.join(os.path.expanduser("~"), "app_dependencies")
+    os.makedirs(install_dir, exist_ok=True)
+    if os_name == "Linux":
+        print("Detected Linux. Installing system dependencies with apt-get...")
+        dependencies_apt = ["rubberband-cli", "fluidsynth", "fluid-soundfont-gm", "build-essential"]
+        run("apt-get update -y")
+        run(f"apt-get install -y {' '.join(dependencies_apt)}")
+    elif os_name == "Windows":
+        print("Detected Windows. Automating dependency installation...")
+        print(f"Dependencies will be installed in: {install_dir}")
+        rubberband_url = "https://breakfastquay.com/files/releases/rubberband-3.3.0-gpl-executable-windows.zip"
+        fluidsynth_url = "https://github.com/FluidSynth/fluidsynth/releases/download/v2.3.5/fluidsynth-2.3.5-win64.zip"
+        soundfont_url = "https://github.com/FluidSynth/fluidsynth/raw/master/sf2/FluidR3_GM.sf2"
+        soundfont_path = os.path.join(install_dir, "soundfonts", "FluidR3_GM.sf2")
+        rubberband_extract_path = os.path.join(install_dir, "rubberband")
+        if not any("rubberband" in s for s in os.environ["PATH"]):
+            if download_and_unzip(rubberband_url, rubberband_extract_path):
+                extracted_dirs = [d for d in os.listdir(rubberband_extract_path) if os.path.isdir(os.path.join(rubberband_extract_path, d))]
+                if extracted_dirs:
+                    rubberband_bin_path = os.path.join(rubberband_extract_path, extracted_dirs[0])
+                    add_to_path_windows(rubberband_bin_path)
+        fluidsynth_extract_path = os.path.join(install_dir, "fluidsynth")
+        if not any("fluidsynth" in s for s in os.environ["PATH"]):
+            if download_and_unzip(fluidsynth_url, fluidsynth_extract_path):
+                fluidsynth_bin_path = os.path.join(fluidsynth_extract_path, "bin")
+                add_to_path_windows(fluidsynth_bin_path)
+        if not os.path.exists(soundfont_path):
+            os.makedirs(os.path.dirname(soundfont_path), exist_ok=True)
+            print("Downloading SoundFont for MIDI playback...")
+            download_file(soundfont_url, soundfont_path)
+    else:
+        print(f"Unsupported OS: {os_name}. Manual installation of system dependencies may be required.")
+    print("\nInstalling Python packages with pip...")
 
 def merge_system_message(data):
     text = ""
@@ -310,14 +534,6 @@ def answer(history: list):
 
     response = MODELS["answer"].generate(prompt=prompt, max_length=200, beam_width=16, **lsts)
     return response
-
-def init_cupy_numpy():
-    import numpy as _np
-    try:
-        import cupy as np
-    except Exception as e:
-        catch(e)
-        import numpy as np
 
 def linear_regression(X, y, learning_rate=0.01, epochs=50):
     m, n = X.shape
@@ -1646,7 +1862,6 @@ def predict(prediction_file: str, model_path: str):
     return output_filename
 
 def lang_code_to_name(code):
-    language_codes = {'af': 'afrikaans', 'sq': 'albanian', 'am': 'amharic', 'ar': 'arabic', 'hy': 'armenian', 'as': 'assamese', 'ay': 'aymara', 'az': 'azerbaijani', 'bm': 'bambara', 'eu': 'basque', 'be': 'belarusian', 'bn': 'bengali', 'bho': 'bhojpuri', 'bs': 'bosnian', 'bg': 'bulgarian', 'ca': 'catalan', 'ceb': 'cebuano', 'ny': 'chichewa', 'zh-CN': 'chinese (simplified)', 'zh-TW': 'chinese (traditional)', 'co': 'corsican', 'hr': 'croatian', 'cs': 'czech', 'da': 'danish', 'dv': 'dhivehi', 'doi': 'dogri', 'nl': 'dutch', 'en': 'english', 'eo': 'esperanto', 'et': 'estonian', 'ee': 'ewe', 'tl': 'filipino', 'fi': 'finnish', 'fr': 'french', 'fy': 'frisian', 'gl': 'galician', 'ka': 'georgian', 'de': 'german', 'el': 'greek', 'gn': 'guarani', 'gu': 'gujarati', 'ht': 'haitian creole', 'ha': 'hausa', 'haw': 'hawaiian', 'iw': 'hebrew', 'he': 'hebrew', 'hi': 'hindi', 'hmn': 'hmong', 'hu': 'hungarian', 'is': 'icelandic', 'ig': 'igbo', 'ilo': 'ilocano', 'id': 'indonesian', 'ga': 'irish', 'it': 'italian', 'ja': 'japanese', 'jw': 'javanese', 'kn': 'kannada', 'kk': 'kazakh', 'km': 'khmer', 'rw': 'kinyarwanda', 'gom': 'konkani', 'ko': 'korean', 'kri': 'krio', 'ku': 'kurdish (kurmanji)', 'ckb': 'kurdish (sorani)', 'ky': 'kyrgyz', 'lo': 'lao', 'la': 'latin', 'lv': 'latvian', 'ln': 'lingala', 'lt': 'lithuanian', 'lg': 'luganda', 'lb': 'luxembourgish', 'mk': 'macedonian', 'mai': 'maithili', 'mg': 'malagasy', 'ms': 'malay', 'ml': 'malayalam', 'mt': 'maltese', 'mi': 'maori', 'mr': 'marathi', 'mni-Mtei': 'meiteilon (manipuri)', 'lus': 'mizo', 'mn': 'mongolian', 'my': 'myanmar', 'ne': 'nepali', 'no': 'norwegian', 'or': 'odia (oriya)', 'om': 'oromo', 'ps': 'pashto', 'fa': 'persian', 'pl': 'polish', 'pt': 'portuguese', 'pa': 'punjabi', 'qu': 'quechua', 'ro': 'romanian', 'ru': 'russian', 'sm': 'samoan', 'sa': 'sanskrit', 'gd': 'scots gaelic', 'nso': 'sepedi', 'sr': 'serbian', 'st': 'sesotho', 'sn': 'shona', 'sd': 'sindhi', 'si': 'sinhala', 'sk': 'slovak', 'sl': 'slovenian', 'so': 'somali', 'es': 'spanish', 'su': 'sundanese', 'sw': 'swahili', 'sv': 'swedish', 'tg': 'tajik', 'ta': 'tamil', 'tt': 'tatar', 'te': 'telugu', 'th': 'thai', 'ti': 'tigrinya', 'ts': 'tsonga', 'tr': 'turkish', 'tk': 'turkmen', 'ak': 'twi', 'uk': 'ukrainian', 'ur': 'urdu', 'ug': 'uyghur', 'uz': 'uzbek', 'vi': 'vietnamese', 'cy': 'welsh', 'xh': 'xhosa', 'yi': 'yiddish', 'yo': 'yoruba', 'zu': 'zulu'}
     return language_codes[code]
 
 def init_logger():
@@ -2356,7 +2571,7 @@ def find_package_paths(package_name):
     unique_paths = list(set(package_paths_found))
     return unique_paths
 
-def tmp(suffix=".data"):
+def tmp(suffix:str=".data", keep:bool=True):
     if not suffix.startswith("."):
         if len(suffix.split(".")) > 1:
             suffix = suffix.split(".")
@@ -2365,6 +2580,8 @@ def tmp(suffix=".data"):
                 suffix = "tmp"
         suffix = "." + suffix
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as temp:
+        if not keep:
+            delete(temp.name)
         return temp.name
 
 def get_process_pid(process_name):
@@ -2465,6 +2682,14 @@ def save(path, text=""):
     os.makedirs( str(Path(path).parent), exist_ok=True)
     with open(path, "w+", encoding="utf8") as file:
         file.write( str(text) )
+
+def save_temp_text(text_content):
+    if not text_content:
+        return None
+    temp_path = tmp()
+    with open(temp_path, "w", encoding="utf-8") as f:
+        f.write(text_content)
+    return temp_path
 
 def run_linux(command, silent=False, env={}):
     import pty
@@ -3410,7 +3635,22 @@ def init_pretrained_model(task:str,turbo:bool=False):
 
     # quantization_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=dtype(), use_double_quant=True, bnb_4bit_quant_type="nf4")
 
-    if task in ["detect"]:
+    elif task in ["tts"]:
+
+        from chatterbox.tts import ChatterboxTTS
+        model = ChatterboxTTS.from_pretrained(device=device())
+
+    elif task in ["speech-recognition"]:
+
+        from transformers import pipeline
+        model = pipeline("automatic-speech-recognition", model=tasks["speech-recognition"])
+
+    elif task in ["audio-classification"]:
+
+        from transformers import pipeline
+        model = pipeline("audio-classification", model=tasks["audio-classification"])
+
+    elif task in ["detect"]:
 
         from transformers import pipeline, AutoProcessor, GenerationConfig, AutoConfig, AutoModel, TFAutoModel, T5ForConditionalGeneration, T5Tokenizer, AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
@@ -3424,7 +3664,6 @@ def init_pretrained_model(task:str,turbo:bool=False):
 
         from audiocraft.models import MAGNeT
         model = MAGNeT.get_pretrained(tasks[task])
-        # model = torch.compile(model)
 
     elif task in ["answer"]:
 
@@ -3481,7 +3720,7 @@ def init_pretrained_model(task:str,turbo:bool=False):
                 model.enable_sequential_cpu_offload()
                 model.enable_attention_slicing(1)
     except Exception as e:
-        catch(e)
+        pass
 
     MODELS[task] = model
 
@@ -4418,3 +4657,629 @@ def init_chat( high_performance:bool = True ):
 
     chatbot = gr.Chatbot(elem_id="chatbot", bubble_full_width=False, type="messages")
     return gr.ChatInterface(fn=get_chat_response, type="messages", chatbot=chatbot, multimodal=True, theme=gr.themes.Citrus(), title="Your AI assistant", css=css(), save_history=True, show_progress="full")
+
+def download_file(url, destination):
+    import requests
+    try:
+        print(f"Downloading from {url} to {destination}...")
+        response = requests.get(url, stream=True)
+        response.raise_for_status()
+        with open(destination, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+        print("Download successful.")
+        return True
+    except Exception as e:
+        print(f"Error downloading file: {e}")
+        return False
+
+def download_and_unzip(url, extract_to):
+    import requests
+    try:
+        print(f"Downloading from {url}...")
+        response = requests.get(url, stream=True)
+        response.raise_for_status()
+        with zipfile.ZipFile(io.BytesIO(response.content)) as z:
+            print(f"Extracting to {extract_to}...")
+            z.extractall(extract_to)
+        print("Download and extraction successful.")
+        return True
+    except requests.exceptions.RequestException as e:
+        print(f"Error downloading file: {e}")
+    except zipfile.BadZipFile:
+        print("Error: Downloaded file is not a valid zip file.")
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+    return False
+
+def add_to_path_windows(folder_path):
+    print(f"Adding {folder_path} to user PATH...")
+    command = f'setx PATH "{folder_path};%PATH%"'
+    result = run(command)
+    if result:
+        print(f"Successfully added {folder_path} to PATH. Please restart your terminal for changes to take effect.")
+    else:
+        print(f"Failed to add {folder_path} to PATH.")
+
+def rvc_to_onnx(model_path):
+    if not os.path.exists("infer") and not os.path.exists("infer/"):
+        logger.info("Infer module not found, downloading...")
+        google_drive_download( id="1kqMYQskvVKwKglcWQsK2Q5G3yPahnbtH", dest='./infer.zip' )
+
+    try:
+        from .infer.modules.onnx.export import export_onnx as eo
+        eo( model_path, model_path.replace( ".pth" , "" )+".onnx" )
+        logger.info("ONNX export complete.")
+        return model_path.replace( ".pth" , "" )+".onnx"
+    except ImportError:
+        logger.error("Failed to import ONNX export module. Ensure 'infer' directory is correctly set up.")
+        catch(ImportError("Failed to import ONNX export module."))
+    except Exception as e:
+        logger.error(f"An error occurred during ONNX export!")
+        catch(e)
+
+def init_rvc():
+    logger.info("Initializing RVC by downloading necessary files.")
+    file_ids = {
+        "configs": "1dIWJ9iP-nLOUw8eflcHFH3RwFWKNepVW",
+        "assets": "1THxR2rRnTx1qv21TZUuCew0G6XlJZJeY",
+        "docs": "1LSq2gJJpLMwjkjtDo0urgrIC2eJ9QVDF",
+        "i18n": "1bQ4pIZxxpnDknpG63hRwoY10b2jx_RwY",
+        "infer": "1kqMYQskvVKwKglcWQsK2Q5G3yPahnbtH",
+        "logs": "1fNMl60ga8OMb4aUvnXzrFIExphWBbHXR",
+        "tools": "1neqVUNipdXukEpImwZUU8O3aQdXR1vDg",
+    }
+    for name, file_id in file_ids.items():
+        dest_path = f"./{name}.zip"
+        logger.info(f"Downloading {name} ({file_id}) to {dest_path}")
+        try:
+            google_drive_download(id=file_id, dest=dest_path)
+
+        except Exception as e:
+            logger.error(f"Failed to download {name}: {e}")
+            catch(e)
+    logger.info("RVC initialization complete.")
+
+def export_files_rvc(experiment: str):
+    logger.info(f"Exporting files for experiment: {experiment}")
+    now_dir = os.getcwd()
+    weight_root = os.path.join(now_dir, "assets", "weights")
+    index_root = os.path.join(now_dir, "logs")
+    exp_path = os.path.join(index_root, experiment)
+
+    latest_checkpoint_filename = find_latest_checkpoint(weight_root, experiment)
+
+    if latest_checkpoint_filename is None:
+        error_message = f"Error: No latest checkpoint found for experiment '{experiment}' in '{exp_path}'. Cannot export."
+        logger.error(error_message)
+        return []
+
+    pth_path = os.path.join(weight_root, latest_checkpoint_filename)
+    logger.info(f"Found latest checkpoint: {pth_path}")
+
+    index_file = ""
+    for root, dirs, files in os.walk(exp_path, topdown=False):
+        for name in files:
+            if name.endswith(".index") and "trained" not in name:
+                index_file = os.path.join(root, name)
+                logger.info(f"Found index file: {index_file}")
+                break
+        if index_file:
+            break
+
+    onnx_path = rvc_to_onnx(pth_path)
+
+    exported_files = [pth_path]
+    if os.path.exists(onnx_path):
+        exported_files.append(onnx_path)
+        logger.info(f"Added ONNX file to exported list: {onnx_path}")
+    else:
+        logger.warning(f"ONNX file not found after export attempt: {onnx_path}")
+
+    if os.path.exists(index_file):
+        exported_files.append(index_file)
+        logger.info(f"Added index file to exported list: {index_file}")
+    else:
+         logger.warning(f"Index file not found: {index_file}")
+
+
+    logger.info(f"Exported files: {exported_files}")
+    return exported_files
+
+
+def find_latest_checkpoint(folder_path: str, model_name: str) -> str | None:
+    logger.info(f"Searching for latest checkpoint in '{folder_path}' with model name '{model_name}'")
+    if not os.path.isdir(folder_path):
+        logger.error(f"Error: Folder not found at {folder_path}")
+        return None
+
+    pattern = re.compile(rf"^{re.escape(model_name)}_e(\d+)_s(\d+)\.pth$")
+
+    latest_checkpoint = None
+    latest_epoch = -1
+    latest_global_step = -1
+
+    try:
+        for filename in os.listdir(folder_path):
+            match = pattern.match(filename)
+            if match:
+                epoch = int(match.group(1))
+                global_step = int(match.group(2))
+
+                if epoch > latest_epoch:
+                    latest_epoch = epoch
+                    latest_global_step = global_step
+                    latest_checkpoint = filename
+                elif epoch == latest_epoch and global_step > latest_global_step:
+                    latest_global_step = global_step
+                    latest_checkpoint = filename
+
+    except Exception as e:
+        logger.error(f"An error occurred while scanning the folder for checkpoints: {e}")
+        return None
+
+    if latest_checkpoint:
+        logger.info(f"Latest checkpoint found: {latest_checkpoint}")
+    else:
+        logger.warning(f"No checkpoint found matching the pattern in '{folder_path}'")
+
+    return latest_checkpoint
+
+
+def train_model_rvc(experiment: str, path: str, lvl: int = 1):
+    logger.info(f"Starting RVC training for experiment: {experiment}")
+
+    import torch
+
+
+    from .configs.config import Config
+    from .i18n.i18n import I18nAuto
+
+    now_dir = os.getcwd()
+    index_root = os.path.join(now_dir, "logs")
+
+    config = Config()
+
+
+    gpus = "-".join([str(i) for i in range(torch.cuda.device_count())]) if torch.cuda.is_available() else ""
+    gpu_memories = [int(torch.cuda.get_device_properties(i).total_memory / 1024**3 + 0.4) for i in range(torch.cuda.device_count())] if torch.cuda.is_available() else [0]
+    default_batch_size = math.floor(min(gpu_memories) // 2) if gpu_memories and min(gpu_memories) > 0 else 1
+    if default_batch_size == 0:
+        default_batch_size = 1
+
+    exp_dir = experiment
+    exp_path = os.path.join(index_root, exp_dir)
+    logger.info(f"Experiment directory: {exp_path}")
+
+    directory(os.path.join(exp_path, "1_16k_wavs"))
+    directory(os.path.join(exp_path, "0_gt_wavs"))
+    input_root = os.path.join(exp_path, "input_root")
+    directory(input_root)
+
+
+    input_path = os.path.join(input_root, "input.wav")
+    logger.info(f"Moving input audio '{path}' to '{input_path}'")
+    try:
+        move(path, input_path)
+    except Exception as e:
+        logger.error(f"Failed to move input audio file: {e}")
+        catch(e)
+        return None
+
+    filelist_path = os.path.join(exp_path,"filelist.txt")
+    logger.info(f"Creating filelist: {filelist_path}")
+    try:
+        write(filelist_path)
+
+    except Exception as e:
+        logger.error(f"Failed to create filelist.txt: {e}")
+        catch(e)
+        return None
+
+
+    sr = 96000
+    n_p = int(_np.ceil(config.n_cpu / 1.5))
+    log_file_preprocess = os.path.join(exp_path, "preprocess.log")
+
+    f0method = "harvest"
+    if_f0 = True
+    gpus_rmvpe = f"{gpus}-{gpus}"
+    log_file_f0_feature = os.path.join(exp_path, "extract_f0_feature.log")
+
+
+    logger.info("Starting preprocessing...")
+    try:
+        with open(log_file_preprocess, 'w') as f_preprocess:
+            cmd_preprocess = f'"{config.python_cmd}" infer/modules/train/preprocess.py "{input_root}" {sr} {n_p} "{exp_path}"'
+            logger.info("Execute: " + cmd_preprocess)
+            subprocess.run(cmd_preprocess, shell=True, check=True, stdout=f_preprocess, stderr=subprocess.STDOUT)
+
+        with open(log_file_preprocess, 'r') as f_preprocess:
+            log_content = f_preprocess.read()
+            logger.info("Preprocessing Log:\n" + log_content)
+
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Preprocessing failed with return code {e.returncode}: {e}")
+        logger.error(f"Preprocessing output:\n{e.stdout.decode() if e.stdout else 'N/A'}\n{e.stderr.decode() if e.stderr else 'N/A'}")
+        catch(e)
+        return None
+    except Exception as e:
+        logger.error(f"An unexpected error occurred during preprocessing: {e}")
+        catch(e)
+        return None
+    logger.info("Preprocessing complete.")
+
+    logger.info("Starting feature extraction...")
+    try:
+        with open(log_file_f0_feature, 'w') as f_f0_feature:
+            if if_f0:
+                logger.info(f"Extracting F0 using method: {f0method}")
+                if f0method != "rmvpe_gpu":
+                    cmd_f0 = f'"{config.python_cmd}" infer/modules/train/extract/extract_f0_print.py "{exp_path}" {n_p} {f0method}'
+                    logger.info("Execute: " + cmd_f0)
+                    subprocess.run(cmd_f0, shell=True, check=True, stdout=f_f0_feature, stderr=subprocess.STDOUT)
+                else:
+                    gpus_rmvpe_split = gpus_rmvpe.split("-")
+                    leng = len(gpus_rmvpe_split)
+                    ps = []
+                    logger.info(f"Using {leng} GPUs for RMVPE extraction: {gpus_rmvpe_split}")
+                    for idx, n_g in enumerate(gpus_rmvpe_split):
+                        cmd_f0_rmvpe = f'"{config.python_cmd}" infer/modules/train/extract/extract_f0_rmvpe.py {leng} {idx} {n_g} "{exp_path}" {config.is_half}'
+                        logger.info(f"Execute (GPU {n_g}): " + cmd_f0_rmvpe)
+                        p = thread(run, cmd_f0_rmvpe)
+                        ps.append(p)
+                    wait(*ps)
+
+            logger.info("Extracting features...")
+            leng = len(gpus.split("-"))
+            ps = []
+            logger.info(f"Using {leng} GPUs for feature extraction: {gpus.split('-')}")
+            for idx, n_g in enumerate(gpus.split("-")):
+                cmd_feature_print = f'"{config.python_cmd}" infer/modules/train/extract_feature_print.py {config.device} {leng} {idx} "{exp_path}" v2'
+                logger.info(f"Execute (GPU {n_g}): " + cmd_feature_print)
+                p = thread(run, cmd_feature_print)
+                ps.append(p)
+            wait(*ps)
+
+        with open(log_file_f0_feature, 'r') as f_f0_feature:
+            log_content = f_f0_feature.read()
+            logger.info("F0 and Feature Extraction Log:\n" + log_content)
+
+    except Exception as e:
+        logger.error(f"An error occurred during F0 or feature extraction: {e}")
+        catch(e)
+        return None
+    logger.info("Feature extraction complete.")
+
+
+    logger.info("Starting index training...")
+    feature_dir = os.path.join(exp_path, "3_feature768")
+    listdir_res = []
+    if os.path.exists(feature_dir):
+        listdir_res = os.listdir(feature_dir)
+
+    if not os.path.exists(feature_dir) or not any(listdir_res):
+        error_message = f"Error: Feature directory '{feature_dir}' is missing or empty! Cannot train index."
+        logger.error(error_message)
+        return None
+
+    try:
+        npys = []
+        for name in sorted(listdir_res):
+             if name.endswith('.npy'):
+                phone = _np.load(os.path.join(feature_dir, name))
+                npys.append(phone)
+
+        if not npys:
+            error_message = f"Error: No .npy files found in '{feature_dir}'! Cannot train index."
+            logger.error(error_message)
+            return None
+
+        big_npy = _np.concatenate(npys, 0)
+        logger.info(f"Concatenated features shape: {big_npy.shape}")
+
+        big_npy_idx = _np.arange(big_npy.shape[0])
+        _np.random.shuffle(big_npy_idx)
+        big_npy = big_npy[big_npy_idx]
+
+    except Exception as e:
+        logger.error(f"An error occurred while loading and concatenating features for index training: {e}")
+        catch(e)
+        return None
+
+    try:
+        from sklearn.cluster import MiniBatchKMeans
+        big_npy = MiniBatchKMeans(
+            n_clusters=15000,
+            verbose=False,
+            batch_size=256 * config.n_cpu,
+            compute_labels=False,
+            init="random",
+            n_init=3
+        ).fit(big_npy).cluster_centers_
+        logger.info(f"KMeans cluster centers shape: {big_npy.shape}")
+
+        import faiss
+        feature_dimension = big_npy.shape[1]
+        n_ivf = min(int(16 * _np.sqrt(big_npy.shape[0])), big_npy.shape[0] // 39)
+        n_ivf = max(1, n_ivf)
+        logger.info(f"Training Faiss index with dimension {feature_dimension} and n_ivf {n_ivf}")
+
+        index = faiss.index_factory(feature_dimension, f"IVF{n_ivf},Flat")
+        index_ivf = faiss.extract_index_ivf(index)
+        index_ivf.nprobe = 1
+        logger.info(f"Faiss index nprobe set to: {index_ivf.nprobe}")
+
+        logger.info("Training Faiss index...")
+        index.train(big_npy)
+        logger.info("Faiss index training complete.")
+
+        trained_index_path = os.path.join(exp_path, f"trained_IVF{n_ivf}_Flat_nprobe_{index_ivf.nprobe}_{exp_dir}_v2.index")
+        faiss.write_index(index, trained_index_path)
+        logger.info(f"Trained Faiss index saved to: {trained_index_path}")
+
+
+        logger.info("Adding features to Faiss index...")
+        batch_size_add = 8192
+        for i in range(0, big_npy.shape[0], batch_size_add):
+            index.add(big_npy[i:i + batch_size_add])
+        logger.info("Features added to Faiss index.")
+
+        added_index_filename = f"added_IVF{n_ivf}_Flat_nprobe_{index_ivf.nprobe}_{exp_dir}_v2.index"
+        added_index_path = os.path.join(exp_path, added_index_filename)
+        faiss.write_index(index, added_index_path)
+        logger.info(f"Final Faiss index saved to: {added_index_path}")
+
+        target_link_path = os.path.join(index_root, added_index_filename)
+        logger.info(f"Creating link from '{added_index_path}' to '{target_link_path}'")
+        try:
+            if os.path.exists(target_link_path) or os.path.islink(target_link_path):
+                 os.remove(target_link_path)
+                 logger.warning(f"Removed existing file/link at {target_link_path}")
+
+            if platform.system() != "Windows":
+                os.symlink(added_index_path, target_link_path)
+            else:
+                os.link(added_index_path, target_link_path)
+            logger.info("Index linking successful.")
+        except Exception as e:
+            logger.error(f"Linking index failed: {e}")
+            catch(e)
+
+
+    except Exception as e:
+        logger.error(f"An error occurred during index training: {e}")
+        catch(e)
+        return None
+    logger.info("Index training complete.")
+
+
+    logger.info("Starting model training...")
+    try:
+        pretrained_G = "assets/pretrained_v2/f0G48k.pth"
+        pretrained_D = "assets/pretrained_v2/f0D48k.pth"
+
+        batch_size = default_batch_size
+        total_epoch = 5000 * lvl
+        save_epoch = 1000
+        if_save_latest = 1
+        if_cache_gpu = 1
+        if_save_every_weights = 1
+        gpus_str = gpus
+
+        config_path = "v2/48k.json"
+        config_save_path = os.path.join(exp_path, "config.json")
+
+        if not pathlib.Path(config_save_path).exists():
+             logger.info(f"Saving training config to: {config_save_path}")
+             try:
+                 with open(config_save_path, "w", encoding="utf-8") as f:
+                     json.dump(config.json_config.get(config_path, {}), f, ensure_ascii=False, indent=4, sort_keys=True)
+                     f.write("\n")
+             except Exception as e:
+                  logger.error(f"Failed to save training config file: {e}")
+                  catch(e)
+
+
+        log_file_train = os.path.join(exp_path, "train.log")
+
+        logger.info("Executing training command...")
+        with open(log_file_train, 'w') as f_train:
+            cmd_train = (
+                f'"{config.python_cmd}" infer/modules/train/train.py '
+                f'-e "{exp_dir}" '
+                f'-sr 96k '
+                f'-f0 1 '
+                f'-bs {batch_size} '
+                f'-g {gpus_str} '
+                f'-te {total_epoch} '
+                f'-se {save_epoch} '
+                f'-pg "{pretrained_G}" '
+                f'-pd "{pretrained_D}" '
+                f'-l {if_save_latest} '
+                f'-c {if_cache_gpu} '
+                f'-sw {if_save_every_weights} '
+                f'-v v2'
+            )
+            logger.info("Execute: " + cmd_train)
+            subprocess.run(cmd_train, shell=True, check=True, stdout=f_train, stderr=subprocess.STDOUT)
+
+        with open(log_file_train, 'r') as f_train:
+            log_content = f_train.read()
+            logger.info("Training Log:\n" + log_content)
+
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Model training failed with return code {e.returncode}: {e}")
+        logger.error(f"Training output:\n{e.stdout.decode() if e.stdout else 'N/A'}\n{e.stderr.decode() if e.stderr else 'N/A'}")
+        catch(e)
+        return None
+    except Exception as e:
+        logger.error(f"An unexpected error occurred during model training: {e}")
+        catch(e)
+        return None
+    logger.info("Model training complete.")
+
+
+    logger.info("Training complete, exporting files...")
+    return export_files_rvc(exp_dir)
+
+
+def convert_vocal_rvc(experiment: str, path: str, semi_tones: int = 0):
+    logger.info(f"Starting vocal conversion for experiment: {experiment} with pitch shift {semi_tones}")
+
+    from .infer.modules.vc.modules import VC
+    from .configs.config import Config
+
+    now_dir = os.getcwd()
+    index_root = os.path.join(now_dir, "logs")
+    weight_root = os.path.join(now_dir, "assets", "weights")
+
+    config = Config()
+    vc = VC(config)
+
+    exp_path = os.path.join(index_root, experiment)
+
+    latest_checkpoint_filename = find_latest_checkpoint(weight_root, experiment)
+
+    if latest_checkpoint_filename is None:
+        error_message = f"Error: No latest checkpoint found for experiment '{experiment}' in '{exp_path}'. Cannot perform conversion."
+        logger.error(error_message)
+        return None
+
+    pth_path = os.path.join(weight_root, latest_checkpoint_filename)
+    logger.info(f"Using model checkpoint: {pth_path}")
+
+    idx_path = None
+    for root, dirs, files in os.walk(exp_path, topdown=False):
+        for name in files:
+            if name.endswith(".index") and "trained" not in name:
+                idx_path = os.path.join(root, name)
+                logger.info(f"Found index file: {idx_path}")
+                break
+        if idx_path:
+            break
+
+    if idx_path is None:
+        logger.warning(f"No index file found for experiment '{experiment}' in '{exp_path}'. Conversion may be less effective.")
+
+    index_rate = 0.5
+    f0_mean_pooling = 1
+    try:
+        vc.get_vc(latest_checkpoint_filename, index_rate, f0_mean_pooling)
+        logger.info("VC model loaded.")
+    except Exception as e:
+        logger.error(f"Failed to load VC model: {e}")
+        catch(e)
+        return None
+
+    try:
+        message, (sr, aud) = vc.vc_single(
+            0,
+            path,
+            semi_tones,
+            None,
+            "crepe",
+            idx_path,
+            None,
+            index_rate,
+            3,
+            0,
+            0.5,
+            0.7
+        )
+        logger.info(f"Vocal conversion message: {message}")
+
+    except Exception as e:
+        logger.error(f"An error occurred during vocal conversion: {e}")
+        catch(e)
+        return None
+
+    if aud is not None and isinstance(aud, _np.ndarray) and aud.size > 0:
+        logger.info(f"Conversion successful, saving output audio with shape {aud.shape} at sample rate {sr}")
+        try:
+            temp_dir = os.path.join(now_dir, "TEMP")
+            directory(temp_dir)
+            out_path = os.path.join(temp_dir, "output.wav")
+
+            import soundfile as sf
+            sf.write(out_path, aud, sr)
+            logger.info(f"Output audio saved to: {out_path}")
+            return out_path
+
+        except Exception as e:
+            logger.error(f"Failed to save output audio file: {e}")
+            catch(e)
+            return None
+    else:
+        logger.warning("Vocal conversion did not produce valid audio data.")
+        return None
+
+def export_audio(audio_segment, output_path_stem, format_choice):
+    format_lower = format_choice.lower()
+    if "mp3" in format_lower: file_format, bitrate, suffix = "mp3", "320k", ".mp3"
+    elif "wav" in format_lower: file_format, bitrate, suffix = "wav", None, ".wav"
+    elif "flac" in format_lower: file_format, bitrate, suffix = "flac", None, ".flac"
+    else: raise ValueError(f"Unsupported format: {format_choice}")
+    output_path = Path(output_path_stem).with_suffix(suffix)
+    params = ["-acodec", "pcm_s16le"] if file_format == "wav" else None
+    audio_segment.export(str(output_path), format=format_choice.lower(), bitrate=bitrate, parameters=params)
+    return str(output_path)
+
+def create_share_links(file_url, text_description):
+    if not file_url: return ""
+    encoded_text = quote(text_description)
+    encoded_url = quote(file_url)
+    twitter_link = f"https://twitter.com/intent/tweet?text={encoded_text}&url={encoded_url}"
+    facebook_link = f"https://www.facebook.com/sharer/sharer.php?u={encoded_url}"
+    reddit_link = f"https://www.reddit.com/submit?url={encoded_url}&title={encoded_text}"
+    whatsapp_link = f"https://api.whatsapp.com/send?text={encoded_text}%20{encoded_url}"
+    return f"""<div style='text-align:center; padding-top: 10px;'><p style='font-weight: bold;'>Share your creation!</p><a href='{twitter_link}' target='_blank' style='margin: 0 5px;'>X/Twitter</a> | <a href='{facebook_link}' target='_blank' style='margin: 0 5px;'>Facebook</a> | <a href='{reddit_link}' target='_blank' style='margin: 0 5px;'>Reddit</a> | <a href='{whatsapp_link}' target='_blank' style='margin: 0 5px;'>WhatsApp</a></div>"""
+
+def humanize_audio(audio_path):
+    import librosa
+    import soundfile as sf
+    try:
+        y, sr = librosa.load(audio_path, sr=None)
+        noise = np.random.randn(len(y))
+        y_noisy = y + 0.0001 * noise
+        y_eq = y_noisy * (1 + 0.01 * np.sin(2 * np.pi * 1000 * np.arange(len(y)) / sr))
+        sf.write(audio_path, y_eq, sr)
+        return audio_path
+    except Exception as e:
+        print(f"Could not humanize AI output: {e}")
+        return audio_path
+
+def value_to_keys(dictionary, target_value):
+    return [key for key, value in dictionary.items() if value == target_value]
+
+def transcribe_audio(audio_path, language):
+    if not audio_path:
+        raise gr.Error("Please upload an audio file to transcribe.")
+    if MODELS["speech-recognition"] is None:
+        init_pretrained_model("speech-recognition")
+    lang_code = value_to_keys(language_codes, language)
+    return MODELS["speech-recognition"](audio_path, generate_kwargs={"language": lang_code}, return_timestamps=True)["text"]
+
+def generate_voice(text, reference_audio, format_choice, humanize=True):
+    import soundfile as sf
+    import pydub
+
+    if not text or not reference_audio:
+        raise gr.Error("Please provide text and a reference voice audio.")
+    if not MODELS["tts"]:
+        init_pretrained_model("tts")
+    try:
+        temp_wav_path = tmp("wav", False)
+        wav = MODELS["tts"].generate(
+            text=text,
+            audio_prompt_path=reference_audio
+        )
+        sf.write(temp_wav_path, wav, 24000)
+        if humanize:
+            temp_wav_path = humanize_audio(temp_wav_path)
+        sound = pydub.AudioSegment.from_file(temp_wav_path)
+        output_stem = tmp(keep=False).replace(".data","")
+        final_output_path = export_audio(sound, output_stem, format_choice)
+        return final_output_path
+    except Exception as e:
+        raise gr.Error(f"Generation failed: {e}")
