@@ -26,13 +26,13 @@ pip install git+https://github.com/YaronKoresh/definers.git
 Definers is modular. You can install extra functionality based on your needs directly from the repository. For example, to install the packages required for all AI and deep learning features, use the following format:
 
 ```bash
-pip install "definers[ai]@git+https://github.com/YaronKoresh/definers.git"
+pip install "definers[ai] @ git+https://github.com/YaronKoresh/definers.git"
 ```
 
 You can install multiple groups at once:
 
 ```bash
-pip install "definers[audio,visual]@git+https://github.com/YaronKoresh/definers.git"
+pip install "definers[audio,visual] @ git+https://github.com/YaronKoresh/definers.git"
 ```
 
 Here are the available optional groups:
