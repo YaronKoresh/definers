@@ -19,7 +19,7 @@
 You can install the lightweight core components of **Definers** directly from its GitHub repository:
 
 ```bash
-pip install git+[https://github.com/YaronKoresh/definers.git](https://github.com/YaronKoresh/definers.git)
+pip install git+https://github.com/YaronKoresh/definers.git
 ```
 
 ## Optional Dependencies
@@ -27,13 +27,13 @@ pip install git+[https://github.com/YaronKoresh/definers.git](https://github.com
 Definers is modular. You can install extra functionality based on your needs directly from the repository. For example, to install the packages required for all AI and deep learning features, use the following format:
 
 ```bash
-pip install "definers[ai] @ git+[https://github.com/YaronKoresh/definers.git](https://github.com/YaronKoresh/definers.git)"
+pip install "definers[ai] @ git+https://github.com/YaronKoresh/definers.git"
 ```
 
 You can install multiple groups at once:
 
 ```bash
-pip install "definers[audio,visual] @ git+[https://github.com/YaronKoresh/definers.git](https://github.com/YaronKoresh/definers.git)"
+pip install "definers[audio,visual] @ git+https://github.com/YaronKoresh/definers.git"
 ```
 
 Here are the available optional groups:
@@ -57,7 +57,7 @@ Here are the available optional groups:
 To install the complete library with all features, use:
 
 ```bash
-pip install "definers[all] @ git+[https://github.com/YaronKoresh/definers.git](https://github.com/YaronKoresh/definers.git)"
+pip install "definers[all] @ git+https://github.com/YaronKoresh/definers.git"
 ```
 
 ## Quick Start
