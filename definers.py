@@ -1,0 +1,4420 @@
+from enum import Enum
+import getpass
+import sysconfig
+import base64
+import select
+import os
+import pathlib
+import importlib
+from glob import glob
+from pathlib import Path
+import sys
+import random
+import string
+from string import ascii_letters, digits, punctuation
+import shutil
+from datetime import datetime
+import argparse
+import multiprocessing
+import threading
+from time import sleep
+import warnings
+import logging
+from time import time
+import signal
+from typing import Any, Dict, List, Optional, Union, Tuple, Callable
+from collections import namedtuple
+from dataclasses import dataclass
+import re
+import subprocess
+import tempfile
+from contextlib import contextmanager
+import shlex
+import json
+import math
+import platform
+import traceback
+import site
+import queue
+import urllib.request
+import asyncio
+import concurrent
+from concurrent.futures import ProcessPoolExecutor
+
+SYSTEM_MESSAGE = "You are a helpful and concise AI assistant. Provide accurate and relevant information to the user's queries in a friendly and clear manner."
+
+tasks = {
+    "video": "tencent/HunyuanVideo",
+    "image": "black-forest-labs/FLUX.1-shnelkl",
+    "detect": "facebook/detr-resnet-50",
+    "answer": "microsoft/Phi-4-multimodal-instruct",
+    "summary": "t5-large",
+    "music": "facebook/magnet-medium-30secs",
+}
+
+MODELS = {
+    "video": None,
+    "image": None,
+    "upscale": None,
+    "detect": None,
+    "answer": None,
+    "summary": None,
+    "music": None,
+}
+
+TOKENIZERS = {
+    "summary": None,
+}
+
+PROCESSORS = {
+    "answer": None,
+}
+
+CONFIGS = {
+    "answer": None,
+}
+
+user_agents = {
+    "chrome": [
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    ],
+    "firefox": [
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:126.0) Gecko/20100101 Firefox/126.0',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:126.0) Gecko/20100101 Firefox/126.0',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:125.0) Gecko/20100101 Firefox/125.0',
+    ],
+    "safari": [
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15',
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148b Safari/604.1',
+        'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148b Safari/604.1',
+    ],
+    "egde": [
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 Edg/126.0.0.0',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 Edg/126.0.0.0',
+    ],
+    "opera": [
+        'Opera/9.80 (Windows NT 6.0) Presto/2.12.388 Version/12.14',
+        'Opera/9.80 (Macintosh; Intel Mac OS X 10.6.8; U; en) Presto/2.9.168 Version/11.52',
+    ],
+    "chrome-mobile": [
+        'Mozilla/5.0 (Linux; Android 10; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+        'Mozilla/5.0 (Linux; Android 13; Pixel 7 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/120.0.6099.119 Mobile/15E148b Safari/604.1',
+    ],
+    "safari-mobile": [
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148b Safari/604.1',
+        'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148b Safari/604.1',
+    ]
+}
+
+iio_formats = ["png", "jpg", "jpeg", "gif", "bmp", "tiff", "tif"]
+
+common_audio_formats = [
+    "wav",
+    "mp3",
+    "flac",
+    "aac",
+    "ogg",
+    "opus",
+    "aiff",
+    "m4a",
+    "wma",
+]
+
+punc = r'["!#$%&()*+,\./:;<=>?@\[\\\]^_`\{\|\}~]'
+
+durl_empty = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAoAAAAKACAYAAAAMzckjAAAAAXNSR0IArs4c6QAAIABJREFUeF7t1kEBAAAIAjHpX9ogNxswfLBzBAgQIECAAAECKYGl0gpLgAABAgQIECBwBqAnIECAAAECBAjEBAzAWOHiEiBAgAABAgQMQD9AgAABAgQIEIgJGICxwsUlQIAAAQIECBiAfoAAAQIECBAgEBMwAGOFi0uAAAECBAgQMAD9AAECBAgQIEAgJmAAxgoXlwABAgQIECBgAPoBAgQIECBAgEBMwACMFS4uAQIECBAgQMAA9AMECBAgQIAAgZiAARgrXFwCBAgQIECAgAHoBwgQIECAAAECMQEDMFa4uAQIECBAgAABA9APECBAgAABAgRiAgZgrHBxCRAgQIAAAQIGoB8gQIAAAQIECMQEDMBY4eISIECAAAECBAxAP0CAAAECBAgQiAkYgLHCxSVAgAABAgQIGIB+gAABAgQIECAQEzAAY4WLS4AAAQIECBAwAP0AAQIECBAgQCAmYADGCheXAAECBAgQIGAA+gECBAgQIECAQEzAAIwVLi4BAgQIECBAwAD0AwQIECBAgACBmIABGCtcXAIECBAgQICAAegHCBAgQIAAAQIxAQMwVri4BAgQIECAAAED0A8QIECAAAECBGICBmCscHEJECBAgAABAgagHyBAgAABAgQIxAQMwFjh4hIgQIAAAQIEDEA/QIAAAQIECBCICRiAscLFJUCAAAECBAgYgH6AAAECBAgQIBATMABjhYtLgAABAgQIEDAA/QABAgQIECBAICZgAMYKF5cAAQIECBAgYAD6AQIECBAgQIBATMAAjBUuLgECBAgQIEDAAPQDBAgQIECAAIGYgAEYK1xcAgQIECBAgIAB6AcIECBAgAABAjEBAzBWuLgECBAgQIAAAQPQDxAgQIAAAQIEYgIGYKxwcQkQIECAAAECBqAfIECAAAECBAjEBAzAWOHiEiBAgAABAgQMQD9AgAABAgQIEIgJGICxwsUlQIAAAQIECBiAfoAAAQIECBAgEBMwAGOFi0uAAAECBAgQMAD9AAECBAgQIEAgJmAAxgoXlwABAgQIECBgAPoBAgQIECBAgEBMwACMFS4uAQIECBAgQMAA9AMECBAgQIAAgZiAARgrXFwCBAgQIECAgAHoBwgQIECAAAECMQEDMFa4uAQIECBAgAABA9APECBAgAABAgRiAgZgrHBxCRAgQIAAAQIGoB8gQIAAAQIECMQEDMBY4eISIECAAAECBAxAP0CAAAECBAgQiAkYgLHCxSVAgAABAgQIGIB+gAABAgQIECAQEzAAY4WLS4AAAQIECBAwAP0AAQIECBAgQCAmYADGCheXAAECBAgQIGAA+gECBAgQIECAQEzAAIwVLi4BAgQIECBAwAD0AwQIECBAgACBmIABGCtcXAIECBAgQICAAegHCBAgQIAAAQIxAQMwVri4BAgQIECAAAED0A8QIECAAAECBGICBmCscHEJECBAgAABAgagHyBAgAABAgQIxAQMwFjh4hIgQIAAAQIEDEA/QIAAAQIECBCICRiAscLFJUCAAAECBAgYgH6AAAECBAgQIBATMABjhYtLgAABAgQIEDAA/QABAgQIECBAICZgAMYKF5cAAQIECBAgYAD6AQIECBAgQIBATMAAjBUuLgECBAgQIEDAAPQDBAgQIECAAIGYgAEYK1xcAgQIECBAgIAB6AcIECBAgAABAjEBAzBWuLgECBAgQIAAAQPQDxAgQIAAAQIEYgIGYKxwcQkQIECAAAECBqAfIECAAAECBAjEBAzAWOHiEiBAgAABAgQMQD9AgAABAgQIEIgJGICxwsUlQIAAAQIECBiAfoAAAQIECBAgEBMwAGOFi0uAAAECBAgQMAD9AAECBAgQIEAgJmAAxgoXlwABAgQIECBgAPoBAgQIECBAgEBMwACMFS4uAQIECBAgQMAA9AMECBAgQIAAgZiAARgrXFwCBAgQIECAgAHoBwgQIECAAAECMQEDMFa4uAQIECBAgAABA9APECBAgAABAgRiAgZgrHBxCRAgQIAAAQIGoB8gQIAAAQIECMQEDMBY4eISIECAAAECBAxAP0CAAAECBAgQiAkYgLHCxSVAgAABAgQIGIB+gAABAgQIECAQEzAAY4WLS4AAAQIECBAwAP0AAQIECBAgQCAmYADGCheXAAECBAgQIGAA+gECBAgQIECAQEzAAIwVLi4BAgQIECBAwAD0AwQIECBAgACBmIABGCtcXAIECBAgQICAAegHCBAgQIAAAQIxAQMwVri4BAgQIECAAAED0A8QIECAAAECBGICBmCscHEJECBAgAABAgagHyBAgAABAgQIxAQMwFjh4hIgQIAAAQIEDEA/QIAAAQIECBCICRiAscLFJUCAAAECBAgYgH6AAAECBAgQIBATMABjhYtLgAABAgQIEDAA/QABAgQIECBAICZgAMYKF5cAAQIECBAgYAD6AQIECBAgQIBATMAAjBUuLgECBAgQIEDAAPQDBAgQIECAAIGYgAEYK1xcAgQIECBAgIAB6AcIECBAgAABAjEBAzBWuLgECBAgQIAAAQPQDxAgQIAAAQIEYgIGYKxwcQkQIECAAAECBqAfIECAAAECBAjEBAzAWOHiEiBAgAABAgQMQD9AgAABAgQIEIgJGICxwsUlQIAAAQIECBiAfoAAAQIECBAgEBMwAGOFi0uAAAECBAgQMAD9AAECBAgQIEAgJmAAxgoXlwABAgQIECBgAPoBAgQIECBAgEBMwACMFS4uAQIECBAgQMAA9AMECBAgQIAAgZiAARgrXFwCBAgQIECAgAHoBwgQIECAAAECMQEDMFa4uAQIECBAgAABA9APECBAgAABAgRiAgZgrHBxCRAgQIAAAQIGoB8gQIAAAQIECMQEDMBY4eISIECAAAECBAxAP0CAAAECBAgQiAkYgLHCxSVAgAABAgQIGIB+gAABAgQIECAQEzAAY4WLS4AAAQIECBAwAP0AAQIECBAgQCAmYADGCheXAAECBAgQIGAA+gECBAgQIECAQEzAAIwVLi4BAgQIECBAwAD0AwQIECBAgACBmIABGCtcXAIECBAgQICAAegHCBAgQIAAAQIxAQMwVri4BAgQIECAAAED0A8QIECAAAECBGICBmCscHEJECBAgAABAgagHyBAgAABAgQIxAQMwFjh4hIgQIAAAQIEDEA/QIAAAQIECBCICRiAscLFJUCAAAECBAgYgH6AAAECBAgQIBATMABjhYtLgAABAgQIEDAA/QABAgQIECBAICZgAMYKF5cAAQIECBAgYAD6AQIECBAgQIBATMAAjBUuLgECBAgQIEDAAPQDBAgQIECAAIGYgAEYK1xcAgQIECBAgIAB6AcIECBAgAABAjEBAzBWuLgECBAgQIAAAQPQDxAgQIAAAQIEYgIGYKxwcQkQIECAAAECBqAfIECAAAECBAjEBAzAWOHiEiBAgAABAgQMQD9AgAABAgQIEIgJGICxwsUlQIAAAQIECBiAfoAAAQIECBAgEBMwAGOFi0uAAAECBAgQMAD9AAECBAgQIEAgJmAAxgoXlwABAgQIECBgAPoBAgQIECBAgEBMwACMFS4uAQIECBAgQMAA9AMECBAgQIAAgZiAARgrXFwCBAgQIECAgAHoBwgQIECAAAECMQEDMFa4uAQIECBAgAABA9APECBAgAABAgRiAgZgrHBxCRAgQIAAAQIGoB8gQIAAAQIECMQEDMBY4eISIECAAAECBAxAP0CAAAECBAgQiAkYgLHCxSVAgAABAgQIGIB+gAABAgQIECAQEzAAY4WLS4AAAQIECBAwAP0AAQIECBAgQCAmYADGCheXAAECBAgQIGAA+gECBAgQIECAQEzAAIwVLi4BAgQIECBAwAD0AwQIECBAgACBmIABGCtcXAIECBAgQICAAegHCBAgQIAAAQIxAQMwVri4BAgQIECAAAED0A8QIECAAAECBGICBmCscHEJECBAgAABAgagHyBAgAABAgQIxAQMwFjh4hIgQIAAAQIEDEA/QIAAAQIECBCICRiAscLFJUCAAAECBAgYgH6AAAECBAgQIBATMABjhYtLgAABAgQIEDAA/QABAgQIECBAICZgAMYKF5cAAQIECBAgYAD6AQIECBAgQIBATMAAjBUuLgECBAgQIEDAAPQDBAgQIECAAIGYgAEYK1xcAgQIECBAgIAB6AcIECBAgAABAjEBAzBWuLgECBAgQIAAAQPQDxAgQIAAAQIEYgIGYKxwcQkQIECAAAECBqAfIECAAAECBAjEBAzAWOHiEiBAgAABAgQMQD9AgAABAgQIEIgJGICxwsUlQIAAAQIECBiAfoAAAQIECBAgEBMwAGOFi0uAAAECBAgQMAD9AAECBAgQIEAgJmAAxgoXlwABAgQIECBgAPoBAgQIECBAgEBMwACMFS4uAQIECBAgQMAA9AMECBAgQIAAgZiAARgrXFwCBAgQIECAgAHoBwgQIECAAAECMQEDMFa4uAQIECBAgAABA9APECBAgAABAgRiAgZgrHBxCRAgQIAAAQIGoB8gQIAAAQIECMQEDMBY4eISIECAAAECBAxAP0CAAAECBAgQiAkYgLHCxSVAgAABAgQIGIB+gAABAgQIECAQEzAAY4WLS4AAAQIECBAwAP0AAQIECBAgQCAmYADGCheXAAECBAgQIGAA+gECBAgQIECAQEzAAIwVLi4BAgQIECBAwAD0AwQIECBAgACBmIABGCtcXAIECBAgQICAAegHCBAgQIAAAQIxAQMwVri4BAgQIECAAAED0A8QIECAAAECBGICBmCscHEJECBAgAABAgagHyBAgAABAgQIxAQMwFjh4hIgQIAAAQIEDEA/QIAAAQIECBCICRiAscLFJUCAAAECBAgYgH6AAAECBAgQIBATMABjhYtLgAABAgQIEDAA/QABAgQIECBAICZgAMYKF5cAAQIECBAgYAD6AQIECBAgQIBATMAAjBUuLgECBAgQIEDAAPQDBAgQIECAAIGYgAEYK1xcAgQIECBAgIAB6AcIECBAgAABAjEBAzBWuLgECBAgQIAAAQPQDxAgQIAAAQIEYgIGYKxwcQkQIECAAAECBqAfIECAAAECBAjEBAzAWOHiEiBAgAABAgQMQD9AgAABAgQIEIgJGICxwsUlQIAAAQIECBiAfoAAAQIECBAgEBMwAGOFi0uAAAECBAgQMAD9AAECBAgQIEAgJmAAxgoXlwABAgQIECBgAPoBAgQIECBAgEBMwACMFS4uAQIECBAgQMAA9AMECBAgQIAAgZiAARgrXFwCBAgQIECAgAHoBwgQIECAAAECMQEDMFa4uAQIECBAgAABA9APECBAgAABAgRiAgZgrHBxCRAgQIAAAQIGoB8gQIAAAQIECMQEDMBY4eISIECAAAECBAxAP0CAAAECBAgQiAkYgLHCxSVAgAABAgQIGIB+gAABAgQIECAQEzAAY4WLS4AAAQIECBAwAP0AAQIECBAgQCAmYADGCheXAAECBAgQIGAA+gECBAgQIECAQEzAAIwVLi4BAgQIECBAwAD0AwQIECBAgACBmIABGCtcXAIECBAgQICAAegHCBAgQIAAAQIxAQMwVri4BAgQIECAAAED0A8QIECAAAECBGICBmCscHEJECBAgAABAgagHyBAgAABAgQIxAQMwFjh4hIgQIAAAQIEDEA/QIAAAQIECBCICRiAscLFJUCAAAECBAgYgH6AAAECBAgQIBATMABjhYtLgAABAgQIEDAA/QABAgQIECBAICZgAMYKF5cAAQIECBAgYAD6AQIECBAgQIBATMAAjBUuLgECBAgQIEDAAPQDBAgQIECAAIGYgAEYK1xcAgQIECBAgIAB6AcIECBAgAABAjEBAzBWuLgECBAgQIAAAQPQDxAgQIAAAQIEYgIGYKxwcQkQIECAAAECBqAfIECAAAECBAjEBAzAWOHiEiBAgAABAgQMQD9AgAABAgQIEIgJGICxwsUlQIAAAQIECBiAfoAAAQIECBAgEBMwAGOFi0uAAAECBAgQMAD9AAECBAgQIEAgJmAAxgoXlwABAgQIECBgAPoBAgQIECBAgEBMwACMFS4uAQIECBAgQMAA9AMECBAgQIAAgZiAARgrXFwCBAgQIECAgAHoBwgQIECAAAECMQEDMFa4uAQIECBAgAABA9APECBAgAABAgRiAgZgrHBxCRAgQIAAAQIGoB8gQIAAAQIECMQEDMBY4eISIECAAAECBAxAP0CAAAECBAgQiAkYgLHCxSVAgAABAgQIGIB+gAABAgQIECAQEzAAY4WLS4AAAQIECBAwAP0AAQIECBAgQCAmYADGCheXAAECBAgQIGAA+gECBAgQIECAQEzAAIwVLi4BAgQIECBAwAD0AwQIECBAgACBmIABGCtcXAIECBAgQICAAegHCBAgQIAAAQIxAQMwVri4BAgQIECAAAED0A8QIECAAAECBGICBmCscHEJECBAgAABAgagHyBAgAABAgQIxAQMwFjh4hIgQIAAAQIEDEA/QIAAAQIECBCICRiAscLFJUCAAAECBAgYgH6AAAECBAgQIBATMABjhYtLgAABAgQIEDAA/QABAgQIECBAICZgAMYKF5cAAQIECBAgYAD6AQIECBAgQIBATMAAjBUuLgECBAgQIEDAAPQDBAgQIECAAIGYgAEYK1xcAgQIECBAgIAB6AcIECBAgAABAjEBAzBWuLgECBAgQIAAAQPQDxAgQIAAAQIEYgIGYKxwcQkQIECAAAECBqAfIECAAAECBAjEBAzAWOHiEiBAgAABAgQMQD9AgAABAgQIEIgJGICxwsUlQIAAAQIECBiAfoAAAQIECBAgEBMwAGOFi0uAAAECBAgQMAD9AAECBAgQIEAgJmAAxgoXlwABAgQIECBgAPoBAgQIECBAgEBMwACMFS4uAQIECBAgQMAA9AMECBAgQIAAgZiAARgrXFwCBAgQIECAgAHoBwgQIECAAAECMQEDMFa4uAQIECBAgAABA9APECBAgAABAgRiAgZgrHBxCRAgQIAAAQIGoB8gQIAAAQIECMQEDMBY4eISIECAAAECBAxAP0CAAAECBAgQiAkYgLHCxSVAgAABAgQIGIB+gAABAgQIECAQEzAAY4WLS4AAAQIECBAwAP0AAQIECBAgQCAmYADGCheXAAECBAgQIGAA+gECBAgQIECAQEzAAIwVLi4BAgQIECBAwAD0AwQIECBAgACBmIABGCtcXAIECBAgQICAAegHCBAgQIAAAQIxAQMwVri4BAgQIECAAAED0A8QIECAAAECBGICBmCscHEJECBAgAABAgagHyBAgAABAgQIxAQMwFjh4hIgQIAAAQIEDEA/QIAAAQIECBCICRiAscLFJUCAAAECBAgYgH6AAAECBAgQIBATMABjhYtLgAABAgQIEDAA/QABAgQIECBAICZgAMYKF5cAAQIECBAgYAD6AQIECBAgQIBATMAAjBUuLgECBAgQIEDAAPQDBAgQIECAAIGYgAEYK1xcAgQIECBAgIAB6AcIECBAgAABAjEBAzBWuLgECBAgQIAAAQPQDxAgQIAAAQIEYgIGYKxwcQkQIECAAAECBqAfIECAAAECBAjEBAzAWOHiEiBAgAABAgQMQD9AgAABAgQIEIgJGICxwsUlQIAAAQIECBiAfoAAAQIECBAgEBMwAGOFi0uAAAECBAgQMAD9AAECBAgQIEAgJmAAxgoXlwABAgQIECBgAPoBAgQIECBAgEBMwACMFS4uAQIECBAgQMAA9AMECBAgQIAAgZiAARgrXFwCBAgQIECAgAHoBwgQIECAAAECMQEDMFa4uAQIECBAgAABA9APECBAgAABAgRiAgZgrHBxCRAgQIAAAQIGoB8gQIAAAQIECMQEDMBY4eISIECAAAECBAxAP0CAAAECBAgQiAkYgLHCxSVAgAABAgQIGIB+gAABAgQIECAQEzAAY4WLS4AAAQIECBAwAP0AAQIECBAgQCAmYADGCheXAAECBAgQIGAA+gECBAgQIECAQEzAAIwVLi4BAgQIECBAwAD0AwQIECBAgACBmIABGCtcXAIECBAgQICAAegHCBAgQIAAAQIxAQMwVri4BAgQIECAAAED0A8QIECAAAECBGICBmCscHEJECBAgAABAgagHyBAgAABAgQIxAQMwFjh4hIgQIAAAQIEDEA/QIAAAQIECBCICRiAscLFJUCAAAECBAgYgH6AAAECBAgQIBATMABjhYtLgAABAgQIEDAA/QABAgQIECBAICZgAMYKF5cAAQIECBAgYAD6AQIECBAgQIBATMAAjBUuLgECBAgQIEDAAPQDBAgQIECAAIGYgAEYK1xcAgQIECBAgIAB6AcIECBAgAABAjEBAzBWuLgECBAgQIAAAQPQDxAgQIAAAQIEYgIGYKxwcQkQIECAAAECBqAfIECAAAECBAjEBAzAWOHiEiBAgAABAgQMQD9AgAABAgQIEIgJGICxwsUlQIAAAQIECBiAfoAAAQIECBAgEBMwAGOFi0uAAAECBAgQMAD9AAECBAgQIEAgJmAAxgoXlwABAgQIECBgAPoBAgQIECBAgEBMwACMFS4uAQIECBAgQMAA9AMECBAgQIAAgZiAARgrXFwCBAgQIECAgAHoBwgQIECAAAECMQEDMFa4uAQIECBAgAABA9APECBAgAABAgRiAgZgrHBxCRAgQIAAAQIGoB8gQIAAAQIECMQEDMBY4eISIECAAAECBAxAP0CAAAECBAgQiAkYgLHCxSVAgAABAgQIGIB+gAABAgQIECAQEzAAY4WLS4AAAQIECBAwAP0AAQIECBAgQCAmYADGCheXAAECBAgQIGAA+gECBAgQIECAQEzAAIwVLi4BAgQIECBAwAD0AwQIECBAgACBmIABGCtcXAIECBAgQICAAegHCBAgQIAAAQIxAQMwVri4BAgQIECAAAED0A8QIECAAAECBGICBmCscHEJECBAgAABAgagHyBAgAABAgQIxAQMwFjh4hIgQIAAAQIEDEA/QIAAAQIECBCICRiAscLFJUCAAAECBAgYgH6AAAECBAgQIBATMABjhYtLgAABAgQIEDAA/QABAgQIECBAICZgAMYKF5cAAQIECBAgYAD6AQIECBAgQIBATMAAjBUuLgECBAgQIEDAAPQDBAgQIECAAIGYgAEYK1xcAgQIECBAgIAB6AcIECBAgAABAjEBAzBWuLgECBAgQIAAAQPQDxAgQIAAAQIEYgIGYKxwcQkQIECAAAECBqAfIECAAAECBAjEBAzAWOHiEiBAgAABAgQMQD9AgAABAgQIEIgJGICxwsUlQIAAAQIECBiAfoAAAQIECBAgEBMwAGOFi0uAAAECBAgQMAD9AAECBAgQIEAgJmAAxgoXlwABAgQIECBgAPoBAgQIECBAgEBMwACMFS4uAQIECBAgQMAA9AMECBAgQIAAgZiAARgrXFwCBAgQIECAgAHoBwgQIECAAAECMQEDMFa4uAQIECBAgAABA9APECBAgAABAgRiAgZgrHBxCRAgQIAAAQIGoB8gQIAAAQIECMQEDMBY4eISIECAAAECBAxAP0CAAAECBAgQiAkYgLHCxSVAgAABAgQIGIB+gAABAgQIECAQEzAAY4WLS4AAAQIECBAwAP0AAQIECBAgQCAmYADGCheXAAECBAgQIGAA+gECBAgQIECAQEzAAIwVLi4BAgQIECBAwAD0AwQIECBAgACBmIABGCtcXAIECBAgQICAAegHCBAgQIAAAQIxAQMwVri4BAgQIECAAAED0A8QIECAAAECBGICBmCscHEJECBAgAABAgagHyBAgAABAgQIxAQMwFjh4hIgQIAAAQIEDEA/QIAAAQIECBCICRiAscLFJUCAAAECBAgYgH6AAAECBAgQIBATMABjhYtLgAABAgQIEDAA/QABAgQIECBAICZgAMYKF5cAAQIECBAgYAD6AQIECBAgQIBATMAAjBUuLgECBAgQIEDAAPQDBAgQIECAAIGYgAEYK1xcAgQIECBAgIAB6AcIECBAgAABAjEBAzBWuLgECBAgQIAAAQPQDxAgQIAAAQIEYgIGYKxwcQkQIECAAAECBqAfIECAAAECBAjEBAzAWOHiEiBAgAABAgQMQD9AgAABAgQIEIgJGICxwsUlQIAAAQIECBiAfoAAAQIECBAgEBMwAGOFi0uAAAECBAgQMAD9AAECBAgQIEAgJmAAxgoXlwABAgQIECBgAPoBAgQIECBAgEBMwACMFS4uAQIECBAgQMAA9AMECBAgQIAAgZiAARgrXFwCBAgQIECAgAHoBwgQIECAAAECMQEDMFa4uAQIECBAgAABA9APECBAgAABAgRiAgZgrHBxCRAgQIAAAQIGoB8gQIAAAQIECMQEDMBY4eISIECAAAECBAxAP0CAAAECBAgQiAkYgLHCxSVAgAABAgQIGIB+gAABAgQIECAQEzAAY4WLS4AAAQIECBAwAP0AAQIECBAgQCAmYADGCheXAAECBAgQIGAA+gECBAgQIECAQEzAAIwVLi4BAgQIECBAwAD0AwQIECBAgACBmIABGCtcXAIECBAgQICAAegHCBAgQIAAAQIxAQMwVri4BAgQIECAAAED0A8QIECAAAECBGICBmCscHEJECBAgAABAgagHyBAgAABAgQIxAQMwFjh4hIgQIAAAQIEDEA/QIAAAQIECBCICRiAscLFJUCAAAECBAgYgH6AAAECBAgQIBATMABjhYtLgAABAgQIEDAA/QABAgQIECBAICZgAMYKF5cAAQIECBAgYAD6AQIECBAgQIBATMAAjBUuLgECBAgQIEDAAPQDBAgQIECAAIGYgAEYK1xcAgQIECBAgIAB6AcIECBAgAABAjEBAzBWuLgECBAgQIAAAQPQDxAgQIAAAQIEYgIGYKxwcQkQIEB6uwAFAAAAwElEQVSAAAECBqAfIECAAAECBAjEBAzAWOHiEiBAgAABAgQMQD9AgAABAgQIEIgJGICxwsUlQIAAAQIECBiAfoAAAQIECBAgEBMwAGOFi0uAAAECBAgQMAD9AAECBAgQIEAgJmAAxgoXlwABAgQIECBgAPoBAgQIECBAgEBMwACMFS4uAQIECBAgQMAA9AMECBAgQIAAgZiAARgrXFwCBAgQIECAgAHoBwgQIECAAAECMQEDMFa4uAQIECBAgACBB3r2AoFVBl6GAAAAAElFTkSuQmCC"
+
+negative_keywords = [
+    # Quality & Style
+    "low quality", "worst quality", "lowres", "jpeg artifacts", "blurry", "noisy", "pixelated",
+    "watermark", "signature", "username", "text", "error", "out of frame", "cropped",
+    "ugly", "disgusting", "horrific", "scary", "creepy",
+    # Anatomy & Body
+    "malformed", "disfigured", "deformed", "mutated", "mutation", "extra limbs", "missing limbs",
+    "extra fingers", "missing fingers", "fewer digits", "bad anatomy", "poorly drawn hands",
+    "poorly drawn face", "mangled", "cloned face", "bad proportions", "fused fingers",
+    # Composition & Scene
+    "static position", "same frames", "boring", "uninteresting", "illogical", "unreasonable scenario",
+    "weird scenario", "disconnected", "disjointed", "tiling", "asymmetrical",
+    # Duplication & Repetition
+    "duplicate", "cloned", "multiple views", "grid", "collage", "split screen"
+]
+random.shuffle(negative_keywords)
+_negative_prompt_ = ", ".join(negative_keywords)
+
+_base_prompt_ = "cinematic masterpiece, ultra realistic, 8k, best quality, sharp focus, professional color grading"
+
+def merge_system_message(data):
+    text = ""
+    for key, value in data.items():
+        if isinstance(value, str):
+            text += f"<|system|>\n{value}\n<|end|>\n"
+        elif isinstance(value, list):
+            for item in value:
+                text += "<|system|>\n"
+                for k, v in item.items():
+                    if isinstance(v, dict):
+                        for lang, content in v.items():
+                            text += f"{lang}: {content}\n"
+                    else:
+                        text += f"{k}: {v}\n"
+                text += "<|end|>\n"
+    return text
+
+def set_system_message(
+    name: Optional[str] = None,
+    role: Optional[str] = None,
+    tone: Optional[str] = None,
+    chattiness: Optional[str] = None,
+    persona_data: Optional[Dict[str, str]] = None,
+    task_rules: Optional[List[str]] = None,
+    interaction_style: Optional[str] = None,
+    output_format: Optional[str] = None
+):
+    """
+    Constructs and sets a comprehensive system message for the AI model globally.
+
+    This function allows for detailed customization of the AI's persona, behavior,
+    and output format by dynamically building a system prompt from the provided arguments.
+
+    Args:
+        name (Optional[str]): The name the AI should use for itself (e.g., 'Definer').
+        role (Optional[str]): The primary role of the AI (e.g., 'a code assistant', 'a travel guide').
+        tone (Optional[str]): The desired tone of voice (e.g., 'friendly and encouraging', 'formal and professional').
+        chattiness (Optional[str]): The desired level of verbosity (e.g., 'be concise', 'provide detailed explanations').
+        persona_data (Optional[Dict[str, str]]): A dictionary of facts about the AI's persona (e.g., {"creator": "John Doe"}).
+        task_rules (Optional[List[str]]): A list of specific rules the AI must follow (e.g., ["Do not mention you are an AI."]).
+        interaction_style (Optional[str]): Instructions on how to interact (e.g., 'ask clarifying questions before answering').
+        output_format (Optional[str]): Specific instructions for the output structure (e.g., 'Respond only in JSON format').
+    
+    Returns:
+        str: The newly constructed system message.
+    """
+    global _system_message
+
+    message_parts = []
+
+    if role:
+        message_parts.append(f"You are a {role}.")
+    else:
+        message_parts.append("You are a helpful AI assistant.")
+
+    if name:
+        message_parts.append(f"Your name is {name}.")
+
+    style_instructions = []
+    if tone:
+        style_instructions.append(f"Your tone should be {tone}.")
+    if chattiness:
+        style_instructions.append(f"In terms of verbosity, {chattiness}.")
+    if interaction_style:
+        style_instructions.append(f"When interacting, {interaction_style}.")
+
+    if style_instructions:
+        message_parts.append(" ".join(style_instructions))
+
+    if persona_data:
+        persona_str = "Here is some information about yourself: "
+        persona_facts = [f"your {key} is {value}" for key, value in persona_data.items()]
+        persona_str += "; ".join(persona_facts) + "."
+        message_parts.append(persona_str)
+
+    if task_rules or output_format:
+        rules_header = "You must strictly follow these rules:"
+        rules_list = []
+        if task_rules:
+            rules_list.extend(task_rules)
+        if output_format:
+            rules_list.append(f"Your final output must be exclusively in the following format: {output_format}.")
+
+        formatted_rules = "\n".join(f"{i+1}. {rule}" for i, rule in enumerate(rules_list))
+        message_parts.append(f"{rules_header}\n{formatted_rules}")
+
+    _system_message = "\n\n".join(message_parts)
+    
+    log("System Message Updated", _system_message)
+    
+    return _system_message
+
+def answer(history: list):
+
+    from PIL import Image
+    import soundfile as sf
+
+    internal = '<|system|>'
+    human = '<|user|>'
+    ai = '<|assistant|>'
+    end = '<|end|>'
+    img = '<|image_X|>'
+    snd = '<|audio_X|>'
+
+    messages = [merge_system_message(SYSTEM_MESSAGE)]
+
+    img_list = []
+    snd_list = []
+
+    for h in history:
+
+        if h["role"] == "assistant":
+            messages.append(end)
+            messages.append(ai)
+        elif h["role"] == "user":
+            messages.append(human)
+
+        content = h["content"]
+        if isinstance(content,dict) or isinstance(content,tuple):
+            ps = []
+            if isinstance(content,dict):
+                ps = [content["path"]]
+            else:
+                ps = [c["path"] for c in content if isinstance(c,dict)]
+            for p in ps:
+                ext = p.split(".")[-1]
+                if ext in common_audio_formats:
+                    audio, samplerate = sf.read(audio_url)
+                    snd_list.append( (audio, samplerate) )
+                    messages.append(snd.replace( "X", str(len(snd_list)) ))
+                if ext in iio_formats:
+                    img_list.append( Image.open(p) )
+                    messages.append(img.replace( "X", str(len(img_list)) ))
+        else:
+            messages.append(content.replace("|"," or "))
+
+        messages.append(end)
+
+    messages.append(ai)
+    prompt = "".join(messages)
+
+    log("Chat history",{
+        "prompt": prompt,
+        "audios": snd_list,
+        "images": img_list,
+    },status="")
+
+    lsts = {}
+    if len(snd_list) > 0:
+        lsts["audios"]=snd_list
+    if len(img_list) > 0:
+        lsts["images"]=img_list
+
+    response = MODELS["answer"].generate(prompt=prompt, max_length=200, beam_width=16, **lsts)
+    return response
+
+def init_cupy_numpy():
+    import numpy as _np
+    try:
+        import cupy as np
+    except Exception as e:
+        catch(e)
+        import numpy as np
+
+def linear_regression(X, y, learning_rate=0.01, epochs=50):
+    m, n = X.shape
+
+    weights = np.zeros(n)
+    bias = 0
+
+    for _ in range(epochs):
+        y_pred = X @ weights + bias
+
+        error = y_pred - y
+        dw = (2/m) * X.T @ error
+        db = (2/m) * np.sum(error)
+
+        weights -= learning_rate * dw
+        bias -= learning_rate * db
+
+    return weights, bias
+
+def initialize_linear_regression(input_dim, model_path):
+    import torch
+    if os.path.exists(model_path):
+        model_torch = LinearRegressionTorch(input_dim)
+        model_torch.load_state_dict(torch.load(model_path))
+        print("Loaded existing model.")
+    else:
+        model_torch = LinearRegressionTorch(input_dim)
+        print("Created new model.")
+
+    model_torch.cuda()
+    return model_torch
+
+def train_linear_regression(X, y, model_path, learning_rate=0.01):
+    import torch
+    model_torch = initialize_linear_regression(X.shape[1], model_path)
+
+    criterion = torch.nn.MSELoss()
+    optimizer = torch.optim.SGD(model_torch.parameters(), lr=learning_rate)
+
+    X_torch = torch.tensor(X, dtype=torch.float32, device='cuda')
+    y_torch = torch.tensor(y, dtype=torch.float32, device='cuda')
+
+    y_pred = model_torch(X_torch).squeeze()
+    loss = criterion(y_pred, y_torch)
+    optimizer.zero_grad()
+    loss.backward()
+    optimizer.step()
+
+    torch.save(model_torch.state_dict(), model_path)
+    print("Model saved.")
+
+    return model_torch
+
+def fetch_dataset(src, url_type=None, revision=None):
+    from datasets import load_dataset
+    try:
+        if revision:
+            dataset = load_dataset(src, revision=revision, split="train")
+        else:
+            dataset = load_dataset(src, split="train")
+    except FileNotFoundError:
+        logging.error(f"Dataset {src} not found.")
+        return None
+    except ConnectionError:
+        logging.error(f"Connection error while loading dataset {src}.")
+        return None
+    except Exception as e:
+        logging.error(f"Error loading dataset {src}: {e}")
+        if url_type:
+            try:
+                if revision:
+                    dataset = load_dataset(url_type, data_files={"train": src}, revision=revision, split="train")
+                else:
+                    dataset = load_dataset(url_type, data_files={"train": src}, split="train")
+            except FileNotFoundError:
+                logging.error(f"Dataset {url_type} with data_files {src} not found.")
+                return None
+            except ConnectionError:
+                logging.error(f"Connection error while loading dataset {url_type} with data_files {src}.")
+                return None
+            except Exception as e2:
+                logging.error(f"Error loading dataset {url_type} with data_files {src}: {e2}")
+                return None
+        else:
+            return None
+
+    return dataset
+
+def drop_columns(dataset, drop_list):
+    if not check_parameter(drop_list):
+        return dataset
+    columns_to_delete = [col for col in dataset.column_names if col in drop_list]
+    return dataset.remove_columns(columns_to_delete)
+
+def select_columns(dataset, cols):
+    if not check_parameter(cols):
+        return dataset
+    all_cols = dataset.column_names
+    cols_to_drop = [c for c in all_cols if c not in cols]
+    return drop_columns(dataset, cols_to_drop)
+
+def select_rows(dataset, start_index, end_index):
+    from datasets import Dataset
+    subset_data = {}
+    for column_name in dataset.column_names:
+        column_data = dataset[column_name]
+        subset_data[column_name] = column_data[start_index:end_index]
+    subset = Dataset.from_dict(subset_data)
+    return subset
+
+def split_columns(data, labels, is_batch=False):
+    if not check_parameter(labels):
+        X, y = data
+        return X, y
+
+    if is_batch:
+        X_batch = []
+        y_batch = []
+
+        batch_size = 0
+        for value in data.values():
+            if isinstance(value, list) or isinstance(value, np.ndarray):
+                batch_size = len(value)
+                break
+
+        if batch_size == 0:
+            return [], []
+
+        for i in range(batch_size):
+            X = {}
+            y = {}
+            for key, value in data.items():
+                if key not in labels:
+                    X[key] = value[i]
+                else:
+                    y[key] = value[i]
+            X_batch.append(X)
+            y_batch.append(y)
+
+        return X_batch, y_batch
+
+    else:
+        features = drop_columns(data, labels)
+        labels_data = select_columns(data, labels)
+        return features, labels_data
+
+def tokenize_and_pad(rows, tokenizer=None):
+
+    if not tokenizer:
+        tokenizer = init_tokenizer()
+
+    features_list = []
+    for row in rows:
+        if isinstance(row, dict):  # Check if it's a dictionary (important!)
+            features_strings = []
+            for key, value in row.items():
+                if isinstance(value, (list, np.ndarray)):
+                    features_strings.extend(map(str, value)) #Convert list or numpy array elements to string
+                elif value is not None:  # Corrected condition: if value is not None
+                    features_strings.append(str(value)) #Convert other values to string
+            features_list.append(" ".join(features_strings)) #Join the string values to one string for each row
+        elif isinstance(row, str): #Handle if it is a string
+            features_list.append(row)
+        else:
+            return rows
+
+    tokenized_inputs = tokenizer(features_list, padding=True, truncation=True, return_tensors="pt")
+    return two_dim_numpy(tokenized_inputs['input_ids'])
+
+def init_tokenizer(mod="google-bert/bert-base-multilingual-cased"):
+    return AutoTokenizer.from_pretrained(mod)
+
+def init_custom_model(model_type, model_path=None):
+
+    try:
+        model = None
+
+        if model_type.lower() not in ["onnx", "pkl"]:
+            print('Model type must be one of ["onnx", "pkl"]')
+            return None
+
+        if model_path and model_type.lower() == "onnx":
+            try:
+                with open(model_path, 'rb') as f:
+                    model = onnx.load(f)
+            except Exception as e_onnx_load:
+                print(f"Error loading ONNX model: {e_onnx_load}")
+                return None
+        elif model_path and model_type.lower() == "pkl":
+            try:
+                with open(model_path, 'rb') as f:
+                    model = pickle.load(f)
+            except Exception as e_pkl_load:
+                print(f"Error loading Pickle model: {e_pkl_load}")
+                return None
+        else:
+            model = none
+
+        return model
+
+    except:
+        catch("Error initializing model")
+        return None
+
+def files_to_dataset(features_paths: list, labels_paths: list = None):
+    import torch
+    from torch.utils.data import TensorDataset, DataLoader
+
+    features = []
+    labels = []
+
+    try:
+        for feature_path in features_paths:
+            loaded = load_as_numpy(feature_path,training=True)
+
+            if isinstance(loaded,list):
+                for l in loaded:
+                    feature = cupy_to_numpy(l)
+                    if feature is None:
+                        print(f"Error loading feature file: {feature_path}")
+                        return None
+                    features.append( feature )
+            else:
+                feature = cupy_to_numpy(loaded)
+                if feature is None:
+                    print(f"Error loading feature file: {feature_path}")
+                    return None
+                features.append( feature )
+
+        if labels_paths:
+            for label_path in labels_paths:
+                loaded = load_as_numpy(label_path,training=True)
+
+                if isinstance(loaded,list):
+                    for l in loaded:
+                        label = cupy_to_numpy(l)
+                        if label is None:
+                            print(f"Error loading label file: {label_path}")
+                            return None
+                        labels.append( label )
+                else:
+                    label = cupy_to_numpy(loaded)
+                    if label is None:
+                        print(f"Error loading label file: {label_path}")
+                        return None
+                    labels.append( label )
+
+    except Exception as e:
+        print(f"Error loading data: {e}")
+        return None
+
+    max_lens = get_max_shapes(*features,*labels)
+
+    try:
+        features = convert_tensor_dtype(torch.stack([
+            torch.tensor(reshape_numpy(_,lengths=max_lens)) for _ in features
+        ]))
+
+        if labels:
+            labels = convert_tensor_dtype(torch.stack([
+                torch.tensor(reshape_numpy(_,lengths=max_lens)) for _ in labels
+            ]))
+
+        if labels is not None and len(labels) > 0:
+            dataset = TensorDataset(features, labels)
+        elif features is not None and len(features) > 0:
+            dataset = TensorDataset(features)
+        else:
+            print("No features or labels loaded.")
+            return None
+
+        return dataset
+
+    except Exception as e_label:
+        catch(f"{type(e_label)}")
+        catch(e_label)
+        return None
+
+def merge_columns(X, y=None):
+    from torch.utils.data import TensorDataset, DataLoader
+    if y:
+        return TensorDataset(X, y)
+    return X
+
+def to_loader(dataset, batch_size=1):
+    from torch.utils.data import TensorDataset, DataLoader
+    return DataLoader(dataset, pin_memory=False, num_workers=0, batch_size=batch_size, shuffle=True, drop_last=False)
+
+def pad_sequences(X):
+    import torch
+    X = three_dim_numpy(X)
+    X = torch.from_numpy(cupy_to_numpy(X))
+    return torch.nn.utils.rnn.pad_sequence(X, batch_first=True)
+
+def kmeans_k_suggestions(X, k_range=range(2,20), random_state=None):
+    wcss_values = {}
+    silhouette_scores = {}
+    davies_bouldin_indices = {}
+    calinski_harabasz_indices = {}
+
+    suggested_k_elbow = None
+    suggested_k_silhouette = None
+    suggested_k_davies_bouldin = None
+    suggested_k_calinski_harabasz = None
+    final_suggestion_k = None
+
+    is_cupy_available = False
+    kmeans_lib = None
+
+    try:
+        import cupy as np
+        from cuml.cluster import KMeans
+        kmeans_lib = KMeans
+        is_cupy_available = True
+        print("GPU acceleration with CuPy (cuML) is available and will be used.")
+    except ImportError:
+        import numpy as np
+        from sklearn.cluster import KMeans
+        kmeans_lib = KMeans
+        print("Warning: CuPy (cuML) is unavailable, falling back to CPU with scikit-learn KMeans.")
+
+    X_array = np.asarray(X)
+
+    if len(k_range) < 2:
+        return {
+            'wcss': wcss_values,
+            'silhouette_scores': silhouette_scores,
+            'davies_bouldin_indices': davies_bouldin_indices,
+            'calinski_harabasz_indices': calinski_harabasz_indices,
+            'suggested_k_elbow': suggested_k_elbow,
+            'suggested_k_silhouette': suggested_k_silhouette,
+            'suggested_k_davies_bouldin': suggested_k_davies_bouldin,
+            'suggested_k_calinski_harabasz': suggested_k_calinski_harabasz,
+            'final_suggestion': final_suggestion_k,
+            'notes': "K-range too small to provide meaningful suggestions. Try a range with at least 2 different k values."
+        }
+
+    for k in k_range:
+        if k <= 1:
+            wcss_values[k] = 0
+            silhouette_scores[k] = np.nan
+            davies_bouldin_indices[k] = np.nan
+            calinski_harabasz_indices[k] = np.nan
+            continue
+
+        kmeans = kmeans_lib(n_clusters=int(k), random_state=random_state, init='k-means++')
+        labels = kmeans.fit_predict(X_array)
+
+        numpy_labels = np.asnumpy(labels) if is_cupy_available else labels
+        numpy_X = np.asnumpy(X_array) if is_cupy_available else X_array
+
+        wcss_values[k] = kmeans.inertia_
+
+        silhouette_scores[k] = silhouette_score(numpy_X, numpy_labels)
+        davies_bouldin_indices[k] = davies_bouldin_score(numpy_X, numpy_labels)
+        calinski_harabasz_indices[k] = calinski_harabasz_score(numpy_X, numpy_labels)
+
+    wcss_ratios = {}
+    if len(k_range) > 2:
+        for i in range(len(k_range) - 1):
+            k1 = k_range[i]
+            k2 = k_range[i+1]
+            if wcss_values[k1] > 0:
+                ratio = wcss_values[k2] / wcss_values[k1]
+                wcss_ratios[k2] = ratio
+
+        if wcss_ratios:
+            suggested_k_elbow = min(wcss_ratios, key=wcss_ratios.get)
+
+
+    suggested_k_silhouette = max(silhouette_scores, key=silhouette_scores.get)
+
+    suggested_k_davies_bouldin = min(davies_bouldin_indices, key=davies_bouldin_indices.get)
+
+    suggested_k_calinski_harabasz = max(calinski_harabasz_indices, key=calinski_harabasz_indices.get)
+
+    if suggested_k_elbow is not None:
+        final_suggestion_k = suggested_k_elbow
+    elif suggested_k_silhouette is not None and silhouette_scores[suggested_k_silhouette] > 0.5:
+        final_suggestion_k = suggested_k_silhouette
+    elif suggested_k_calinski_harabasz is not None:
+        final_suggestion_k = suggested_k_calinski_harabasz
+    else:
+        final_suggestion_k = None
+
+
+    return {
+        'wcss': wcss_values,
+        'silhouette_scores': silhouette_scores,
+        'davies_bouldin_indices': davies_bouldin_indices,
+        'calinski_harabasz_indices': calinski_harabasz_indices,
+        'suggested_k_elbow': suggested_k_elbow,
+        'suggested_k_silhouette': suggested_k_silhouette,
+        'suggested_k_davies_bouldin': suggested_k_davies_bouldin,
+        'suggested_k_calinski_harabasz': suggested_k_calinski_harabasz,
+        'final_suggestion': final_suggestion_k,
+        'random_state': random_state,
+        'notes': "Suggestions are based on heuristics. Visualize metrics and use domain knowledge for final k selection. GPU acceleration is automatically used if available."
+    }
+
+def fit(model):
+
+    log("Features",model.X_all)
+
+    if hasattr(model,"y_all"):
+        log("Labels",model.y_all)
+        max_lens = get_max_shapes(model.X_all,model.y_all)
+        try:
+            model.X_all = numpy_to_cupy(reshape_numpy(cupy_to_numpy(model.X_all),lengths=max_lens))
+            model.y_all = numpy_to_cupy(reshape_numpy(cupy_to_numpy(model.y_all),lengths=max_lens))
+            log("Fitting Supervised", model.X_all.shape[0])
+
+            model.fit(model.X_all, model.y_all)
+
+        except Exception as e:
+            catch(e)
+    else:
+        max_lens = get_max_shapes(model.X_all)
+        try:
+            model.X_all = numpy_to_cupy(reshape_numpy(cupy_to_numpy(model.X_all),lengths=max_lens))
+            log("Fitting Unsupervised", model.X_all.shape[0])
+
+            model.fit(model.X_all)
+
+        except Exception as e:
+            catch(e)
+
+    return model
+
+def feed(model, X_new, y_new=None, epochs=1):
+
+    if model is None:
+        model = HybridModel()
+
+    if y_new is None:
+
+        for epoch in range(epochs):
+            log(f"Feeding epoch {epoch+1} X",one_dim_numpy(X_new))
+            if not hasattr(model, 'X_all'):
+                model.X_all = one_dim_numpy(X_new)
+            else:
+                model.X_all = one_dim_numpy(np.concatenate((model.X_all, one_dim_numpy(X_new)), axis=0))
+
+    else:
+
+        for epoch in range(epochs):
+            log(f"Feeding epoch {epoch+1} X",one_dim_numpy(X_new))
+            log(f"Feeding epoch {epoch+1} y",one_dim_numpy(y_new))
+            if not hasattr(model, 'X_all'):
+                model.X_all = one_dim_numpy(X_new)
+                model.y_all = one_dim_numpy(y_new)
+            else:
+                model.X_all = one_dim_numpy(np.concatenate((model.X_all, one_dim_numpy(X_new)), axis=0))
+                model.y_all = one_dim_numpy(np.concatenate((model.y_all, one_dim_numpy(y_new)), axis=0))
+
+    return model
+
+def train(
+    model_path=None,
+    remote_src=None, revision=None, url_type="parquet",
+    features=None, labels=None,
+    dataset_label_columns=None, drop_list=None,
+    selected_rows=None
+):
+    import joblib
+
+    tokenizer = init_tokenizer()
+
+    got_inp = check_parameter(features) or check_parameter(remote_src)
+    is_supv = check_parameter(dataset_label_columns) or check_parameter(labels)
+
+    model = None
+
+    if check_parameter(model_path):
+        model = joblib.load(model_path)
+        print(f"cuML model loaded from {model_path}")
+        if model is None:
+            logging.error(f"Could not load model from {model_path}")
+            return None
+
+    model_path = f'model_{random_string()}.joblib'
+
+    if not got_inp:
+        return None
+
+    if check_parameter(remote_src):
+        dataset = fetch_dataset(remote_src, url_type, revision)
+    else:
+        dataset = files_to_dataset(features, labels)
+
+    dataset = drop_columns(dataset, drop_list)
+
+    log("Full dataset length",len(dataset))
+
+    loaders = []
+    if check_parameter(selected_rows):
+        selected_rows = simple_text(selected_rows).split()
+        for part in selected_rows:
+            if "-" in part:
+                start_end = part.split("-")
+                loaders.append(to_loader(
+                    select_rows( dataset, int(start_end[0])-1, int(start_end[-1]) )
+                ))
+            else:
+                datasets.append(to_loader(
+                    select_rows( dataset, int(part)-1, int(part) )
+                ))
+    else:
+        loaders.append( to_loader(dataset) )
+
+    if is_supv:
+
+        for l,loader in enumerate(loaders):
+            print(f"Loader {l+1}")
+            for i,b in enumerate(loader):
+                print(f"Batch {i+1}: {b}")
+
+                X, y = split_columns(b, dataset_label_columns, is_batch=True)
+
+                X = tokenize_and_pad(X, tokenizer)
+                y = tokenize_and_pad(y, tokenizer)
+
+                #  X = process_rows(X)
+
+                X = pad_sequences(X)
+
+                X = numpy_to_cupy(X)
+                y = numpy_to_cupy(y)
+
+                print("Feeding model")
+                model = feed(model, X, y)
+
+    else:
+
+        for l,loader in enumerate(loaders):
+            print(f"Loader {l+1}")
+            for i,b in enumerate(loader):
+                print(f"Batch {i+1}: {b}")
+
+                X = tokenize_and_pad(b, tokenizer)
+
+                #  X = process_rows(X)
+
+                X = pad_sequences(X)
+
+                X = numpy_to_cupy(X)
+
+                print("Feeding model")
+                model = feed(model, X)
+
+    print("Fitting model")
+    fit(model)
+
+    try:
+        joblib.dump(model, model_path)
+        log("Trained model path",model_path,status=True)
+        return model_path
+    except Exception as e:
+        print(f"Error saving cuML model: {e}")
+        return None
+
+
+def create_vectorizer(texts):
+
+    from sklearn.feature_extraction.text import TfidfVectorizer
+
+    vectorizer = TfidfVectorizer()
+    vectorizer.fit(texts)
+    return vectorizer
+
+def vectorize(vectorizer, texts):
+    """Vectorizes a list of strings using a fitted vectorizer."""
+    if vectorizer is None or texts is None:
+        return None
+
+    X_tfidf = vectorizer.transform(texts)
+    return np.array(X_tfidf.toarray())
+
+def unvectorize(vectorizer, vectorized_data):
+    if vectorizer is None or vectorized_data is None:
+        return None
+
+    vocabulary = vectorizer.vocabulary_
+    index_to_word = {v: k for k, v in vocabulary.items()}  # Reverse mapping
+
+    unvectorized_texts = []
+    for row in vectorized_data:
+        words = []
+        for i, value in enumerate(row):
+            if value > 0:  # Consider non-zero TF-IDF values
+                if i in index_to_word:
+                    words.append(index_to_word[i])
+        unvectorized_texts.append(" ".join(words))  # Reconstruct text
+
+    return unvectorized_texts
+
+
+def extract_video_features(video_path, frame_interval=10):
+    """
+    Extracts features from a video file by processing frames at specified intervals.
+    Combines color histograms, LBP, and Canny edge features for each processed frame.
+
+    Args:
+        video_path (str): The path to the video file.
+        frame_interval (int): Process every nth frame.
+
+    Returns:
+        numpy.ndarray: A 2D NumPy array, where each row represents features from a frame, or None if an error occurs.
+    """
+
+    import cv2
+    import skimage.feature as skf
+
+    try:
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            raise ValueError("Error opening video file.")
+
+        frame_count = 0
+        all_frame_features = []
+
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break  # End of video
+
+            if frame_count % frame_interval == 0:
+                frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+                # Color Histograms
+                hist_b = cv2.calcHist([frame], [0], None, [256], [0, 256]).flatten()
+                hist_g = cv2.calcHist([frame], [1], None, [256], [0, 256]).flatten()
+                hist_r = cv2.calcHist([frame], [2], None, [256], [0, 256]).flatten()
+                color_hist = _np.concatenate((hist_b, hist_g, hist_r)).astype(_np.float32)
+
+                # Local Binary Patterns (LBP)
+                radius = 1
+                n_points = 8 * radius
+                lbp = skf.local_binary_pattern(frame_gray, n_points, radius, method='uniform').flatten().astype(_np.float32)
+
+                # Canny Edge Detection
+                edges = cv2.Canny(frame_gray, 100, 200).flatten().astype(_np.float32)
+
+                # Combine features for this frame
+                frame_features = _np.concatenate((color_hist, lbp, edges))
+                all_frame_features.append(frame_features)
+
+            frame_count += 1
+
+        cap.release()
+
+        if not all_frame_features:
+            return None  # No frames processed
+
+        return np.array(all_frame_features)
+
+    except Exception as e:
+        catch(e)
+        return None
+
+def extract_text_features(text, vectorizer=None):
+    """
+    Extracts TF-IDF features from a text string.
+
+    Args:
+        text (str): The input text string.
+        max_features (int): Maximum number of features (words) to consider.
+
+    Returns:
+        numpy.ndarray: A 1D NumPy array containing the TF-IDF features, or None if an error occurs.
+    """
+
+    from sklearn.feature_extraction.text import TfidfVectorizer
+
+    try:
+        vectorizer = vectorizer or TfidfVectorizer()
+        tfidf_matrix = vectorizer.fit_transform([text])  # Input must be a list of strings
+        features = tfidf_matrix.toarray().flatten().astype(_np.float32) #convert to float 32 for cuml
+        return features
+
+    except Exception as e:
+        print(f"Error extracting text features: {e}")
+        return None
+
+def extract_image_features(image_path):
+    """
+    Extracts and combines color histograms, texture features (LBP), and edge features (Canny)
+    from an image file into a single 1D NumPy array.
+
+    Args:
+        image_path (str): The path to the image file.
+
+    Returns:
+        numpy.ndarray: A 1D NumPy array containing the combined image features, or None if an error occurs.
+    """
+
+    import cv2
+    import skimage.feature as skf
+
+    try:
+        img = cv2.imread(image_path)
+        if img is None:
+            raise ValueError("Image could not be read.")
+
+        img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+        # Color Histograms (3 channels: B, G, R)
+        hist_b = cv2.calcHist([img], [0], None, [256], [0, 256]).flatten()
+        hist_g = cv2.calcHist([img], [1], None, [256], [0, 256]).flatten()
+        hist_r = cv2.calcHist([img], [2], None, [256], [0, 256]).flatten()
+        color_hist = _np.concatenate((hist_b, hist_g, hist_r)).astype(_np.float32)
+
+        # Local Binary Patterns (LBP)
+        radius = 1
+        n_points = 8 * radius
+        lbp = skf.local_binary_pattern(img_gray, n_points, radius, method='uniform').flatten().astype(_np.float32)
+
+        # Canny Edge Detection
+        edges = cv2.Canny(img_gray, 100, 200).flatten().astype(_np.float32)
+
+        # Combine all features
+        all_features = _np.concatenate((color_hist, lbp, edges))
+
+        return all_features
+
+    except Exception as e:
+        print(f"Error extracting image features: {e}")
+        return None
+
+def extract_audio_features(file_path, n_mfcc=N_MFCC):
+    """
+    Extracts and combines MFCCs, spectral features, zero-crossing rate, and chroma features
+    from an audio file into a single 1D NumPy array.
+
+    Args:
+        file_path (str): The path to the audio file.
+        n_mfcc (int): The number of MFCCs to extract..
+
+    Returns:
+        numpy.ndarray: A 1D NumPy array containing the combined audio features, or None if an error occurs.
+    """
+
+    import librosa
+
+    try:
+        y, sr = librosa.load(file_path, sr=None)  # Load with original sample rate
+    except Exception as e:
+        print(f"Error loading audio file: {e}")
+        return None
+
+    try:
+        # MFCCs
+        mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=n_mfcc, n_fft=N_FFT, n_mels=N_MELS).flatten()
+
+        # Spectral features
+        spectral_centroid = librosa.feature.spectral_centroid(y=y, sr=sr).flatten()
+        spectral_bandwidth = librosa.feature.spectral_bandwidth(y=y, sr=sr).flatten()
+        spectral_rolloff = librosa.feature.spectral_rolloff(y=y, sr=sr).flatten()
+
+        spectral_features = _np.concatenate((spectral_centroid, spectral_bandwidth, spectral_rolloff))
+
+        # Zero-crossing rate
+        zero_crossing_rate = librosa.feature.zero_crossing_rate(y=y).flatten()
+
+        # Chroma features
+        chroma = librosa.feature.chroma_stft(y=y, sr=sr).flatten()
+
+        # Combine all features
+        all_features = _np.concatenate((mfccs, spectral_features, zero_crossing_rate, chroma)).astype(_np.float32) #convert to float 32 for cuml
+        return all_features
+
+    except Exception as e:
+        catch(e)
+        return None
+
+def load_as_numpy(path, training=False):
+
+    import imageio as iio
+    from scipy.io import wavfile
+    import sox
+    import pandas
+
+    try:
+        parts = path.split(".")
+        if len(parts) >= 2:
+            last = parts[-1].strip().lower()
+            if last in ["wav","mp3"]:
+                try:
+                    tfm = sox.Transformer()
+                    tfm.rate(AUDIO_SR)
+
+                    if training:
+
+                        temp_name = tmp("wav")
+                        tfm.build_file(path, temp_name)
+
+                        temp_2 = tmp("mp3")
+                        remove_silence(temp_name,temp_2)
+                        dir, num = split_mp3( temp_2, AUDIO_SEC )
+                        files = read(dir)
+                        x = []
+                        for _f in files:
+                            _x = numpy_to_cupy(extract_audio_features(f'{dir}/{_f}'))
+                            x.append(_x)
+                        delete(temp_name)
+                        delete(temp_2)
+
+                    else:
+                        temp_name = tmp("mp3")
+                        tfm.build_file(path, temp_name)
+
+                        x = numpy_to_cupy(extract_audio_features(temp_name))
+                        delete(temp_name)
+
+                    return x
+
+                except Exception as e:
+                    catch(e)
+                    return None
+            elif last in ["csv", "xlsx", "json"]:  # Return NumPy arrays for consistency
+                try:
+                    if last == "csv":
+                        df = pandas.read_csv(path)
+                    elif last == "xlsx":
+                        df = pandas.read_excel(path)
+                    elif last == "json":
+                        df = pandas.read_json(path)
+                    return df.values  # Convert DataFrame to NumPy array
+                except Exception as e_data:
+                    catch(e_data)
+                    return None
+            elif last == "txt":
+                try:
+                    txt = read(path)
+                    return numpy_to_cupy(extract_text_features(txt))
+                except Exception as e_txt:
+                    catch(e_txt)
+                    return None
+            elif last in iio_formats:
+                try:
+                    image_data = iio.imread(path)
+                    data = resize_image(image_data, HEIGHT_PX, WIDTH_PX)
+                    path_resized = save_image(data)
+                    return numpy_to_cupy(extract_image_features(path_resized))
+                except Exception as e_image:
+                    catch(e_image)
+                    return None
+            else:
+                try:
+                    resized_video_file = resize_video(path, HEIGHT_PX, WIDTH_PX)
+                    new_fps_video_file = convert_video_fps(resized_video_file, FPS)
+                    return numpy_to_cupy(extract_video_features(new_fps_video_file))
+                except Exception as e_video:
+                    catch(e_video)
+                    return None
+        else:
+            print(f"Invalid path format: {path}")
+            return None
+    except Exception as e_overall:
+        catch(e_overall)
+        return None
+
+def read_as_numpy(path:str):
+    return load_as_numpy(path)
+
+def get_prediction_file_extension(pred_type):
+    """Returns the correct file extension for the prediction type."""
+    if pred_type == "video":
+        return "mp4"
+    elif pred_type == "image":
+        return "png"
+    elif pred_type == "audio":
+        return "wav"
+    elif pred_type == "text":
+        return "txt"
+    else:
+        return "data"
+
+
+def process_rows(batch):
+    try:
+        from cuml.preprocessing import StandardScaler, Normalizer, SimpleImputer
+    except Exception as e:
+        catch(e)
+        print("Falling back to sklearn (CPU)")
+        from sklearn.preprocessing import StandardScaler, Normalizer
+        from sklearn.impute import SimpleImputer
+
+    lst = []
+    for i, row in enumerate(batch):
+        r = two_dim_numpy(row)
+        log(f"Scaling {i+1}",r)
+        scaler = StandardScaler()
+        r = scaler.fit_transform(r)
+        log(f"Normalizing {i+1}",r)
+        normalizer = Normalizer()
+        r = normalizer.fit_transform(r)
+        log(f"Imputing {i+1}",r)
+        imputer = SimpleImputer()
+        r = imputer.fit_transform(r)
+        log(f"Reshaping {i+1}",r)
+        lst.append(reshape_numpy(r))
+
+    return two_dim_numpy(lst)
+
+def predict_linear_regression(X_new, model_path):
+    import torch
+    try:
+        input_dim = X_new.shape[1]
+        model_torch = LinearRegressionTorch(input_dim)
+        model_torch.load_state_dict(torch.load(model_path))
+
+        model_torch.eval()
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model_torch.to(device)
+
+        X_new_torch = torch.tensor(X_new, dtype=torch.float32, device=device)
+
+        with torch.no_grad():
+            predictions_torch = model_torch(X_new_torch).squeeze()
+
+        predictions_numpy = predictions_torch.cpu().numpy()
+
+        return predictions_numpy
+
+    except Exception as e:
+        print(f"Error during prediction: {e}")
+        return None
+
+def features_to_audio(
+    predicted_features,
+    sr=None,
+    n_mfcc=None,
+    n_mels=None,
+    n_fft=None,
+    hop_length=512,
+):
+    import librosa
+
+    sr = sr if sr is not None else AUDIO_SR
+    n_mfcc = n_mfcc if n_mfcc is not None else N_MFCC
+    n_mels = n_mels if n_mels is not None else N_MELS
+    n_fft = n_fft if n_fft is not None else N_FFT
+
+    if sr is None or n_mfcc is None or n_mels is None or n_fft is None:
+         print("Error: Audio parameters (sr, n_mfcc, n_mels, n_fft) are not provided and global defaults are not set.")
+         return None
+
+    expected_freq_bins = n_fft // 2 + 1
+
+    try:
+        predicted_features = _np.asarray(predicted_features)
+        remainder = predicted_features.size % n_mfcc
+        if remainder != 0:
+            padding_needed = n_mfcc - remainder
+            print(f"Padding with {padding_needed} zeros to make the predicted features ({predicted_features.size}) a multiple of n_mfcc ({n_mfcc}).")
+            predicted_features = _np.pad(predicted_features, (0, padding_needed), mode='constant', constant_values=0)
+
+        mfccs = predicted_features.reshape((n_mfcc, -1))
+
+        if mfccs.shape[1] == 0:
+            print("Error: Reshaped MFCCs have zero frames. Cannot proceed with audio reconstruction.")
+            return None
+
+        mel_spectrogram_db = librosa.feature.inverse.mfcc_to_mel(mfccs, n_mels=n_mels)
+
+        mel_spectrogram = librosa.db_to_amplitude(mel_spectrogram_db)
+        mel_spectrogram = _np.nan_to_num(mel_spectrogram, nan=0.0, posinf=_np.finfo(_np.float16).max, neginf=_np.finfo(_np.float16).min)
+        mel_spectrogram = _np.maximum(0, mel_spectrogram)
+
+        magnitude_spectrogram = librosa.feature.inverse.mel_to_stft(M = mel_spectrogram, sr = sr, n_fft = n_fft)
+        magnitude_spectrogram = _np.nan_to_num(magnitude_spectrogram, nan=0.0, posinf=_np.finfo(_np.float16).max, neginf=_np.finfo(_np.float16).min)
+        magnitude_spectrogram = _np.maximum(0, magnitude_spectrogram)
+        magnitude_spectrogram = _np.nan_to_num(magnitude_spectrogram, nan=0.0, posinf=_np.finfo(_np.float16).max, neginf=_np.finfo(_np.float16).min)
+
+        if magnitude_spectrogram.shape[0] != expected_freq_bins:
+            print(f"Error: Magnitude spectrogram has incorrect frequency bin count ({magnitude_spectrogram.shape[0]}) for n_fft ({n_fft}).\nExpected {expected_freq_bins}.\nCannot perform Griffin-Lim.")
+            return None
+
+        if magnitude_spectrogram.shape[1] == 0:
+            print("Error: Magnitude spectrogram has zero frames. Skipping Griffin-Lim.")
+            return None
+
+        griffin_lim_iterations = [12, 32]
+
+        for n_iter in griffin_lim_iterations:
+            try:
+                audio_waveform = librosa.griffinlim(magnitude_spectrogram, n_fft=n_fft, hop_length=hop_length, n_iter=n_iter)
+
+                if audio_waveform.size > 0:
+                    print(f"Griffin-Lim finished {n_iter} iterations")
+
+                    audio_waveform = _np.nan_to_num( audio_waveform, nan=0.0, posinf=_np.finfo(_np.float16).max, neginf=_np.finfo(_np.float16).min )                        
+                    audio_waveform = _np.clip(audio_waveform, -1.0, 1.0)
+
+                    if not _np.all(_np.isfinite(audio_waveform)):
+                         print("Warning: Audio waveform contains non-finite values after clipping.\nThis is unexpected.\nReturning None.")
+                         return None
+
+                    return audio_waveform
+
+                else:
+                    print(f"Griffin-Lim with n_iter={n_iter} produced an empty output.")
+
+            except Exception as e:
+                print(f"Griffin-Lim with n_iter={n_iter} failed!")
+                catch(e)
+                if n_iter == griffin_lim_iterations[-1]:
+                    print("Griffin-Lim failed. Returning None.")
+                    return None
+                else:
+                    print("Trying again with more iterations...")
+
+        return None
+
+    except Exception as e:
+        catch(e)
+        return None
+
+def predict_audio(model, audio_file):
+    import librosa
+    import soundfile as sf
+
+    try:
+        audio_data, sr = librosa.load(audio_file, sr=AUDIO_SR, mono=True)
+
+        timeline = get_active_audio_timeline(audio_file)
+
+        log("Audio shape", audio_data.shape)
+        log("Active audio timeline", timeline)
+
+        predicted_audio = _np.zeros_like(audio_data) # Use _np for standard numpy operation
+
+        if not timeline:
+             log("Silent timeline", "No active audio segments found.")
+
+
+        for i, (start_time, end_time) in enumerate(timeline):
+            start_sample = int(start_time * sr)
+            end_sample = int(end_time * sr)
+
+            start_sample = max(0, start_sample)
+            end_sample = min(len(audio_data), end_sample)
+
+            active_audio_part_np = audio_data[start_sample:end_sample]
+
+            if active_audio_part_np.size == 0:
+                 log("Segment skipped", f"Skipping empty audio segment from {start_time:.2f}s to {end_time:.2f}s")
+                 continue
+
+            active_audio_part_model_input = numpy_to_cupy(active_audio_part_np)
+
+            log("Predicting segment", f"Predicting audio segment {i+1}/{len(timeline)} with shape {active_audio_part_model_input.shape}")
+            prediction = model.predict(active_audio_part_model_input)
+
+            if is_clusters_model(model):
+                 log("Getting prediction cluster content", f"Predicted cluster for segment {i+1}: {int(prediction[0])}")
+                 part_feat = cupy_to_numpy(get_cluster_content(model, int(prediction[0])))
+            else:
+                 part_feat = cupy_to_numpy(prediction)
+
+            log("Prediction shape", f"Predicted features shape for segment {i+1}: {part_feat.shape}")
+
+            part_aud = features_to_audio(part_feat)
+
+            if part_aud is None:
+                 log("Segment failure", f"Failed to convert features to audio for segment {i+1}. Skipping this segment.")
+                 continue
+
+            part_length = end_sample - start_sample
+
+            min_len = min(part_aud.shape[0], part_length)
+            predicted_audio[start_sample : start_sample + min_len] = part_aud[:min_len]
+
+
+        output_file = tmp("wav")
+        sf.write(output_file, predicted_audio, sr)
+
+        log("Audio output", f"Predicted audio saved to: {output_file}")
+        return output_file
+
+    except Exception as e:
+        catch(e)
+        return None
+
+def features_to_image(predicted_features):  # Example image shape
+    """
+    Generates an image from predicted image features, assuming the features
+    were extracted using the provided 'extract_image_features' function.
+
+    Args:
+        predicted_features (numpy.ndarray): 1D NumPy array of predicted features.
+        image_shape (tuple): The desired shape of the output image (height, width, channels).
+
+    Returns:
+        numpy.ndarray: Image as a NumPy array (height, width, channels), or None if an error occurs.
+    """
+
+    import cv2
+
+    image_shape = (HEIGHT_PX, WIDTH_PX, 3)
+
+    try:
+        height, width, channels = image_shape
+        hist_size = 256 * 3  # Color histograms (B, G, R)
+        lbp_size = height * width  # LBP features
+        edge_size = height * width # Canny edge features
+
+        # Split the predicted features
+        color_hist = predicted_features[:hist_size].reshape(3, 256)
+        lbp_features = predicted_features[hist_size:hist_size + lbp_size].reshape(height, width)
+        edge_features = predicted_features[hist_size + lbp_size:].reshape(height, width)
+
+        # Create a blank image
+        reconstructed_image = np.zeros(image_shape, dtype=np.uint8)
+
+        # Reconstruct color channels (simplified)
+        for c in range(channels):
+          for i in range(256):
+            if c == 0:
+              reconstructed_image[:,:,0] += np.uint8(color_hist[0][i]/np.max(color_hist[0]) * 255)
+            elif c == 1:
+              reconstructed_image[:,:,1] += np.uint8(color_hist[1][i]/np.max(color_hist[1]) * 255)
+            else:
+              reconstructed_image[:,:,2] += np.uint8(color_hist[2][i]/np.max(color_hist[2]) * 255)
+
+        # Reconstruct LBP and Edge (simplified)
+        lbp_scaled = cv2.normalize(lbp_features, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
+        edge_scaled = cv2.normalize(edge_features, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
+
+        reconstructed_image_gray = cv2.addWeighted(lbp_scaled, 0.5, edge_scaled, 0.5, 0)
+        reconstructed_image = cv2.cvtColor(reconstructed_image, cv2.COLOR_BGR2GRAY)
+        reconstructed_image = cv2.addWeighted(reconstructed_image, 0.5, reconstructed_image_gray, 0.5, 0)
+        reconstructed_image = cv2.cvtColor(reconstructed_image, cv2.COLOR_GRAY2BGR)
+
+        return reconstructed_image
+
+    except Exception as e:
+        print(f"Error generating image from features: {e}")
+        return None
+
+def features_to_video(predicted_features, frame_interval=10, fps=FPS):
+    """
+    Generates a video from predicted video features, assuming the features
+    were extracted using the provided 'extract_video_features' function.
+
+    Args:
+        predicted_features (numpy.ndarray): 2D NumPy array, where each row represents features from a frame.
+        frame_interval (int): Frame interval used during feature extraction.
+        fps (int): Frames per second of the output video.
+
+    Returns:
+        bool: True if video generation was successful, False otherwise.
+    """
+
+    import cv2
+
+    output_path = tmp("mp4")
+
+    video_shape = (HEIGHT_PX, WIDTH_PX, 3)
+
+    try:
+        height, width, channels = video_shape
+        hist_size = 256 * 3
+        lbp_size = height * width
+        edge_size = height * width
+
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Or another suitable codec
+        out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+
+        for frame_features in predicted_features:
+            color_hist = frame_features[:hist_size].reshape(3, 256)
+            lbp_features = frame_features[hist_size:hist_size + lbp_size].reshape(height, width)
+            edge_features = frame_features[hist_size + lbp_size:].reshape(height, width)
+
+            reconstructed_frame = np.zeros(video_shape, dtype=np.uint8)
+
+            # Reconstruct color channels (simplified)
+            for c in range(channels):
+                for i in range(256):
+                    if c == 0:
+                        reconstructed_frame[:, :, 0] += np.uint8(color_hist[0][i] / np.max(color_hist[0]) * 255)
+                    elif c == 1:
+                        reconstructed_frame[:, :, 1] += np.uint8(color_hist[1][i] / np.max(color_hist[1]) * 255)
+                    else:
+                        reconstructed_frame[:, :, 2] += np.uint8(color_hist[2][i] / np.max(color_hist[2]) * 255)
+
+            # Reconstruct LBP and Edge (simplified)
+            lbp_scaled = cv2.normalize(lbp_features, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
+            edge_scaled = cv2.normalize(edge_features, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
+
+            reconstructed_frame_gray = cv2.addWeighted(lbp_scaled, 0.5, edge_scaled, 0.5, 0)
+            reconstructed_frame = cv2.cvtColor(reconstructed_frame, cv2.COLOR_BGR2GRAY)
+            reconstructed_frame = cv2.addWeighted(reconstructed_frame, 0.5, reconstructed_frame_gray, 0.5, 0)
+            reconstructed_frame = cv2.cvtColor(reconstructed_frame, cv2.COLOR_GRAY2BGR)
+
+            out.write(reconstructed_frame)
+
+        out.release()
+        return output_path
+
+    except Exception as e:
+        print(f"Error generating video from features: {e}")
+        return False
+
+def features_to_text(predicted_features, vectorizer=None, vocabulary=None):
+    """
+    Generates text from predicted TF-IDF features, assuming the features
+    were extracted using the provided 'extract_text_features' function.
+
+    Args:
+        predicted_features (numpy.ndarray): 1D NumPy array of predicted TF-IDF features.
+        vectorizer (TfidfVectorizer, optional): The trained TfidfVectorizer used to extract features.
+                                                  If None, a vocabulary must be provided.
+        vocabulary (list, optional): The vocabulary (list of words) used to create the features.
+                                      Required if vectorizer is None.
+
+    Returns:
+        str: Reconstructed text string, or None if an error occurs.
+    """
+
+    from sklearn.feature_extraction.text import TfidfVectorizer
+
+    try:
+        if vectorizer is None and vocabulary is None:
+            raise ValueError("Either a vectorizer or a vocabulary must be provided.")
+
+        if vectorizer is None:
+            vectorizer = TfidfVectorizer(vocabulary=vocabulary)
+            vectorizer.fit(vocabulary)  # Need to fit with vocabulary to get correct mapping
+
+        # Reconstruct the TF-IDF matrix (1 sample)
+        tfidf_matrix = predicted_features.reshape(1, -1)
+
+        # Inverse transform to get word indices
+        word_indices = tfidf_matrix.nonzero()[1]
+
+        # Get feature names (words)
+        feature_names = vectorizer.get_feature_names_out()
+
+        # Reconstruct the text
+        reconstructed_words = [feature_names[i] for i in word_indices]
+        reconstructed_text = " ".join(reconstructed_words)
+
+        return reconstructed_text
+
+    except Exception as e:
+        print(f"Error generating text from features: {e}")
+        return None
+
+def predict(prediction_file: str, model_path: str):
+
+    import imageio as iio
+    from scipy.io import wavfile
+    import joblib
+
+    vec = None
+    input_data = None
+
+    mod = joblib.load(model_path)
+    print(f"cuML model loaded from {model_path}")
+    if mod is None:
+        logging.error(f"Could not load model from {model_path}")
+        return None
+
+    if prediction_file.split(".")[-1].strip().lower() == "txt":
+        txt = read(prediction_file)
+        if isinstance(txt, tuple) or isinstance(txt, list):
+            txt = "".join(txt)
+        vec = create_vectorizer([txt])
+        input_data = numpy_to_cupy(extract_text_features(txt,vec))
+    elif prediction_file.split(".")[-1].strip().lower() in common_audio_formats:
+        out = predict_audio(mod,prediction_file)
+        print(f"Prediction saved to {out}")
+        return out
+    else:
+        input_data = numpy_to_cupy(load_as_numpy(prediction_file))
+
+    if input_data is None:
+        log("Could not load input data",prediction_file,status=False)
+        return None
+
+    input_data = one_dim_numpy(input_data)
+    pred = mod.predict(input_data)
+
+    if pred is None:
+        logging.error("Model prediction failed.")
+        return None
+
+    if is_clusters_model(mod):
+        pred = one_dim_numpy(get_cluster_content( mod, int(pred[0]) ))
+
+    pred_type = guess_numpy_type(pred)
+    output_filename = f"{random_string()}.{get_prediction_file_extension(pred_type)}"
+
+    if vec is not None:
+        pred = features_to_text(cupy_to_numpy(pred))
+    elif pred_type is "text":
+        vec = create_vectorizer([""])
+        pred = features_to_text(cupy_to_numpy(pred))
+    elif pred_type is "audio":
+        pred = features_to_audio(cupy_to_numpy(pred))
+    elif pred_type is "image":
+        pred = features_to_image(cupy_to_numpy(pred))
+    elif pred_type is "video":
+        pred = features_to_video(cupy_to_numpy(pred))
+
+    handlers = {
+        "video": lambda: write_video(pred, FPS),
+        "image": lambda: iio.imwrite(output_filename, (cupy_to_numpy(pred) * 255).astype(np.uint8)),
+        "audio": lambda: wavfile.write(output_filename, AUDIO_SR, cupy_to_numpy(pred)),
+        "text": lambda: open(output_filename, "w").write(pred),
+    }
+
+    if pred_type in handlers:
+        try:
+            handlers[pred_type]()
+        except Exception as e:
+            catch(e)
+            return None
+    else:
+        logging.error(f"Unsupported prediction type: {pred_type}")
+        return None
+
+    print(f"Prediction saved to {output_filename}")
+    return output_filename
+
+def lang_code_to_name(code):
+    language_codes = {'af': 'afrikaans', 'sq': 'albanian', 'am': 'amharic', 'ar': 'arabic', 'hy': 'armenian', 'as': 'assamese', 'ay': 'aymara', 'az': 'azerbaijani', 'bm': 'bambara', 'eu': 'basque', 'be': 'belarusian', 'bn': 'bengali', 'bho': 'bhojpuri', 'bs': 'bosnian', 'bg': 'bulgarian', 'ca': 'catalan', 'ceb': 'cebuano', 'ny': 'chichewa', 'zh-CN': 'chinese (simplified)', 'zh-TW': 'chinese (traditional)', 'co': 'corsican', 'hr': 'croatian', 'cs': 'czech', 'da': 'danish', 'dv': 'dhivehi', 'doi': 'dogri', 'nl': 'dutch', 'en': 'english', 'eo': 'esperanto', 'et': 'estonian', 'ee': 'ewe', 'tl': 'filipino', 'fi': 'finnish', 'fr': 'french', 'fy': 'frisian', 'gl': 'galician', 'ka': 'georgian', 'de': 'german', 'el': 'greek', 'gn': 'guarani', 'gu': 'gujarati', 'ht': 'haitian creole', 'ha': 'hausa', 'haw': 'hawaiian', 'iw': 'hebrew', 'he': 'hebrew', 'hi': 'hindi', 'hmn': 'hmong', 'hu': 'hungarian', 'is': 'icelandic', 'ig': 'igbo', 'ilo': 'ilocano', 'id': 'indonesian', 'ga': 'irish', 'it': 'italian', 'ja': 'japanese', 'jw': 'javanese', 'kn': 'kannada', 'kk': 'kazakh', 'km': 'khmer', 'rw': 'kinyarwanda', 'gom': 'konkani', 'ko': 'korean', 'kri': 'krio', 'ku': 'kurdish (kurmanji)', 'ckb': 'kurdish (sorani)', 'ky': 'kyrgyz', 'lo': 'lao', 'la': 'latin', 'lv': 'latvian', 'ln': 'lingala', 'lt': 'lithuanian', 'lg': 'luganda', 'lb': 'luxembourgish', 'mk': 'macedonian', 'mai': 'maithili', 'mg': 'malagasy', 'ms': 'malay', 'ml': 'malayalam', 'mt': 'maltese', 'mi': 'maori', 'mr': 'marathi', 'mni-Mtei': 'meiteilon (manipuri)', 'lus': 'mizo', 'mn': 'mongolian', 'my': 'myanmar', 'ne': 'nepali', 'no': 'norwegian', 'or': 'odia (oriya)', 'om': 'oromo', 'ps': 'pashto', 'fa': 'persian', 'pl': 'polish', 'pt': 'portuguese', 'pa': 'punjabi', 'qu': 'quechua', 'ro': 'romanian', 'ru': 'russian', 'sm': 'samoan', 'sa': 'sanskrit', 'gd': 'scots gaelic', 'nso': 'sepedi', 'sr': 'serbian', 'st': 'sesotho', 'sn': 'shona', 'sd': 'sindhi', 'si': 'sinhala', 'sk': 'slovak', 'sl': 'slovenian', 'so': 'somali', 'es': 'spanish', 'su': 'sundanese', 'sw': 'swahili', 'sv': 'swedish', 'tg': 'tajik', 'ta': 'tamil', 'tt': 'tatar', 'te': 'telugu', 'th': 'thai', 'ti': 'tigrinya', 'ts': 'tsonga', 'tr': 'turkish', 'tk': 'turkmen', 'ak': 'twi', 'uk': 'ukrainian', 'ur': 'urdu', 'ug': 'uyghur', 'uz': 'uzbek', 'vi': 'vietnamese', 'cy': 'welsh', 'xh': 'xhosa', 'yi': 'yiddish', 'yo': 'yoruba', 'zu': 'zulu'}
+    return language_codes[code]
+
+def init_logger():
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.DEBUG)
+    console_handler = logging.StreamHandler()
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    console_handler.setFormatter(formatter)
+    if not logger.handlers:
+        logger.addHandler(console_handler)
+    return logger
+
+def write_on_image(image_path,top_title=None,middle_title=None,bottom_title=None):
+    from PIL import Image, ImageDraw, ImageFont
+
+    if "Alef-Bold.ttf" not in read("."):
+        google_drive_download("1C48KkYWQDYu7ypbNtSXAUJ6kuzoZ42sI","./Alef-Bold.ttf")
+
+    img = Image.open(image_path)
+
+    w, h = img.size
+    
+    draw = ImageDraw.Draw(img)
+
+    labels_distance = 1/3
+
+    if top_title:
+        rows = len(top_title.split("\n"))
+        textheight=min(math.ceil( w / 10 ), math.ceil( h / 5 ))
+        font = ImageFont.truetype("Alef-Bold.ttf", textheight)
+        textwidth = draw.textlength(top_title,font)
+        x = math.ceil((w - textwidth) / 2)
+        y = h - (textheight * rows / 2) - (h / 2)
+        y = math.ceil(y - (h / 2 * labels_distance))
+        draw.text((x, y), top_title, (255,255,255), font=font, spacing=2, stroke_width=math.ceil(textheight/20), stroke_fill=(0,0,0))
+
+    if middle_title:
+        rows = len(middle_title.split("\n"))
+        textheight=min(math.ceil( w / 12 ), math.ceil( h / 6 ))
+        font = ImageFont.truetype("Alef-Bold.ttf", textheight)
+        textwidth = draw.textlength(middle_title,font)
+        x = math.ceil((w - textwidth) / 2)
+        y = h - (textheight * rows / 2) - (h / 2)
+        draw.text((x, y), middle_title, (255,255,255), font=font, spacing=4, stroke_width=math.ceil(textheight/40), stroke_fill=(64,64,64))
+
+    if bottom_title:
+        rows = len(bottom_title.split("\n"))
+        textheight=min(math.ceil( w / 10 ), math.ceil( h / 5 ))
+        font = ImageFont.truetype("Alef-Bold.ttf", textheight)
+        textwidth = draw.textlength(bottom_title,font)
+        x = math.ceil((w - textwidth) / 2)
+        y = h - (textheight * rows / 2) - (h / 2)
+        y = math.ceil(y + (h / 2 * labels_distance))
+        draw.text((x, y), bottom_title, (0,0,0), font=font, spacing=2, stroke_width=math.ceil(textheight/20), stroke_fill=(255,255,255))
+
+    return save_image(img)
+
+def init_upscale():
+    import torch
+    import numpy as np
+    from torch import nn
+    import pillow_heif
+    from PIL import Image
+    from refiners.foundationals.latent_diffusion.stable_diffusion_1.multi_upscaler import (
+        MultiUpscaler,
+        UpscalerCheckpoints,
+    )
+    try:
+        import cupy.typing as npt
+    except Exception as e:
+        import numpy.typing as npt
+
+    Tile = tuple[int, int, Image.Image]
+    Tiles = list[tuple[int, int, list[Tile]]]
+    
+    def conv_block(in_nc: int, out_nc: int) -> nn.Sequential:
+        
+        return nn.Sequential(
+            nn.Conv2d(in_nc, out_nc, kernel_size=3, padding=1),
+            nn.LeakyReLU(negative_slope=0.2, inplace=True),
+        )
+    
+    class ResidualDenseBlock_5C(nn.Module):
+
+        def __init__(self, nf: int = 64, gc: int = 32) -> None:
+            
+            super().__init__()
+    
+            self.conv1 = conv_block(nf, gc)
+            self.conv2 = conv_block(nf + gc, gc)
+            self.conv3 = conv_block(nf + 2 * gc, gc)
+            self.conv4 = conv_block(nf + 3 * gc, gc)
+            self.conv5 = nn.Sequential(nn.Conv2d(nf + 4 * gc, nf, kernel_size=3, padding=1))
+    
+        def forward(self, x: torch.Tensor) -> torch.Tensor:
+            x1 = self.conv1(x)
+            x2 = self.conv2(torch.cat((x, x1), 1))
+            x3 = self.conv3(torch.cat((x, x1, x2), 1))
+            x4 = self.conv4(torch.cat((x, x1, x2, x3), 1))
+            x5 = self.conv5(torch.cat((x, x1, x2, x3, x4), 1))
+            return x5 * 0.2 + x
+
+    class RRDB(nn.Module):
+
+        def __init__(self, nf: int) -> None:
+            super().__init__()
+            self.RDB1 = ResidualDenseBlock_5C(nf)
+            self.RDB2 = ResidualDenseBlock_5C(nf)
+            self.RDB3 = ResidualDenseBlock_5C(nf)
+    
+        def forward(self, x: torch.Tensor) -> torch.Tensor:
+            out = self.RDB1(x)
+            out = self.RDB2(out)
+            out = self.RDB3(out)
+            return out * 0.2 + x
+    
+    
+    class Upsample2x(nn.Module):
+        """Upsample 2x."""
+    
+        def __init__(self) -> None:
+            super().__init__()  # type: ignore[reportUnknownMemberType]
+    
+        def forward(self, x: torch.Tensor) -> torch.Tensor:
+            return nn.functional.interpolate(x, scale_factor=2.0)  # type: ignore
+    
+    
+    class ShortcutBlock(nn.Module):
+        """Elementwise sum the output of a submodule to its input"""
+    
+        def __init__(self, submodule: nn.Module) -> None:
+            super().__init__()  # type: ignore[reportUnknownMemberType]
+            self.sub = submodule
+    
+        def forward(self, x: torch.Tensor) -> torch.Tensor:
+            return x + self.sub(x)
+    
+    
+    class RRDBNet(nn.Module):
+        def __init__(self, in_nc: int, out_nc: int, nf: int, nb: int) -> None:
+            super().__init__()  # type: ignore[reportUnknownMemberType]
+            assert in_nc % 4 != 0  # in_nc is 3
+    
+            self.model = nn.Sequential(
+                nn.Conv2d(in_nc, nf, kernel_size=3, padding=1),
+                ShortcutBlock(
+                    nn.Sequential(
+                        *(RRDB(nf) for _ in range(nb)),
+                        nn.Conv2d(nf, nf, kernel_size=3, padding=1),
+                    )
+                ),
+                Upsample2x(),
+                nn.Conv2d(nf, nf, kernel_size=3, padding=1),
+                nn.LeakyReLU(negative_slope=0.2, inplace=True),
+                Upsample2x(),
+                nn.Conv2d(nf, nf, kernel_size=3, padding=1),
+                nn.LeakyReLU(negative_slope=0.2, inplace=True),
+                nn.Conv2d(nf, nf, kernel_size=3, padding=1),
+                nn.LeakyReLU(negative_slope=0.2, inplace=True),
+                nn.Conv2d(nf, out_nc, kernel_size=3, padding=1),
+            )
+    
+        def forward(self, x: torch.Tensor) -> torch.Tensor:
+            return self.model(x)
+    
+    
+    def infer_params(state_dict: dict[str, torch.Tensor]) -> tuple[int, int, int, int, int]:
+        # this code is adapted from https://github.com/victorca25/iNNfer
+        scale2x = 0
+        scalemin = 6
+        n_uplayer = 0
+        out_nc = 0
+        nb = 0
+    
+        for block in list(state_dict):
+            parts = block.split(".")
+            n_parts = len(parts)
+            if n_parts == 5 and parts[2] == "sub":
+                nb = int(parts[3])
+            elif n_parts == 3:
+                part_num = int(parts[1])
+                if part_num > scalemin and parts[0] == "model" and parts[2] == "weight":
+                    scale2x += 1
+                if part_num > n_uplayer:
+                    n_uplayer = part_num
+                    out_nc = state_dict[block].shape[0]
+            assert "conv1x1" not in block  # no ESRGANPlus
+    
+        nf = state_dict["model.0.weight"].shape[0]
+        in_nc = state_dict["model.0.weight"].shape[1]
+        scale = 2**scale2x
+    
+        assert out_nc > 0
+        assert nb > 0
+    
+        return in_nc, out_nc, nf, nb, scale  # 3, 3, 64, 23, 4
+    
+    # https://github.com/philz1337x/clarity-upscaler/blob/e0cd797198d1e0e745400c04d8d1b98ae508c73b/modules/images.py#L64
+    Grid = namedtuple("Grid", ["tiles", "tile_w", "tile_h", "image_w", "image_h", "overlap"])
+
+    # adapted from https://github.com/philz1337x/clarity-upscaler/blob/e0cd797198d1e0e745400c04d8d1b98ae508c73b/modules/images.py#L67
+    def split_grid(image: Image.Image, tile_w: int = 512, tile_h: int = 512, overlap: int = 64) -> Grid:
+        w = image.width
+        h = image.height
+    
+        non_overlap_width = tile_w - overlap
+        non_overlap_height = tile_h - overlap
+    
+        cols = max(1, math.ceil((w - overlap) / non_overlap_width))
+        rows = max(1, math.ceil((h - overlap) / non_overlap_height))
+    
+        dx = (w - tile_w) / (cols - 1) if cols > 1 else 0
+        dy = (h - tile_h) / (rows - 1) if rows > 1 else 0
+    
+        grid = Grid([], tile_w, tile_h, w, h, overlap)
+        for row in range(rows):
+            row_images: list[Tile] = []
+            y1 = max(min(int(row * dy), h - tile_h), 0)
+            y2 = min(y1 + tile_h, h)
+            for col in range(cols):
+                x1 = max(min(int(col * dx), w - tile_w), 0)
+                x2 = min(x1 + tile_w, w)
+                tile = image.crop((x1, y1, x2, y2))
+                row_images.append((x1, tile_w, tile))
+            grid.tiles.append((y1, tile_h, row_images))
+    
+        return grid
+
+    # https://github.com/philz1337x/clarity-upscaler/blob/e0cd797198d1e0e745400c04d8d1b98ae508c73b/modules/images.py#L104
+    def combine_grid(grid: Grid):
+        def make_mask_image(r: npt.NDArray[np.float32]) -> Image.Image:
+            r = r * 255 / grid.overlap
+            return Image.fromarray(r.astype(np.uint8), "L")
+    
+        mask_w = make_mask_image(
+            np.arange(grid.overlap, dtype=np.float32).reshape((1, grid.overlap)).repeat(grid.tile_h, axis=0)
+        )
+        mask_h = make_mask_image(
+            np.arange(grid.overlap, dtype=np.float32).reshape((grid.overlap, 1)).repeat(grid.image_w, axis=1)
+        )
+    
+        combined_image = Image.new("RGB", (grid.image_w, grid.image_h))
+        for y, h, row in grid.tiles:
+            combined_row = Image.new("RGB", (grid.image_w, h))
+            for x, w, tile in row:
+                if x == 0:
+                    combined_row.paste(tile, (0, 0))
+                    continue
+    
+                combined_row.paste(tile.crop((0, 0, grid.overlap, h)), (x, 0), mask=mask_w)
+                combined_row.paste(tile.crop((grid.overlap, 0, w, h)), (x + grid.overlap, 0))
+    
+            if y == 0:
+                combined_image.paste(combined_row, (0, 0))
+                continue
+    
+            combined_image.paste(
+                combined_row.crop((0, 0, combined_row.width, grid.overlap)),
+                (0, y),
+                mask=mask_h,
+            )
+            combined_image.paste(
+                combined_row.crop((0, grid.overlap, combined_row.width, h)),
+                (0, y + grid.overlap),
+            )
+    
+        return combined_image
+    
+    
+    class UpscalerESRGAN:
+        def __init__(self, model_path: Path, device: torch.device, dtype: torch.dtype):
+            self.model_path = model_path
+            self.device = device
+            self.model = self.load_model(model_path)
+            self.to(device, dtype)
+    
+        def __call__(self, img: Image.Image) -> Image.Image:
+            return self.upscale_without_tiling(img)
+    
+        def to(self, device: torch.device, dtype: torch.dtype):
+            self.device = device
+            self.dtype = dtype
+            self.model.to(device=device, dtype=dtype)
+    
+        def load_model(self, path: Path) -> RRDBNet:
+            filename = path
+            state_dict: dict[str, torch.Tensor] = torch.load(filename, weights_only=True, map_location=self.device)  # type: ignore
+            in_nc, out_nc, nf, nb, upscale = infer_params(state_dict)
+            assert upscale == 4, "Only 4x upscaling is supported"
+            model = RRDBNet(in_nc=in_nc, out_nc=out_nc, nf=nf, nb=nb)
+            model.load_state_dict(state_dict)
+            model.eval()
+    
+            return model
+    
+        def upscale_without_tiling(self, img: Image.Image) -> Image.Image:
+            img_np = np.array(img)
+            img_np = img_np[:, :, ::-1]
+            img_np = np.ascontiguousarray(np.transpose(img_np, (2, 0, 1))) / 255
+            img_t = torch.from_numpy(img_np).float()  # type: ignore
+            img_t = img_t.unsqueeze(0).to(device=self.device, dtype=self.dtype)
+            with torch.no_grad():
+                output = self.model(img_t)
+            output = output.squeeze().float().cpu().clamp_(0, 1).numpy()
+            output = 255.0 * np.moveaxis(output, 0, 2)
+            output = output.astype(np.uint8)
+            output = output[:, :, ::-1]
+            return Image.fromarray(output, "RGB")
+    
+        # https://github.com/philz1337x/clarity-upscaler/blob/e0cd797198d1e0e745400c04d8d1b98ae508c73b/modules/esrgan_model.py#L208
+        def upscale_with_tiling(self, img: Image.Image) -> Image.Image:
+            img = img.convert("RGB")
+            grid = split_grid(img)
+            newtiles: Tiles = []
+            scale_factor: int = 1
+    
+            for y, h, row in grid.tiles:
+                newrow: list[Tile] = []
+                for tiledata in row:
+                    x, w, tile = tiledata
+                    output = self.upscale_without_tiling(tile)
+                    scale_factor = output.width // tile.width
+                    newrow.append((x * scale_factor, w * scale_factor, output))
+                newtiles.append((y * scale_factor, h * scale_factor, newrow))
+    
+            newgrid = Grid(
+                newtiles,
+                grid.tile_w * scale_factor,
+                grid.tile_h * scale_factor,
+                grid.image_w * scale_factor,
+                grid.image_h * scale_factor,
+                grid.overlap * scale_factor,
+            )
+            output = combine_grid(newgrid)
+            return output
+
+    @dataclass(kw_only=True)
+    class ESRGANUpscalerCheckpoints(UpscalerCheckpoints):
+        esrgan: Path
+
+    class ESRGANUpscaler(MultiUpscaler):
+        def __init__(
+            self,
+            checkpoints: ESRGANUpscalerCheckpoints,
+            device: torch.device,
+            dtype: torch.dtype,
+        ) -> None:
+            super().__init__(checkpoints=checkpoints, device=device, dtype=dtype)
+            self.esrgan = UpscalerESRGAN(checkpoints.esrgan, device=self.device, dtype=self.dtype)
+    
+        def to(self, device: torch.device, dtype: torch.dtype):
+            self.esrgan.to(device=device, dtype=dtype)
+            self.sd = self.sd.to(device=device, dtype=dtype)
+            self.device = device
+            self.dtype = dtype
+    
+        def pre_upscale(self, image: Image.Image, upscale_factor: float, **_: Any) -> Image.Image:
+            image = self.esrgan.upscale_with_tiling(image)
+            return super().pre_upscale(image=image, upscale_factor=upscale_factor / 4)
+
+    pillow_heif.register_heif_opener()
+
+    def _rescale_checkpoints():
+    
+        from huggingface_hub import hf_hub_download
+    
+        CHECKPOINTS = ESRGANUpscalerCheckpoints(
+            unet=Path(
+                hf_hub_download(
+                    repo_id="refiners/juggernaut.reborn.sd1_5.unet",
+                    filename="model.safetensors",
+                    revision="347d14c3c782c4959cc4d1bb1e336d19f7dda4d2",
+                )
+            ),
+            clip_text_encoder=Path(
+                hf_hub_download(
+                    repo_id="refiners/juggernaut.reborn.sd1_5.text_encoder",
+                    filename="model.safetensors",
+                    revision="744ad6a5c0437ec02ad826df9f6ede102bb27481",
+                )
+            ),
+            lda=Path(
+                hf_hub_download(
+                    repo_id="refiners/juggernaut.reborn.sd1_5.autoencoder",
+                    filename="model.safetensors",
+                    revision="3c1aae3fc3e03e4a2b7e0fa42b62ebb64f1a4c19",
+                )
+            ),
+            controlnet_tile=Path(
+                hf_hub_download(
+                    repo_id="refiners/controlnet.sd1_5.tile",
+                    filename="model.safetensors",
+                    revision="48ced6ff8bfa873a8976fa467c3629a240643387",
+                )
+            ),
+            esrgan=Path(
+                hf_hub_download(
+                    repo_id="philz1337x/upscaler",
+                    filename="4x-UltraSharp.pth",
+                    revision="011deacac8270114eb7d2eeff4fe6fa9a837be70",
+                )
+            ),
+            negative_embedding=Path(
+                hf_hub_download(
+                    repo_id="philz1337x/embeddings",
+                    filename="JuggernautNegative-neg.pt",
+                    revision="203caa7e9cc2bc225031a4021f6ab1ded283454a",
+                )
+            ),
+            negative_embedding_key="string_to_param.*",
+            loras={
+                "more_details": Path(
+                    hf_hub_download(
+                        repo_id="philz1337x/loras",
+                        filename="more_details.safetensors",
+                        revision="a3802c0280c0d00c2ab18d37454a8744c44e474e",
+                    )
+                ),
+                "sdxl_render": Path(
+                    hf_hub_download(
+                        repo_id="philz1337x/loras",
+                        filename="SDXLrender_v2.0.safetensors",
+                        revision="a3802c0280c0d00c2ab18d37454a8744c44e474e",
+                    )
+                )
+            }
+        )
+    
+        return CHECKPOINTS
+
+    upscaler = ESRGANUpscaler(checkpoints=_rescale_checkpoints(), device=device(), dtype=dtype())
+    upscaler.to(device=device(), dtype=dtype())
+
+    MODELS["upscale"] = upscaler
+
+def upscale(
+    path,
+    upscale_factor: int = 2,
+    prompt: str = "Reasonable, Accurate, Natural, Real, Convincing.",
+    negative_prompt: str = "Fake, Polished, Shiny, Blurry, Painted, Anime.",
+    seed: int = None,
+    controlnet_scale: float = 0.5,
+    controlnet_decay: float = 0.8,
+    condition_scale: float = 8.0,
+    tile_width: int = 1024,
+    tile_height: int = 1024,
+    denoise_strength: float = 0.2,
+    num_inference_steps: int = 25,
+    solver: str = "DDIM",
+):
+    from PIL import Image
+    from refiners.fluxion.utils import manual_seed
+    from refiners.foundationals.latent_diffusion import Solver, solvers
+
+    if upscale_factor < 2 or upscale_factor > 4:
+        return
+
+    if not seed:
+        seed = random.randint(0, big_number())
+
+    manual_seed(seed)
+
+    solver_type: type[Solver] = getattr(solvers, solver)
+
+    input_image = Image.open(path)
+
+    upscaled_image = MODELS["upscale"].upscale(
+        image=input_image,
+        prompt=prompt,
+        negative_prompt=negative_prompt,
+        upscale_factor=upscale_factor,
+        controlnet_scale=controlnet_scale,
+        controlnet_scale_decay=controlnet_decay,
+        condition_scale=condition_scale,
+        tile_size=(tile_height, tile_width),
+        denoise_strength=denoise_strength,
+        num_inference_steps=num_inference_steps,
+        loras_scale={"more_details": 0.3, "sdxl_render": 1.0},
+        solver_type=solver_type,
+    )
+
+    return save_image( upscaled_image )
+
+def find_latest_rvc_checkpoint(folder_path: str, model_name: str) -> str | None:
+    logger.info(f"Searching for latest checkpoint in '{folder_path}' with model name '{model_name}'")
+    if not os.path.isdir(folder_path):
+        logger.error(f"Error: Folder not found at {folder_path}")
+        return None
+
+    pattern = re.compile(rf"^{re.escape(model_name)}_e(\d+)_s(\d+)\.pth$")
+
+    latest_checkpoint = None
+    latest_epoch = -1
+    latest_global_step = -1
+
+    try:
+        for filename in os.listdir(folder_path):
+            match = pattern.match(filename)
+            if match:
+                epoch = int(match.group(1))
+                global_step = int(match.group(2))
+
+                if epoch > latest_epoch:
+                    latest_epoch = epoch
+                    latest_global_step = global_step
+                    latest_checkpoint = filename
+                elif epoch == latest_epoch and global_step > latest_global_step:
+                    latest_global_step = global_step
+                    latest_checkpoint = filename
+
+    except Exception as e:
+        logger.error(f"An error occurred while scanning the folder for checkpoints: {e}")
+        return None
+
+    if latest_checkpoint:
+        logger.info(f"Latest checkpoint found: {latest_checkpoint}")
+    else:
+        logger.warning(f"No checkpoint found matching the pattern in '{folder_path}'")
+
+    return latest_checkpoint
+
+def get_max_resolution(width, height, mega_pixels = 0.25, factor = 16):
+    max_pixels = mega_pixels * 1000 * 1000
+    ratio = width / height
+    new_height = (max_pixels / ratio) ** 0.5
+    new_width = ratio * new_height
+    new_height = int( int(new_height) - (int(new_height) % factor) )
+    new_width = int( int(new_width) - (int(new_width) % factor) )
+    return new_width, new_height
+
+def master(source_path, loops=2):
+    if not source_path:
+        print("No source file provided.")
+        return None
+
+    print(f"Starting mastering for: {source_path}")
+
+    source_p = Path(source_path)
+    mastered_mp3_path = source_p.with_name(f"{source_p.stem}_mastered.mp3")
+
+    try:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            reference_path = temp_path / "reference.wav"
+
+            print("Downloading reference track...")
+            download_file_from_google_drive(file_id="1UF_FIuq4vbCdDfCVLHvD_9fXzJDoredh", dest_path=str(reference_path), unzip=False)
+            print("Reference track downloaded.")
+
+            def _master(source_path):
+
+              result_wav_path = tmp(".wav")
+              delete(result_wav_path)
+
+              mg.process(
+                target=str(source_path),
+                reference=str(reference_path),
+                results=[
+                    mg.pcm24(str(result_wav_path))
+                ],
+                config=mg.Config(
+                    max_length=15 * 60,
+                    threshold=0.999,
+                    internal_sample_rate=44100,
+                )
+              )
+              return result_wav_path
+
+            for _ in range(loops):
+                source_path = _master(source_path)
+
+            print("Mastering process complete. Converting to MP3.")
+
+            res_data, sr = librosa.load(source_path, sr=None, mono=False)
+            write_mp3(str(mastered_mp3_path), sr, res_data, maximize = True)
+            print(f"Mastered file saved to: {mastered_mp3_path}")
+
+    except Exception as e:
+        print(f"An error occurred during mastering: {e}")
+        return None
+
+    return str(mastered_mp3_path)
+
+def get_cluster_content(model, cluster_index):
+
+    if not hasattr(model, 'labels_'):
+        raise ValueError("Model must be a trained KMeans model.")
+
+    cluster_labels = model.labels_
+
+    cluster_contents = {}
+    for i, label in enumerate(cluster_labels):
+        if label not in cluster_contents:
+            cluster_contents[label] = []
+        cluster_contents[label].append(model.x_all[i])
+
+    if cluster_index in cluster_contents:
+        return cluster_contents[cluster_index]
+    return None
+
+def is_clusters_model(model):
+    return hasattr(model,"cluster_centers_")
+
+def install_faiss():
+    faiss_repo_url = "https://github.com/facebookresearch/faiss.git"
+    faiss_dir = "_faiss_"
+    build_dir = os.path.join(faiss_dir, "build")
+    python_dir = os.path.join(build_dir, "faiss", "python")
+    try:
+        subprocess.run(["git", "clone", faiss_repo_url, faiss_dir], check=True)
+        with cwd(faiss_dir):
+            cmake_command = [
+                "cmake", "-B", build_dir, "-DBUILD_TESTING=OFF", "-DCMAKE_BUILD_TYPE=Release",
+                "-DFAISS_ENABLE_C_API=ON", "-DFAISS_ENABLE_GPU=ON", "-DFAISS_ENABLE_PYTHON=ON",
+                f"-DPython_EXECUTABLE={sys.executable}",
+                f"-DPython_INCLUDE_DIR={sys.prefix}/include/python{sys.version_info.major}.{sys.version_info.minor}",
+                f"-DPython_LIBRARY={sys.prefix}/lib/libpython{sys.version_info.major}.{sys.version_info.minor}.so",
+                f"-DPython_NumPy_INCLUDE_DIRS={sys.prefix}/lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages/numpy/core/include",
+                "."
+            ]
+            subprocess.run(cmake_command, check=True)
+            subprocess.run(["make", "-C", build_dir, "-j16", "faiss"], check=True)
+            subprocess.run(["make", "-C", build_dir, "-j16", "swigfaiss"], check=True)
+            subprocess.run([sys.executable, "-m", "pip", "install", "."], cwd=python_dir, check=True)
+        print("Faiss installed successfully!")
+    except subprocess.CalledProcessError as e:
+        print(f"Error during installation: {e}")
+    except FileNotFoundError as e:
+        print(f"File not found error: {e}")
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+
+def simple_text(prompt):
+    prompt = re.sub("[\t]", ' ', prompt)
+    prompt = re.sub("( ){2,}", ' ', prompt)
+    prompt = re.sub("(\n){2,}", "\n", prompt)
+    prompt = re.sub("(-){2,}", "-", prompt)
+    prompt = re.sub(punc, '', prompt)
+    prompt = prompt.lower().strip()
+    prompt = prompt.replace(" -","-")
+    return prompt
+
+def exist(path):
+    path = os.path.abspath(os.path.expanduser(path.strip()))
+    ret = run(f'ls -1 "{ path }"', silent=True)
+    if not ret:
+        return False
+    return True
+
+def add_path(path):
+
+    if path not in sys.path:
+        permit(path)
+        sys.path.append(path)
+        site.addsitedir(path)
+
+def paths(*patterns):
+
+    patterns = [os.path.abspath(os.path.expanduser(p)) for p in patterns]
+
+    path_list = []
+    for p in patterns:
+        try:
+            lst = list(glob(p,recursive=True))
+            path_list = [*path_list,*lst]
+        except Exception as e:
+            pass
+
+    return list(set(path_list))
+
+def copy(src,dst):
+    if os.path.isdir(src) or Path(src).is_symlink() and os.path.isdir( str(Path(src).resolve()) ):
+        shutil.copytree(
+            src, dst,
+            symlinks=False,
+            ignore_dangling_symlinks=True
+        )
+    else:
+        shutil.copy(src, dst)
+
+def big_number(zeros=10):
+    return int("1" + ("0" * zeros))
+
+def find_package_paths(package_name):
+    package_paths_found = []
+    package_dir_name = package_name.replace('-', '_')
+
+    site_packages_dirs = site.getsitepackages()
+    for site_packages_dir in site_packages_dirs:
+        package_path = os.path.join(site_packages_dir, package_dir_name)
+        if os.path.exists(package_path) and os.path.isdir(package_path):
+            package_paths_found.append(package_path)
+
+    for path in sys.path:
+        if path:
+            potential_package_path = os.path.join(path, package_dir_name)
+            if os.path.exists(potential_package_path) and os.path.isdir(potential_package_path):
+                package_paths_found.append(potential_package_path)
+
+    for site_packages_dir in site_packages_dirs:
+        dist_packages_dir = site_packages_dir.replace('site-packages', 'dist-packages')
+        if dist_packages_dir != site_packages_dir:
+            package_path = os.path.join(dist_packages_dir, package_dir_name)
+            if os.path.exists(package_path) and os.path.isdir(package_path):
+                package_paths_found.append(package_path)
+
+    unique_paths = list(set(package_paths_found))
+    return unique_paths
+
+def tmp(suffix=".data"):
+    if not suffix.startswith("."):
+        if len(suffix.split(".")) > 1:
+            suffix = suffix.split(".")
+            suffix = suffix[len(suffix)-1]
+            if len(suffix) < 1:
+                suffix = "tmp"
+        suffix = "." + suffix
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as temp:
+        return temp.name
+
+def get_process_pid(process_name):
+    try:
+        pid = int(subprocess.check_output(["pidof", process_name]).strip())
+        return pid
+    except subprocess.CalledProcessError:
+        return None
+    except ValueError:
+        return None
+
+def send_signal_to_process(pid, signal_number):
+    try:
+        os.kill(pid, signal_number)
+        return True
+    except OSError as e:
+        print(f"Error sending signal: {e}")
+        return False
+
+@contextmanager
+def cwd(dir=None):
+    if not dir:
+        dir = os.path.dirname(__file__)
+    owd = os.getcwd()
+    try:
+        os.chdir(dir)
+        yield dir
+    finally:
+        os.chdir(owd)
+
+def log(subject,data,status=None):
+
+    if status is True:
+            print(f"\n >>> { datetime.now().time() } <<< \nOK OK OK OK OK OK OK\n{ str(data) }\nOK OK OK OK OK OK OK\n >>> {subject} <<< \n")
+    elif status is False:
+            print(f"\n >>> { datetime.now().time() } <<< \nx ERR x ERR x ERR x\n{ str(data) }\nx ERR x ERR x ERR x\n >>> {subject} <<< \n")
+    elif status is None:
+            print(f"\n >>> { datetime.now().time() } <<< \n===================\n{ str(data) }\n===================\n >>> {subject} <<< \n")
+    elif isinstance(status,str) and status.strip() != "":
+            print(f"\n >>> { datetime.now().time() } <<< \n{status}\n{ str(data) }\n{status}\n >>> {subject} <<< \n")
+    else:
+            print(f"\n{ datetime.now().time() }\n{ str(data) }\n{subject}\n")
+
+def catch(e):
+    logger.exception(e)
+
+def directory(dir):
+    dir = os.path.realpath( str(dir) )
+    os.makedirs(dir, exist_ok=True)
+
+def move(src,dest):
+    if os.path.isdir(src) or Path(src).is_symlink() and os.path.isdir( str(Path(src).resolve()) ):
+        shutil.copytree(
+            src, dest,
+            symlinks=False,
+            ignore_dangling_symlinks=True,
+            copy_function=shutil.move
+        )
+        shutil.rmtree(src)
+    else:
+        shutil.move(src, dest)
+
+def delete(path):
+    obj = Path(path)
+    if not exist(path):
+        return
+    if os.path.isdir(path) and not obj.is_symlink():
+        shutil.rmtree(path)
+    else:
+        obj.unlink(missing_ok=True)
+
+def remove(path):
+    delete(path)
+
+def load(path):
+        path = os.path.realpath( str(path) )
+        permit(path)
+        if not os.path.exists(path):
+                return None
+        if os.path.isdir(path):
+                return os.listdir(path)
+        else:
+                try:
+                        with open(path, encoding="utf8") as file:
+                                return file.read()
+                except:
+                        with open(path, "rb") as file:
+                                return file.read()
+
+def read(path):
+    return load(path)
+
+def write(path,txt=""):
+    return save(path,txt)
+
+def save(path, text=""):
+    path = os.path.realpath( str(path) )
+    os.makedirs( str(Path(path).parent), exist_ok=True)
+    with open(path, "w+", encoding="utf8") as file:
+        file.write( str(text) )
+
+def run_linux(command, silent=False, env={}):
+    import pty
+
+    original_env = os.environ.copy()
+    modified_env = {**original_env, **env}
+
+    if isinstance(command, list):
+        command = "\n".join(command)
+
+    in_lines = command.strip().splitlines()
+    cmds = [i.strip() for i in in_lines if i.strip() != ""]
+
+    if len(cmds) > 0:
+
+        script = "\n".join(cmds)
+
+        name = tmp(".sh")
+        try:
+            write(name,"#!/bin/bash --login\n"+script)
+            permit(name)
+            master, slave = pty.openpty()
+            pid = os.fork()
+            if pid == 0:
+                os.setsid()
+                try:
+                    with open(os.devnull, "r") as stdin:
+                        os.dup2(stdin.fileno(), 0)
+                    os.dup2(slave, 1)  # Redirect stdout to the slave pty
+                    os.dup2(slave, 2)  # Redirect stderr to the slave pty
+                    os.close(master)  # Close the master in the child
+                    os.close(slave)  # Close the slave in the child (important!)
+                    os.environ.update(modified_env)
+                    os.execl("/bin/bash", "/bin/bash", "--login", "-c", name, "&")
+                except Exception as e:
+                    print(f"Execution Error: {e}")
+                finally:
+                    delete(name)
+                    os.environ.update(original_env)
+                    os._exit(0)  # Child MUST exit
+
+            else:  # Parent process
+
+                os.close(slave)
+                output_bytes = b""
+                output=""
+                while True:
+                    rlist, _, _ = select.select([master], [], [])  # Wait for output
+                    if master in rlist:
+                        try:
+                            chunk = os.read(master, 1024)
+                            if not chunk:  # Process finished
+                                break
+                            output_bytes += chunk
+                            try:
+                                chunk_utf = chunk.decode('utf-8', errors='replace')
+                                if not silent:
+                                    print(chunk_utf, end="", flush=True)
+                                output+=chunk_utf
+                            except UnicodeDecodeError:
+                                continue
+                        except OSError: # Handle pty closing
+                            break
+                os.close(master)
+                returncode = os.waitpid(pid, 0)[1] >> 8  # Get the return code
+                if returncode != 0:
+                    if not silent:
+                        log(f'Script failed [{returncode}]',script)
+                    return False
+                if not silent:
+                    log('Script completed',script)
+                out_lines = output.strip().splitlines()
+                ret_lines = [o.strip() for o in out_lines if o.strip() != ""]
+                return ret_lines
+
+        except OSError as e:
+            catch(e)
+            return False
+
+def run_windows(
+    command, 
+    silent = False, 
+    env = {}
+):
+    try:
+        if isinstance(command, list):
+            cmds = command
+        else:
+            cmds = command.strip().splitlines()
+            if len(cmds) > 1:
+                 command_to_run = " && ".join([c.strip() for c in cmds if c.strip()])
+            else:
+                 command_to_run = command
+
+        modified_env = {**os.environ.copy(), **env}
+
+        process = subprocess.Popen(
+            command_to_run,
+            shell=True,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=modified_env,
+            universal_newlines=True
+        )
+
+        stdout, stderr = process.communicate()
+
+        returncode = process.returncode
+
+        if not silent:
+            if stdout:
+                print(stdout, end="", flush=True)
+            if stderr:
+                print(stderr, end="", flush=True)
+
+        if returncode != 0:
+            if not silent:
+                log(f'Script failed [{returncode}]', command_to_run)
+                log(f'Stderr: {stderr.strip()}', "")
+            return False
+        else:
+            if not silent:
+                log('Script completed', command_to_run)
+            
+            out_lines = stdout.strip().splitlines()
+            ret_lines = [o.strip() for o in out_lines if o.strip()]
+            return ret_lines
+
+    except Exception as e:
+        catch(e)
+        return False
+
+def run(command, silent=False, env={}):
+    if sys.platform.startswith('win'):
+        return run_windows(command, silent, env)
+    else:
+        return run_linux(command, silent, env)
+
+def thread(func, *args, **kwargs):
+    try:
+        t = threading.Thread(target=func, args=args, kwargs=kwargs)
+        t.start()
+        return t
+    except Exception as e:
+        catch(e)
+
+def wait(*threads):
+    for t in threads:
+        t.join()
+
+def permit(path):
+    try:
+        subprocess.run(["chmod", "-R", "a+xrw", path], check=True)
+        return True
+    except Exception as e:
+        return False
+
+def check_version_wildcard(version_spec, version_actual):
+    version_spec = version_spec.replace(".","\\.").replace("*", ".*")
+    pattern = re.compile(f"^{version_spec}$")
+    return bool(pattern.match(version_actual))
+
+def installed(pack, version=None):
+
+    pack = pack.lower().strip()
+    if version:
+        version = version.lower().strip()
+
+    try:
+        lines = run(f'pip list', silent=True)
+        if lines:
+            for line in lines:
+                parts = re.sub( r"( ){2,}", ";", line).split(";")
+                if len(parts) == 2:
+                    n = parts[0].lower().strip()
+                    v = parts[1].lower().strip()
+                    if n == pack and (
+                        version == None or v.startswith(version) or (
+                            "*" in version and check_version_wildcard(version, v)
+                        )
+                    ):
+                        return True
+                else:
+                    continue
+        return False
+
+    except subprocess.CalledProcessError as e:
+        catch(e)
+        return False
+    except FileNotFoundError:
+        return False
+
+def importable(name):
+    res = run(f'python -c "import {name}"', silent=True)
+    if res == False:
+        return False
+    return True
+
+def is_package_path(package_path,package_name=None):
+    if exist(package_path) and os.path.isdir(package_path) and (
+        os.path.exists(os.path.join(package_path, "__init__.py")) or (
+            os.path.exists(os.path.join(package_path, os.path.basename(package_path)))
+        ) or (
+            os.path.exists(os.path.join(package_path, "src"))
+        )
+    ) and (
+        package_name is None or package_name == os.path.basename(package_path)
+    ):
+        return True
+    return False
+
+def cuda_toolkit(install=True):
+
+    directory("/usr/share/keyrings/")
+    directory("/etc/modprobe.d/")
+    permit("/tmp")
+    # permit("/usr/bin")
+    # permit("/usr/lib")
+    # permit("/usr/local")
+
+    run("""
+        export PATH=/sbin:$PATH
+        apt-get update
+        apt-get purge nvidia-*
+        echo "blacklist nouveau" > /etc/modprobe.d/blacklist-nouveau.conf
+        echo "options nouveau modeset=0" >> /etc/modprobe.d/blacklist-nouveau.conf
+        apt-get install --reinstall dkms
+        apt-get install -f
+        curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/cuda-keyring_1.1-1_all.deb > /usr/share/keyrings/cuda.deb
+        cd /usr/share/keyrings/
+        ar vx cuda.deb
+        tar xvf data.tar.xz
+        mv /usr/share/keyrings/usr/share/keyrings/cuda-archive-keyring.gpg /usr/share/keyrings/cuda-archive-keyring.gpg
+        rm -r /usr/share/keyrings/usr/
+        rm -r /usr/share/keyrings/etc/
+        echo "deb [signed-by=/usr/share/keyrings/cuda-archive-keyring.gpg] https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/ /" > /etc/apt/sources.list.d/CUDA.list
+    """)
+
+    permit("/usr/share/keyrings/cuda-archive-keyring.gpg")
+    permit("/etc/apt/sources.list.d/CUDA.list")
+
+    if install:
+        run(f"""
+            apt-get update
+            apt-get -y install cuda-toolkit
+        """, silent=True)
+
+def cuda_version():
+    try:
+        result = subprocess.run(['nvcc', '--version'], capture_output=True, text=True, check=True)
+        output = result.stdout
+        match = re.search(r"Build cuda_([\d\.]+)", output)
+        if match:
+            cuda_version = match.group(1)
+            return cuda_version
+        else:
+            return False
+
+    except Exception as e:
+        return False
+
+def set_cuda_env():
+    cu_path = paths(
+        "/opt/cuda*/",
+        "/usr/local/cuda*/",
+    )
+    ld_path = paths(
+        "/opt/cuda*/lib",
+        "/usr/local/cuda*/lib",
+        "/opt/cuda*/lib64",
+        "/usr/local/cuda*/lib64",
+    )
+    if len(cu_path) > 0 and len(ld_path) > 0:
+        cu = cu_path[0]
+        ld = ld_path[0]
+        log("CUDA_PATH",cu,status=True)
+        log("LD_LIBRARY_PATH",ld,status=True)
+        os.environ["CUDA_PATH"] = cu
+        os.environ["LD_LIBRARY_PATH"] = ld
+        return
+
+    log("Cuda not found", "Failed setting CUDA environment",status=False)
+    return
+
+def free():
+    import torch
+    try:
+        torch.cuda.empty_cache()
+    except Exception as e:
+        catch(e)
+    run("rm -rf ~/.cache/huggingface/*", silent=True)
+    run("rm -rf /data-nvme/zerogpu-offload/*", silent=True)
+    run("rm -rf /opt/ml/checkpoints/*", silent=True)
+    run(f'pip cache purge', silent=True)
+
+    mamba_path = os.path.expanduser("~/miniconda3/bin/mamba")
+    if os.path.exists(mamba_path):
+        run(f'{mamba_path} clean --all', silent=True)
+
+def post_install():
+
+    free()
+
+    import torch
+    from torch.fx.experimental import proxy_tensor
+    def get_proxy_mode(): # -> Optional[ProxyTorchDispatchMode]
+        pre_dispatch_mode = torch._ops._get_dispatch_mode_pre_dispatch(
+            torch._C._TorchDispatchModeKey.PROXY
+        )
+        mode = torch._C._get_dispatch_mode(torch._C._TorchDispatchModeKey.PROXY)
+        assert (
+            pre_dispatch_mode is None or mode is None
+        ), f"pre_dispatch_mode={pre_dispatch_mode}, mode={mode}"
+        return pre_dispatch_mode or mode
+    proxy_tensor.get_proxy_mode = getattr(proxy_tensor,"get_proxy_mode",get_proxy_mode)
+
+    import numpy as np
+    def dummy_npwarn_decorator_factory():
+        def npwarn_decorator(x):
+            return x
+        return npwarn_decorator
+    np._no_nep50_warning = getattr(np, '_no_nep50_warning', dummy_npwarn_decorator_factory)
+
+def pre_install():
+
+    os.environ['TRANSFORMERS_CACHE'] = '/opt/ml/checkpoints/'
+    os.environ['HF_DATASETS_CACHE'] = '/opt/ml/checkpoints/'
+    os.environ["GRADIO_ALLOW_FLAGGING"] = "never"
+    os.environ["OMP_NUM_THREADS"] = "4"
+    if sys.platform == "darwin":
+        os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
+    os.environ["DISPLAY"] = ":0.0"
+    os.environ["NUMBA_CACHE_DIR"] = f'{os.environ["HOME"]}/.tmp'
+    os.environ["DISABLE_FLASH_ATTENTION"] = "True"
+
+def apt_install(custom):
+
+    basic_apt="build-essential gcc cmake swig gdebi git git-lfs wget curl libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev libncursesw5-dev xz-utils tk-dev libffi-dev liblzma-dev initramfs-tools libgirepository1.0-dev libdbus-1-dev libdbus-glib-1-dev libsecret-1-0 libmanette-0.2-0 libharfbuzz0b libharfbuzz-icu0 libenchant-2-2 libhyphen0 libwoff1 libgraphene-1.0-0 libxml2-dev libxmlsec1-dev"
+    audio_apt="libportaudio2 libasound2-dev sox libsox-fmt-all praat ffmpeg libavcodec-extra libavif-dev"
+    visual_apt="libopenblas-dev libgflags-dev libgles2 libgtk-3-0 libgtk-4-1 libatk1.0-0 libatk-bridge2.0-0 libcups2 libxcomposite1 libxdamage1 libatspi2.0-0 libgstreamer1.0-0 gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-tools gstreamer1.0-gl"
+
+    run("apt-get update")
+    run(f"apt-get reinstall -y { basic_apt } { audio_apt } { video_apt }")
+
+    pre_install()
+
+    for c in run_custom[custom]:
+        if c.startswith("func::"):
+            exec(c[6:]+"()")
+        else:
+            run(c)
+
+    post_install()
+
+def device():
+    from accelerate import Accelerator
+    acc = Accelerator()
+    return str(acc.device)
+
+def get_python_version():
+    try:
+        version_info = sys.version_info
+        version_str = f"{version_info.major}.{version_info.minor}.{version_info.micro}"
+        return version_str
+    except Exception as e:
+        print(f"Error getting Python version: {e}")
+        return None
+
+def get_linux_distribution():
+    try:
+        try:
+            subprocess.run(['apt-get', 'update'], check=True)
+            subprocess.run(['apt-get', 'install', '-y', 'lsb_release'], check=True)
+            result = subprocess.run(['lsb_release', '-a'], capture_output=True, text=True, check=True)
+            output = result.stdout
+
+            distro_match = re.search(r"Distributor ID:\s*([^\n]+)", output)
+            release_match = re.search(r"Release:\s*([^\n]+)", output)
+
+            if distro_match and release_match:
+                distro = distro_match.group(1).strip().lower().split(" ")[0]
+                release = release_match.group(1).strip()
+                return distro, release
+            else:
+                return None, None
+
+        except (FileNotFoundError, subprocess.CalledProcessError):
+            pass
+
+        try:
+            with open("/etc/os-release", "r") as f:
+                os_release_content = f.read()
+
+            name_match = re.search(r'NAME="([^"]+)"', os_release_content)
+            version_match = re.search(r'VERSION_ID="([^"]+)"', os_release_content)
+
+            if name_match and version_match:
+              distro = name_match.group(1).strip()
+              release = version_match.group(1).strip()
+              return distro, release
+            else:
+              return None, None
+
+        except FileNotFoundError:
+            return None, None
+
+        return None, None
+
+    except Exception as e:
+        print(f"Error getting distribution info: {e}")
+        return None, None
+
+def split_mp3( path:str, chunk_seconds:float ):
+
+    from pydub import AudioSegment
+
+    sound = AudioSegment.from_mp3(path)
+
+    chunk_ms = chunk_seconds * 1000
+    chunks = [sound[(chunk_ms * i):(chunk_ms * (i+1))] for i in range(math.ceil( len(sound)/(chunk_seconds*1000) ))]
+
+    export_path = f'{os.getcwd()}/mp3_segments_{str(random.random()).split(".")[1]}'
+
+    Path(export_path).mkdir(parents=True, exist_ok=True)
+
+    i = 0
+    for chunk_idx in range(len(chunks)):
+
+        chunk = chunks[chunk_idx]
+        chunk.export(export_path+f'/{str(chunk_idx)}.mp3', format="mp3")
+        i = chunk_idx
+
+    i = i + 1
+    return export_path, i
+
+def remove_silence( input_file:str, output_file:str ):
+    try:
+        subprocess.run(['ffmpeg', '-y', '-i', input_file, '-ac', '2', '-af', 'silenceremove=stop_duration=0.1:stop_threshold=-32dB', output_file], check=True)
+        return output_file
+        
+    except subprocess.CalledProcessError as e:
+        catch(e)
+
+def compact_audio( input_file:str, output_file:str ):
+    try:
+        subprocess.run(['ffmpeg', '-y', '-i', input_file, '-ar', '16000', '-ab', "320k", '-ac', '1', output_file], check=True)
+        return output_file
+        
+    except subprocess.CalledProcessError as e:
+        catch(e)
+
+def google_drive_download(id,dest):
+    from googledrivedownloader import download_file_from_google_drive
+    download_file_from_google_drive( file_id=id, dest_path=dest, unzip=True, showsize=False )
+
+def save_image(img,path="."):
+    name = os.path.join( path, "img_"+random_string()+".png" )
+    img.save(name)
+    return name
+
+def tensor_length(tensor):
+    from torch import tensor
+
+    nums = list(tensor.size())
+
+    ret = 1
+    for num in nums:
+        ret = ret * num
+    return ret
+
+def dtype():
+    import torch
+    return torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+
+def language(text):
+    from langdetect import detect
+    return detect(text)
+
+def linked_url(url):
+
+    host = url.split("?")[0]
+    if "?" in url:
+        param = "?"+url.split("?")[1]
+    else:
+        param = ""
+
+    html_string = f'''
+         <!DOCTYPE html>
+        <html>
+            <head>
+                <meta charset="UTF-8">
+                <base href="{host}" target="_top">
+                <a href="{param}"></a>
+            </head>
+            <body onload='document.querySelector("a").click()'></body>
+        </html>
+    '''
+
+    html_bytes = html_string.encode('utf-8')
+
+    base64_encoded_html = base64.b64encode(html_bytes).decode('utf-8')
+
+    data_url = f"data:text/html;charset=utf-8;base64,{base64_encoded_html}"
+
+    return data_url
+
+def geo_new_york():
+    return {
+        "latitude": random.uniform(40.5,40.9),
+        "longitude": random.uniform(-74.2,-73.7)
+    }
+
+def extract_text(url,selector):
+
+    from lxml.html import fromstring
+    from playwright.sync_api import sync_playwright, expect
+    from lxml.cssselect import CSSSelector
+
+    xpath = CSSSelector(selector).path
+
+    log("URL", url)
+
+    html_string = None
+
+    with sync_playwright() as playwright:
+        browser = playwright.firefox.launch(headless=True).new_context( locale="en-US", timezone_id="America/New_York", user_agent=random.choice(user_agents["firefox"]), color_scheme="dark")
+        page = browser.new_page()
+        page.goto( url, referer="https://duckduckgo.com/", timeout=18*1000 )
+        expect(page.locator(selector)).not_to_be_empty()
+        page.wait_for_timeout(2000)
+        html_string = page.content()
+        browser.close()
+
+    if html_string == None:
+        return None
+
+    html = fromstring(html_string)
+    elems = html.xpath(xpath)
+    elems = [el.text_content().strip() for el in elems if el.text_content().strip()]
+    if len(elems)==0:
+        return ""
+    return elems[0]
+
+def ai_translate(text, lang="en"):
+
+    if text == None or lang == None:
+        return ""
+
+    if text.strip() == "":
+        return ""
+
+    lang = simple_text(lang)
+
+    to_lang = language_codes[lang]
+    to_lang = to_lang[0].upper() + to_lang[1:]
+
+    from_lang = language_codes[language(text)]
+    from_lang = from_lang[0].upper() + from_lang[1:]
+
+    if from_lang == to_lang:
+        return simple_text(text)
+
+    text = f"translate {from_lang} to {to_lang}: {simple_text(text)}" 
+
+    log("Exec T5 translation",text,status="")
+
+    TOKENIZERS["summary"].src_lang = from_lang
+
+    encoded = TOKENIZERS["summary"](text, return_tensors="pt")
+    encoded = {key: tensor.to(device()) for key, tensor in encoded.items()}
+
+    generated_tokens = MODELS["summary"].generate(**encoded)
+
+    translated_text = TOKENIZERS["summary"].batch_decode(generated_tokens, skip_special_tokens=True)[0]
+
+    log("T5 translated text",translated_text,status="")
+
+    return simple_text(translated_text)
+
+def google_translate(text,lang="en"):
+
+    import requests
+
+    if text == None or lang == None:
+        return ""
+
+    if text.strip() == "":
+        return ""
+
+    lang = simple_text(lang)
+    text = simple_text(text)
+
+    url = f'https://translate.googleapis.com/translate_a/single?client=gtx&dt=t&q={text}&sl={language(text)}&tl={lang}'
+    r = requests.get(url)
+
+    ret = r.text.split('"')[1]
+    ret = simple_text(ret)
+    print(ret)
+    return ret
+
+def duck_translate(text,lang="en"):
+
+    if text == None or lang == None:
+        return ""
+
+    if text.strip() == "":
+        return ""
+
+    lang = simple_text(lang)
+    lang = language_codes[lang]
+
+    text = simple_text(text)
+
+    url = f'https://duckduckgo.com/?q={lang} translate: {text}&ia=web'
+    scraped = extract_text(url,f".module--translations-translatedtext.js-module--translations-translatedtext")
+    if scraped is None or scraped == "":
+        print(f'Translation Warning: Failed To Translate!')
+    else:
+        text = scraped
+    text = simple_text(text)
+    print(text)
+    return text
+
+def css():
+    return """
+
+    * {
+        scrollbar-width: none;
+    }
+
+    input, textarea, input::placeholder, textarea::placeholder {
+        text-align: center !important;
+    }
+
+        *, *::placeholder {
+            font-family: Suez One !important;
+        }
+
+        h1,h2,h3,h4,h5,h6 {
+            width: 100% !important;
+            text-align: center;
+        }
+
+        footer {
+            display: none !important;
+        }
+
+        .dropdown-arrow {
+            display: none !important;
+        }
+
+        div:not(.hide):has(>button) {
+            display: flex !important;
+            justify-content: space-evenly !important;
+            align-items: center !important;
+        }
+
+    button {
+        margin: 10px 0 !important; /* Add some vertical margin to buttons */
+        border-radius: 2mm !important; /* Rounded corners for buttons */
+        border: none !important;
+        cursor: pointer !important;
+        transition: background-color 0.3s ease !important; /* Smooth hover effect */
+    }
+
+    * > img {
+        max-width: 100% !important; /* Make sure image scales within the container */
+        height: auto !important;    /* Maintain aspect ratio */
+        display: block !important; /* Prevents a small space below the image */
+    }
+
+    textarea {
+        border: 1px solid #ccc !important;
+        border-radius: 5px !important;
+        padding: 8px !important;
+        height: auto !important;
+        margin-bottom: 10px !important;
+    }
+
+    textarea:focus{
+        border-color: #4CAF50 !important;
+        outline: none !important;
+        box-shadow: 0 0 5px rgba(76, 175, 80, 0.5) !important;
+    }
+
+    h1 {
+        color: #333 !important;
+    }
+
+    h2 {
+        color: #444 !important;
+    }
+
+    h3{
+        color: #555 !important;
+    }
+
+    .block {
+        gap: 20px !important;
+        padding: 10px !important;
+    }
+
+    .column{
+        padding: 10px !important;
+    }
+
+    .gradio-container {
+        padding: 20px !important;
+    }
+
+    """
+
+def random_string(min_len=50, max_len=60):
+    characters = string.ascii_letters + string.digits + "_"
+    length = random.randint(min_len,max_len)
+    return ''.join(random.choice(characters) for _ in range(length))
+
+def random_number(size):
+	return int.from_bytes(os.urandom(size), sys.byteorder)
+
+def number_to_hex(num):
+	return int(num).encode('hex')
+
+def string_to_bytes(str):
+	return bytes(f"{str}", encoding="utf-8")
+
+def file_to_sha3_512(path,salt_num=None):
+	content = read(path)
+	if content != None:
+		return string_to_sha3_512(content,salt_num)
+
+def string_to_sha3_512(str,salt_num=None):
+	if salt_num == None:
+		salt_num = random_number(16)
+	salt = number_to_hex(salt_num)
+
+	m = hashlib.sha3_512()
+	m.update(bytes( str , encoding="utf-8"))
+	m.update(bytes( salt ))
+	return [ m.hexdigest(), salt_num ]
+
+def latest(db = "*", filters = {}, days = None, identifierKey = "id"):
+    
+    def _history(db, filters = {}, days = None):
+      timestamp = time.time()
+      if days == None:
+        time_start = 0
+      else:
+        timestamp_range = 86400000 * days
+        timestamp_start = timestamp - timestamp_range
+      try:
+        folders = [ f'{database_path}/{tm}' for tm in read(f'{database_path}') if int(tm) >= time_start ]
+      except:
+        return []
+      keys = [k for k in filters]
+      values = [filters[k] for k in filters]
+      filtered_folders = []
+      for index in range(0,len(keys)-1):
+        key = keys[index]
+        filtered_folders += [ folder for folder in folders if key in read(folder) and read(f'{folder}/{key}') == values[index] ]
+      ret = []
+      for folder in filtered_folders:
+        obj = {}
+        folderSplit = split(folder,"/")
+        folderName = folderSplit[len(folderSplit.length)-2]
+        date = datetime.utcfromtimestamp(folderName)
+        for key in read(folder):
+          obj[key] = read(f'{folder}/{key}')
+        ret += { "timestamp": folderName, "time": date, "data": obj }
+      return ret[::-1]
+        
+    if db == "*":
+      ret = {}
+      dbs = read(database_path)
+      for currentDb in dbs:
+        ret[currentDb] = get_latest(currentDb, filters, days, identifierKey)
+      return ret
+    elif (type(db).__name__ == "list"):
+      ret = {}
+      for currentDb in db:
+        ret[currentDb] = get_latest(currentDb, filters, days, identifierKey)
+      return ret
+    latest = []
+    ids = []
+    for item in _history(db):
+      _id = item["data"][identifierKey]
+      index = ids.index(_id)
+      if index == -1:
+        ids.append(_id)
+        latest.append(item)
+      else:
+        latestIndex = []
+        for obj in latest:
+          latestIndex.append( obj["data"][identifierKey] )
+        latestIndex = latestIndex.index(_id)
+        if int(latest[latestIndex]["timestamp"]) < int(item["timestamp"]):
+           latest[latestIndex] = item
+    keys = [k for k in filters]
+    values = [filters[k] for k in filters]
+    if days == None:
+      time_s = 0
+    else:
+      timestamp_range = 86400000 * days
+      timestamp_start = timestamp - timestamp_range
+    latest_filtered_1 = []
+    for obj in latest:
+      if obj["timestamp"] >= timestamp_start:
+        latest_filtered_1.append( obj )
+    latest_filtered_2 = []
+    for obj in latest_filtered_1:
+      status = True
+      for i in range(0,len(keys)-1):
+        key = keys[i]
+        value = values[i]
+        if not obj["data"][key] and obj["data"][key] == value:
+          status = False
+          break
+      if status:
+        latest_filtered_2.append(obj)
+    for i in range(0,len(latest_filtered_2)-1):
+      latest_filtered_2[i] = latest_filtered_2[i]["data"]
+      return latest_filtered_2
+    
+def clean(db = "*",identifierKey = "id"):
+  if db == "*":
+    dbs = read(database_path)
+    for db2 in dbs:
+      _latest = latest(db2, {}, None, identifierKey)
+      remove(f'{database_path}/{db2}')
+      for obj in _latest:
+        push(db2, obj, obj.timestamp)
+  elif type(db).__name__ == "list":
+    for db2 in db:
+      _latest = latest(db2, {}, None, identifierKey)
+      remove(f'{database_path}/{db2}')
+      for obj in _latest:
+        push(db2, obj, obj.timestamp)
+  else:
+    _latest = latest(db, {}, None, identifierKey)
+    remove(f'{database_path}/{db2}')
+    for obj in _latest:
+      push(db2, obj, obj.timestamp)
+
+def push(db, data, timestamp=None):
+  if timestamp == None:
+    timestamp = time.time()
+  elif type(timestamp).__name__ != "int":
+    try:
+      timestamp = int(timestamp)
+    except:
+      timestamp = time.time()
+  directory(f'{database_path}/{db}/{timestamp}/')
+  keys = [k for k in data]
+  values = [data[k] for k in data]
+  files = [f'{database_path}/{db}/{timestamp}/{key}' for key in keys]
+  for i in range(0,len(files)-1):
+    file(files[i], values[i])
+
+def history(db, filters = {}, days = None):
+  timestamp = time.time()
+  if days == None:
+    time_start = 0
+  else:
+    timestamp_range = 86400000 * days
+    timestamp_start = timestamp - timestamp_range
+  try:
+    folders = [ f'{database_path}/{tm}' for tm in read(f'{database_path}') if int(tm) >= time_start ]
+  except:
+    return []
+  keys = [k for k in filters]
+  values = [filters[k] for k in filters]
+  filtered_folders = []
+  for index in range(0,len(keys)-1):
+    key = keys[index]
+    filtered_folders += [ folder for folder in folders if key in read(folder) and read(f'{folder}/{key}') == values[index] ]
+  ret = []
+  for folder in filtered_folders:
+    obj = {}
+    folderSplit = split(folder,"/")
+    folderName = folderSplit[len(folderSplit.length)-2]
+    date = datetime.utcfromtimestamp(folderName)
+    for key in read(folder):
+      obj[key] = read(f'{folder}/{key}')
+    ret += obj
+  return ret[::-1]
+
+def summary(text, max_words=50, min_loops=0):
+
+    words = text.split()
+    words_length = len(words)
+
+    def _summarize(text):
+        prefix = "summarize: "
+
+        encoded = TOKENIZERS["summary"]( prefix + text, return_tensors="pt", truncation=False)
+        encoded = {key: tensor.to(device()) for key, tensor in encoded.items()}
+        penlt = min( max( round(max_words / words_length, 1), 0.1), 0.8)
+        print( f"length_penalty is {penlt} (summary)" )
+        gen = MODELS["summary"].generate(
+            **encoded,
+            length_penalty=penlt,
+            num_beams=6,
+            early_stopping=True,
+            max_length=512
+        )
+        return simple_text(TOKENIZERS["summary"].decode(gen[0], skip_special_tokens=True))
+        
+    if words_length >= 50:
+        while words_length >= 50:
+            words = text.split()
+            summ = _summarize(
+                " ".join(words[0:50])
+            ) + " ".join(words[50:])
+            if summ == text:
+                return text
+            text = summ
+            words_length = len(text.split())
+
+    while min_loops > 0 or words_length > max_words:
+        summ = _summarize(text)
+        if summ == text:
+            return text
+        text = summ
+        words_length = len(text.split())
+        min_loops -= 1
+        
+    return text
+
+def init_pretrained_model(task:str,turbo:bool=False):
+
+    free()
+
+    global MODELS
+    global TOKENIZERS
+
+    if MODELS[task]:
+        return
+
+    import torch
+
+    model = None
+
+    # quantization_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=dtype(), use_double_quant=True, bnb_4bit_quant_type="nf4")
+
+    if task in ["detect"]:
+
+        from transformers import pipeline, AutoProcessor, GenerationConfig, AutoConfig, AutoModel, TFAutoModel, T5ForConditionalGeneration, T5Tokenizer, AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
+        config = AutoConfig.from_pretrained(tasks[task])
+        try:
+            model = AutoModel.from_pretrained(tasks[task], config=config, trust_remote_code=True, torch_dtype=dtype())
+        except:
+            model = TFAutoModel.from_pretrained(tasks[task], config=config, trust_remote_code=True, torch_dtype=dtype())
+
+    elif task in ["music"]:
+
+        from audiocraft.models import MAGNeT
+        model = MAGNeT.get_pretrained(tasks[task])
+        # model = torch.compile(model)
+
+    elif task in ["answer"]:
+
+        from transformers import pipeline, AutoProcessor, GenerationConfig, AutoConfig, AutoModel, TFAutoModel, T5ForConditionalGeneration, T5Tokenizer, AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
+        tok = AutoTokenizer.from_pretrained(tasks[task])
+        prc = AutoProcessor.from_pretrained(tasks[task], trust_remote_code=True)
+        mod = AutoModelForCausalLM.from_pretrained(
+            tasks[task],
+            device_map="auto",
+            torch_dtype=dtype(),
+            trust_remote_code=True,
+            _attn_implementation="eager",
+        )
+
+        model = BeamSearch(mod, tok, prc, device(), length_penalty=0.1)
+
+    elif task in ["summary"]:
+
+        from transformers import pipeline, AutoProcessor, GenerationConfig, AutoConfig, AutoModel, TFAutoModel, T5ForConditionalGeneration, T5Tokenizer, AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
+        TOKENIZERS[task] = T5Tokenizer.from_pretrained(tasks[task])
+        free()
+        model = T5ForConditionalGeneration.from_pretrained(tasks[task])
+
+    elif task in ["video"]:
+
+        from diffusers import HunyuanVideoPipeline, HunyuanVideoTransformer3DModel
+
+        transformer = HunyuanVideoTransformer3DModel.from_pretrained(
+            tasks[task], subfolder="transformer", torch_dtype=dtype(), revision='refs/pr/18'
+        )
+        model = HunyuanVideoPipeline.from_pretrained(tasks[task], transformer=transformer, revision='refs/pr/18', torch_dtype=dtype())
+
+    elif task in ["image"]:
+
+        from diffusers import DiffusionPipeline
+        model = FluxPipeline.from_pretrained(tasks[task], torch_dtype=dtype())
+
+    try:
+        try:
+            model.enable_vae_slicing()
+            model.enable_vae_tiling()
+        except Exception as e:
+            pass
+        if turbo is True:
+            model.to(device())
+        else:
+            try:
+                model.enable_model_cpu_offload()
+            except Exception as e:
+                pass
+            if turbo is False:
+                model.enable_sequential_cpu_offload()
+                model.enable_attention_slicing(1)
+    except Exception as e:
+        catch(e)
+
+    MODELS[task] = model
+
+    free()
+
+def choose_random_words(word_list, num_words=10):
+    if not word_list:
+        return []
+
+    list_length = len(word_list)
+
+    if num_words > list_length:
+        num_words = list_length - 1
+
+    if num_words == 0:
+        num_words = 1
+    elif num_words == -1:
+        return []
+
+    chosen_words = random.sample(word_list, num_words)
+    return chosen_words
+
+def optimize_prompt_realism(prompt):
+    prompt = preprocess_prompt(prompt)
+    prompt = "reasonable accurate natural convincing real recorded scenario of " + prompt
+    return prompt
+
+def preprocess_prompt(prompt):
+
+    if len(prompt) > 0:
+        lines = prompt.splitlines()
+        prompt = " and ".join(lines)
+        prompt = simple_text(prompt)
+
+    return prompt
+
+def pipe(task:str, *a, prompt:str="", path:str="", resolution:str="640x640", length:int=3, fps:int=24):
+
+    import torch
+    import cv2
+    from diffusers.utils import export_to_video
+
+    params1 = []
+    params2 = {}
+    if task in ["image","video"]:
+        log(f"Pipe activated",prompt,status="")
+        width, height = resolution.split("x")
+        width, height = int(width), int(height)
+        if task == "video":
+            length = length*fps
+        else:
+            length = 1
+        params2["prompt"] = prompt
+        params2["height"] = height
+        params2["width"] = width
+        params2["guidance_scale"] = 4.5
+        if task == "video":
+            params2["num_videos_per_prompt"] = 1
+            params2["num_frames"] = length
+        else:
+            params2["negative_prompt"] = _negative_prompt_
+            params2["max_sequence_length"]=512
+        params2["num_inference_steps"]=60
+        params2["generator"]=torch.Generator(device()).manual_seed(random.randint(0, big_number()))
+    elif task == "detect":
+        params1.append(path)
+
+    from transformers import AutoTokenizer
+    if task in ["detect"]:
+        tokenizer = AutoTokenizer.from_pretrained(tasks[task])
+        inputs = tokenizer(*params1, **params2, return_tensors="tf")
+    elif task in ["image","video"]:
+        inputs = params2
+
+    try:
+        outputs = MODELS[task](**inputs)
+    except Exception as e:
+        catch(e)
+        if task == "image":
+            outputs = MODELS["video"](**inputs)
+        elif task == "video":
+            outputs = MODELS["image"](**inputs)
+
+    if task in ["image","video"]:
+        if task == "video":
+            sample = outputs.frames[0]
+            path = tmp("mp4")
+            export_to_video(sample,path,fps=24)
+            return path
+        else:
+            # import imageio as iio
+            # if isinstance(sample[0], np.ndarray):
+            #    sample = (sample[0] * 255).astype(np.uint8)
+            # else:
+            #     sample = np.array(sample[0])
+            # path = tmp("png")
+            # iio.imwrite(path, sample)
+            sample = outputs.images[0]
+            return save_image(sample)
+    elif task == "answer":
+        return outputs
+    elif task == "detect":
+        preds = {}
+        if not preds[ pred["label"] ]:
+            preds[ pred["label"] ] = []
+        for pred in outputs:
+            preds[ pred["label"] ].append( pred["box"] )
+        return preds
+
+def check_parameter(p):
+    return p is not None and not (
+        isinstance(p,list) and (
+            len(p) == 0 or isinstance(p[0],str) and p[0].strip() == ""
+        ) or isinstance(p,str) and p.strip() == ""
+    )
+
+def read_mp3(file, normalized = False):
+    import pydub
+
+    audio_segment = pydub.AudioSegment.from_mp3(file)
+    samples = np.array(audio_segment.get_array_of_samples())
+    
+    if audio_segment.channels == 2:
+        audio_data = samples.reshape((-1, 2)).T
+    else:
+        audio_data = samples.reshape((1, -1))
+        
+    if normalized:
+        return audio_segment.frame_rate, np.float32(audio_data) / 32768.0
+    else:
+        return audio_segment.frame_rate, audio_data
+
+def write_mp3(file_path, sr, audio_data):
+    if audio_data.ndim == 1:
+        channels = 1
+    else:
+        channels = audio_data.shape[0]
+
+    y = np.int8(
+        (audio_data * 128.0 / 2 + 128.0)
+        + (audio_data * 128.0 / 2 - 128.0)
+    )
+    interleaved_data = np.ascontiguousarray(y.T)
+
+    song = pydub.AudioSegment(
+        interleaved_data.tobytes(),
+        frame_rate=sr,
+        sample_width=1,
+        channels=channels
+    )
+    song.export(file_path, format="mp3", bitrate="320k")
+
+def export_to_pkl(model, pkl_path):
+    import pickle
+    with open(pkl_path, "wb") as f:
+        pickle.dump(model, f)
+import numpy as np
+
+def process_audio_chunks(fn, data, chunk_size, overlap=0):
+    """
+    A stereo-aware function to process audio in overlapping chunks.
+    """
+    if overlap >= chunk_size:
+        raise ValueError("Overlap must be smaller than chunk size")
+
+    # Ensure data is float32 for processing
+    data = data.astype(np.float32)
+
+    # Handle both mono (1D) and stereo (2D) arrays correctly
+    if data.ndim == 1:
+        # It's mono, add a channel axis to make it consistent: (n_samples,) -> (1, n_samples)
+        data = data[np.newaxis, :]
+    
+    num_channels, audio_length = data.shape
+    step = chunk_size - overlap
+
+    # Create stereo-aware buffers for the final result and window sum
+    final_result = np.zeros_like(data, dtype=np.float32)
+    window_sum = np.zeros_like(data, dtype=np.float32)
+
+    window = np.hanning(chunk_size)
+    # Reshape window for broadcasting with stereo data: (chunk_size,) -> (1, chunk_size)
+    window = window[np.newaxis, :]
+
+    start = 0
+    while start < audio_length:
+        end = min(start + chunk_size, audio_length)
+        current_chunk_size = end - start
+        
+        # Slice all channels for the current time window
+        chunk = data[:, start:end]
+        
+        # Pad the last chunk if it's shorter than chunk_size
+        if current_chunk_size < chunk_size:
+            padding_size = chunk_size - current_chunk_size
+            # Pad only the second axis (the samples), not the channels
+            chunk = np.pad(chunk, ((0, 0), (0, padding_size)), 'constant')
+        
+        # The callback function `fn` receives the raw chunk
+        processed_chunk = fn(chunk)
+
+        # Ensure the processed chunk is 2D for consistency
+        if processed_chunk.ndim == 1:
+            processed_chunk = processed_chunk[np.newaxis, :]
+        
+        # Apply windowing during the reconstruction (overlap-add)
+        final_result[:, start:end] += processed_chunk[:, :current_chunk_size] * window[:, :current_chunk_size]
+        window_sum[:, start:end] += window[:, :current_chunk_size]**2
+        
+        if end == audio_length:
+            break
+        start += step
+
+    # Avoid division by zero for silent parts
+    window_sum[window_sum == 0] = 1.0
+    final_result /= window_sum
+
+    return final_result
+
+def str_to_numpy(txt):
+    if isinstance(txt, tuple) or isinstance(txt, list):
+        txt = "".join(txt)
+    vec = create_vectorizer([txt])
+    return numpy_to_cupy(vectorize(vec,[txt]))
+
+def one_dim_numpy(v):
+    return two_dim_numpy(v).flatten()
+
+def two_dim_numpy(v):
+    import torch
+    if isinstance(v, torch.Tensor):
+        v = v.cpu().numpy()
+    elif isinstance(v, str):
+        v = str_to_numpy(v)
+    elif isinstance(v, np.ndarray):
+        if _np.issubdtype(v.dtype, _np.str_):
+            v = numpy_to_str(v)
+            v = str_to_numpy(v)
+        elif not np.issubdtype(v.dtype, np.number):
+            raise TypeError(f"CuPy array of dtype {v.dtype} is not supported.")
+    elif isinstance(v, (list, tuple)):
+        v = np.array(v)
+    elif not np.issubdtype(type(v), _np.number):
+        try:
+            v = np.array(v).astype(float)
+        except Exception as e:
+            raise TypeError(f"Input of type {type(v)} is not supported: {e}")
+    else:
+        v = np.array([v])
+
+    if v.ndim == 0:
+        return v.reshape(1, 1)
+    elif v.ndim == 1:
+        return v.reshape(-1, 1)
+    elif v.ndim == 2:
+        return v
+    else:
+        try:
+            new_shape = (-1, v.shape[-1])
+            return v.reshape(new_shape)
+        except ValueError as e:
+            raise ValueError(f"Cannot reshape array of shape {v.shape} to 2D: {e}")
+
+def three_dim_numpy(v):
+    import torch
+    if isinstance(v, torch.Tensor):
+        v = v.cpu().numpy()
+    elif isinstance(v, str):
+        v = str_to_numpy(v)
+    elif isinstance(v, np.ndarray):
+        if _np.issubdtype(v.dtype, _np.str_):
+            v = numpy_to_str(v)
+            v = str_to_numpy(v)
+        elif not np.issubdtype(v.dtype, np.number):
+            raise TypeError(f"CuPy array of dtype {v.dtype} is not supported.")
+    elif isinstance(v, (list, tuple)):
+        v = np.array(v)
+    elif not np.issubdtype(type(v), _np.number):
+        try:
+            v = np.array(v).astype(float)
+        except Exception as e:
+            raise TypeError(f"Input of type {type(v)} is not supported: {e}")
+    else:
+        v = np.array([v])
+
+    if v.ndim <= 2:
+        return v.reshape(-1, 1, 1)
+    elif v.ndim == 3:
+        return v
+    else:
+        try:
+            new_shape = (-1, v.shape[-2], v.shape[-1])
+            return v.reshape(new_shape)
+        except ValueError as e:
+            raise ValueError(f"Cannot reshape array of shape {v.shape} to 3D: {e}")
+
+def resize_video(input_video_path, target_height, target_width, anti_aliasing=True):
+    """
+    Resizes a video using skimage.transform.resize.
+
+    Args:
+        input_video_path (str): Path to the input video file.
+        target_height (int): The desired height in pixels.
+        target_width (int): The desired width in pixels.
+        anti_aliasing (bool, optional): Whether to apply anti-aliasing. Defaults to True.
+    """
+
+    output_video_path = tmp("mp4")
+
+    try:
+        reader = iio.imiter(input_video_path)
+        metadata = reader.metadata()
+        fps = metadata['fps']
+
+        writer = iio.imwriter(output_video_path, fps=fps)
+
+        for frame in reader:
+            resized_frame = resize(frame, (target_height, target_width), anti_aliasing=anti_aliasing)
+            writer.append_data((resized_frame * 255).astype(np.uint8)) #Save the frame as uint8.
+
+        writer.close()
+        reader.close()
+
+        return output_video_path
+
+    except FileNotFoundError:
+        print(f"Error: Video file not found at {input_video_path}")
+    except Exception as e:
+        print(f"An error occurred during video resizing: {e}")
+
+def resize_image(image_data, target_height, target_width, anti_aliasing=True):
+    """
+    Resizes an image using skimage.transform.resize.
+
+    Args:
+        image_data (np.ndarray): The image data as a NumPy array (e.g., from iio.imread).
+        target_height (int): The desired height in pixels.
+        target_width (int): The desired width in pixels.
+        anti_aliasing (bool, optional): Whether to apply anti-aliasing. Defaults to True.
+
+    Returns:
+        np.ndarray: The resized image data.
+    """
+
+    import imageio as iio
+    from skimage.transform import resize
+
+    try:
+        if image_data.ndim < 2:
+            raise ValueError("Input image must have at least 2 dimensions (height, width).")
+
+        resized_image = resize(image_data, (target_height, target_width), anti_aliasing=anti_aliasing)
+        return resized_image
+
+    except ValueError as ve:
+        print(f"ValueError: {ve}")
+        return None
+
+    except Exception as e:
+        print(f"An error occurred during resizing: {e}")
+        return None
+
+def numpy_to_list(np_arr):
+    return np.concatenate(np_arr, axis=None).ravel().tolist()
+
+def guess_numpy_sample_rate(audio_data, possible_sample_rates=None, 
+                         window_type='hann', window_size=None, 
+                         peak_prominence=0.01, peak_distance=10,
+                         frequency_threshold=0.05):
+    """
+    מעריכה את קצב הדגימה של אודיו באמצעות ניתוח תדרים.
+
+    Args:
+        audio_data (np.ndarray): מערך NumPy של נתוני האודיו.
+        possible_sample_rates (list, optional): רשימה של קצבי דגימה אפשריים. 
+            אם None, ינסה למצוא התאמה מתוך טווח רחב.
+        window_type (str, optional): סוג חלון לשימוש (hann, hamming, etc.).
+        window_size (int, optional): גודל החלון. אם None, ייבחר אוטומטית.
+        peak_prominence (float, optional): מינימום prominence לזיהוי פסגות.
+        peak_distance (int, optional): מינימום מרחק בין פסגות.
+        frequency_threshold (float, optional): סף להתאמה בין תדרים (יחסית לתדר נייקוויסט).
+
+    Returns:
+        int: קצב הדגימה המשוער, או None אם לא נמצאה התאמה.
+    """
+
+    from scipy import signal
+
+    audio_data = cupy_to_numpy(audio_data)
+
+    # 1. הכנת חלון וחישוב ספקטרום
+    if window_size is None:
+        window_size = len(audio_data)
+    window = signal.get_window(window_type, window_size)
+    frequencies = _np.fft.fftfreq(window_size, d=1.0) # d=1.0 כי אנחנו עובדים עם דגימות ולא עם זמן
+    spectrum = _np.abs(_np.fft.fft(audio_data[:window_size] * window)) # לוקחים רק חלק מהמידע אם קיים
+
+    # 2. זיהוי תדרים דומיננטיים
+    peak_indices = signal.find_peaks(spectrum, prominence=peak_prominence, distance=peak_distance)[0]
+    dominant_frequencies = frequencies[peak_indices]
+
+    # 3. הערכת קצב הדגימה
+    if possible_sample_rates is None:
+        possible_sample_rates = [22050, 44100, 48000, 88200, 96000, 192000]
+    
+    for sr in possible_sample_rates:
+        nyquist_frequency = sr / 2
+        for freq in dominant_frequencies:
+            if abs(freq) < nyquist_frequency and abs(freq - round(freq)) / nyquist_frequency < frequency_threshold:
+                return sr
+    return None
+
+def guess_numpy_type(data):
+
+    np_list = numpy_to_list(data)
+    mean = np.mean(data)
+    std = np.std(data)
+    ratio = std / mean if mean != 0 else float('inf')
+    if data.shape and len(data.shape) > 3:
+        return "video"
+    elif data.shape and len(data.shape) > 2:
+        return "image"
+    elif str(data.dtype)[1] in ["U","S"]:
+        return "text"
+    elif data.ndim > 1 or str(data.dtype)[1] in ["f"] or ratio > 1:
+        return "audio"
+    else:
+        return "text"
+
+def cupy_to_numpy(v: Any) -> Any:
+    try:
+        import cupy as cp
+        return cp.asnumpy(v)
+    except Exception:
+        return v
+
+def numpy_to_cupy(v: Any) -> Any:
+    try:
+        import cupy as cp
+        return cp.array(v)
+    except Exception:
+        return v
+
+def get_max_shapes(*data):
+
+        lengths = []
+
+        shapes = [np_arr.shape for np_arr in data]
+
+        for sh in shapes:
+            l = len(lengths)
+            while l < len(sh):
+                lengths.append(0)
+                l = len(lengths)
+            for i,dim in enumerate(sh):
+                lengths[i] = max(lengths[i],dim)
+
+        return lengths
+
+def pad_nested(nested_data, lengths, fill_value=0):
+    if isinstance(nested_data, _np.ndarray):
+        nested_data = nested_data.tolist()
+    elif isinstance(nested_data, tuple):
+        nested_data = list(nested_data)
+
+    if not nested_data:
+        return [fill_value] * lengths[0]
+
+    if not isinstance(nested_data[0], list):
+        data_len = len(nested_data)
+        diff = lengths[0] - data_len
+        if diff > 0:
+            nested_data.extend([fill_value] * diff)
+        return nested_data
+
+    ret = []
+    for arr in nested_data:
+        ret.append(pad_nested(arr, lengths[1:], fill_value))
+
+    data_len = len(ret)
+    diff = lengths[0] - data_len
+    if diff > 0:
+        ret.extend([pad_nested([], lengths[1:], fill_value)] * diff)
+
+    return ret
+
+def reshape_numpy(data, fill_value = 0, lengths = None):
+
+    if isinstance(data, _np.ndarray):
+        data = data.tolist()
+
+    if not data:
+        return _np.array([])
+
+    try:
+        if lengths is None:
+            lengths = get_max_shapes(data)
+
+        log("Reshaping data",lengths)
+        reshaped_data = pad_nested(data, lengths)
+        log("Reshaped data",lengths)
+
+        return _np.array(reshaped_data)
+
+    except (TypeError, IndexError) as e:
+        catch(e)
+        return _np.array([])
+    except Exception as e2:
+        catch(e2)
+        return _np.array([])
+
+def convert_tensor_dtype(tensor):
+    import torch
+
+    if tensor.is_floating_point():
+        if tensor.dtype == torch.float64:
+            return tensor.to(torch.float32)
+        else:
+            return tensor
+    elif torch.is_floating_point(tensor) == False:
+        max_val = tensor.max()
+        min_val = tensor.min()
+
+        if min_val >= 0: #unsigned int
+            if max_val <= 255:
+                return tensor.to(torch.uint8)
+            elif max_val <= 65535:
+                return tensor.to(torch.uint16)
+            elif max_val <= 4294967295:
+                return tensor.to(torch.uint32)
+            else:
+                return tensor.to(torch.uint64)
+        else: #signed int
+            if min_val >= -128 and max_val <= 127:
+                return tensor.to(torch.int8)
+            elif min_val >= -32768 and max_val <= 32767:
+                return tensor.to(torch.int16)
+            elif min_val >= -2147483648 and max_val <= 2147483647:
+                return tensor.to(torch.int32)
+            else:
+                return tensor.to(torch.int64)
+
+    else:
+        return tensor
+
+def get_active_audio_timeline(audio_file, threshold_db=-16, min_silence_len=0.1):
+    """
+    Gets the start and end times of each non-silence audio part.
+
+    Args:
+        audio_file (str): Path to the audio file.
+        threshold_db (float): Silence threshold in dB.
+        min_silence_len (float): Minimum silence length in seconds.
+
+    Returns:
+        list: A list of tuples, where each tuple contains (start_time, end_time) of active audio.
+    """
+
+    import librosa
+
+    audio_data, sample_rate = librosa.load(audio_file, sr=32000)
+    silence_mask = detect_silence_mask(audio_data, sample_rate, threshold_db, min_silence_len)
+
+    # Find active audio regions
+    active_regions = librosa.effects.split(_np.logical_not(silence_mask).astype(float), frame_length=1, hop_length=1)
+
+    # Convert sample indices to time
+    timeline = [(
+        start.item() / int(sample_rate),
+        end.item() / int(sample_rate)
+    ) for start, end in active_regions]
+    return timeline
+
+def detect_silence_mask(audio_data, sample_rate, threshold_db=-16, min_silence_len=0.1):
+    """Detects silence in an audio signal and creates a silence mask."""
+
+    import librosa
+
+    threshold_amplitude = librosa.db_to_amplitude(threshold_db)
+    frame_length = int(0.02 * sample_rate)
+    hop_length = frame_length // 4
+    rms = librosa.feature.rms(y=audio_data, frame_length=frame_length, hop_length=hop_length)[0]
+    silence_mask_rms = rms < threshold_amplitude
+    silence_mask = np.repeat(silence_mask_rms, hop_length)
+    if len(silence_mask) > len(audio_data):
+        silence_mask = silence_mask[:len(audio_data)]
+    elif len(silence_mask) < len(audio_data):
+        padding = np.ones(len(audio_data) - len(silence_mask), dtype=bool)
+        silence_mask = np.concatenate((silence_mask, padding))
+    min_silence_samples = int(min_silence_len * sample_rate)
+    silence_mask_filtered = silence_mask.copy()
+    silence_regions = librosa.effects.split(silence_mask.astype(float), top_db=0.5)
+    for start, end in silence_regions:
+        if end - start < min_silence_samples:
+            silence_mask_filtered[start:end] = False
+    return silence_mask_filtered
+
+def convert_video_fps(input_video_path, target_fps):
+    """
+    Converts a video's 24 to a target 24.
+
+    Args:
+        input_video_path (str): Path to the input video file.
+        target_fps (float): The desired target 24.
+    """
+
+    output_video_path = tmp("mp4")
+
+    try:
+        reader = iio.imiter(input_video_path)
+        metadata = reader.metadata()
+        original_fps = metadata['fps']
+        frames = list(reader)
+        reader.close()
+
+        if original_fps == target_fps:
+            # No conversion needed
+            iio.imwrite(output_video_path, frames, fps=target_fps)
+            return
+
+        ratio = target_fps / original_fps
+        new_frames = []
+        for i in np.arange(0, len(frames), 1 / ratio):
+            index = int(i)
+            if index < len(frames):
+                new_frames.append(frames[index])
+
+        iio.imwrite(output_video_path, new_frames, fps=target_fps)
+
+        return output_video_path
+
+    except FileNotFoundError:
+        print(f"Error: Video file not found at {input_video_path}")
+    except Exception as e:
+        print(f"An error occurred during 24 conversion: {e}")
+
+def write_video(video_data, fps):
+    """
+    Writes a video file using imageio.
+
+    Args:
+        video_data (list): A list of NumPy arrays, where each array represents a frame.
+        fps (int, optional): Frames per second.
+    """
+
+    output_path = tmp("mp4")
+
+    try:
+        writer = iio.imwriter(output_path, fps=fps)
+        for frame in video_data:
+            writer.append_data(frame)
+        writer.close()
+        return output_path
+    except Exception as e:
+        print(f"An error occurred during video writing: {e}")
+
+def read_video(video_path):
+    """
+    Reads a video file using imageio.
+
+    Args:
+        video_path (str): Path to the video file.
+
+    Returns:
+        tuple: A tuple containing the video data as a NumPy array and the video metadata.
+               Returns (None, None) if an error occurs.
+    """
+    try:
+        reader = iio.imiter(video_path)
+        metadata = reader.metadata()
+        video_data = list(reader)  # Convert to a list of frames
+        reader.close()
+        return metadata, video_data
+    except FileNotFoundError:
+        print(f"Error: Video file not found at {video_path}")
+        return None, None
+    except Exception as e:
+        print(f"An error occurred during video reading: {e}")
+        return None, None
+
+def is_gpu():
+    import torch
+    return torch.cuda.is_available()
+
+def check_onnx(path):
+    import onnx
+    model = onnx.load(path)
+    try:
+        onnx.checker.check_model(model)
+    except onnx.checker.ValidationError:
+        return False
+    return True
+
+def pytorch_to_onnx(model_torch, input_dim, onnx_path="model.onnx"):
+    import torch
+    dummy_input = torch.randn(1, input_dim).cuda()
+    torch.onnx.export(model_torch, dummy_input, onnx_path, verbose=True)
+    print("ONNX export complete!")
+
+def compress(dir:str, format:str="zip", keep_name:bool=True):
+    if keep_name:
+        target = str(Path(dir).parent) + "/" + str(Path(dir).name)
+    else:
+        target = str(Path(dir).parent) + "/" + random_string()
+    shutil.make_archive( target , format, str(Path(dir).parent), str(Path(dir).name) )
+    return target + "." + format
+
+def extract(arcv, dest = None, format = None):
+    if not dest:
+        dest = str(Path(arcv).parent)
+    if format:
+        shutil.unpack_archive( arcv, dest, format )
+    else:
+        shutil.unpack_archive( arcv, dest )
+
+class HybridModel:
+    def __init__(self):
+        self.model = None
+
+    def fit(self, X, y=None):
+        if y is not None: #Supervised
+            from cuml.linear_model import LinearRegression as cuLinearRegression
+
+            if self.model is None:
+                self.model = cuLinearRegression()
+
+            # Training
+            start_train = time()
+            self.model.fit(X, y)
+            np.cuda.runtime.deviceSynchronize()
+            end_train = time()
+            train_time = end_train - start_train
+
+            print(f"Train Time: {train_time:.4f} seconds")
+
+        else: #Unsupervised
+            from cuml.cluster import KMeans as cuKMeans
+
+            if self.model is None:
+                self.model = cuKMeans(n_clusters=N_COMPONENTS)
+
+            # Training
+            start_train = time()
+            self.model.fit(X)
+            np.cuda.runtime.deviceSynchronize()
+            end_train = time()
+            train_time = end_train - start_train
+
+            print(f"Train Time: {train_time:.4f} seconds")
+
+    def predict(self, X):
+        """
+        Predicts using a trained hybrid model.
+        """
+
+        if self.model is None:
+            raise ValueError("Model must be trained before prediction.")
+
+        start_predict = time()
+
+        predictions = self.model.predict(X)
+
+        np.cuda.runtime.deviceSynchronize()
+        end_predict = time()
+        predict_time = end_predict - start_predict
+        predictions = cupy_to_numpy(predictions)
+
+        print(f"Predict Time: {predict_time:.4f} seconds")
+
+        return predictions
+
+class BeamSearch:
+    import torch
+
+    def __init__(self, model, tokenizer, processor, device, length_penalty: float = 1.0, score_function = None):
+
+        self.model = model.to(device).eval()
+        self.tokenizer = tokenizer
+        self.processor = processor
+        self.device = device
+        self.eos_token_id = tokenizer.eos_token_id
+        self.length_penalty = length_penalty
+        self.score_function = score_function or self._default_score_function
+
+    def _default_score_function(self, beam: List[Tuple[torch.Tensor, float]], total_score: float) -> float:
+        """
+        Default scoring function with length penalty.
+        """
+        seq, _ = beam[-1]
+        seq_len = seq.shape[1]
+        return total_score / (seq_len ** self.length_penalty)
+
+    def search(self, input_ids: torch.Tensor, max_length: int, beam_width: int) -> torch.Tensor:
+        """Performs beam search generation."""
+        input_ids = input_ids.to(self.device)
+        beams = [([(input_ids, 0.0)], 0.0)]
+
+        for _ in range(max_length - input_ids.shape[1]):
+            new_beams = []
+            for beam, total_score in beams:
+                seq, score = beam[-1]
+                if self.eos_token_id is not None and seq[0, -1].item() == self.eos_token_id:
+                    new_beams.append((beam, total_score))
+                    continue
+
+                with torch.no_grad():
+                    outputs = self.model(seq)
+                    logits = outputs.logits[:, -1, :]
+                    probs = F.log_softmax(logits, dim=-1)
+
+                topk_probs, topk_indices = torch.topk(probs, beam_width)
+                for i in range(beam_width):
+                    new_seq = torch.cat([seq, topk_indices[:, i].unsqueeze(-1)], dim=-1)
+                    new_score = score + topk_probs[:, i].item()
+                    new_beams.append((beam + [(new_seq, new_score)], total_score + topk_probs[:, i].item()))
+
+            beams = sorted(new_beams, key=self.score_function, reverse=True)[:beam_width]
+            if self.eos_token_id is not None and all(beam[-1][0][0, -1].item() == self.eos_token_id for beam, _ in beams):
+                break
+
+        best_beam, _ = beams[0]
+        best_seq, _ = best_beam[-1]
+        return best_seq.cpu()
+
+    def generate(self, prompt: str, max_length: int, beam_width: int, **kw) -> str:
+
+        import torch.nn.modules.module as module
+
+        inputs = self.processor(prompt, return_tensors="pt", **kw).to(self.device)
+
+        input_ids = inputs["input_ids"]
+        beam_ids = self.search(input_ids, max_length, beam_width)
+        beam_ids = two_dim_numpy(beam_ids)
+        beam_ids = torch.from_numpy(beam_ids).to(self.device)
+
+        inputs["input_ids"] = beam_ids
+
+        original_requires_grad_ = module.Module.requires_grad_
+
+        def no_grad_requires_grad_(self, requires_grad=True):
+            pass
+
+        module.Module.requires_grad_ = no_grad_requires_grad_
+
+        with torch.no_grad():
+            generated_ids = self.model.generate(
+                **inputs,
+                max_new_tokens=max_length,
+                num_logits_to_keep=0,
+            )
+
+        generated_ids = generated_ids[:, inputs["input_ids"].shape[1]:]
+
+        response = self.processor.batch_decode(
+            generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
+        )[0]
+
+        module.Module.requires_grad_ = original_requires_grad_
+
+        log("Response",response)
+
+        return response
+
+def LinearRegressionTorch(input_dim):
+    import torch
+    class _LinearRegressionTorch(torch.nn.Module):
+        def __init__(self, input_dim):
+            super(LinearRegressionTorch, self).__init__()
+            self.linear = torch.nn.Linear(input_dim, 1)
+        def forward(self, x):
+            return self.linear(x)
+    return _LinearRegressionTorch(input_dim)
+
+def SklearnWrapper(sklearn_model, is_classification=False):
+    import torch
+
+    class _SklearnWrapper(torch.nn.Module):
+        def __init__(self, sklearn_model, is_classification=False):
+            super().__init__()
+            self.sklearn_model = sklearn_model
+            self.is_classification = is_classification
+
+        def forward(self, x, y=None, y_mask=None):
+            x_numpy = self._to_numpy(x)
+            if hasattr(self.sklearn_model, "predict_proba") and self.is_classification:
+                predictions = self.sklearn_model.predict_proba(x_numpy)
+            elif hasattr(self.sklearn_model, "decision_function") and self.is_classification:
+                predictions = self.sklearn_model.decision_function(x_numpy)
+            else:
+                predictions = self.sklearn_model.predict(x_numpy)
+            return torch.tensor(predictions, dtype=torch.float32, device=x.device)
+
+        def fit(self, x, y=None):
+            x_numpy = self._to_numpy(x)
+            y_numpy = self._to_numpy(y) if y is not None else None
+
+            if y_numpy is not None:
+                self.sklearn_model.fit(x_numpy, y_numpy)
+            else:
+                if len(x_numpy.shape) > 2:
+                    logging.warning("Fitting model on 3D input without labels. Fitting on each sequence independently.")
+                    for i in range(x_numpy.shape[0]):
+                        self.sklearn_model.fit(x_numpy[i])
+                else:
+                    self.sklearn_model.fit(x_numpy)
+
+        def _to_numpy(self, tensor_or_array):
+            if tensor_or_array is None:
+                return None
+            if isinstance(tensor_or_array, np.ndarray):
+                return tensor_or_array
+            if isinstance(tensor_or_array, torch.Tensor):
+                return tensor_or_array.cpu().numpy()
+            raise ValueError(f"Expected torch.Tensor or numpy.ndarray, got {type(tensor_or_array)}")
+
+    return _SklearnWrapper(sklearn_model, is_classification)
+
+def add_chat_message(history, message):
+    for x in message["files"]:
+        history.append({"role": "user", "content": {"path": x}})
+    if message["text"] is not None:
+        txt = ai_translate(message["text"])
+        history.append({"role": "user", "content": txt})
+    return history
+
+def get_chat_response(message, history: list):
+    history = add_chat_message(history, message)
+    response = answer(history)
+    return response
+
+def init_chat( high_performance:bool = True ):
+    init_pretrained_model( "answer", high_performance )
+    init_pretrained_model( "summary", high_performance )
+
+    chatbot = gr.Chatbot(elem_id="chatbot", bubble_full_width=False, type="messages")
+    return gr.ChatInterface(fn=get_chat_response, type="messages", chatbot=chatbot, multimodal=True, theme=gr.themes.Citrus(), title="Your AI assistant", css=css(), save_history=True, show_progress="full")

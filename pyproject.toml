@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "definers"
+version = "0.1.0"
+authors = [
+  { name="Yaron Koresh", email="aharonkoresh1@gmail.com" },
+]
+description = "A comprehensive Python toolkit for AI, data processing, media manipulation, and system utilities."
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Multimedia",
+]
+dependencies = ["numpy", "pandas", "scipy", "torch", "numba", "backoff", "googledrivedownloader"]
+
+[project.optional-dependencies]
+ai = ["torchvision","torchaudio","torchsde","av","einops","torchcrepe","torchfcpe","datasets","accelerate","diffusers","transformers","peft","bitsandbytes","hf_transfer","tensorboardX","langdetect","tensorflow==2.18.0","onnx","onnxruntime","skl2onnx","git+https://github.com/YaronKoresh/fairseq.git"]
+audio = ["librosa","pydub","resampy","pysoundfile","audioread","pyworld","praat-parselmouth","sox","sounddevice","mir_eval","ffmpeg-python"]
+visual = ["pillow","pillow_heif","scikit-image","opencv-contrib-python-headless","imageio"]
+ml = ["scikit-learn","xgboost"]
+web = ["requests-html","beautifulsoup4","lxml[html_clean]","playwright","cssselect"]
+ui = ["gradio","gradio-client","spaces"]
+all = ["definers[ai]","definers[audio]","definers[visual]","definers[ml]","definers[web]","definers[ui]","definers[gpu]"]
+gpu = ["cupy-cuda12x","cuml-cu12","cudf-cu12"]
+
+[project.urls]
+"Homepage" = "https://github.com/YaronKoresh/definers"
+"Bug Tracker" = "https://github.com/YaronKoresh/definers/issues"
