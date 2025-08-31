@@ -30,12 +30,12 @@ web = ["requests-html","beautifulsoup4","lxml[html_clean]","playwright","csssele
 ui = ["gradio","gradio-client","spaces"]
 gpu = ["cupy-cuda12x","cuml-cu12","cudf-cu12"]
 all = [
-  definers[ai],
-  definers[audio],
-  definers[visual],
-  definers[web],
-  definers[ui],
-  definers[gpu]
+  "chatterbox-tts","compressed-tensors","torch","torchvision","numba","numpy","torchaudio","torchsde","av","einops","torchcrepe","torchfcpe","datasets","accelerate","diffusers","transformers","peft","bitsandbytes","hf_transfer","tensorboardX","tensorflow==2.18.0","onnx","onnxruntime","skl2onnx","fairseq @ git+https://github.com/YaronKoresh/fairseq.git","scikit-learn","xgboost",
+  "mido","matplotlib","demucs","basic-pitch","midi2audio","matchering","librosa","pydub","resampy","soundfile","audioread","pyworld","praat-parselmouth","sox","sounddevice","mir_eval","ffmpeg-python","madmom @ git+https://github.com/CPJKU/madmom@0551aa8f48d71a367d92b5d3a347a0cf7cd97cc9",
+  "pillow","pillow_heif","scikit-image","moviepy","opencv-contrib-python-headless","imageio","refiners @ git+https://github.com/finegrain-ai/refiners@d288e94fa8eed1386bd28cd0d5ceb8109c3ff398",
+  "requests-html","beautifulsoup4","lxml[html_clean]","playwright","cssselect",
+  "gradio","gradio-client","spaces",
+  "cupy-cuda12x","cuml-cu12","cudf-cu12"
 ]
 
 [project.urls]
