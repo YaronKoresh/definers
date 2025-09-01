@@ -23,19 +23,119 @@ classifiers = [
 dependencies = ["langdetect", "cython", "pandas", "scipy", "backoff", "googledrivedownloader", "requests", "sentencepiece"]
 
 [project.optional-dependencies]
-ai = ["chatterbox-tts","compressed-tensors","torch","torchvision","numba","numpy","torchaudio","torchsde","av","einops","torchcrepe","torchfcpe","datasets","accelerate","diffusers","transformers","peft","bitsandbytes","hf_transfer","tensorboardX","tensorflow==2.18.0","onnx","onnxruntime","skl2onnx","fairseq @ git+https://github.com/YaronKoresh/fairseq.git","scikit-learn","xgboost"]
-audio = ["mido","matplotlib","demucs","basic-pitch","midi2audio","matchering","librosa","pydub","resampy","soundfile","audioread","pyworld","praat-parselmouth","sox","sounddevice","mir_eval","ffmpeg-python","madmom @ git+https://github.com/CPJKU/madmom@0551aa8f48d71a367d92b5d3a347a0cf7cd97cc9"]
-visual = ["pillow","pillow_heif","scikit-image","moviepy","opencv-contrib-python-headless","imageio","refiners @ git+https://github.com/finegrain-ai/refiners@d288e94fa8eed1386bd28cd0d5ceb8109c3ff398"]
-web = ["requests-html","beautifulsoup4","lxml[html_clean]","playwright","cssselect"]
-ui = ["gradio","gradio-client","spaces"]
-gpu = ["cupy-cuda12x","cuml-cu12","cudf-cu12"]
+## 🤖 AI
+ai = [
+    # Core AI & ML Frameworks
+    "torch~=2.3.1",
+    "torchvision~=0.18.1",
+    "torchaudio~=2.3.1",
+    "tensorflow==2.18.0",
+    "numba~=0.60.0",
+    "numpy~=1.26.4",
+
+    # Hugging Face Ecosystem
+    "transformers~=4.42.0",
+    "diffusers~=0.29.0",
+    "accelerate~=0.31.0",
+    "datasets~=2.20.0",
+    "peft~=0.11.1",
+    "hf_transfer~=0.1.6",
+    "bitsandbytes~=0.43.1",
+
+    # ONNX Runtime
+    "onnx~=1.16.1",
+    "onnxruntime~=1.18.1",
+    "skl2onnx~=1.17.0",
+
+    # General ML & Utilities
+    "scikit-learn~=1.5.1",
+    "xgboost~=2.1.0",
+    "tensorboardX~=2.6.3",
+    "einops~=0.8.0",
+    "av~=12.1.0",
+    "torchsde~=0.2.6",
+    "torchcrepe~=0.2.3",
+    "torchfcpe~=0.0.3",
+    "chatterbox-tts~=0.2.1",
+    "compressed-tensors~=1.4.2",
+    "fairseq @ git+https://github.com/YaronKoresh/fairseq.git",
+]
+
+## 🎵 Audio
+audio = [
+    # Core Audio Processing
+    "librosa~=0.10.2",
+    "demucs~=4.0.1",
+    "pydub~=0.25.1",
+    "soundfile~=0.12.1",
+    "resampy~=0.4.3",
+    "audioread~=3.0.1",
+    "pyworld~=0.3.4",
+    "praat-parselmouth~=0.4.3",
+
+    # MIDI & Pitch
+    "basic-pitch~=1.0.2",
+    "mido~=1.3.2",
+    "midi2audio~=0.1.1",
+
+    # Utilities & Evaluation
+    "matplotlib~=3.9.1",
+    "matchering~=2.1.1",
+    "sox~=1.5.0",
+    "sounddevice~=0.5.0",
+    "mir_eval~=0.7",
+    "ffmpeg-python~=0.2.0",
+    "madmom @ git+https://github.com/CPJKU/madmom@0551aa8f48d71a367d92b5d3a347a0cf7cd97cc9",
+]
+
+## 🖼️ Visual
+visual = [
+    # Image Processing
+    "pillow~=10.4.0",
+    "pillow_heif~=0.16.0",
+    "scikit-image~=0.24.0",
+    "opencv-contrib-python-headless~=4.10.0.84",
+
+    # Video Processing
+    "moviepy~=1.0.3",
+    "imageio~=2.34.2",
+
+    # AI / Fine-tuning
+    "refiners @ git+https://github.com/finegrain-ai/refiners@d288e94fa8eed1386bd28cd0d5ceb8109c3ff398",
+]
+
+## 🌐 Web
+web = [
+    # Scraping & Parsing
+    "requests-html~=0.10.0",
+    "beautifulsoup4~=4.12.3",
+    "lxml[html_clean]~=5.2.2",
+    "cssselect~=1.2.0",
+
+    # Browser Automation
+    "playwright~=1.45.0",
+]
+
+## 🎨 UI
+ui = [
+    # Gradio UI
+    "gradio~=4.37.2",
+    "gradio-client~=1.1.0",
+    "spaces~=0.39.0",
+]
+
+## 🚀 GPU
+gpu = [
+    # CUDA Accelerated Libraries
+    "cupy-cuda12x~=13.3.1",
+    "cuml-cu12~=24.08.0",
+    "cudf-cu12~=24.08.0",
+]
+
+## ✨ All
 all = [
-  "chatterbox-tts","compressed-tensors","torch","torchvision","numba","numpy","torchaudio","torchsde","av","einops","torchcrepe","torchfcpe","datasets","accelerate","diffusers","transformers","peft","bitsandbytes","hf_transfer","tensorboardX","tensorflow==2.18.0","onnx","onnxruntime","skl2onnx","fairseq @ git+https://github.com/YaronKoresh/fairseq.git","scikit-learn","xgboost",
-  "mido","matplotlib","demucs","basic-pitch","midi2audio","matchering","librosa","pydub","resampy","soundfile","audioread","pyworld","praat-parselmouth","sox","sounddevice","mir_eval","ffmpeg-python","madmom @ git+https://github.com/CPJKU/madmom@0551aa8f48d71a367d92b5d3a347a0cf7cd97cc9",
-  "pillow","pillow_heif","scikit-image","moviepy","opencv-contrib-python-headless","imageio","refiners @ git+https://github.com/finegrain-ai/refiners@d288e94fa8eed1386bd28cd0d5ceb8109c3ff398",
-  "requests-html","beautifulsoup4","lxml[html_clean]","playwright","cssselect",
-  "gradio","gradio-client","spaces",
-  "cupy-cuda12x","cuml-cu12","cudf-cu12"
+    # This installs all the optional dependencies listed above
+    "definers[ai,audio,visual,web,ui,gpu]",
 ]
 
 [project.urls]
