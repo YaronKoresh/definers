@@ -56,7 +56,6 @@ def init_cupy_numpy():
     try:
         import cupy as np
     except Exception as e:
-        catch(e)
         import numpy as np
     if not hasattr(np,float):
         np.float = np.float64
@@ -5281,4 +5280,5 @@ def generate_voice(text, reference_audio, format_choice, humanize=True):
     except Exception as e:
         raise gr.Error(f"Generation failed: {e}")
 
+logger = init_logger()
 init_cupy_numpy()
