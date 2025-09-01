@@ -1,21 +1,12 @@
-# ----------------------------------------------------------------------------------
-# 1. BUILD SYSTEM: This section is updated to use Poetry's build backend.
-# ----------------------------------------------------------------------------------
 [build-system]
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
 
-# ----------------------------------------------------------------------------------
-# 2. NVIDIA SOURCE: This is the key addition. It tells Poetry about NVIDIA's index.
-# ----------------------------------------------------------------------------------
 [[tool.poetry.source]]
 name = "nvidia"
 url = "https://pypi.nvidia.com"
 priority = "supplemental"
 
-# ----------------------------------------------------------------------------------
-# 3. METADATA: All project info now lives under [tool.poetry].
-# ----------------------------------------------------------------------------------
 [tool.poetry]
 name = "definers"
 version = "0.1.0"
@@ -31,10 +22,6 @@ classifiers = [
 homepage = "https://github.com/YaronKoresh/definers"
 repository = "https://github.com/YaronKoresh/definers"
 
-# ----------------------------------------------------------------------------------
-# 4. DEPENDENCIES: Dependencies are now split into sections.
-#    Note the new syntax for the python version.
-# ----------------------------------------------------------------------------------
 [tool.poetry.dependencies]
 python = ">=3.8"
 langdetect = "*"
@@ -46,10 +33,9 @@ googledrivedownloader = "*"
 requests = "*"
 sentencepiece = "*"
 
-# ----------------------------------------------------------------------------------
-# 5. DEPENDENCY GROUPS: Optional dependencies are now "groups".
-#    This makes them easy to manage and install.
-# ----------------------------------------------------------------------------------
+[tool.poetry.group.ai]
+optional = true
+
 [tool.poetry.group.ai.dependencies]
 # Core AI & ML Frameworks
 torch = "~=2.3.1"
@@ -72,10 +58,10 @@ bitsandbytes = "~=0.43.1"
 onnx = "~=1.16.1"
 onnxruntime = "~=1.18.1"
 skl2onnx = "~=1.17.0"
-joblib = "~=1.5.2"
 
 # General ML & Utilities
 scikit-learn = "~=1.5.1"
+joblib = "~=1.5.2"
 xgboost = "~=2.1.0"
 tensorboardX = "~=2.6.3"
 einops = "~=0.8.0"
@@ -85,8 +71,10 @@ torchcrepe = "~=0.0.24"
 torchfcpe = "~=0.0.3"
 chatterbox-tts = "~=0.1.2"
 compressed-tensors = "~=0.11.0"
-# Note the new syntax for git dependencies
 fairseq = {git = "https://github.com/YaronKoresh/fairseq.git"}
+
+[tool.poetry.group.audio]
+optional = true
 
 [tool.poetry.group.audio.dependencies]
 librosa = "~=0.10.2"
@@ -108,6 +96,9 @@ mir_eval = "~=0.7"
 ffmpeg-python = "~=0.2.0"
 madmom = {git = "https://github.com/CPJKU/madmom", rev = "0551aa8f48d71a367d92b5d3a347a0cf7cd97cc9"}
 
+[tool.poetry.group.visual]
+optional = true
+
 [tool.poetry.group.visual.dependencies]
 pillow = "~=10.4.0"
 pillow_heif = "~=0.16.0"
@@ -117,6 +108,9 @@ moviepy = "~=1.0.3"
 imageio = "~=2.34.2"
 refiners = {git = "https://github.com/finegrain-ai/refiners", rev = "d288e94fa8eed1386bd28cd0d5ceb8109c3ff398"}
 
+[tool.poetry.group.web]
+optional = true
+
 [tool.poetry.group.web.dependencies]
 requests-html = "~=0.10.0"
 beautifulsoup4 = "~=4.12.3"
@@ -124,22 +118,21 @@ lxml = {version = "~=5.2.2", extras = ["html_clean"]}
 cssselect = "~=1.2.0"
 playwright = "~=1.45.0"
 
+[tool.poetry.group.ui]
+optional = true
+
 [tool.poetry.group.ui.dependencies]
 gradio = "~=4.37.2"
 gradio-client = "~=1.1.0"
 spaces = "~=0.39.0"
 
-# ----------------------------------------------------------------------------------
-# 6. GPU GROUP: We now tell Poetry to get these specific packages from the "nvidia" source.
-#    This automatically resolves the installation issue.
-# ----------------------------------------------------------------------------------
+[tool.poetry.group.gpu]
+optional = true
+
 [tool.poetry.group.gpu.dependencies]
 cupy-cuda12x = {version = "~=13.3.0", source = "nvidia"}
 cuml-cu12 = {version = "~=24.08.0", source = "nvidia"}
 cudf-cu12 = {version = "~=24.08.0", source = "nvidia"}
 
-# ----------------------------------------------------------------------------------
-# 7. EXTRAS: The "all" group is now defined cleanly here.
-# ----------------------------------------------------------------------------------
 [tool.poetry.extras]
 all = ["ai", "audio", "visual", "web", "ui", "gpu"]
