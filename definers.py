@@ -74,7 +74,7 @@ tasks = {
     "detect": "facebook/detr-resnet-50",
     "answer": "microsoft/Phi-4-multimodal-instruct",
     "summary": "t5-large",
-    "music": "facebook/magnet-medium-30secs",
+    "music": "facebook/musicgen-small",
     "speech-recognition": "openai/whisper-large-v3",
     "audio-classification": "MIT/ast-finetuned-audioset-10-10-0.4593",
 }
@@ -98,6 +98,7 @@ TOKENIZERS = {
 
 PROCESSORS = {
     "answer": None,
+    "music": None,
 }
 
 CONFIGS = {
@@ -339,7 +340,7 @@ def install_ffmpeg():
         print("[INFO] This script only supports Windows and Linux.")
         sys.exit(1)
 
-def install_audio_deps():
+def install_audio_effects():
     os_name = get_os_name()
     install_dir = os.path.join(os.path.expanduser("~"), "app_dependencies")
     os.makedirs(install_dir, exist_ok=True)
@@ -396,6 +397,7 @@ def set_system_message(
     name: Optional[str] = None,
     role: Optional[str] = None,
     tone: Optional[str] = None,
+    goals: Optional[List[str, str]] = None,
     chattiness: Optional[str] = None,
     persona_data: Optional[Dict[str, str]] = None,
     task_rules: Optional[List[str]] = None,
@@ -412,8 +414,9 @@ def set_system_message(
         name (Optional[str]): The name the AI should use for itself (e.g., 'Definer').
         role (Optional[str]): The primary role of the AI (e.g., 'a code assistant', 'a travel guide').
         tone (Optional[str]): The desired tone of voice (e.g., 'friendly and encouraging', 'formal and professional').
+        goals (Optional[List[str, str]]): A list of the goals of the AI in the conversations (e.g., ['answer users questions', 'guide users with the application usage']).
         chattiness (Optional[str]): The desired level of verbosity (e.g., 'be concise', 'provide detailed explanations').
-        persona_data (Optional[Dict[str, str]]): A dictionary of facts about the AI's persona (e.g., {"creator": "John Doe"}).
+        persona_data (Optional[Dict[str, str]]): A dictionary of facts about the AI's persona (e.g., {"your creator": "John Doe"}).
         task_rules (Optional[List[str]]): A list of specific rules the AI must follow (e.g., ["Do not mention you are an AI."]).
         interaction_style (Optional[str]): Instructions on how to interact (e.g., 'ask clarifying questions before answering').
         output_format (Optional[str]): Specific instructions for the output structure (e.g., 'Respond only in JSON format').
@@ -426,7 +429,7 @@ def set_system_message(
     message_parts = []
 
     if role:
-        message_parts.append(f"You are a {role}.")
+        message_parts.append(f"You are {role}.")
     else:
         message_parts.append("You are a helpful AI assistant.")
 
@@ -445,10 +448,14 @@ def set_system_message(
         message_parts.append(" ".join(style_instructions))
 
     if persona_data:
-        persona_str = "Here is some information about yourself: "
-        persona_facts = [f"your {key} is {value}" for key, value in persona_data.items()]
+        persona_str = "Here is some information for you to learn and remember: "
+        persona_facts = [f"{key} is {value}" for key, value in persona_data.items()]
         persona_str += "; ".join(persona_facts) + "."
         message_parts.append(persona_str)
+
+    if goals:
+        goals_str += "; ".join(goals) + "."
+        message_parts.append(goals_str)
 
     if task_rules or output_format:
         rules_header = "You must strictly follow these rules:"
@@ -2388,58 +2395,25 @@ def get_max_resolution(width, height, mega_pixels = 0.25, factor = 16):
     new_width = int( int(new_width) - (int(new_width) % factor) )
     return new_width, new_height
 
-def master(source_path, loops=2):
-    if not source_path:
-        print("No source file provided.")
-        return None
-
-    print(f"Starting mastering for: {source_path}")
-
-    source_p = Path(source_path)
-    mastered_mp3_path = source_p.with_name(f"{source_p.stem}_mastered.mp3")
-
+def master(source_path, strength, format_choice):
+    if not source_path: raise gr.Error("Please upload a track to master.")
+    output_stem = Path(source_path).with_name(f"{Path(source_path).stem}_mastered")
     try:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp_path = Path(temp_dir)
-            reference_path = temp_path / "reference.wav"
-
-            print("Downloading reference track...")
-            download_file_from_google_drive(file_id="1UF_FIuq4vbCdDfCVLHvD_9fXzJDoredh", dest_path=str(reference_path), unzip=False)
-            print("Reference track downloaded.")
-
-            def _master(source_path):
-
-              result_wav_path = tmp(".wav")
-              delete(result_wav_path)
-
-              mg.process(
-                target=str(source_path),
-                reference=str(reference_path),
-                results=[
-                    mg.pcm24(str(result_wav_path))
-                ],
-                config=mg.Config(
-                    max_length=15 * 60,
-                    threshold=0.999,
-                    internal_sample_rate=44100,
-                )
-              )
-              return result_wav_path
-
-            for _ in range(loops):
-                source_path = _master(source_path)
-
-            print("Mastering process complete. Converting to MP3.")
-
-            res_data, sr = librosa.load(source_path, sr=None, mono=False)
-            write_mp3(str(mastered_mp3_path), sr, res_data, maximize = True)
-            print(f"Mastered file saved to: {mastered_mp3_path}")
-
+        with tempfile.TemporaryDirectory() as :
+            reference_path = Path(temp_dir) / "reference.wav"
+            google_drive_download("1UF_FIuq4vbCdDfCVLHvD_9fXzJDoredh", str(reference_path))
+            def _master(current_source_path):
+                result_wav_path = tmp("wav", keep=False)
+                mg.process(target=str(current_source_path), reference=str(reference_path), results=[mg.pcm24(str(result_wav_path))], config=mg.Config(max_length=15*60, threshold=0.99/strength, internal_sample_rate=44100))
+                return result_wav_path
+            processed_path = source_path
+            for _ in range(math.floor(strength)): processed_path = _master(processed_path)
+            final_sound = pydub.AudioSegment.from_file(processed_path) + (strength - 1.0) * 6
+            output_path = export_audio(final_sound, output_stem, format_choice)
+            delete_path(processed_path)
+            return output_path
     except Exception as e:
-        print(f"An error occurred during mastering: {e}")
-        return None
-
-    return str(mastered_mp3_path)
+        raise gr.Error(f"Mastering failed: {e}")
 
 def get_cluster_content(model, cluster_index):
 
@@ -2567,7 +2541,12 @@ def find_package_paths(package_name):
     unique_paths = list(set(package_paths_found))
     return unique_paths
 
-def tmp(suffix:str=".data", keep:bool=True):
+def tmp(suffix:str=".data", keep:bool=True, dir=False):
+    if dir:
+        with tempfile.TemporaryDirectory(delete=False) as temp:
+            if not keep:
+                delete(temp.name)
+            return temp.name
     if not suffix.startswith("."):
         if len(suffix.split(".")) > 1:
             suffix = suffix.split(".")
@@ -3636,6 +3615,29 @@ def init_pretrained_model(task:str,turbo:bool=False):
         from chatterbox.tts import ChatterboxTTS
         model = ChatterboxTTS.from_pretrained(device=device())
 
+    elif task in ["svc"]:
+
+        logger.info("Initializing RVC by downloading necessary files.")
+        file_ids = {
+            "configs": "1dIWJ9iP-nLOUw8eflcHFH3RwFWKNepVW",
+            "assets": "1THxR2rRnTx1qv21TZUuCew0G6XlJZJeY",
+            "docs": "1LSq2gJJpLMwjkjtDo0urgrIC2eJ9QVDF",
+            "i18n": "1bQ4pIZxxpnDknpG63hRwoY10b2jx_RwY",
+            "infer": "1kqMYQskvVKwKglcWQsK2Q5G3yPahnbtH",
+            "logs": "1fNMl60ga8OMb4aUvnXzrFIExphWBbHXR",
+            "tools": "1neqVUNipdXukEpImwZUU8O3aQdXR1vDg",
+        }
+        for name, file_id in file_ids.items():
+            dest_path = f"./{name}.zip"
+            logger.info(f"Downloading {name} ({file_id}) to {dest_path}")
+            try:
+                google_drive_download(id=file_id, dest=dest_path)
+
+            except Exception as e:
+                logger.error(f"Failed to download {name}: {e}")
+                catch(e)
+        logger.info("RVC initialization complete.")
+
     elif task in ["speech-recognition"]:
 
         from transformers import pipeline
@@ -3658,8 +3660,10 @@ def init_pretrained_model(task:str,turbo:bool=False):
 
     elif task in ["music"]:
 
-        from audiocraft.models import MAGNeT
-        model = MAGNeT.get_pretrained(tasks[task])
+        from transformers import AutoProcessor, MusicgenForConditionalGeneration
+
+        PROCESSORS[task] = AutoProcessor.from_pretrained("facebook/musicgen-small")
+        model = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-small").to(device())
 
     elif task in ["answer"]:
 
@@ -4647,12 +4651,17 @@ def get_chat_response(message, history: list):
     response = answer(history)
     return response
 
-def init_chat( high_performance:bool = True ):
+def init_chat( title:str, examples = [], high_performance:bool = True ):
     init_pretrained_model( "answer", high_performance )
     init_pretrained_model( "summary", high_performance )
 
     chatbot = gr.Chatbot(elem_id="chatbot", bubble_full_width=False, type="messages")
-    return gr.ChatInterface(fn=get_chat_response, type="messages", chatbot=chatbot, multimodal=True, theme=gr.themes.Citrus(), title="Your AI assistant", css=css(), save_history=True, show_progress="full")
+    gr.Examples(
+        examples=examples,
+        inputs=chatbot,
+        label="Preset Messages"
+    )
+    return gr.ChatInterface(fn=get_chat_response, type="messages", chatbot=chatbot, multimodal=True, theme=gr.themes.Citrus(), title=title, css=css(), save_history=True, show_progress="full")
 
 def download_file(url, destination):
     import requests
@@ -4713,28 +4722,6 @@ def rvc_to_onnx(model_path):
     except Exception as e:
         logger.error(f"An error occurred during ONNX export!")
         catch(e)
-
-def init_rvc():
-    logger.info("Initializing RVC by downloading necessary files.")
-    file_ids = {
-        "configs": "1dIWJ9iP-nLOUw8eflcHFH3RwFWKNepVW",
-        "assets": "1THxR2rRnTx1qv21TZUuCew0G6XlJZJeY",
-        "docs": "1LSq2gJJpLMwjkjtDo0urgrIC2eJ9QVDF",
-        "i18n": "1bQ4pIZxxpnDknpG63hRwoY10b2jx_RwY",
-        "infer": "1kqMYQskvVKwKglcWQsK2Q5G3yPahnbtH",
-        "logs": "1fNMl60ga8OMb4aUvnXzrFIExphWBbHXR",
-        "tools": "1neqVUNipdXukEpImwZUU8O3aQdXR1vDg",
-    }
-    for name, file_id in file_ids.items():
-        dest_path = f"./{name}.zip"
-        logger.info(f"Downloading {name} ({file_id}) to {dest_path}")
-        try:
-            google_drive_download(id=file_id, dest=dest_path)
-
-        except Exception as e:
-            logger.error(f"Failed to download {name}: {e}")
-            catch(e)
-    logger.info("RVC initialization complete.")
 
 def export_files_rvc(experiment: str):
     logger.info(f"Exporting files for experiment: {experiment}")
@@ -4827,7 +4814,6 @@ def train_model_rvc(experiment: str, path: str, lvl: int = 1):
 
     import torch
 
-
     from .configs.config import Config
     from .i18n.i18n import I18nAuto
 
@@ -4835,7 +4821,6 @@ def train_model_rvc(experiment: str, path: str, lvl: int = 1):
     index_root = os.path.join(now_dir, "logs")
 
     config = Config()
-
 
     gpus = "-".join([str(i) for i in range(torch.cuda.device_count())]) if torch.cuda.is_available() else ""
     gpu_memories = [int(torch.cuda.get_device_properties(i).total_memory / 1024**3 + 0.4) for i in range(torch.cuda.device_count())] if torch.cuda.is_available() else [0]
@@ -4851,7 +4836,6 @@ def train_model_rvc(experiment: str, path: str, lvl: int = 1):
     directory(os.path.join(exp_path, "0_gt_wavs"))
     input_root = os.path.join(exp_path, "input_root")
     directory(input_root)
-
 
     input_path = os.path.join(input_root, "input.wav")
     logger.info(f"Moving input audio '{path}' to '{input_path}'")
@@ -4872,8 +4856,7 @@ def train_model_rvc(experiment: str, path: str, lvl: int = 1):
         catch(e)
         return None
 
-
-    sr = 96000
+    sr = 48000
     n_p = int(_np.ceil(config.n_cpu / 1.5))
     log_file_preprocess = os.path.join(exp_path, "preprocess.log")
 
@@ -4881,7 +4864,6 @@ def train_model_rvc(experiment: str, path: str, lvl: int = 1):
     if_f0 = True
     gpus_rmvpe = f"{gpus}-{gpus}"
     log_file_f0_feature = os.path.join(exp_path, "extract_f0_feature.log")
-
 
     logger.info("Starting preprocessing...")
     try:
@@ -4947,7 +4929,6 @@ def train_model_rvc(experiment: str, path: str, lvl: int = 1):
         return None
     logger.info("Feature extraction complete.")
 
-
     logger.info("Starting index training...")
     feature_dir = os.path.join(exp_path, "3_feature768")
     listdir_res = []
@@ -4986,7 +4967,7 @@ def train_model_rvc(experiment: str, path: str, lvl: int = 1):
     try:
         from sklearn.cluster import MiniBatchKMeans
         big_npy = MiniBatchKMeans(
-            n_clusters=15000,
+            n_clusters=8000,
             verbose=False,
             batch_size=256 * config.n_cpu,
             compute_labels=False,
@@ -5042,13 +5023,11 @@ def train_model_rvc(experiment: str, path: str, lvl: int = 1):
             logger.error(f"Linking index failed: {e}")
             catch(e)
 
-
     except Exception as e:
         logger.error(f"An error occurred during index training: {e}")
         catch(e)
         return None
     logger.info("Index training complete.")
-
 
     logger.info("Starting model training...")
     try:
@@ -5056,8 +5035,8 @@ def train_model_rvc(experiment: str, path: str, lvl: int = 1):
         pretrained_D = "assets/pretrained_v2/f0D48k.pth"
 
         batch_size = default_batch_size
-        total_epoch = 5000 * lvl
-        save_epoch = 1000
+        total_epoch = 40 * lvl
+        save_epoch = 10
         if_save_latest = 1
         if_cache_gpu = 1
         if_save_every_weights = 1
@@ -5076,7 +5055,6 @@ def train_model_rvc(experiment: str, path: str, lvl: int = 1):
                   logger.error(f"Failed to save training config file: {e}")
                   catch(e)
 
-
         log_file_train = os.path.join(exp_path, "train.log")
 
         logger.info("Executing training command...")
@@ -5084,7 +5062,7 @@ def train_model_rvc(experiment: str, path: str, lvl: int = 1):
             cmd_train = (
                 f'"{config.python_cmd}" infer/modules/train/train.py '
                 f'-e "{exp_dir}" '
-                f'-sr 96k '
+                f'-sr 48k '
                 f'-f0 1 '
                 f'-bs {batch_size} '
                 f'-g {gpus_str} '
@@ -5115,10 +5093,8 @@ def train_model_rvc(experiment: str, path: str, lvl: int = 1):
         return None
     logger.info("Model training complete.")
 
-
     logger.info("Training complete, exporting files...")
     return export_files_rvc(exp_dir)
-
 
 def convert_vocal_rvc(experiment: str, path: str, semi_tones: int = 0):
     logger.info(f"Starting vocal conversion for experiment: {experiment} with pitch shift {semi_tones}")
@@ -5242,15 +5218,13 @@ def humanize_audio(audio_path):
         sf.write(audio_path, y_eq, sr)
         return audio_path
     except Exception as e:
-        print(f"Could not humanize AI output: {e}")
+        catch(f"Could not humanize AI output: {e}")
         return audio_path
 
 def value_to_keys(dictionary, target_value):
     return [key for key, value in dictionary.items() if value == target_value]
 
 def transcribe_audio(audio_path, language):
-    if not audio_path:
-        raise gr.Error("Please upload an audio file to transcribe.")
     if MODELS["speech-recognition"] is None:
         init_pretrained_model("speech-recognition")
     lang_code = value_to_keys(language_codes, language)
@@ -5260,8 +5234,6 @@ def generate_voice(text, reference_audio, format_choice, humanize=True):
     import soundfile as sf
     import pydub
 
-    if not text or not reference_audio:
-        raise gr.Error("Please provide text and a reference voice audio.")
     if not MODELS["tts"]:
         init_pretrained_model("tts")
     try:
@@ -5278,7 +5250,648 @@ def generate_voice(text, reference_audio, format_choice, humanize=True):
         final_output_path = export_audio(sound, output_stem, format_choice)
         return final_output_path
     except Exception as e:
-        raise gr.Error(f"Generation failed: {e}")
+        catch(f"Generation failed: {e}")
+
+def generate_music(prompt, duration_s, format_choice, humanize):
+    inputs = MODELS["music"](text=[prompt], padding=True, return_tensors="pt").to(device())
+    max_new_tokens = int(duration_s * 50)
+    audio_values = MODELS["music"].generate(**inputs, do_sample=True, guidance_scale=3, max_new_tokens=max_new_tokens)
+    sampling_rate = MODELS["music"].config.audio_encoder.sampling_rate
+    wav_output = audio_values[0, 0].cpu().numpy()
+    temp_wav_path = tmp("wav", keep=False)
+    write_wav(temp_wav_path, rate=sampling_rate, data=wav_output)
+    if humanize:
+        temp_wav_path = humanize_audio(temp_wav_path)
+    sound = pydub.AudioSegment.from_file(temp_wav_path)
+    output_stem = Path(temp_wav_path).with_name(f"generated_{random_string()}")
+    output_path = export_audio(sound, output_stem, format_choice)
+    delete(temp_wav_path)
+    return output_path
+
+def dj_mix(files, mix_type, target_bpm, transition_sec, format_choice):
+    import madmom
+
+    if not files or len(files) < 2:
+        catch("Please upload at least two audio files.")
+        return None
+    transition_ms = int(transition_sec * 1000)
+    processed_tracks = []
+    if target_bpm is None or target_bpm == 0:
+        proc = madmom.features.beats.DBNBeatTrackingProcessor(fps=100)
+        act = madmom.features.beats.RNNBeatProcessor()(files[0].name)
+        target_bpm = np.median(60 / np.diff(proc(act)))
+    for file in files:
+        try:
+            temp_stretched_path = None
+            current_path = file.name
+            if "beatmatched" in mix_type.lower():
+                proc = madmom.features.beats.DBNBeatTrackingProcessor(fps=100)
+                act = madmom.features.beats.RNNBeatProcessor()(current_path)
+                original_bpm = np.median(60 / np.diff(proc(act)))
+                if original_bpm > 0 and target_bpm > 0:
+                    speed_factor = target_bpm / original_bpm
+                    temp_stretched_path = tmp(Path(current_path).suffix)
+                    stretch_audio_cli(current_path, temp_stretched_path, speed_factor)
+                    current_path = temp_stretched_path
+            track_segment = pydub.AudioSegment.from_file(current_path)
+            processed_tracks.append(track_segment)
+            if temp_stretched_path:
+                delete(temp_stretched_path)
+        except Exception as e:
+            print(f"Could not process track {Path(file.name).name}, skipping. Error: {e}")
+            continue
+    if not processed_tracks:
+        catch("No tracks could be processed.")
+        return None
+    final_mix = processed_tracks[0]
+    for i in range(1, len(processed_tracks)):
+        final_mix = final_mix.append(processed_tracks[i], crossfade=transition_ms)
+    output_stem = tmp("dj_mix",keep=False)
+    final_output_path = export_audio(final_mix, output_stem, format_choice)
+    return final_output_path
+
+def beat_visualizer(image_path, audio_path, image_effect, animation_style, scale_intensity):
+    from moviepy import ImageClip, AudioFileClip
+    import librosa
+
+    img = Image.open(image_path)
+    effect_map = {"Blur": ImageFilter.BLUR, "Sharpen": ImageFilter.SHARPEN, "Contour": ImageFilter.CONTOUR, "Emboss": ImageFilter.EMBOSS}
+    if image_effect in effect_map: img = img.filter(effect_map[image_effect])
+    temp_img_path = tmp(".png"); img.save(temp_img_path)
+    output_path = tmp(".mp4")
+    audio_clip = AudioFileClip(audio_path)
+    duration = audio_clip.duration
+    y, sr = librosa.load(audio_path, sr=None)
+    rms = librosa.feature.rms(y=y)[0]
+    scales = 1.0 + (((rms - np.min(rms)) / (np.max(rms) - np.min(rms) + 1e-6)) * (scale_intensity - 1.0))
+    def beat_resize_func(t):
+        frame_index = min(int(t * sr / 512), len(scales) - 1)
+        return scales[frame_index]
+    image_clip = ImageClip(temp_img_path, duration=duration)
+    if animation_style == "Zoom In": image_clip = image_clip.resize(lambda t: 1 + 0.1 * (t / duration))
+    elif animation_style == "Zoom Out": image_clip = image_clip.resize(lambda t: 1.1 - 0.1 * (t / duration))
+    final_clip = image_clip.resize(lambda t: image_clip.w * beat_resize_func(t) / image_clip.w).set_position(('center', 'center')).set_audio(audio_clip)
+    final_clip.write_videofile(output_path, codec='libx264', fps=24, audio_codec='aac', logger=None)
+    delete(temp_img_path)
+    return output_path
+
+def generate_video(audio_path, prompt, format_choice):
+    import librosa
+    import madmom
+    from moviepy import VideoFileClip, AudioFileClip
+    from moviepy.video.VideoClip import VideoClip
+
+    y, sr = librosa.load(audio_path)
+    duration = librosa.get_duration(y=y, sr=sr)
+    rms = librosa.feature.rms(y=y)[0]
+    spectral_centroid = librosa.feature.spectral_centroid(y=y, sr=sr)[0]
+    proc = madmom.features.beats.DBNBeatTrackingProcessor(fps=100)
+    act = madmom.features.beats.RNNBeatProcessor()(audio_path)
+    beat_times = proc(act)
+    beats = librosa.time_to_frames(beat_times, sr=sr)
+    rms_norm = (rms - np.min(rms)) / (np.max(rms) - np.min(rms) + 1e-6)
+    centroid_norm = (spectral_centroid - np.min(spectral_centroid)) / (np.max(spectral_centroid) - np.min(spectral_centroid) + 1e-6)
+    w, h = 1280, 720
+    fps = 30
+    def make_frame(t):
+        frame = np.zeros((h, w, 3), dtype=np.uint8)
+        frame_idx = int(t * sr / 512)
+        color_val = centroid_norm[min(frame_idx, len(centroid_norm)-1)]
+        r = int(10 + color_val * 60)
+        g = int(20 + color_val * 40)
+        b = int(40 + color_val * 90)
+        frame[:,:,:] = [r, g, b]
+        radius = int(50 + rms_norm[min(frame_idx, len(rms_norm)-1)] * 200)
+        center_x, center_y = w // 2, h // 2
+        for beat_frame in beats:
+            if abs(frame_idx - beat_frame) < 2:
+                radius = int(radius * 1.5)
+                break
+        rr, cc = np.ogrid[:h, :w]
+        circle_mask = (rr - center_y)**2 + (cc - center_x)**2 <= radius**2
+        frame[circle_mask] = [int(200 + color_val * 55), int(150 - color_val * 50), int(100 + color_val * 50)]
+        return frame
+    output_path = tmp(".mp4")
+    animation = VideoClip(make_frame, duration=duration)
+    audio_clip = AudioFileClip(audio_path)
+    final_clip = animation.set_audio(audio_clip)
+    final_clip.write_videofile(output_path, codec='libx264', audio_codec='aac', fps=fps)
+    return output_path
+
+def lyric_video(audio_path, background_path, lyrics_text, text_position, language):
+    from moviepy import ImageClip, AudioFileClip, VideoFileClip, ColorClip, TextClip, CompositeVideoClip
+
+    audio_clip = AudioFileClip(audio_path)
+    duration = audio_clip.duration
+    if background_path:
+        bg_clip_class = ImageClip if background_path.lower().endswith(('.png', '.jpg', '.jpeg')) else VideoFileClip
+        background_clip = bg_clip_class(background_path, duration=duration)
+    else:
+        background_clip = ColorClip(size=(1280, 720), color=(0,0,0), duration=duration)
+    background_clip = background_clip.resize(width=1280)
+    lines = [line for line in lyrics_text.strip().split('\n') if line.strip()]
+    if not lines:
+        catch("Lyrics text is empty.")
+        return None
+    line_duration = duration / len(lines)
+    font = 'Arial'
+    lyric_clips = [TextClip(line, fontsize=70, color='white', font=font, stroke_color='black', stroke_width=2).set_position(text_position).set_start(i * line_duration).set_duration(line_duration) for i, line in enumerate(lines)]
+    final_clip = CompositeVideoClip([background_clip] + lyric_clips, size=background_clip.size).set_audio(audio_clip)
+    output_path = tmp(".mp4")
+    final_clip.write_videofile(output_path, codec='libx264', fps=24, audio_codec='aac', logger=None)
+    return output_path
+
+def stretch_audio(input_path, output_path, speed_factor, crispness=6):
+    if not os.path.exists(input_path):
+        return None
+    command = ["rubberband", "--tempo", str(speed_factor), "--crispness", str(crispness), "-q", input_path, output_path]
+    try:
+        subprocess.run(command, check=True, capture_output=True, text=True)
+        return output_path
+    except Exception as e:
+        catch(f"Error during audio stretching with rubberband: {e}")
+        return None
+
+def get_audio_feedback(audio_path):
+    import librosa
+    from scipy.stats import pearsonr
+
+    if not audio_path:
+        catch("Please upload an audio file for feedback.")
+        return None
+    try:
+        y_stereo, sr = librosa.load(audio_path, sr=None, mono=False)
+        y_mono = librosa.to_mono(y_stereo) if y_stereo.ndim > 1 else y_stereo
+        rms = librosa.feature.rms(y=y_mono)[0]
+        spectral_contrast = librosa.feature.spectral_contrast(y=y_mono, sr=sr)
+        stft = librosa.stft(y_mono)
+        freqs = librosa.fft_frequencies(sr=sr)
+        bass_energy = np.mean(np.abs(stft[ (freqs >= 20) & (freqs < 250) ]))
+        high_energy = np.mean(np.abs(stft[ (freqs >= 5000) & (freqs < 20000) ]))
+        peak_amp = np.max(np.abs(y_mono))
+        mean_rms = np.mean(rms)
+        crest_factor = 20 * np.log10(peak_amp / mean_rms) if mean_rms > 0 else 0
+        stereo_width = 0
+        if y_stereo.ndim > 1 and y_stereo.shape[0] == 2:
+            corr, _ = pearsonr(y_stereo[0], y_stereo[1])
+            stereo_width = (1 - corr) * 100
+        feedback = "### AI Track Feedback\n\n"
+        feedback += "#### Technical Analysis\n"
+        feedback += f"- **Loudness & Dynamics:** The track has a crest factor of **{crest_factor:.2f} dB**. "
+        if crest_factor > 14:
+            feedback += "This suggests the track is very dynamic and punchy.\n"
+        elif crest_factor > 8:
+            feedback += "This is a good balance between punch and loudness, typical for many genres.\n"
+        else:
+            feedback += "This suggests the track is heavily compressed or limited, prioritizing loudness over dynamic range.\n"
+        feedback += f"- **Stereo Image:** The stereo width is estimated at **{stereo_width:.1f}%**. "
+        if stereo_width > 60:
+            feedback += "The mix feels wide and immersive.\n"
+        elif stereo_width > 20:
+            feedback += "The mix has a balanced stereo field.\n"
+        else:
+            feedback += "The mix is narrow or mostly mono.\n"
+        feedback += f"- **Frequency Balance:** Bass energy is at **{bass_energy:.2f}** and high-frequency energy is at **{high_energy:.2f}**. "
+        if bass_energy > high_energy * 2:
+            feedback += "The track is bass-heavy.\n"
+        elif high_energy > bass_energy * 2:
+            feedback += "The track is bright or treble-heavy.\n"
+        else:
+            feedback += "The track has a relatively balanced frequency spectrum.\n"
+        feedback += "\n#### Advice\n"
+        if crest_factor < 8:
+            feedback += "- **Compression:** The track might be over-compressed. Consider reducing the amount of compression to bring back some life and punch to the transients.\n"
+        if stereo_width < 20 and y_stereo.ndim > 1:
+            feedback += "- **Stereo Width:** To make the mix sound bigger, try using stereo widening tools or panning instruments differently to create more space.\n"
+        if bass_energy > high_energy * 2.5:
+            feedback += "- **Bass Management:** The low-end might be overpowering. Ensure it's not masking other instruments. A high-pass filter on non-bass elements can clean up muddiness.\n"
+        if high_energy > bass_energy * 2.5:
+            feedback += "- **Tame the Highs:** The track is very bright, which can be fatiguing. Check for harshness in cymbals or vocals, and consider using a de-esser or a gentle high-shelf cut.\n"
+        if mean_rms < 0.05:
+            feedback += "- **Mastering:** The overall volume is low. The track would benefit from mastering to increase its loudness and competitiveness with commercial tracks.\n"
+        else:
+            feedback += "- **General Mix:** The track has a solid technical foundation. Focus on creative choices, arrangement, and ensuring all elements have their own space in the mix.\n"
+        return feedback
+    except Exception as e:
+        raise catch(f"Analysis failed: {e}")
+        return None
+
+def analyze_audio_features(audio_path):
+    import librosa
+    import madmom
+
+    try:
+        proc = madmom.features.beats.DBNBeatTrackingProcessor(fps=100)
+        act = madmom.features.beats.RNNBeatProcessor()(audio_path)
+        bpm = np.median(60 / np.diff(proc(act)))
+        y, sr = librosa.load(audio_path)
+        chroma = librosa.feature.chroma_stft(y=y, sr=sr)
+        key_map = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+        key = key_map[np.argmax(np.sum(chroma, axis=1))]
+        return f"{key}, {bpm:.2f} BPM"
+    except Exception as e:
+        catch(f"Analysis failed: {e}")
+        return None
+
+def change_audio_speed(audio_path, speed_factor, preserve_pitch, format_choice):
+    import pydub
+
+    sound_out = None
+    if preserve_pitch:
+        audio_path_out = tmp(Path(audio_path).suffix)
+        if stretch_audio(audio_path, audio_path_out, speed_factor):
+            sound_out = pydub.AudioSegment.from_file(audio_path_out)
+            delete(audio_path_out)
+        else:
+            catch("Failed to stretch audio while preserving pitch.")
+            return None
+    else:
+        sound = pydub.AudioSegment.from_file(audio_path)
+        new_frame_rate = int(sound.frame_rate * speed_factor)
+        sound_out = sound._spawn(sound.raw_data, overrides={"frame_rate": new_frame_rate}).set_frame_rate(sound.frame_rate)
+    if sound_out:
+        output_stem = str(Path(audio_path).with_name(f"{Path(audio_path).stem}_speed_{speed_factor}x"))
+        return export_audio(sound_out, output_stem, format_choice)
+    else:
+        catch("Could not process audio speed change.")
+        return None
+
+def separate_stems(audio_path, separation_type, format_choice):
+    import pydub
+    output_dir = tmp(dir=True)
+    run(f'"{sys.executable}" -m demucs.separate -n htdemucs_ft --two-stems=vocals -o "{output_dir}" "{audio_path}"')
+    separated_dir = Path(output_dir) / "htdemucs_ft" / Path(audio_path).stem
+    vocals_path = separated_dir / "vocals.wav"
+    accompaniment_path = separated_dir / "no_vocals.wav"
+    if not vocals_path.exists() or not accompaniment_path.exists():
+        delete(output_dir)
+        catch("Stem separation failed.")
+        return None
+    chosen_stem_path, suffix = (vocals_path, "_acapella") if "acapella" in separation_type.lower() else (accompaniment_path, "_karaoke")
+    sound = pydub.AudioSegment.from_file(chosen_stem_path)
+    output_stem = str(Path(audio_path).with_name(Path(audio_path).stem + suffix))
+    final_output_path = export_audio(sound, output_stem, format_choice)
+    delete(output_dir)
+    return final_output_path
+
+def pitch_shift_vocals(audio_path, pitch_shift, format_choice):
+    import librosa
+    import pydub
+    import soundfile as sf
+
+    separation_dir = tmp(dir=True)
+    run(f'"{sys.executable}" -m demucs.separate -n htdemucs_ft --two-stems=vocals -o "{separation_dir}" "{audio_path}"')
+    separated_dir = Path(separation_dir) / "htdemucs_ft" / Path(audio_path).stem
+    vocals_path = separated_dir / "vocals.wav"
+    instrumental_path = separated_dir / "no_vocals.wav"
+    if not vocals_path.exists() or not instrumental_path.exists():
+        delete(separation_dir)
+        catch("Vocal separation failed.")
+        return None
+    y_vocals, sr = librosa.load(str(vocals_path), sr=None)
+    y_shifted = librosa.effects.pitch_shift(y=y_vocals, sr=sr, n_steps=float(pitch_shift))
+    shifted_vocals_path = tmp("shifted_vocals.wav", keep=False)
+    sf.write(shifted_vocals_path, y_shifted, sr)
+    instrumental = pydub.AudioSegment.from_file(instrumental_path)
+    shifted_vocals = pydub.AudioSegment.from_file(shifted_vocals_path)
+    combined = instrumental.overlay(shifted_vocals)
+    output_stem = str(Path(audio_path).with_name(f"{Path(audio_path).stem}_vocal_pitch_shifted"))
+    final_output_path = export_audio(combined, output_stem, format_choice)
+    delete(separation_dir)
+    delete(shifted_vocals_path)
+    return final_output_path
+
+def create_spectrum_visualization(audio_path):
+    import librosa
+    import matplotlib.pyplot as plt
+
+    try:
+        y, sr = librosa.load(audio_path)
+        
+        n_fft = 4096
+        start_sample = (len(y) - n_fft) // 2
+        y_sample = y[start_sample : start_sample + n_fft]
+
+        if len(y_sample) < n_fft:
+            y_sample = np.pad(y_sample, (0, n_fft - len(y_sample)))
+
+        window = np.hanning(len(y_sample))
+        y_windowed = y_sample * window
+        
+        fft_result = np.fft.fft(y_windowed)
+        freqs = np.fft.fftfreq(len(fft_result), 1/sr)
+        
+        mask = freqs >= 0
+        freqs = freqs[mask]
+        
+        magnitude = np.abs(fft_result[mask])
+        db_magnitude = 20 * np.log10(magnitude / np.max(magnitude))
+        
+        audible_mask = freqs > 20
+        if np.any(audible_mask):
+            peak_idx = np.argmax(db_magnitude[audible_mask])
+            peak_freq = freqs[audible_mask][peak_idx]
+            peak_db = db_magnitude[audible_mask][peak_idx]
+        else:
+            peak_freq, peak_db = 0, -90
+
+        fig, ax = plt.subplots(figsize=(10, 5), facecolor='#1f2937')
+        ax.set_facecolor('#1f2937')
+        
+        ax.plot(freqs, db_magnitude, color='#7c3aed')
+        ax.set_xscale('log')
+        
+        ax.set_xlim(20, 20000)
+        ax.set_ylim(-90, 0)
+        ax.set_title('Frequency Analysis', color='white')
+        ax.set_xlabel('Frequency (Hz)', color='white')
+        ax.set_ylabel('Amplitude (dB)', color='white')
+        ax.tick_params(colors='white', which='both')
+        ax.grid(True, which="both", ls="-", color='gray', alpha=0.4)
+        
+        peak_text = f'Peak: {peak_freq:.0f} Hz at {peak_db:.1f} dB'
+        ax.axvline(x=peak_freq, color='red', linestyle='-', alpha=0.8)
+        ax.text(
+            0.98, 0.95, peak_text, transform=ax.transAxes, color='white', 
+            ha='right', va='top', bbox=dict(
+                facecolor='#111827',
+                alpha=0.6, edgecolor='none'
+            )
+        )
+
+        fig.tight_layout()
+        temp_path = tmp(".png")
+        fig.savefig(temp_path, facecolor=fig.get_facecolor())
+        plt.close(fig)
+        
+        return temp_path
+        
+    except Exception as e:
+        catch(f"Error creating spectrum: {e}")
+        return None
+
+def stem_mixer(files, format_choice):
+    import librosa
+    import madmom
+    import  soundfile as sf
+    import pydub
+
+    if not files or len(files) < 2:
+        catch("Please upload at least two stem files.")
+        return None
+    processed_stems = []
+    target_sr = None
+    target_bpm = None
+    for i, file in enumerate(files):
+        y, sr = librosa.load(file.name, sr=None)
+        if target_sr is None:
+            target_sr = sr
+        y = librosa.resample(y, orig_sr=sr, target_sr=target_sr)
+        proc = madmom.features.beats.DBNBeatTrackingProcessor(fps=100)
+        act = madmom.features.beats.RNNBeatProcessor()(file.name)
+        tempo = np.median(60 / np.diff(proc(act)))
+        if i == 0:
+            target_bpm = tempo
+        if tempo != target_bpm:
+            speed_factor = target_bpm / tempo
+            temp_stretched_path = tmp(".wav")
+            temp_original_path = tmp(".wav")
+            sf.write(temp_original_path, y, target_sr)
+            stretch_audio(temp_original_path, temp_stretched_path, speed_factor)
+            y, _ = librosa.load(temp_stretched_path, sr=target_sr)
+            delete(temp_original_path)
+            delete(temp_stretched_path)
+        processed_stems.append(y)
+    max_length = max(len(y) for y in processed_stems)
+    mixed_y = np.zeros(max_length)
+    for y in processed_stems:
+        mixed_y[:len(y)] += y
+    mixed_y /= len(processed_stems)
+    temp_wav_path = tmp(".wav")
+    write_wav(temp_wav_path, target_sr, (mixed_y * 32767).astype(np.int16))
+    sound = pydub.AudioSegment.from_file(temp_wav_path)
+    output_stem = Path(temp_wav_path).with_name(f"stem_mix_{random_string()}")
+    output_path = export_audio(sound, output_stem, format_choice)
+    delete(temp_wav_path)
+    return output_path
+
+def identify_instruments(audio_path):
+    if MODELS["audio-classification"] is None:
+        catch("Audio identification model is not available.")
+        return None
+    predictions = MODELS["audio-classification"](audio_path, top_k=10)
+    instrument_list = [
+        "guitar", "piano", "violin", "drum", "bass", "saxophone", "trumpet", "flute",
+        "cello", "clarinet", "synthesizer", "organ", "accordion", "banjo", "harp", "voice", "speech"
+    ]
+    detected_instruments = "### Detected Instruments\n\n"
+    found = False
+    for p in predictions:
+        label = p['label'].lower()
+        if any(instrument in label for instrument in instrument_list):
+            detected_instruments += f"- **{p['label'].title()}** (Score: {p['score']:.2f})\n"
+            found = True
+    if not found:
+        detected_instruments += "Could not identify specific instruments with high confidence. Top sound events:\n"
+        for p in predictions[:3]:
+            detected_instruments += f"- {p['label'].title()} (Score: {p['score']:.2f})\n"
+    return detected_instruments
+
+def extend_audio(audio_path, extend_duration_s, format_choice, humanize = True):
+    import librosa
+    import soundfile as sf
+    import pydub
+
+    if MODELS["music"] is None or PROCESSORS["music"] is None:
+        catch("MusicGen model is not available for audio extension.")
+        return None
+    y, sr = librosa.load(audio_path, sr=None, mono=True)
+    prompt_duration_s = min(15.0, len(y) / sr)
+    prompt_wav = y[-int(prompt_duration_s * sr):]
+    inputs = PROCESSORS["music"](
+        audio=prompt_wav,
+        sampling_rate=sr,
+        return_tensors="pt"
+    ).to(device())
+    total_duration_s = prompt_duration_s + extend_duration_s
+    max_new_tokens = int(total_duration_s * 50)
+    generated_audio_values = MODELS["music"].generate(
+        **inputs,
+        do_sample=True,
+        guidance_scale=3,
+        max_new_tokens=max_new_tokens
+    )
+    generated_wav = generated_audio_values[0, 0].cpu().numpy()
+    extension_start_sample = int(prompt_duration_s * generation_model.config.audio_encoder.sampling_rate)
+    extension_wav = generated_wav[extension_start_sample:]
+    temp_extension_path = tmp(".wav")
+    sf.write(temp_extension_path, extension_wav, generation_model.config.audio_encoder.sampling_rate)
+    if humanize:
+        temp_extension_path = humanize_audio(temp_extension_path)
+    original_sound = pydub.AudioSegment.from_file(audio_path)
+    extension_sound = pydub.AudioSegment.from_file(temp_extension_path)
+    if original_sound.channels != extension_sound.channels:
+        extension_sound = extension_sound.set_channels(original_sound.channels)
+    final_sound = original_sound + extension_sound
+    output_stem = str(Path(audio_path).with_name(f"{Path(audio_path).stem}_extended"))
+    final_output_path = export_audio(final_sound, output_stem, format_choice)
+    delete(temp_extension_path)
+    return final_output_path
+
+def audio_to_midi(audio_path):
+    from basic_pitch.inference import predict as predict_midi
+
+    output_dir = tmp(dir=True)
+    predict_midi(audio_path, output_dir)
+    midi_files = list(Path(output_dir).glob("*.mid"))
+    if not midi_files:
+        delete(output_dir)
+        catch("Failed to convert audio to MIDI.")
+        return None
+    final_midi_path = tmp(".mid")
+    shutil.copy(midi_files[0], final_midi_path)
+    delete(output_dir)
+    return final_midi_path
+
+def midi_to_audio(midi_path, format_choice):
+    from midi2audio import FluidSynth
+    import pydub
+
+    soundfont_paths = [
+        os.path.join(os.path.expanduser("~"), "app_dependencies", "soundfonts", "FluidR3_GM.sf2"),
+        "/usr/share/sounds/sf2/FluidR3_GM.sf2",
+        "C:/Windows/System32/drivers/gm.dls"
+    ]
+    soundfont_file = None
+    for path in soundfont_paths:
+        if os.path.exists(path):
+            soundfont_file = path
+            break
+    if soundfont_file is None:
+        catch("SoundFont file not found. MIDI to Audio conversion cannot proceed. Please re-run the dependency installer.")
+        return None
+    fs = FluidSynth(sound_font=soundfont_file)
+    temp_wav_path = tmp(".wav")
+    fs.midi_to_audio(midi_path, temp_wav_path)
+    sound = pydub.AudioSegment.from_file(temp_wav_path)
+    output_stem = str(Path(midi_path).with_name(f"{Path(midi_path).stem}_render"))
+    final_output_path = export_audio(sound, output_stem, format_choice)
+    delete(temp_wav_path)
+    return final_output_path
+
+def enhance_midi(midi_path, format_choice, humanize = True):
+    temp_audio_prompt = midi_to_audio(midi_path, "wav")
+    enhanced_audio = extend_audio(temp_audio_prompt, 10, format_choice, humanize)
+    delete(temp_audio_prompt)
+    return enhanced_audio
+
+def autotune_vocals(audio_path, strength, format_choice):
+    import librosa
+    import madmom
+    import soundfile as sf
+    import pydub
+
+    separation_dir = tmp(dir=True)
+    try:
+        run(f'"{sys.executable}" -m demucs.separate -n htdemucs_ft --two-stems=vocals -o "{separation_dir}" "{audio_path}"')
+        separated_dir = Path(separation_dir) / "htdemucs_ft" / Path(audio_path).stem
+        vocals_path = separated_dir / "vocals.wav"
+        instrumental_path = separated_dir / "no_vocals.wav"
+        if not vocals_path.exists() or not instrumental_path.exists():
+            catch("Vocal separation failed.")
+            return None
+        y_original, sr = librosa.load(str(vocals_path), sr=None, mono=True)
+        y = np.copy(y_original)
+        print("Starting vocal rhythm correction...")
+        try:
+            proc = madmom.features.beats.DBNBeatTrackingProcessor(fps=100)
+            act = madmom.features.beats.RNNBeatProcessor()(str(instrumental_path))
+            beat_times = proc(act)
+            vocal_intervals = librosa.effects.split(y, top_db=40, frame_length=2048, hop_length=512)
+            if len(vocal_intervals) > 0 and len(beat_times) > 0:
+                y_timed = np.zeros_like(y)
+                last_end_sample = 0
+                for start_frame, end_frame in vocal_intervals:
+                    start_sample = librosa.frames_to_samples(start_frame, hop_length=512)
+                    end_sample = librosa.frames_to_samples(end_frame, hop_length=512)
+                    segment = y[start_sample:end_sample]
+                    if len(segment) == 0:
+                        continue
+                    start_time = librosa.samples_to_time(start_sample, sr=sr)
+                    quantized_start_time_idx = np.argmin(np.abs(beat_times - start_time))
+                    quantized_start_time = beat_times[quantized_start_time_idx]
+                    quantized_start_sample = librosa.time_to_samples(quantized_start_time, sr=sr)
+                    if quantized_start_sample < last_end_sample:
+                        next_beat_candidates = beat_times[beat_times > librosa.samples_to_time(last_end_sample, sr=sr)]
+                        if len(next_beat_candidates) > 0:
+                            quantized_start_sample = librosa.time_to_samples(next_beat_candidates[0], sr=sr)
+                        else:
+                            quantized_start_sample = last_end_sample
+                    start_pos = quantized_start_sample
+                    end_pos = start_pos + len(segment)
+                    segment_to_place = segment
+                    if end_pos > len(y_timed):
+                        segment_to_place = segment[:len(y_timed) - start_pos]
+                    if len(segment_to_place) > 0:
+                        y_timed[start_pos : start_pos + len(segment_to_place)] += segment_to_place
+                        last_end_sample = start_pos + len(segment_to_place)
+                max_amp = np.max(np.abs(y_timed))
+                if max_amp > 1.0:
+                    y_timed /= max_amp
+                if np.max(np.abs(y_timed)) < 0.01:
+                    print("Rhythm correction resulted in near-silence. Reverting to original vocal timing.")
+                    y = y_original
+                else:
+                    y = y_timed
+                    print("Vocal rhythm correction applied successfully.")
+            else:
+                print("Could not detect beats or vocal segments, skipping rhythm correction.")
+        except Exception as e:
+            catch(f"Could not apply rhythm correction, proceeding with pitch correction only. Error: {e}")
+            return None
+        n_fft = 2048
+        hop_length = 512
+        stft_vocals = librosa.stft(y, n_fft=n_fft, hop_length=hop_length)
+        magnitudes = np.abs(stft_vocals)
+        f0, voiced_flag, _ = librosa.pyin(y, fmin=librosa.note_to_hz('C2'), fmax=librosa.note_to_hz('C7'), sr=sr, frame_length=n_fft, hop_length=hop_length)
+        f0 = np.nan_to_num(f0)
+        target_f0 = np.copy(f0)
+        for i in range(len(f0)):
+            if voiced_flag[i]:
+                current_f0 = f0[i]
+                if current_f0 > 0:
+                    target_midi = round(librosa.hz_to_midi(current_f0))
+                    ideal_f0 = librosa.midi_to_hz(target_midi)
+                    target_f0[i] = current_f0 + (ideal_f0 - current_f0) * strength
+        phase = np.angle(stft_vocals)
+        new_phase = np.zeros_like(phase)
+        new_phase[:, 0] = phase[:, 0]
+        freqs = librosa.fft_frequencies(sr=sr, n_fft=n_fft)
+        expected_phase_advance = 2 * np.pi * freqs * hop_length / sr
+        for t in range(1, stft_vocals.shape[1]):
+            dphase = phase[:, t] - phase[:, t-1] - expected_phase_advance
+            dphase = dphase - 2 * np.pi * np.round(dphase / (2 * np.pi))
+            true_freq = expected_phase_advance + dphase
+            ratio = 1.0
+            if t < len(f0) and f0[t] > 0 and target_f0[t] > 0:
+                ratio = target_f0[t] / f0[t]
+            shifted_phase_advance = true_freq * ratio
+            new_phase[:, t] = new_phase[:, t-1] + shifted_phase_advance
+        stft_tuned = magnitudes * np.exp(1j * new_phase)
+        y_tuned = librosa.istft(stft_tuned, hop_length=hop_length, length=len(y))
+        temp_tuned_vocals_path = tmp("tuned_vocals.wav")
+        sf.write(temp_tuned_vocals_path, y_tuned, sr)
+        instrumental = pydub.AudioSegment.from_file(instrumental_path)
+        tuned_vocals = pydub.AudioSegment.from_file(temp_tuned_vocals_path)
+        if instrumental.channels == 2 and tuned_vocals.channels == 1:
+            tuned_vocals = tuned_vocals.set_channels(2)
+        combined = instrumental.overlay(tuned_vocals)
+        output_stem = str(Path(audio_path).with_name(f"{Path(audio_path).stem}_autotuned"))
+        final_output_path = export_audio(combined, output_stem, format_choice)
+        delete(temp_tuned_vocals_path)
+        return final_output_path
+    finally:
+        delete_path(separation_dir)
 
 logger = init_logger()
 init_cupy_numpy()
