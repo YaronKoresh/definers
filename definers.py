@@ -1260,7 +1260,7 @@ def extract_image_features(image_path):
         print(f"Error extracting image features: {e}")
         return None
 
-def extract_audio_features(file_path, n_mfcc=N_MFCC):
+def extract_audio_features(file_path, n_mfcc=20):
     """
     Extracts and combines MFCCs, spectral features, zero-crossing rate, and chroma features
     from an audio file into a single 1D NumPy array.
@@ -1283,7 +1283,7 @@ def extract_audio_features(file_path, n_mfcc=N_MFCC):
 
     try:
         # MFCCs
-        mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=n_mfcc, n_fft=N_FFT, n_mels=N_MELS).flatten()
+        mfccs = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=n_mfcc, n_fft=2048, n_mels=80).flatten()
 
         # Spectral features
         spectral_centroid = librosa.feature.spectral_centroid(y=y, sr=sr).flatten()
@@ -1471,9 +1471,9 @@ def features_to_audio(
     import librosa
 
     sr = sr if sr is not None else AUDIO_SR
-    n_mfcc = n_mfcc if n_mfcc is not None else N_MFCC
-    n_mels = n_mels if n_mels is not None else N_MELS
-    n_fft = n_fft if n_fft is not None else N_FFT
+    n_mfcc = n_mfcc if n_mfcc is not None else 20
+    n_mels = n_mels if n_mels is not None else 80
+    n_fft = n_fft if n_fft is not None else 2048
 
     if sr is None or n_mfcc is None or n_mels is None or n_fft is None:
          print("Error: Audio parameters (sr, n_mfcc, n_mels, n_fft) are not provided and global defaults are not set.")
