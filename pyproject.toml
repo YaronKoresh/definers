@@ -28,7 +28,6 @@ langdetect = "*"
 cython = "*"
 pandas = "*"
 scipy = "*"
-backoff = "*"
 googledrivedownloader = "*"
 requests = "*"
 sentencepiece = "*"
@@ -44,13 +43,11 @@ accelerate = "~=0.31.0"
 datasets = "~=2.20.0"
 peft = "~=0.11.1"
 hf_transfer = "~=0.1.6"
-bitsandbytes = "~=0.43.1"
 onnx = "~=1.16.1"
 onnxruntime = "~=1.18.1"
 skl2onnx = "~=1.17.0"
 scikit-learn = "~=1.5.1"
 joblib = "~=1.5.2"
-xgboost = "~=2.1.0"
 tensorboardX = "~=2.6.3"
 einops = "~=0.8.0"
 av = "~=12.1.0"
@@ -64,7 +61,6 @@ librosa = "~=0.10.2"
 demucs = "~=4.0.1"
 pydub = "~=0.25.1"
 soundfile = "~=0.12.1"
-resampy = "~=0.4.3"
 audioread = "~=3.0.1"
 pyworld = "~=0.3.4"
 praat-parselmouth = "~=0.4.3"
@@ -76,7 +72,6 @@ matchering = "~=2.0.6"
 sox = "~=1.5.0"
 sounddevice = "~=0.5.0"
 mir_eval = "~=0.7"
-ffmpeg-python = "~=0.2.0"
 madmom = {git = "https://github.com/CPJKU/madmom", rev = "0551aa8f48d71a367d92b5d3a347a0cf7cd97cc9"}
 pillow = "~=10.4.0"
 pillow_heif = "~=0.16.0"
@@ -91,8 +86,6 @@ lxml = {version = "~=5.2.2", extras = ["html_clean"]}
 cssselect = "~=1.2.0"
 playwright = "~=1.45.0"
 gradio = "~=4.37.2"
-gradio-client = "~=1.1.0"
-spaces = "~=0.39.0"
 
 [tool.poetry.group.cuda]
 optional = true
@@ -100,7 +93,6 @@ optional = true
 [tool.poetry.group.cuda.dependencies]
 cupy-cuda12x = {version = "~=13.3.0", source = "nvidia"}
 cuml-cu12 = {version = "~=24.08.0", source = "nvidia"}
-cudf-cu12 = {version = "~=24.08.0", source = "nvidia"}
 
 [tool.poetry.extras]
 cuda = ["cuda"]
