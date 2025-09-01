@@ -21,40 +21,10 @@ You can install the lightweight core components of **Definers** directly from it
 pip install git+https://github.com/YaronKoresh/definers.git
 ```
 
-## Optional Dependencies
-
-Definers is modular. You can install extra functionality based on your needs directly from the repository. For example, to install the packages required for all AI and deep learning features, use the following format:
+And if you already have CUDA installed, you can install the packages required for CUDA acceleration, by using the following format:
 
 ```bash
-pip install "definers[ai] @ git+https://github.com/YaronKoresh/definers.git"
-```
-
-You can install multiple groups at once:
-
-```bash
-pip install "definers[audio,visual] @ git+https://github.com/YaronKoresh/definers.git"
-```
-
-Here are the available optional groups:
-
-- ai: For deep learning, transformers, and diffusion models.
-
-- audio: For advanced audio processing.
-
-- visual: For image and video manipulation.
-
-- web: For web scraping.
-
-- ui: For running Gradio interfaces.
-
-- gpu: For NVIDIA GPU acceleration with RAPIDS.
-
-- all: To install everything.
-
-To install the complete library with all features, use:
-
-```bash
-pip install "definers[all] @ git+https://github.com/YaronKoresh/definers.git"
+pip install "definers[cuda] @ git+https://github.com/YaronKoresh/definers.git"
 ```
 
 ## Quick Start
