@@ -2399,7 +2399,7 @@ def master(source_path, strength, format_choice):
     if not source_path: raise gr.Error("Please upload a track to master.")
     output_stem = Path(source_path).with_name(f"{Path(source_path).stem}_mastered")
     try:
-        with tempfile.TemporaryDirectory() as :
+        with tempfile.TemporaryDirectory() as temp_dir:
             reference_path = Path(temp_dir) / "reference.wav"
             google_drive_download("1UF_FIuq4vbCdDfCVLHvD_9fXzJDoredh", str(reference_path))
             def _master(current_source_path):
