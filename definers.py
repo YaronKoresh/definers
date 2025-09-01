@@ -397,7 +397,7 @@ def set_system_message(
     name: Optional[str] = None,
     role: Optional[str] = None,
     tone: Optional[str] = None,
-    goals: Optional[List[str, str]] = None,
+    goals: Optional[List[str]] = None,
     chattiness: Optional[str] = None,
     persona_data: Optional[Dict[str, str]] = None,
     task_rules: Optional[List[str]] = None,
@@ -414,7 +414,7 @@ def set_system_message(
         name (Optional[str]): The name the AI should use for itself (e.g., 'Definer').
         role (Optional[str]): The primary role of the AI (e.g., 'a code assistant', 'a travel guide').
         tone (Optional[str]): The desired tone of voice (e.g., 'friendly and encouraging', 'formal and professional').
-        goals (Optional[List[str, str]]): A list of the goals of the AI in the conversations (e.g., ['answer users questions', 'guide users with the application usage']).
+        goals (Optional[List[str]]): A list of the goals of the AI in the conversations (e.g., ['answer users questions', 'guide users with the application usage']).
         chattiness (Optional[str]): The desired level of verbosity (e.g., 'be concise', 'provide detailed explanations').
         persona_data (Optional[Dict[str, str]]): A dictionary of facts about the AI's persona (e.g., {"your creator": "John Doe"}).
         task_rules (Optional[List[str]]): A list of specific rules the AI must follow (e.g., ["Do not mention you are an AI."]).
