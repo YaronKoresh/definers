@@ -1329,7 +1329,7 @@ def load_as_numpy(path, training=False):
 
                         temp_2 = tmp("mp3")
                         remove_silence(temp_name,temp_2)
-                        dir, num = split_mp3( temp_2, AUDIO_SEC )
+                        dir, num = split_mp3( temp_2, 5 )
                         files = read(dir)
                         x = []
                         for _f in files:
@@ -1381,7 +1381,7 @@ def load_as_numpy(path, training=False):
             else:
                 try:
                     resized_video_file = resize_video(path, HEIGHT_PX, WIDTH_PX)
-                    new_fps_video_file = convert_video_fps(resized_video_file, FPS)
+                    new_fps_video_file = convert_video_fps(resized_video_file, 24)
                     return numpy_to_cupy(extract_video_features(new_fps_video_file))
                 except Exception as e_video:
                     catch(e_video)
@@ -1672,7 +1672,7 @@ def features_to_image(predicted_features):  # Example image shape
         print(f"Error generating image from features: {e}")
         return None
 
-def features_to_video(predicted_features, frame_interval=10, fps=FPS):
+def features_to_video(predicted_features, frame_interval=10, fps=24):
     """
     Generates a video from predicted video features, assuming the features
     were extracted using the provided 'extract_video_features' function.
@@ -1839,7 +1839,7 @@ def predict(prediction_file: str, model_path: str):
         pred = features_to_video(cupy_to_numpy(pred))
 
     handlers = {
-        "video": lambda: write_video(pred, FPS),
+        "video": lambda: write_video(pred, 24),
         "image": lambda: iio.imwrite(output_filename, (cupy_to_numpy(pred) * 255).astype(np.uint8)),
         "audio": lambda: wavfile.write(output_filename, AUDIO_SR, cupy_to_numpy(pred)),
         "text": lambda: open(output_filename, "w").write(pred),
@@ -4457,7 +4457,7 @@ class HybridModel:
             from cuml.cluster import KMeans as cuKMeans
 
             if self.model is None:
-                self.model = cuKMeans(n_clusters=N_COMPONENTS)
+                self.model = cuKMeans(n_clusters=32768)
 
             # Training
             start_train = time()
