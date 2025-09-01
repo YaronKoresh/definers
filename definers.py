@@ -2913,7 +2913,7 @@ def cuda_toolkit(install=True):
         apt-get purge nvidia-*
         echo "blacklist nouveau" > /etc/modprobe.d/blacklist-nouveau.conf
         echo "options nouveau modeset=0" >> /etc/modprobe.d/blacklist-nouveau.conf
-        apt-get install --reinstall dkms
+        apt-get install -y --reinstall dkms
         apt-get install -f
         curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/cuda-keyring_1.1-1_all.deb > /usr/share/keyrings/cuda.deb
         cd /usr/share/keyrings/
@@ -2931,7 +2931,7 @@ def cuda_toolkit(install=True):
     if install:
         run(f"""
             apt-get update
-            apt-get -y install cuda-toolkit
+            apt-get install -y cuda-toolkit
         """, silent=True)
 
 def cuda_version():

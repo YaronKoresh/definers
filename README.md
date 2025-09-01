@@ -54,7 +54,7 @@ Here are the available optional groups:
 To install the complete library with all features, use:
 
 ```bash
-pip install "definers[all]@git+https://github.com/YaronKoresh/definers.git"
+pip install "definers[all] @ git+https://github.com/YaronKoresh/definers.git"
 ```
 
 ## Quick Start
