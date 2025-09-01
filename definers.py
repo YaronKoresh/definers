@@ -3635,7 +3635,7 @@ def init_pretrained_model(task:str,turbo:bool=False):
 
     # quantization_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=dtype(), use_double_quant=True, bnb_4bit_quant_type="nf4")
 
-    elif task in ["tts"]:
+    if task in ["tts"]:
 
         from chatterbox.tts import ChatterboxTTS
         model = ChatterboxTTS.from_pretrained(device=device())
