@@ -32,20 +32,12 @@ backoff = "*"
 googledrivedownloader = "*"
 requests = "*"
 sentencepiece = "*"
-
-[tool.poetry.group.ai]
-optional = true
-
-[tool.poetry.group.ai.dependencies]
-# Core AI & ML Frameworks
 torch = "~=2.3.1"
 torchvision = "~=0.18.1"
 torchaudio = "~=2.3.1"
 tensorflow = "==2.18.0"
 numba = "~=0.60.0"
 numpy = "~=1.26.4"
-
-# Hugging Face Ecosystem
 transformers = "~=4.42.0"
 diffusers = "~=0.29.0"
 accelerate = "~=0.31.0"
@@ -53,13 +45,9 @@ datasets = "~=2.20.0"
 peft = "~=0.11.1"
 hf_transfer = "~=0.1.6"
 bitsandbytes = "~=0.43.1"
-
-# ONNX Runtime
 onnx = "~=1.16.1"
 onnxruntime = "~=1.18.1"
 skl2onnx = "~=1.17.0"
-
-# General ML & Utilities
 scikit-learn = "~=1.5.1"
 joblib = "~=1.5.2"
 xgboost = "~=2.1.0"
@@ -72,11 +60,6 @@ torchfcpe = "~=0.0.3"
 chatterbox-tts = "~=0.1.2"
 compressed-tensors = "~=0.11.0"
 fairseq = {git = "https://github.com/YaronKoresh/fairseq.git"}
-
-[tool.poetry.group.audio]
-optional = true
-
-[tool.poetry.group.audio.dependencies]
 librosa = "~=0.10.2"
 demucs = "~=4.0.1"
 pydub = "~=0.25.1"
@@ -95,11 +78,6 @@ sounddevice = "~=0.5.0"
 mir_eval = "~=0.7"
 ffmpeg-python = "~=0.2.0"
 madmom = {git = "https://github.com/CPJKU/madmom", rev = "0551aa8f48d71a367d92b5d3a347a0cf7cd97cc9"}
-
-[tool.poetry.group.visual]
-optional = true
-
-[tool.poetry.group.visual.dependencies]
 pillow = "~=10.4.0"
 pillow_heif = "~=0.16.0"
 scikit-image = "~=0.24.0"
@@ -107,32 +85,22 @@ opencv-contrib-python-headless = "~=4.10.0.84"
 moviepy = "~=1.0.3"
 imageio = "~=2.34.2"
 refiners = {git = "https://github.com/finegrain-ai/refiners", rev = "d288e94fa8eed1386bd28cd0d5ceb8109c3ff398"}
-
-[tool.poetry.group.web]
-optional = true
-
-[tool.poetry.group.web.dependencies]
 requests-html = "~=0.10.0"
 beautifulsoup4 = "~=4.12.3"
 lxml = {version = "~=5.2.2", extras = ["html_clean"]}
 cssselect = "~=1.2.0"
 playwright = "~=1.45.0"
-
-[tool.poetry.group.ui]
-optional = true
-
-[tool.poetry.group.ui.dependencies]
 gradio = "~=4.37.2"
 gradio-client = "~=1.1.0"
 spaces = "~=0.39.0"
 
-[tool.poetry.group.gpu]
+[tool.poetry.group.cuda]
 optional = true
 
-[tool.poetry.group.gpu.dependencies]
+[tool.poetry.group.cuda.dependencies]
 cupy-cuda12x = {version = "~=13.3.0", source = "nvidia"}
 cuml-cu12 = {version = "~=24.08.0", source = "nvidia"}
 cudf-cu12 = {version = "~=24.08.0", source = "nvidia"}
 
 [tool.poetry.extras]
-all = ["ai", "audio", "visual", "web", "ui", "gpu"]
+cuda = ["cuda"]
