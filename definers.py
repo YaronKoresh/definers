@@ -5739,19 +5739,28 @@ def extend_audio(audio_path, extend_duration_s, format_choice, humanize = True):
     return final_output_path
 
 def audio_to_midi(audio_path):
-    from basic_pitch.inference import predict as predict_midi
 
-    output_dir = tmp(dir=True)
-    predict_midi(audio_path, output_dir)
-    midi_files = list(Path(output_dir).glob("*.mid"))
-    if not midi_files:
-        delete(output_dir)
-        catch("Failed to convert audio to MIDI.")
-        return None
-    final_midi_path = tmp(".mid")
-    shutil.copy(midi_files[0], final_midi_path)
-    delete(output_dir)
-    return final_midi_path
+    import madmom
+    from basic_pitch.inference import predict, Model
+    from basic_pitch import ICASSP_2022_MODEL_PATH
+
+    proc = madmom.features.beats.DBNBeatTrackingProcessor(fps=100)
+    act = madmom.features.beats.RNNBeatProcessor()(audio_path)
+    bpm = np.median(60 / np.diff(proc(act)))
+
+    model_output, midi_data, note_events = predict(
+        path,
+        midi_tempo=bpm,
+        onset_threshold=0.95, # Segmentation
+        frame_threshold=0.25, # Confidence
+        minimum_note_length=80, # Length
+        minimum_frequency=60,
+        maximum_frequency=4200
+    )
+    
+    name = random_string() + ".mid"
+    midi_data.write(f'./{ name }')
+    return name
 
 def midi_to_audio(midi_path, format_choice):
     from midi2audio import FluidSynth
@@ -5778,12 +5787,6 @@ def midi_to_audio(midi_path, format_choice):
     final_output_path = export_audio(sound, output_stem, format_choice)
     delete(temp_wav_path)
     return final_output_path
-
-def enhance_midi(midi_path, format_choice, humanize = True):
-    temp_audio_prompt = midi_to_audio(midi_path, "wav")
-    enhanced_audio = extend_audio(temp_audio_prompt, 10, format_choice, humanize)
-    delete(temp_audio_prompt)
-    return enhanced_audio
 
 def autotune_vocals(audio_path, strength, format_choice):
     import librosa
