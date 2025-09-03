@@ -24,6 +24,7 @@ repository = "https://github.com/YaronKoresh/definers"
 
 [tool.poetry.dependencies]
 python = ">=3.8"
+pip = "==24.0"
 absl-py = "==2.3.1"
 accelerate = "==0.31.0"
 aiofiles = "==23.2.1"
