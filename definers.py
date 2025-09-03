@@ -3601,7 +3601,7 @@ def init_pretrained_model(task:str,turbo:bool=False):
     global MODELS
     global TOKENIZERS
 
-    if MODELS[task]:
+    if hasattr(MODELS,task) and MODELS[task]:
         return
 
     import torch
