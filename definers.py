@@ -285,14 +285,14 @@ def _install_ffmpeg_linux():
 
     package_managers = {
         'apt': {
-            'update_cmd': ['sudo', 'apt-get', 'update'],
-            'install_cmd': ['sudo', 'apt-get', 'install', 'ffmpeg', '-y']
+            'update_cmd': ['apt-get', 'update'],
+            'install_cmd': ['apt-get', 'install', 'ffmpeg', '-y']
         },
         'dnf': {
-            'install_cmd': ['sudo', 'dnf', 'install', 'ffmpeg', '-y']
+            'install_cmd': ['dnf', 'install', 'ffmpeg', '-y']
         },
         'pacman': {
-            'install_cmd': ['sudo', 'pacman', '-S', 'ffmpeg', '--noconfirm']
+            'install_cmd': ['pacman', '-S', 'ffmpeg', '--noconfirm']
         }
     }
 
@@ -3641,12 +3641,12 @@ def init_pretrained_model(task:str,turbo:bool=False):
     elif task in ["speech-recognition"]:
 
         from transformers import pipeline
-        model = pipeline("automatic-speech-recognition", model=tasks["speech-recognition"])
+        model = pipeline("automatic-speech-recognition", model=tasks["speech-recognition"]).to(device())
 
     elif task in ["audio-classification"]:
 
         from transformers import pipeline
-        model = pipeline("audio-classification", model=tasks["audio-classification"])
+        model = pipeline("audio-classification", model=tasks["audio-classification"]).to(device())
 
     elif task in ["detect"]:
 
@@ -3654,9 +3654,9 @@ def init_pretrained_model(task:str,turbo:bool=False):
 
         config = AutoConfig.from_pretrained(tasks[task])
         try:
-            model = AutoModel.from_pretrained(tasks[task], config=config, trust_remote_code=True, torch_dtype=dtype())
+            model = AutoModel.from_pretrained(tasks[task], config=config, trust_remote_code=True, torch_dtype=dtype()).to(device())
         except:
-            model = TFAutoModel.from_pretrained(tasks[task], config=config, trust_remote_code=True, torch_dtype=dtype())
+            model = TFAutoModel.from_pretrained(tasks[task], config=config, trust_remote_code=True, torch_dtype=dtype()).to(device())
 
     elif task in ["music"]:
 
@@ -3687,7 +3687,7 @@ def init_pretrained_model(task:str,turbo:bool=False):
 
         TOKENIZERS[task] = T5Tokenizer.from_pretrained(tasks[task])
         free()
-        model = T5ForConditionalGeneration.from_pretrained(tasks[task])
+        model = T5ForConditionalGeneration.from_pretrained(tasks[task]).to(device())
 
     elif task in ["video"]:
 
@@ -3696,12 +3696,12 @@ def init_pretrained_model(task:str,turbo:bool=False):
         transformer = HunyuanVideoTransformer3DModel.from_pretrained(
             tasks[task], subfolder="transformer", torch_dtype=dtype(), revision='refs/pr/18'
         )
-        model = HunyuanVideoPipeline.from_pretrained(tasks[task], transformer=transformer, revision='refs/pr/18', torch_dtype=dtype())
+        model = HunyuanVideoPipeline.from_pretrained(tasks[task], transformer=transformer, revision='refs/pr/18', torch_dtype=dtype()).to(device())
 
     elif task in ["image"]:
 
         from diffusers import DiffusionPipeline
-        model = FluxPipeline.from_pretrained(tasks[task], torch_dtype=dtype())
+        model = FluxPipeline.from_pretrained(tasks[task], torch_dtype=dtype()).to(device())
 
     try:
         try:
@@ -3709,8 +3709,6 @@ def init_pretrained_model(task:str,turbo:bool=False):
             model.enable_vae_tiling()
         except Exception as e:
             pass
-        if turbo is True:
-            model.to(device())
         else:
             try:
                 model.enable_model_cpu_offload()
