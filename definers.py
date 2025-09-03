@@ -3007,16 +3007,10 @@ def apt_install(custom):
     audio_apt="libportaudio2 libasound2-dev sox libsox-fmt-all praat ffmpeg libavcodec-extra libavif-dev"
     visual_apt="libopenblas-dev libgflags-dev libgles2 libgtk-3-0 libgtk-4-1 libatk1.0-0 libatk-bridge2.0-0 libcups2 libxcomposite1 libxdamage1 libatspi2.0-0 libgstreamer1.0-0 gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-tools gstreamer1.0-gl"
 
-    run("apt-get update")
-    run(f"apt-get reinstall -y { basic_apt } { audio_apt } { video_apt }")
-
     pre_install()
 
-    for c in run_custom[custom]:
-        if c.startswith("func::"):
-            exec(c[6:]+"()")
-        else:
-            run(c)
+    run("apt-get update")
+    run(f"apt-get reinstall -y { basic_apt } { audio_apt } { video_apt }")
 
     post_install()
 
