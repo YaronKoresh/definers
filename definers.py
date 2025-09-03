@@ -3641,12 +3641,12 @@ def init_pretrained_model(task:str,turbo:bool=False):
     elif task in ["speech-recognition"]:
 
         from transformers import pipeline
-        model = pipeline("automatic-speech-recognition", model=tasks["speech-recognition"]).to(device())
+        model = pipeline("automatic-speech-recognition", model=tasks["speech-recognition"], device=device())
 
     elif task in ["audio-classification"]:
 
         from transformers import pipeline
-        model = pipeline("audio-classification", model=tasks["audio-classification"]).to(device())
+        model = pipeline("audio-classification", model=tasks["audio-classification"], device=device())
 
     elif task in ["detect"]:
 
