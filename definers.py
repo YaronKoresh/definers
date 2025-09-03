@@ -3001,7 +3001,7 @@ def pre_install():
     os.environ["NUMBA_CACHE_DIR"] = f'{os.environ["HOME"]}/.tmp'
     os.environ["DISABLE_FLASH_ATTENTION"] = "True"
 
-def apt_install(custom):
+def apt_install():
 
     basic_apt="build-essential gcc cmake swig gdebi git git-lfs wget curl libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev libncursesw5-dev xz-utils tk-dev libffi-dev liblzma-dev initramfs-tools libgirepository1.0-dev libdbus-1-dev libdbus-glib-1-dev libsecret-1-0 libmanette-0.2-0 libharfbuzz0b libharfbuzz-icu0 libenchant-2-2 libhyphen0 libwoff1 libgraphene-1.0-0 libxml2-dev libxmlsec1-dev"
     audio_apt="libportaudio2 libasound2-dev sox libsox-fmt-all praat ffmpeg libavcodec-extra libavif-dev"
