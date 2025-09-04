@@ -3010,7 +3010,7 @@ def apt_install():
     pre_install()
 
     run("apt-get update")
-    run(f"apt-get reinstall -y { basic_apt } { audio_apt } { video_apt }")
+    run(f"apt-get reinstall -y { basic_apt } { audio_apt } { visual_apt }")
 
     post_install()
 
