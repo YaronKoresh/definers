@@ -187,7 +187,7 @@ _negative_prompt_ = ", ".join(negative_keywords)
 _base_prompt_ = "cinematic masterpiece, ultra realistic, 8k, best quality, sharp focus, professional color grading"
 
 def get_os_name():
-    return platform.system()
+    return platform.system().toLower()
 
 def is_admin_windows():
     try:
@@ -330,11 +330,15 @@ def _install_ffmpeg_linux():
         sys.exit(1)
 
 def install_ffmpeg():
+    if runnable(ffmpeg):
+        return True
     system = get_os_name()
-    if system == "Windows":
+    if system == "windows":
         _install_ffmpeg_windows()
-    elif system == "Linux":
+        return True
+    elif system == "linux":
         _install_ffmpeg_linux()
+        return True
     else:
         print(f"[ERROR] Unsupported operating system: {system}.")
         print("[INFO] This script only supports Windows and Linux.")
@@ -344,12 +348,12 @@ def install_audio_effects():
     os_name = get_os_name()
     install_dir = os.path.join(os.path.expanduser("~"), "app_dependencies")
     os.makedirs(install_dir, exist_ok=True)
-    if os_name == "Linux":
+    if os_name == "linux":
         print("Detected Linux. Installing system dependencies with apt-get...")
         dependencies_apt = ["rubberband-cli", "fluidsynth", "fluid-soundfont-gm", "build-essential"]
         run("apt-get update -y")
         run(f"apt-get install -y {' '.join(dependencies_apt)}")
-    elif os_name == "Windows":
+    elif os_name == "windows":
         print("Detected Windows. Automating dependency installation...")
         print(f"Dependencies will be installed in: {install_dir}")
         rubberband_url = "https://breakfastquay.com/files/releases/rubberband-3.3.0-gpl-executable-windows.zip"
@@ -2863,6 +2867,13 @@ def importable(name):
     if res == False:
         return False
     return True
+
+def runnable(cmd):
+    if get_os_name() == "windows" and run(f"powershell.exe -Command {repr(cmd)} -WhatIf", silent=True):
+        return True
+    if get_os_name() == "linux" and run(f"which {repr(cmd.split()[0])}", silent=True):
+        return True
+    return False
 
 def is_package_path(package_path,package_name=None):
     if exist(package_path) and os.path.isdir(package_path) and (
