@@ -743,7 +743,7 @@ def init_custom_model(model_type, model_path=None):
                 print(f"Error loading Pickle model: {e_pkl_load}")
                 return None
         else:
-            model = none
+            model = None
 
         return model
 
@@ -1053,7 +1053,7 @@ def train(
                     select_rows( dataset, int(start_end[0])-1, int(start_end[-1]) )
                 ))
             else:
-                datasets.append(to_loader(
+                loaders.append(to_loader(
                     select_rows( dataset, int(part)-1, int(part) )
                 ))
     else:
@@ -1288,7 +1288,7 @@ def load_as_numpy(path, training=False):
             if last in ["wav","mp3"]:
                 try:
                     tfm = sox.Transformer()
-                    tfm.rate(AUDIO_SR)
+                    tfm.rate(32000)
 
                     if training:
 
@@ -1340,7 +1340,7 @@ def load_as_numpy(path, training=False):
             elif last in iio_formats:
                 try:
                     image_data = iio.imread(path)
-                    data = resize_image(image_data, HEIGHT_PX, WIDTH_PX)
+                    data = resize_image(image_data, 1024, 1024)
                     path_resized = save_image(data)
                     return numpy_to_cupy(extract_image_features(path_resized))
                 except Exception as e_image:
@@ -1348,7 +1348,7 @@ def load_as_numpy(path, training=False):
                     return None
             else:
                 try:
-                    resized_video_file = resize_video(path, HEIGHT_PX, WIDTH_PX)
+                    resized_video_file = resize_video(path, 1024, 1024)
                     new_fps_video_file = convert_video_fps(resized_video_file, 24)
                     return numpy_to_cupy(extract_video_features(new_fps_video_file))
                 except Exception as e_video:
@@ -1438,7 +1438,7 @@ def features_to_audio(
 ):
     import librosa
 
-    sr = sr if sr is not None else AUDIO_SR
+    sr = sr if sr is not None else 32000
     n_mfcc = n_mfcc if n_mfcc is not None else 20
     n_mels = n_mels if n_mels is not None else 80
     n_fft = n_fft if n_fft is not None else 2048
@@ -1523,7 +1523,7 @@ def predict_audio(model, audio_file):
     import soundfile as sf
 
     try:
-        audio_data, sr = librosa.load(audio_file, sr=AUDIO_SR, mono=True)
+        audio_data, sr = librosa.load(audio_file, sr=32000, mono=True)
 
         timeline = get_active_audio_timeline(audio_file)
 
@@ -1646,7 +1646,7 @@ def features_to_video(predicted_features, frame_interval=10, fps=24):
 
     output_path = tmp("mp4")
 
-    video_shape = (HEIGHT_PX, WIDTH_PX, 3)
+    video_shape = (1024, 1024, 3)
 
     try:
         height, width, channels = video_shape
@@ -1797,7 +1797,7 @@ def predict(prediction_file: str, model_path: str):
     handlers = {
         "video": lambda: write_video(pred, 24),
         "image": lambda: iio.imwrite(output_filename, (cupy_to_numpy(pred) * 255).astype(np.uint8)),
-        "audio": lambda: wavfile.write(output_filename, AUDIO_SR, cupy_to_numpy(pred)),
+        "audio": lambda: wavfile.write(output_filename, 32000, cupy_to_numpy(pred)),
         "text": lambda: open(output_filename, "w").write(pred),
     }
 
@@ -3593,7 +3593,7 @@ def init_pretrained_model(task:str,turbo:bool=False):
     global MODELS
     global TOKENIZERS
 
-    if hasattr(MODELS,task) and MODELS[task]:
+    if task in MODELS and MODELS[task]:
         return
 
     import torch
@@ -4496,10 +4496,8 @@ class BeamSearch:
         self.length_penalty = length_penalty
         self.score_function = score_function or self._default_score_function
 
-    def _default_score_function(self, beam: List[Tuple[torch.Tensor, float]], total_score: float) -> float:
-        """
-        Default scoring function with length penalty.
-        """
+    def _default_score_function(self, _arg) -> float:
+        beam, total_score = _arg
         seq, _ = beam[-1]
         seq_len = seq.shape[1]
         return total_score / (seq_len ** self.length_penalty)
@@ -5244,6 +5242,8 @@ def generate_voice(text, reference_audio, format_choice, humanize=True):
         catch(f"Generation failed: {e}")
 
 def generate_music(prompt, duration_s, format_choice, humanize):
+    from scipy.io.wavfile import write as write_wav
+
     inputs = MODELS["music"](text=[prompt], padding=True, return_tensors="pt").to(device())
     max_new_tokens = int(duration_s * 50)
     audio_values = MODELS["music"].generate(**inputs, do_sample=True, guidance_scale=3, max_new_tokens=max_new_tokens)
@@ -5282,7 +5282,7 @@ def dj_mix(files, mix_type, target_bpm, transition_sec, format_choice):
                 if original_bpm > 0 and target_bpm > 0:
                     speed_factor = target_bpm / original_bpm
                     temp_stretched_path = tmp(Path(current_path).suffix)
-                    stretch_audio_cli(current_path, temp_stretched_path, speed_factor)
+                    stretch_audio(current_path, temp_stretched_path, speed_factor)
                     current_path = temp_stretched_path
             track_segment = pydub.AudioSegment.from_file(current_path)
             processed_tracks.append(track_segment)
@@ -5622,6 +5622,7 @@ def create_spectrum_visualization(audio_path):
         return None
 
 def stem_mixer(files, format_choice):
+    from scipy.io.wavfile import write as write_wav
     import librosa
     import madmom
     import  soundfile as sf
@@ -5885,7 +5886,7 @@ def autotune_vocals(audio_path, strength, format_choice):
         delete(temp_tuned_vocals_path)
         return final_output_path
     finally:
-        delete_path(separation_dir)
+        delete(separation_dir)
 
 logger = init_logger()
 init_cupy_numpy()
