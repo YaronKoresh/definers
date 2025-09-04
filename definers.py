@@ -3751,6 +3751,7 @@ def pipe(task:str, *a, prompt:str="", path:str="", resolution:str="640x640", len
 
     import torch
     import cv2
+    from PIL import Image
     from diffusers.utils import export_to_video
 
     params1 = []
@@ -3776,7 +3777,8 @@ def pipe(task:str, *a, prompt:str="", path:str="", resolution:str="640x640", len
         params2["num_inference_steps"]=60
         params2["generator"]=torch.Generator(device()).manual_seed(random.randint(0, big_number()))
     elif task == "detect":
-        params1.append(path)
+        image = Image.open(path)
+        params1.append(image)
 
     from transformers import AutoTokenizer
     if task in ["detect"]:
@@ -5183,7 +5185,7 @@ def export_audio(audio_segment, output_path_stem, format_choice):
     else: raise ValueError(f"Unsupported format: {format_choice}")
     output_path = Path(output_path_stem).with_suffix(suffix)
     params = ["-acodec", "pcm_s16le"] if file_format == "wav" else None
-    audio_segment.export(str(output_path), format=format_choice.lower(), bitrate=bitrate, parameters=params)
+    audio_segment.export(str(output_path), format=file_format, bitrate=bitrate, parameters=params)
     return str(output_path)
 
 def create_share_links(file_url, text_description):
@@ -5244,7 +5246,7 @@ def generate_voice(text, reference_audio, format_choice, humanize=True):
 def generate_music(prompt, duration_s, format_choice, humanize):
     from scipy.io.wavfile import write as write_wav
 
-    inputs = MODELS["music"](text=[prompt], padding=True, return_tensors="pt").to(device())
+    inputs = PROCESSORS["music"](text=[prompt], padding=True, return_tensors="pt").to(device())
     max_new_tokens = int(duration_s * 50)
     audio_values = MODELS["music"].generate(**inputs, do_sample=True, guidance_scale=3, max_new_tokens=max_new_tokens)
     sampling_rate = MODELS["music"].config.audio_encoder.sampling_rate
@@ -5326,7 +5328,7 @@ def beat_visualizer(image_path, audio_path, image_effect, animation_style, scale
     delete(temp_img_path)
     return output_path
 
-def generate_video(audio_path, prompt, format_choice):
+def music_video(audio_path):
     import librosa
     import madmom
     from moviepy import VideoFileClip, AudioFileClip
@@ -5369,8 +5371,13 @@ def generate_video(audio_path, prompt, format_choice):
     final_clip.write_videofile(output_path, codec='libx264', audio_codec='aac', fps=fps)
     return output_path
 
-def lyric_video(audio_path, background_path, lyrics_text, text_position, language):
+def lyric_video(audio_path, background_path, lyrics_text, text_position):
     from moviepy import ImageClip, AudioFileClip, VideoFileClip, ColorClip, TextClip, CompositeVideoClip
+
+    font_path = "./Alef-Bold.ttf"
+    if not os.path.exists(font_path):
+        print("Font not found, downloading...")
+        google_drive_download("1C48KkYWQDYu7ypbNtSXAUJ6kuzoZ42sI", font_path)
 
     audio_clip = AudioFileClip(audio_path)
     duration = audio_clip.duration
@@ -5385,8 +5392,7 @@ def lyric_video(audio_path, background_path, lyrics_text, text_position, languag
         catch("Lyrics text is empty.")
         return None
     line_duration = duration / len(lines)
-    font = 'Arial'
-    lyric_clips = [TextClip(line, fontsize=70, color='white', font=font, stroke_color='black', stroke_width=2).set_position(text_position).set_start(i * line_duration).set_duration(line_duration) for i, line in enumerate(lines)]
+    lyric_clips = [TextClip(line, fontsize=70, color='white', font=font_path, stroke_color='black', stroke_width=2).set_position(text_position).set_start(i * line_duration).set_duration(line_duration) for i, line in enumerate(lines)]
     final_clip = CompositeVideoClip([background_clip] + lyric_clips, size=background_clip.size).set_audio(audio_clip)
     output_path = tmp(".mp4")
     final_clip.write_videofile(output_path, codec='libx264', fps=24, audio_codec='aac', logger=None)
@@ -5741,7 +5747,7 @@ def audio_to_midi(audio_path):
     bpm = np.median(60 / np.diff(proc(act)))
 
     model_output, midi_data, note_events = predict(
-        path,
+        audio_path,
         midi_tempo=bpm,
         onset_threshold=0.95, # Segmentation
         frame_threshold=0.25, # Confidence
