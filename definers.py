@@ -196,6 +196,9 @@ def is_admin_windows():
         return False
 
 def _install_ffmpeg_windows():
+    import requests
+    import zipfile
+
     print("[INFO] Running FFmpeg installer for Windows...")
 
     if not is_admin_windows():
@@ -711,9 +714,12 @@ def tokenize_and_pad(rows, tokenizer=None):
     return two_dim_numpy(tokenized_inputs['input_ids'])
 
 def init_tokenizer(mod="google-bert/bert-base-multilingual-cased"):
+    from transformers import AutoTokenizer
     return AutoTokenizer.from_pretrained(mod)
 
 def init_custom_model(model_type, model_path=None):
+    import onnx
+    import pickle
 
     try:
         model = None
@@ -836,6 +842,8 @@ def pad_sequences(X):
     return torch.nn.utils.rnn.pad_sequence(X, batch_first=True)
 
 def kmeans_k_suggestions(X, k_range=range(2,20), random_state=None):
+    from sklearn.metrics import silhouette_score, davies_bouldin_score, calinski_harabasz_score
+
     wcss_values = {}
     silhouette_scores = {}
     davies_bouldin_indices = {}
@@ -1104,7 +1112,6 @@ def train(
 
 
 def create_vectorizer(texts):
-
     from sklearn.feature_extraction.text import TfidfVectorizer
 
     vectorizer = TfidfVectorizer()
@@ -1112,7 +1119,7 @@ def create_vectorizer(texts):
     return vectorizer
 
 def vectorize(vectorizer, texts):
-    """Vectorizes a list of strings using a fitted vectorizer."""
+
     if vectorizer is None or texts is None:
         return None
 
@@ -1139,18 +1146,6 @@ def unvectorize(vectorizer, vectorized_data):
 
 
 def extract_video_features(video_path, frame_interval=10):
-    """
-    Extracts features from a video file by processing frames at specified intervals.
-    Combines color histograms, LBP, and Canny edge features for each processed frame.
-
-    Args:
-        video_path (str): The path to the video file.
-        frame_interval (int): Process every nth frame.
-
-    Returns:
-        numpy.ndarray: A 2D NumPy array, where each row represents features from a frame, or None if an error occurs.
-    """
-
     import cv2
     import skimage.feature as skf
 
@@ -1165,7 +1160,7 @@ def extract_video_features(video_path, frame_interval=10):
         while True:
             ret, frame = cap.read()
             if not ret:
-                break  # End of video
+                break
 
             if frame_count % frame_interval == 0:
                 frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -1176,15 +1171,12 @@ def extract_video_features(video_path, frame_interval=10):
                 hist_r = cv2.calcHist([frame], [2], None, [256], [0, 256]).flatten()
                 color_hist = _np.concatenate((hist_b, hist_g, hist_r)).astype(_np.float32)
 
-                # Local Binary Patterns (LBP)
                 radius = 1
                 n_points = 8 * radius
                 lbp = skf.local_binary_pattern(frame_gray, n_points, radius, method='uniform').flatten().astype(_np.float32)
 
-                # Canny Edge Detection
                 edges = cv2.Canny(frame_gray, 100, 200).flatten().astype(_np.float32)
 
-                # Combine features for this frame
                 frame_features = _np.concatenate((color_hist, lbp, edges))
                 all_frame_features.append(frame_features)
 
@@ -1193,7 +1185,7 @@ def extract_video_features(video_path, frame_interval=10):
         cap.release()
 
         if not all_frame_features:
-            return None  # No frames processed
+            return None
 
         return np.array(all_frame_features)
 
@@ -1202,17 +1194,6 @@ def extract_video_features(video_path, frame_interval=10):
         return None
 
 def extract_text_features(text, vectorizer=None):
-    """
-    Extracts TF-IDF features from a text string.
-
-    Args:
-        text (str): The input text string.
-        max_features (int): Maximum number of features (words) to consider.
-
-    Returns:
-        numpy.ndarray: A 1D NumPy array containing the TF-IDF features, or None if an error occurs.
-    """
-
     from sklearn.feature_extraction.text import TfidfVectorizer
 
     try:
@@ -1226,17 +1207,6 @@ def extract_text_features(text, vectorizer=None):
         return None
 
 def extract_image_features(image_path):
-    """
-    Extracts and combines color histograms, texture features (LBP), and edge features (Canny)
-    from an image file into a single 1D NumPy array.
-
-    Args:
-        image_path (str): The path to the image file.
-
-    Returns:
-        numpy.ndarray: A 1D NumPy array containing the combined image features, or None if an error occurs.
-    """
-
     import cv2
     import skimage.feature as skf
 
@@ -1271,18 +1241,6 @@ def extract_image_features(image_path):
         return None
 
 def extract_audio_features(file_path, n_mfcc=20):
-    """
-    Extracts and combines MFCCs, spectral features, zero-crossing rate, and chroma features
-    from an audio file into a single 1D NumPy array.
-
-    Args:
-        file_path (str): The path to the audio file.
-        n_mfcc (int): The number of MFCCs to extract..
-
-    Returns:
-        numpy.ndarray: A 1D NumPy array containing the combined audio features, or None if an error occurs.
-    """
-
     import librosa
 
     try:
@@ -1626,22 +1584,10 @@ def predict_audio(model, audio_file):
         catch(e)
         return None
 
-def features_to_image(predicted_features):  # Example image shape
-    """
-    Generates an image from predicted image features, assuming the features
-    were extracted using the provided 'extract_image_features' function.
-
-    Args:
-        predicted_features (numpy.ndarray): 1D NumPy array of predicted features.
-        image_shape (tuple): The desired shape of the output image (height, width, channels).
-
-    Returns:
-        numpy.ndarray: Image as a NumPy array (height, width, channels), or None if an error occurs.
-    """
-
+def features_to_image(predicted_features):
     import cv2
 
-    image_shape = (HEIGHT_PX, WIDTH_PX, 3)
+    image_shape = (1024, 1024, 3)
 
     try:
         height, width, channels = image_shape
@@ -2400,7 +2346,9 @@ def get_max_resolution(width, height, mega_pixels = 0.25, factor = 16):
     return new_width, new_height
 
 def master(source_path, strength, format_choice):
-    if not source_path: raise gr.Error("Please upload a track to master.")
+    import matchering as mg
+    import pydub
+
     output_stem = Path(source_path).with_name(f"{Path(source_path).stem}_mastered")
     try:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -2414,10 +2362,11 @@ def master(source_path, strength, format_choice):
             for _ in range(math.floor(strength)): processed_path = _master(processed_path)
             final_sound = pydub.AudioSegment.from_file(processed_path) + (strength - 1.0) * 6
             output_path = export_audio(final_sound, output_stem, format_choice)
-            delete_path(processed_path)
+            delete(processed_path)
             return output_path
     except Exception as e:
-        raise gr.Error(f"Mastering failed: {e}")
+        catch(e)
+        return None
 
 def get_cluster_content(model, cluster_index):
 
@@ -3459,150 +3408,141 @@ def string_to_sha3_512(str,salt_num=None):
 	m.update(bytes( salt ))
 	return [ m.hexdigest(), salt_num ]
 
-def latest(db = "*", filters = {}, days = None, identifierKey = "id"):
-    
-    def _history(db, filters = {}, days = None):
-      timestamp = time.time()
-      if days == None:
-        time_start = 0
-      else:
-        timestamp_range = 86400000 * days
-        timestamp_start = timestamp - timestamp_range
-      try:
-        folders = [ f'{database_path}/{tm}' for tm in read(f'{database_path}') if int(tm) >= time_start ]
-      except:
-        return []
-      keys = [k for k in filters]
-      values = [filters[k] for k in filters]
-      filtered_folders = []
-      for index in range(0,len(keys)-1):
-        key = keys[index]
-        filtered_folders += [ folder for folder in folders if key in read(folder) and read(f'{folder}/{key}') == values[index] ]
-      ret = []
-      for folder in filtered_folders:
-        obj = {}
-        folderSplit = split(folder,"/")
-        folderName = folderSplit[len(folderSplit.length)-2]
-        date = datetime.utcfromtimestamp(folderName)
-        for key in read(folder):
-          obj[key] = read(f'{folder}/{key}')
-        ret += { "timestamp": folderName, "time": date, "data": obj }
-      return ret[::-1]
+class Database:
+    def __init__(self, path):
+        self.path = path
+        if not os.path.exists(self.path):
+            os.makedirs(self.path)
+
+    def _get_history(self, db, filters={}, days=None):
+        db_path = os.path.join(self.path, db)
+        if not os.path.exists(db_path):
+            return []
+
+        start_timestamp = 0
+        if days is not None and isinstance(days, (int, float)):
+            start_timestamp = time() - (days * 86400)
+
+        try:
+            timestamp_dirs = [d for d in os.listdir(db_path) if int(d) >= start_timestamp]
+        except (ValueError, FileNotFoundError):
+            return []
+
+        results = []
+        for ts_string in timestamp_dirs:
+            record_path = os.path.join(db_path, ts_string)
+            if not os.path.isdir(record_path):
+                continue
+
+            item_data = {}
+            for key_file in os.listdir(record_path):
+                with open(os.path.join(record_path, key_file), 'r') as f:
+                    item_data[key_file] = f.read()
+            
+            all_filters_match = True
+            for key, value in filters.items():
+                if item_data.get(key) != str(value):
+                    all_filters_match = False
+                    break
+            
+            if all_filters_match:
+                ts_int = int(ts_string)
+                record = {
+                    "timestamp": ts_int,
+                    "time": datetime.fromtimestamp(ts_int),
+                    "data": item_data
+                }
+                results.append(record)
+
+        return sorted(results, key=lambda x: x['timestamp'], reverse=True)
+
+    def history(self, db, filters={}, days=None):
+        full_history = self._get_history(db, filters, days)
+        return [item['data'] for item in full_history]
+
+    def push(self, db, data, timestamp=None):
+        if timestamp is None:
+            timestamp = int(time())
+        elif not isinstance(timestamp, int):
+            try:
+                timestamp = int(timestamp)
+            except (ValueError, TypeError):
+                timestamp = int(time())
+
+        record_path = os.path.join(self.path, db, str(timestamp))
+        os.makedirs(record_path, exist_ok=True)
+
+        for key, value in data.items():
+            file_path = os.path.join(record_path, key)
+            with open(file_path, 'w') as f:
+                f.write(str(value))
+
+    def latest(self, db="*", filters={}, days=None, identifierKey="id"):
+        if db == "*":
+            return {db_name: self.latest(db_name, filters, days, identifierKey) for db_name in os.listdir(self.path)}
+        if isinstance(db, list):
+            return {db_name: self.latest(db_name, filters, days, identifierKey) for db_name in db}
+
+        full_history = self._get_history(db)
+
+        latest_items = {}
+        for item in full_history:
+            item_id = item['data'].get(identifierKey)
+            if item_id is None:
+                continue
+
+            if item_id not in latest_items or item['timestamp'] > latest_items[item_id]['timestamp']:
+                latest_items[item_id] = item
+
+        filtered_results = list(latest_items.values())
+
+        if days is not None:
+            start_timestamp = time() - (days * 86400)
+            filtered_results = [item for item in filtered_results if item['timestamp'] >= start_timestamp]
+
+        if filters:
+            final_results = []
+            for item in filtered_results:
+                all_filters_match = True
+                for key, value in filters.items():
+                    if item['data'].get(key) != str(value):
+                        all_filters_match = False
+                        break
+                if all_filters_match:
+                    final_results.append(item)
+            filtered_results = final_results
+
+        sorted_results = sorted(filtered_results, key=lambda x: x['timestamp'], reverse=True)
+        return [item['data'] for item in sorted_results]
+
+    def clean(self, db="*", identifierKey="id"):
+        if db == "*":
+            dbs = os.listdir(self.path)
+            for db_name in dbs:
+                self.clean(db_name, identifierKey)
+            return
+        if isinstance(db, list):
+            for db_name in db:
+                self.clean(db_name, identifierKey)
+            return
+
+        full_history = self._get_history(db)
+        latest_items = {}
+        for item in full_history:
+            item_id = item['data'].get(identifierKey)
+            if item_id is None:
+                continue
+            if item_id not in latest_items or item['timestamp'] > latest_items[item_id]['timestamp']:
+                latest_items[item_id] = item
         
-    if db == "*":
-      ret = {}
-      dbs = read(database_path)
-      for currentDb in dbs:
-        ret[currentDb] = get_latest(currentDb, filters, days, identifierKey)
-      return ret
-    elif (type(db).__name__ == "list"):
-      ret = {}
-      for currentDb in db:
-        ret[currentDb] = get_latest(currentDb, filters, days, identifierKey)
-      return ret
-    latest = []
-    ids = []
-    for item in _history(db):
-      _id = item["data"][identifierKey]
-      index = ids.index(_id)
-      if index == -1:
-        ids.append(_id)
-        latest.append(item)
-      else:
-        latestIndex = []
-        for obj in latest:
-          latestIndex.append( obj["data"][identifierKey] )
-        latestIndex = latestIndex.index(_id)
-        if int(latest[latestIndex]["timestamp"]) < int(item["timestamp"]):
-           latest[latestIndex] = item
-    keys = [k for k in filters]
-    values = [filters[k] for k in filters]
-    if days == None:
-      time_s = 0
-    else:
-      timestamp_range = 86400000 * days
-      timestamp_start = timestamp - timestamp_range
-    latest_filtered_1 = []
-    for obj in latest:
-      if obj["timestamp"] >= timestamp_start:
-        latest_filtered_1.append( obj )
-    latest_filtered_2 = []
-    for obj in latest_filtered_1:
-      status = True
-      for i in range(0,len(keys)-1):
-        key = keys[i]
-        value = values[i]
-        if not obj["data"][key] and obj["data"][key] == value:
-          status = False
-          break
-      if status:
-        latest_filtered_2.append(obj)
-    for i in range(0,len(latest_filtered_2)-1):
-      latest_filtered_2[i] = latest_filtered_2[i]["data"]
-      return latest_filtered_2
-    
-def clean(db = "*",identifierKey = "id"):
-  if db == "*":
-    dbs = read(database_path)
-    for db2 in dbs:
-      _latest = latest(db2, {}, None, identifierKey)
-      remove(f'{database_path}/{db2}')
-      for obj in _latest:
-        push(db2, obj, obj.timestamp)
-  elif type(db).__name__ == "list":
-    for db2 in db:
-      _latest = latest(db2, {}, None, identifierKey)
-      remove(f'{database_path}/{db2}')
-      for obj in _latest:
-        push(db2, obj, obj.timestamp)
-  else:
-    _latest = latest(db, {}, None, identifierKey)
-    remove(f'{database_path}/{db2}')
-    for obj in _latest:
-      push(db2, obj, obj.timestamp)
+        records_to_keep = list(latest_items.values())
 
-def push(db, data, timestamp=None):
-  if timestamp == None:
-    timestamp = time.time()
-  elif type(timestamp).__name__ != "int":
-    try:
-      timestamp = int(timestamp)
-    except:
-      timestamp = time.time()
-  directory(f'{database_path}/{db}/{timestamp}/')
-  keys = [k for k in data]
-  values = [data[k] for k in data]
-  files = [f'{database_path}/{db}/{timestamp}/{key}' for key in keys]
-  for i in range(0,len(files)-1):
-    file(files[i], values[i])
+        db_path = os.path.join(self.path, db)
+        if os.path.isdir(db_path):
+            shutil.rmtree(db_path)
 
-def history(db, filters = {}, days = None):
-  timestamp = time.time()
-  if days == None:
-    time_start = 0
-  else:
-    timestamp_range = 86400000 * days
-    timestamp_start = timestamp - timestamp_range
-  try:
-    folders = [ f'{database_path}/{tm}' for tm in read(f'{database_path}') if int(tm) >= time_start ]
-  except:
-    return []
-  keys = [k for k in filters]
-  values = [filters[k] for k in filters]
-  filtered_folders = []
-  for index in range(0,len(keys)-1):
-    key = keys[index]
-    filtered_folders += [ folder for folder in folders if key in read(folder) and read(f'{folder}/{key}') == values[index] ]
-  ret = []
-  for folder in filtered_folders:
-    obj = {}
-    folderSplit = split(folder,"/")
-    folderName = folderSplit[len(folderSplit.length)-2]
-    date = datetime.utcfromtimestamp(folderName)
-    for key in read(folder):
-      obj[key] = read(f'{folder}/{key}')
-    ret += obj
-  return ret[::-1]
+        for item in records_to_keep:
+            self.push(db, item['data'], item['timestamp'])
 
 def summary(text, max_words=50, min_loops=0):
 
@@ -4544,6 +4484,7 @@ class HybridModel:
 
 class BeamSearch:
     import torch
+    import torch.nn.functional as F
 
     def __init__(self, model, tokenizer, processor, device, length_penalty: float = 1.0, score_function = None):
 
@@ -4564,7 +4505,7 @@ class BeamSearch:
         return total_score / (seq_len ** self.length_penalty)
 
     def search(self, input_ids: torch.Tensor, max_length: int, beam_width: int) -> torch.Tensor:
-        """Performs beam search generation."""
+
         input_ids = input_ids.to(self.device)
         beams = [([(input_ids, 0.0)], 0.0)]
 
@@ -5772,10 +5713,10 @@ def extend_audio(audio_path, extend_duration_s, format_choice, humanize = True):
         max_new_tokens=max_new_tokens
     )
     generated_wav = generated_audio_values[0, 0].cpu().numpy()
-    extension_start_sample = int(prompt_duration_s * generation_model.config.audio_encoder.sampling_rate)
+    extension_start_sample = int(prompt_duration_s * MODELS["music"].config.audio_encoder.sampling_rate)
     extension_wav = generated_wav[extension_start_sample:]
     temp_extension_path = tmp(".wav")
-    sf.write(temp_extension_path, extension_wav, generation_model.config.audio_encoder.sampling_rate)
+    sf.write(temp_extension_path, extension_wav, MODELS["music"].config.audio_encoder.sampling_rate)
     if humanize:
         temp_extension_path = humanize_audio(temp_extension_path)
     original_sound = pydub.AudioSegment.from_file(audio_path)
