@@ -2836,6 +2836,12 @@ def check_version_wildcard(version_spec, version_actual):
 
 def installed(pack, version=None):
 
+    pack_lower = pack.lower().strip()
+
+    version_lower = None
+    if version:
+        version_lower = version.lower().strip()
+
     system = get_os_name()
 
     if system == "windows":
@@ -2877,10 +2883,6 @@ def installed(pack, version=None):
         except Exception:
             return False 
 
-    pack = pack.lower().strip()
-    if version:
-        version = version.lower().strip()
-
     try:
         lines = run(f'pip list', silent=True)
         if lines:
@@ -2889,9 +2891,9 @@ def installed(pack, version=None):
                 if len(parts) == 2:
                     n = parts[0].lower().strip()
                     v = parts[1].lower().strip()
-                    if n == pack and (
-                        version == None or v.startswith(version) or (
-                            "*" in version and check_version_wildcard(version, v)
+                    if n == pack_lower and (
+                        version_lower == None or v.startswith(version_lower) or (
+                            "*" in version_lower and check_version_wildcard(version_lower, v)
                         )
                     ):
                         return True
