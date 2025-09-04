@@ -458,7 +458,7 @@ def set_system_message(
         message_parts.append(persona_str)
 
     if goals:
-        goals_str += "; ".join(goals) + "."
+        goals_str = "; ".join(goals) + "."
         message_parts.append(goals_str)
 
     if task_rules or output_format:
