@@ -187,7 +187,7 @@ _negative_prompt_ = ", ".join(negative_keywords)
 _base_prompt_ = "cinematic masterpiece, ultra realistic, 8k, best quality, sharp focus, professional color grading"
 
 def get_os_name():
-    return platform.system().toLower()
+    return platform.system().lower()
 
 def is_admin_windows():
     try:
@@ -330,7 +330,7 @@ def _install_ffmpeg_linux():
         sys.exit(1)
 
 def install_ffmpeg():
-    if runnable(ffmpeg):
+    if installed("ffmpeg"):
         return True
     system = get_os_name()
     if system == "windows":
@@ -2440,6 +2440,8 @@ def is_clusters_model(model):
     return hasattr(model,"cluster_centers_")
 
 def install_faiss():
+    if importable("faiss"):
+        return False
     faiss_repo_url = "https://github.com/facebookresearch/faiss.git"
     faiss_dir = "_faiss_"
     build_dir = os.path.join(faiss_dir, "build")
@@ -2834,6 +2836,47 @@ def check_version_wildcard(version_spec, version_actual):
 
 def installed(pack, version=None):
 
+    system = get_os_name()
+
+    if system == "windows":
+        cmd = 'powershell.exe -Command "Get-ItemProperty HKLM:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*, HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*, HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* | Select-Object DisplayName, DisplayVersion | Format-Table -HideTableHeaders'
+        try:
+            lines = run(cmd, silent=True)
+            for line in lines:
+                parts = re.split(r'\s{2,}', line.strip())
+                if not parts or not parts[0]:
+                    continue
+
+                name = parts[0].lower().strip()
+                ver = parts[1].strip() if len(parts) > 1 else ""
+
+                if pack_lower in name:
+                    if version_lower is None or (ver and ver.startswith(version_lower)) or (ver and "*" in version_lower and check_version_wildcard(version_lower, ver)):
+                        return True
+        except Exception:
+            return False
+
+    elif system == "linux":
+        if not shutil.which(pack):
+            return False
+
+        if version_lower is None:
+            return True
+
+        try:
+            lines = run(f'{pack} --version', silent=True)
+            if not lines:
+                 lines = run(f'{pack} -v', silent=True)
+            
+            if lines:
+                match = re.search(r'(\d+\.\d+(\.\d+)*)', lines[0])
+                if match:
+                    actual_version = match.group(0)
+                    if actual_version.startswith(version_lower) or ("*" in version_lower and check_version_wildcard(version_lower, actual_version)):
+                        return True
+        except Exception:
+            return False 
+
     pack = pack.lower().strip()
     if version:
         version = version.lower().strip()
@@ -2854,11 +2897,13 @@ def installed(pack, version=None):
                         return True
                 else:
                     continue
+
         return False
 
     except subprocess.CalledProcessError as e:
         catch(e)
         return False
+
     except FileNotFoundError:
         return False
 
@@ -3021,7 +3066,7 @@ def apt_install():
     pre_install()
 
     run("apt-get update")
-    run(f"apt-get reinstall -y { basic_apt } { audio_apt } { visual_apt }")
+    run(f"apt-get install -y { basic_apt } { audio_apt } { visual_apt }")
 
     post_install()
 
