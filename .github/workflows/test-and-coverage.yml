@@ -30,8 +30,9 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install "definers @ git+https://github.com/YaronKoresh/definers.git"
-          python -c "from definers import cuda_toolkit, set_cuda_env; cuda_toolkit(); set_cuda_env()"
+          wget https://raw.githubusercontent.com/YaronKoresh/definers/refs/heads/main/scripts/setup_cuda.sh
+          chmod +x setup_cuda.sh
+          ./setup_cuda.sh
           pip install "definers[cuda] @ git+https://github.com/YaronKoresh/definers.git" --extra-index-url https://pypi.nvidia.com
 
       - name: Run tests with coverage
