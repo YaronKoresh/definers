@@ -1,0 +1,46 @@
+name: Test and Coverage
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  run-tests:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          import os
+          os.system('pip install --upgrade --force-reinstall "definers @ git+https://github.com/YaronKoresh/definers.git"')
+          from definers import cuda_toolkit, set_cuda_env
+          cuda_toolkit()
+          set_cuda_env()
+          os.system('pip install --upgrade --force-reinstall "definers[cuda] @ git+https://github.com/YaronKoresh/definers.git" --extra-index-url https://pypi.nvidia.com')
+      - name: Run tests with coverage
+        run: |
+          coverage run --source=definers -m pytest
+
+      - name: Generate Coverage Badge
+        uses: tj-actions/coverage-badge-py@v2
+        with:
+          source: .coverage
+          output: coverage.svg
+          label: 'Code Coverage'
+          
+      - name: Commit badge to repository
+        run: |
+          git config --local user.email "aharonkoresh1@gmail.com"
+          git config --local user.name "YaronKoresh"
+          git add coverage.svg
+          git commit -m "docs: Update coverage badge" || echo "No changes to commit"
+          git push
