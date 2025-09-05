@@ -4648,15 +4648,18 @@ def get_chat_response(message, history: list):
     response = answer(history)
     return response
 
-def init_chat( title:str, examples = [], high_performance:bool = True ):
+def init_chat( title:str, examples:list = ["Hello!"], high_performance:bool = True ):
     import gradio as gr
 
-    init_pretrained_model( "answer", high_performance )
-    init_pretrained_model( "summary", high_performance )
+    if not MODELS["answer"]:
+        init_pretrained_model( "answer", high_performance )
+
+    if not MODELS["summary"]:
+        init_pretrained_model( "summary", high_performance )
 
     chatbot = gr.Chatbot(elem_id="chatbot", bubble_full_width=False, type="messages")
     gr.Examples(
-        examples=[{"role": "user", "content": example} for example in examples],
+        examples=[[example, None] for example in examples],
         inputs=chatbot,
         label="Preset Messages"
     )
