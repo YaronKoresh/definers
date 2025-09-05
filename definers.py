@@ -3666,27 +3666,26 @@ def init_pretrained_model(task:str,turbo:bool=False):
 
     elif task in ["answer"]:
 
-        from transformers import pipeline, AutoProcessor, GenerationConfig, AutoConfig, AutoModel, TFAutoModel, T5ForConditionalGeneration, T5Tokenizer, AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+        from transformers import AutoProcessor, AutoModelForCausalLM, AutoTokenizer
 
         tok = AutoTokenizer.from_pretrained(tasks[task])
         prc = AutoProcessor.from_pretrained(tasks[task], trust_remote_code=True)
         mod = AutoModelForCausalLM.from_pretrained(
             tasks[task],
-            device_map="auto",
             torch_dtype=dtype(),
             trust_remote_code=True,
             _attn_implementation="eager",
-        )
+        ).to(device())
 
         model = BeamSearch(mod, tok, prc, device(), length_penalty=0.1)
 
     elif task in ["summary"]:
 
-        from transformers import pipeline, AutoProcessor, GenerationConfig, AutoConfig, AutoModel, TFAutoModel, T5ForConditionalGeneration, T5Tokenizer, AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+        from transformers import T5ForConditionalGeneration, T5Tokenizer
 
         TOKENIZERS[task] = T5Tokenizer.from_pretrained(tasks[task])
         free()
-        model = T5ForConditionalGeneration.from_pretrained(tasks[task]).to(device())
+        model = T5ForConditionalGeneration.from_pretrained(tasks[task], torch_dtype=dtype()).to(device())
 
     elif task in ["video"]:
 
