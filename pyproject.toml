@@ -205,7 +205,7 @@ dependencies = [
     "starlette==0.47.3",
     "statsmodels==0.14.5",
     "submitit==1.5.3",
-    "sympy==1.13.1",
+    "sympy==1.13.3",
     "tabulate==0.9.0",
     "tensorboard==2.18.0",
     "tensorboard-data-server==0.7.2",
