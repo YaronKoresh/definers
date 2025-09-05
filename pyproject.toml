@@ -229,7 +229,7 @@ dependencies = [
     "trampoline==0.1.2",
     "transformers==4.53.0",
     "treetable==0.2.6",
-    "triton==3.2.0",
+    "triton==3.4.0; platform_system == 'Linux' and platform_machine == 'x86_64'",
     "typer==0.17.3",
     "typing-inspection==0.4.1",
     "typing-extensions==4.15.0",
