@@ -224,7 +224,7 @@ dependencies = [
     "torchcrepe==0.0.24",
     "torchfcpe==0.0.4",
     "torchsde==0.2.6",
-    "torchvision==0.21.0",
+    "torchvision==0.23.0",
     "tqdm==4.67.1",
     "trampoline==0.1.2",
     "transformers==4.53.0",
