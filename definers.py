@@ -4648,7 +4648,7 @@ def get_chat_response(message, history: list):
     response = answer(history)
     return response
 
-def init_chat( title:str, examples:list = ["Hello!"], high_performance:bool = True ):
+def init_chat( title:str, high_performance:bool = True ):
     import gradio as gr
 
     if not MODELS["answer"]:
@@ -4658,11 +4658,6 @@ def init_chat( title:str, examples:list = ["Hello!"], high_performance:bool = Tr
         init_pretrained_model( "summary", high_performance )
 
     chatbot = gr.Chatbot(elem_id="chatbot", bubble_full_width=False, type="messages")
-    gr.Examples(
-        examples=[[example, None] for example in examples],
-        inputs=chatbot,
-        label="Preset Messages"
-    )
     return gr.ChatInterface(fn=get_chat_response, type="messages", chatbot=chatbot, multimodal=True, theme=gr.themes.Citrus(), title=title, css=css(), save_history=True, show_progress="full")
 
 def download_file(url, destination):
