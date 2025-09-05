@@ -29,7 +29,7 @@ pip install "definers[cuda] @ git+https://github.com/YaronKoresh/definers.git"
 
 ## Quick Start
 
-Here’s a quick example of how to use Definers to summarize a piece of text (requires the ai extra):
+Here’s a quick example of how to use Definers to summarize a piece of text:
 
 ```python
 from definers import summary, init_pretrained_model
