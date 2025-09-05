@@ -1,5 +1,6 @@
 # Definers: Your All-in-One Python Toolkit
 
+![Code Coverage](https://github.com/YaronKoresh/definers/blob/main/coverage.svg?raw=true)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 **Definers** is a powerful and versatile Python library designed to streamline a wide range of tasks, from machine learning and AI-powered media generation to everyday file and system operations. Whether you're a data scientist, a developer, or an AI enthusiast, Definers provides the tools you need to get the job done efficiently.
