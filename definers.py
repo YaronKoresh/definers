@@ -1748,7 +1748,7 @@ def predict(prediction_file: str, model_path: str):
 
     mod = joblib.load(model_path)
     print(f"cuML model loaded from {model_path}")
-    if mod is None:
+    if mod == None:
         logging.error(f"Could not load model from {model_path}")
         return None
 
@@ -1765,14 +1765,14 @@ def predict(prediction_file: str, model_path: str):
     else:
         input_data = numpy_to_cupy(load_as_numpy(prediction_file))
 
-    if input_data is None:
+    if input_data == None:
         log("Could not load input data",prediction_file,status=False)
         return None
 
     input_data = one_dim_numpy(input_data)
     pred = mod.predict(input_data)
 
-    if pred is None:
+    if pred == None:
         logging.error("Model prediction failed.")
         return None
 
@@ -1782,16 +1782,16 @@ def predict(prediction_file: str, model_path: str):
     pred_type = guess_numpy_type(pred)
     output_filename = f"{random_string()}.{get_prediction_file_extension(pred_type)}"
 
-    if vec is not None:
+    if vec != None:
         pred = features_to_text(cupy_to_numpy(pred))
-    elif pred_type is "text":
+    elif pred_type == "text":
         vec = create_vectorizer([""])
         pred = features_to_text(cupy_to_numpy(pred))
-    elif pred_type is "audio":
+    elif pred_type == "audio":
         pred = features_to_audio(cupy_to_numpy(pred))
-    elif pred_type is "image":
+    elif pred_type == "image":
         pred = features_to_image(cupy_to_numpy(pred))
-    elif pred_type is "video":
+    elif pred_type == "video":
         pred = features_to_video(cupy_to_numpy(pred))
 
     handlers = {
@@ -5851,7 +5851,6 @@ def autotune_vocals(audio_path, strength, format_choice):
                 print("Could not detect beats or vocal segments, skipping rhythm correction.")
         except Exception as e:
             catch(f"Could not apply rhythm correction, proceeding with pitch correction only. Error: {e}")
-            return None
         n_fft = 2048
         hop_length = 512
         stft_vocals = librosa.stft(y, n_fft=n_fft, hop_length=hop_length)
