@@ -1,4 +1,7 @@
 name: Test and Coverage
+permissions:
+  contents: read
+  pull-requests: write
 
 on:
   push:
@@ -20,12 +23,9 @@ jobs:
 
       - name: Install dependencies
         run: |
-          import os
-          os.system('pip install --upgrade --force-reinstall "definers @ git+https://github.com/YaronKoresh/definers.git"')
-          from definers import cuda_toolkit, set_cuda_env
-          cuda_toolkit()
-          set_cuda_env()
-          os.system('pip install --upgrade --force-reinstall "definers[cuda] @ git+https://github.com/YaronKoresh/definers.git" --extra-index-url https://pypi.nvidia.com')
+          pip install --upgrade --force-reinstall "definers @ git+https://github.com/YaronKoresh/definers.git"
+          python -c "from definers import cuda_toolkit, set_cuda_env; cuda_toolkit(); set_cuda_env()"
+          pip install --upgrade --force-reinstall "definers[cuda] @ git+https://github.com/YaronKoresh/definers.git" --extra-index-url https://pypi.nvidia.com
       - name: Run tests with coverage
         run: |
           coverage run --source=definers -m pytest
