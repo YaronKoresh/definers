@@ -262,8 +262,8 @@ refiners = {git = "https://github.com/finegrain-ai/refiners", rev = "d288e94fa8e
 optional = true
 
 [tool.poetry.group.cuda.dependencies]
-cupy-cuda12x = "~=13.3.0"
-cuml-cu12 = {version = "~=24.8.0", source = "nvidia"}
+cupy-cuda12x = "==13.3.0"
+cuml-cu12 = {version = "==24.8.0", source = "nvidia"}
 nvidia-cublas-cu12 = "==12.4.5.8"
 nvidia-cuda-cupti-cu12 = "==12.4.127"
 nvidia-cuda-nvrtc-cu12 = "==12.4.127"
@@ -277,6 +277,3 @@ nvidia-cusparselt-cu12 = "==0.6.2"
 nvidia-nccl-cu12 = "==2.21.5"
 nvidia-nvjitlink-cu12 = "==12.4.127"
 nvidia-nvtx-cu12 = "==12.4.127"
-
-[tool.poetry.extras]
-cuda = ["cuda"]
