@@ -4643,6 +4643,8 @@ def get_chat_response(message, history: list):
     return response
 
 def init_chat( title:str, examples = [], high_performance:bool = True ):
+    import gradio as gr
+
     init_pretrained_model( "answer", high_performance )
     init_pretrained_model( "summary", high_performance )
 
