@@ -27,7 +27,7 @@ jobs:
         uses: actions/cache@v4.2.4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-python
+          key: ${{ runner.os }}-python-test-and-coverage
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -39,11 +39,12 @@ jobs:
           wget https://raw.githubusercontent.com/YaronKoresh/definers/refs/heads/main/scripts/setup_cuda.sh
           chmod +x setup_cuda.sh
           ./setup_cuda.sh
-          pip install "definers[cuda] @ git+https://github.com/YaronKoresh/definers.git" --extra-index-url https://pypi.nvidia.com
+          pip install "definers[cuda,dev] @ git+https://github.com/YaronKoresh/definers.git" --extra-index-url https://pypi.nvidia.com
+          python -m pip install coverage
 
       - name: Run tests with coverage
         run: |
-          coverage run --source=definers -m pytest
+          python -m coverage run --source=definers -m pytest
 
       - name: Generate Coverage Badge
         uses: tj-actions/coverage-badge-py@v2
