@@ -263,7 +263,7 @@ cuda = [
     "cupy-cuda12x==13.3.0",
     "cuml-cu12==24.8.0",
     "nvidia-cublas-cu12==12.4.5.8",
-    "nvidia-cuda-cupti-cu12==12.4.127",
+    'nvidia-cuda-cupti-cu12==12.8.90; platform_system == "Linux" and platform_machine == "x86_64"',
     "nvidia-cuda-nvrtc-cu12==12.8.93; platform_system == 'Linux' and platform_machine == 'x86_64'",
     'nvidia-cuda-runtime-cu12==12.8.90; platform_system == "Linux" and platform_machine == "x86_64"',
     "nvidia-cudnn-cu12==9.1.0.70",
