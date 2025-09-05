@@ -2887,6 +2887,9 @@ def is_package_path(package_path,package_name=None):
 
 def cuda_toolkit():
 
+    if get_os_name() != "linux":
+        return None
+
     directory("/usr/share/keyrings/")
     directory("/etc/modprobe.d/")
     permit("/tmp")
@@ -2938,6 +2941,10 @@ def cuda_version():
         return False
 
 def set_cuda_env():
+
+    if get_os_name() != "linux":
+        return None
+
     cu_path = paths(
         "/opt/cuda*/",
         "/usr/local/cuda*/",
@@ -3547,47 +3554,53 @@ class Database:
         for item in records_to_keep:
             self.push(db, item['data'], item['timestamp'])
 
-def summary(text, max_words=50, min_loops=0):
+def _summarize(text_to_summarize, is_chunk=False):
+    prefix = "summarize: "
+    encoded = TOKENIZERS["summary"](prefix + text_to_summarize, return_tensors="pt", truncation=True, max_length=512)
+    encoded = {key: tensor.to(device()) for key, tensor in encoded.items()}
+    
+    gen_kwargs = {
+        "max_length": 512,
+        "repetition_penalty": 1.2,
+        "length_penalty": 2.0 if is_chunk else 1.0,
+        "no_repeat_ngram_size": 3,
+        "num_beams": 8,
+        "early_stopping": True
+    }
+    
+    if is_chunk:
+        gen_kwargs["min_length"] = 40
 
+    gen = MODELS["summary"].generate(**encoded, **gen_kwargs)
+    return simple_text(TOKENIZERS["summary"].decode(gen[0], skip_special_tokens=True))
+
+def map_reduce_summary(text, max_words=50):
     words = text.split()
-    words_length = len(words)
+    chunk_size = 350 
+    overlap = 50
 
-    def _summarize(text):
-        prefix = "summarize: "
+    chunk_summaries = []
+    for i in range(0, len(words), chunk_size - overlap):
+        chunk_text = " ".join(words[i:i + chunk_size])
+        chunk_summary = _summarize(chunk_text, is_chunk=True)
+        chunk_summaries.append(chunk_summary)
 
-        encoded = TOKENIZERS["summary"]( prefix + text, return_tensors="pt", truncation=False)
-        encoded = {key: tensor.to(device()) for key, tensor in encoded.items()}
-        penlt = min( max( round(max_words / words_length, 1) - 0.3, 0.1), 0.6)
-        print( f"length_penalty is {penlt} (summary)" )
-        gen = MODELS["summary"].generate(
-            **encoded,
-            length_penalty=penlt,
-            num_beams=18,
-            early_stopping=True,
-            max_length=512
-        )
-        return simple_text(TOKENIZERS["summary"].decode(gen[0], skip_special_tokens=True))
+    combined_summary = " ".join(chunk_summaries)
+    
+    if len(combined_summary.split()) > max_words:
+        final_summary = _summarize(combined_summary, is_chunk=False)
+    else:
+        final_summary = combined_summary
         
-    if words_length >= 50:
-        while words_length >= 50:
-            words = text.split()
-            summ = _summarize(
-                " ".join(words[0:50])
-            ) + " ".join(words[50:])
-            if summ == text:
-                return text
-            text = summ
-            words_length = len(text.split())
+    return final_summary
 
-    while min_loops > 0 or words_length > max_words:
-        summ = _summarize(text)
-        if summ == text:
-            return text
-        text = summ
-        words_length = len(text.split())
-        min_loops -= 1
-        
-    return text
+def summary(text, max_words=50):
+    word_count = len(text.split())
+    
+    if word_count > 350:
+        return map_reduce_summary(text, max_words)
+    else:
+        return _summarize(text, is_chunk=False)
 
 def init_pretrained_model(task:str,turbo:bool=False):
 
@@ -3602,8 +3615,6 @@ def init_pretrained_model(task:str,turbo:bool=False):
     import torch
 
     model = None
-
-    # quantization_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=dtype(), use_double_quant=True, bnb_4bit_quant_type="nf4")
 
     if task in ["tts"]:
 

@@ -16,6 +16,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Free up disk space on runner
+        run: |
+          sudo apt-get clean
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /usr/local/.ghcup
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -23,9 +30,10 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install --upgrade --force-reinstall "definers @ git+https://github.com/YaronKoresh/definers.git"
+          pip install "definers @ git+https://github.com/YaronKoresh/definers.git"
           python -c "from definers import cuda_toolkit, set_cuda_env; cuda_toolkit(); set_cuda_env()"
-          pip install --upgrade --force-reinstall "definers[cuda] @ git+https://github.com/YaronKoresh/definers.git" --extra-index-url https://pypi.nvidia.com
+          pip install "definers[cuda] @ git+https://github.com/YaronKoresh/definers.git" --extra-index-url https://pypi.nvidia.com
+
       - name: Run tests with coverage
         run: |
           coverage run --source=definers -m pytest

@@ -14,15 +14,25 @@
 -   **Web Scraping & Translation**: Extract text from web pages and translate it with ease.
 -   **GPU Acceleration**: Built-in support for CUDA via CuPy and RAPIDS for high-performance computing.
 
-## Installation
+## Installation without CUDA Support
 
-You can install the lightweight core components of **Definers** directly from its GitHub repository:
+You can install the core components of **Definers** directly from its GitHub repository:
 
 ```bash
 pip install git+https://github.com/YaronKoresh/definers.git
 ```
 
-And if you already have CUDA installed, you can install the packages required for CUDA acceleration, by using the following format:
+### Installation with CUDA Support
+
+If you don't have CUDA installed, and you are using linux with bash, you can install CUDA Toolkit, by using the following format:
+
+```bash
+wget https://raw.githubusercontent.com/YaronKoresh/definers/refs/heads/main/scripts/setup_cuda.sh
+chmod +x setup_cuda.sh
+./setup_cuda.sh
+```
+
+Now, after you have CUDA installed, you can install definers with CUDA acceleration:
 
 ```bash
 pip install "definers[cuda] @ git+https://github.com/YaronKoresh/definers.git" --extra-index-url https://pypi.nvidia.com
