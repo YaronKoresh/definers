@@ -11,7 +11,7 @@ authors = [
 description = "A comprehensive Python toolkit for AI, data processing, media manipulation, and system utilities."
 readme = "README.md"
 license = { text = "MIT" }
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
@@ -247,6 +247,7 @@ dependencies = [
     "xxhash==3.5.0",
     "yarl==1.20.1",
     "zipp==3.23.0",
+    "chatterbox-tts @ git+https://github.com/YaronKoresh/chatterbox.git",
     "fairseq @ git+https://github.com/YaronKoresh/fairseq.git",
     "basic-pitch @ git+https://github.com/YaronKoresh/basic-pitch.git",
     "madmom @ git+https://github.com/CPJKU/madmom@0551aa8f48d71a367d92b5d3a347a0cf7cd97cc9",
