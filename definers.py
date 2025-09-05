@@ -870,20 +870,16 @@ def kmeans_k_suggestions(X, k_range=range(2,20), random_state=None):
     suggested_k_calinski_harabasz = None
     final_suggestion_k = None
 
-    is_cupy_available = False
     kmeans_lib = None
+    is_cupy_available = True
 
     try:
-        import cupy as np
-        from cuml.cluster import KMeans
-        kmeans_lib = KMeans
-        is_cupy_available = True
-        print("GPU acceleration with CuPy (cuML) is available and will be used.")
+        import cupy
     except ImportError:
-        import numpy as np
-        from sklearn.cluster import KMeans
-        kmeans_lib = KMeans
-        print("Warning: CuPy (cuML) is unavailable, falling back to CPU with scikit-learn KMeans.")
+        is_cupy_available = False
+
+    from cuml.cluster import KMeans
+    kmeans_lib = KMeans
 
     X_array = np.asarray(X)
 
@@ -3561,12 +3557,12 @@ def summary(text, max_words=50, min_loops=0):
 
         encoded = TOKENIZERS["summary"]( prefix + text, return_tensors="pt", truncation=False)
         encoded = {key: tensor.to(device()) for key, tensor in encoded.items()}
-        penlt = min( max( round(max_words / words_length, 1), 0.1), 0.8)
+        penlt = min( max( round(max_words / words_length, 1) - 0.3, 0.1), 0.6)
         print( f"length_penalty is {penlt} (summary)" )
         gen = MODELS["summary"].generate(
             **encoded,
             length_penalty=penlt,
-            num_beams=6,
+            num_beams=18,
             early_stopping=True,
             max_length=512
         )
