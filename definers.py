@@ -2503,7 +2503,7 @@ def find_package_paths(package_name):
 
 def tmp(suffix:str=".data", keep:bool=True, dir=False):
     if dir:
-        with tempfile.TemporaryDirectory(delete=False) as temp:
+        with tempfile.TemporaryDirectory() as temp:
             if not keep:
                 delete(temp.name)
             return temp.name
@@ -4639,7 +4639,7 @@ def add_chat_message(history, message):
     for x in message["files"]:
         history.append({"role": "user", "content": {"path": x}})
     if message["text"] is not None:
-        txt = ai_translate(message["text"])
+        txt = message["text"]
         history.append({"role": "user", "content": txt})
     return history
 
@@ -5194,8 +5194,8 @@ def export_audio(audio_segment, output_path_stem, format_choice):
     audio_segment.export(str(output_path), format=file_format, bitrate=bitrate, parameters=params)
     return str(output_path)
 
-def create_share_links(file_url, text_description):
-    if not file_url: return ""
+def create_share_links(hf_username, space_name, file_path, text_description):
+    file_url = f'https://{hf_username}-{space_name}.hf.space/gradio_api/file={file_path}'
     encoded_text = quote(text_description)
     encoded_url = quote(file_url)
     twitter_link = f"https://twitter.com/intent/tweet?text={encoded_text}&url={encoded_url}"
@@ -5269,6 +5269,7 @@ def generate_music(prompt, duration_s, format_choice, humanize):
 
 def dj_mix(files, mix_type, target_bpm, transition_sec, format_choice):
     import madmom
+    import pydub
 
     if not files or len(files) < 2:
         catch("Please upload at least two audio files.")

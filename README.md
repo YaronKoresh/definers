@@ -24,7 +24,7 @@ pip install git+https://github.com/YaronKoresh/definers.git
 And if you already have CUDA installed, you can install the packages required for CUDA acceleration, by using the following format:
 
 ```bash
-pip install "definers[cuda] @ git+https://github.com/YaronKoresh/definers.git"
+pip install "definers[cuda] @ git+https://github.com/YaronKoresh/definers.git" --extra-index-url https://pypi.nvidia.com
 ```
 
 ## Quick Start
