@@ -5568,11 +5568,13 @@ def pitch_shift_vocals(audio_path, pitch_shift, format_choice):
 def create_spectrum_visualization(audio_path):
     import librosa
     import matplotlib.pyplot as plt
+    import matplotlib.ticker as ticker
 
     try:
         y, sr = librosa.load(audio_path)
+
+        n_fft = 128
         
-        n_fft = 4096
         start_sample = (len(y) - n_fft) // 2
         y_sample = y[start_sample : start_sample + n_fft]
 
@@ -5581,57 +5583,61 @@ def create_spectrum_visualization(audio_path):
 
         window = np.hanning(len(y_sample))
         y_windowed = y_sample * window
-        
+
         fft_result = np.fft.fft(y_windowed)
         freqs = np.fft.fftfreq(len(fft_result), 1/sr)
-        
+
         mask = freqs >= 0
         freqs = freqs[mask]
-        
         magnitude = np.abs(fft_result[mask])
-        db_magnitude = 20 * np.log10(magnitude / np.max(magnitude))
-        
+
+        magnitude_db = 20 * np.log10(magnitude + 1e-9)
+
+        magnitude_db -= np.max(magnitude_db)
+
+        fig, ax = plt.subplots(figsize=(8, 5), facecolor='#f0f0f0')
+        ax.set_facecolor('white')
+
+        ax.fill_between(freqs, magnitude_db, y2=-84, color='#7c3aed', alpha=0.8, zorder=2)
+        ax.plot(freqs, magnitude_db, color='#4c2a8c', linewidth=1, zorder=3)
+
+        ax.set_xscale('log')
+        ax.set_xlim(20, 22000)
+        ax.set_ylim(-84, 0)
+
+        xticks = [400, 1000, 2000, 4000, 7000, 20000]
+        ax.set_xticks(xticks)
+        ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
+
+        ax.set_yticks(np.arange(-84, 1, 12))
+        ax.grid(True, which="both", ls="--", color='gray', alpha=0.6, zorder=1)
+
+        ax.set_title('Frequency Analysis', color='black')
+        ax.set_xlabel('Frequency (Hz)', color='black')
+        ax.set_ylabel('Amplitude (dB)', color='black')
+        ax.tick_params(colors='black', which='both')
+
         audible_mask = freqs > 20
         if np.any(audible_mask):
-            peak_idx = np.argmax(db_magnitude[audible_mask])
+            peak_idx = np.argmax(magnitude_db[audible_mask])
             peak_freq = freqs[audible_mask][peak_idx]
-            peak_db = db_magnitude[audible_mask][peak_idx]
-        else:
-            peak_freq, peak_db = 0, -90
+            peak_db = magnitude_db[audible_mask][peak_idx]
 
-        fig, ax = plt.subplots(figsize=(10, 5), facecolor='#1f2937')
-        ax.set_facecolor('#1f2937')
-        
-        ax.plot(freqs, db_magnitude, color='#7c3aed')
-        ax.set_xscale('log')
-        
-        ax.set_xlim(20, 20000)
-        ax.set_ylim(-90, 0)
-        ax.set_title('Frequency Analysis', color='white')
-        ax.set_xlabel('Frequency (Hz)', color='white')
-        ax.set_ylabel('Amplitude (dB)', color='white')
-        ax.tick_params(colors='white', which='both')
-        ax.grid(True, which="both", ls="-", color='gray', alpha=0.4)
-        
-        peak_text = f'Peak: {peak_freq:.0f} Hz at {peak_db:.1f} dB'
-        ax.axvline(x=peak_freq, color='red', linestyle='-', alpha=0.8)
-        ax.text(
-            0.98, 0.95, peak_text, transform=ax.transAxes, color='white', 
-            ha='right', va='top', bbox=dict(
-                facecolor='#111827',
-                alpha=0.6, edgecolor='none'
-            )
-        )
+            peak_text = f'Peak: {peak_freq:.0f} Hz at {peak_db:.1f} dB'
+            ax.text(0.98, 0.95, peak_text, transform=ax.transAxes, color='black',
+                      ha='right', va='top')
 
         fig.tight_layout()
-        temp_path = tmp(".png")
+        
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+            temp_path = tmp.name
         fig.savefig(temp_path, facecolor=fig.get_facecolor())
         plt.close(fig)
-        
+
         return temp_path
-        
+
     except Exception as e:
-        catch(f"Error creating spectrum: {e}")
+        print(f"Error creating spectrum: {e}")
         return None
 
 def stem_mixer(files, format_choice):
