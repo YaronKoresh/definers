@@ -614,6 +614,7 @@ def train_linear_regression(X, y, model_path, learning_rate=0.01):
     return model_torch
 
 def fetch_dataset(src, url_type=None, revision=None):
+    import PIL
     from datasets import load_dataset
     try:
         if revision:
@@ -662,7 +663,9 @@ def select_columns(dataset, cols):
     return drop_columns(dataset, cols_to_drop)
 
 def select_rows(dataset, start_index, end_index):
+    import PIL
     from datasets import Dataset
+
     subset_data = {}
     for column_name in dataset.column_names:
         column_data = dataset[column_name]

@@ -1,5 +1,6 @@
 import unittest
 from unittest.mock import patch, MagicMock
+import PIL
 from definers import fetch_dataset
 
 class TestFetchDataset(unittest.TestCase):

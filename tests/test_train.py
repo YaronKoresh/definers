@@ -1,14 +1,13 @@
 import unittest
 from unittest.mock import patch, MagicMock
 import numpy as np
-
 from definers import train, check_parameter, simple_text
 
 class TestTrain(unittest.TestCase):
 
     def setUp(self):
        self.mock_tokenizer = MagicMock()
-        self.mock_tokenizer.return_value = {
+       self.mock_tokenizer.return_value = {
             'input_ids': np.array([[1, 2, 3]]),
             'attention_mask': np.array([[1, 1, 1]])
         }
