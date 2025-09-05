@@ -121,7 +121,7 @@ dependencies = [
     "mido==1.3.3",
     "mir-eval==0.8.2",
     "ml-dtypes==0.4.1",
-    "moviepy==1.0.3",
+    "moviepy==2.2.1",
     "mpmath==1.3.0",
     "msgpack==1.1.1",
     "multidict==6.6.4",
