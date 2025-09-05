@@ -228,7 +228,7 @@ dependencies = [
     "torchvision==0.21.0",
     "tqdm==4.67.1",
     "trampoline==0.1.2",
-    "transformers==4.46.3",
+    "transformers==4.53.0",
     "treetable==0.2.6",
     "triton==3.2.0",
     "typer==0.17.3",
