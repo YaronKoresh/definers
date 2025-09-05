@@ -4650,7 +4650,7 @@ def init_chat( title:str, examples = [], high_performance:bool = True ):
 
     chatbot = gr.Chatbot(elem_id="chatbot", bubble_full_width=False, type="messages")
     gr.Examples(
-        examples=examples,
+        examples=[{"role": "user", "content": example} for example in examples],
         inputs=chatbot,
         label="Preset Messages"
     )
