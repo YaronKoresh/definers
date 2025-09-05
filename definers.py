@@ -2889,14 +2889,17 @@ def is_package_path(package_path,package_name=None):
         return True
     return False
 
-def cuda_toolkit(install=True):
+def cuda_toolkit():
 
     directory("/usr/share/keyrings/")
     directory("/etc/modprobe.d/")
     permit("/tmp")
-    # permit("/usr/bin")
-    # permit("/usr/lib")
-    # permit("/usr/local")
+    permit("/usr/bin")
+    permit("/usr/lib")
+    permit("/usr/local")
+
+    run("apt-get update")
+    run(f"apt-get install -y curl")
 
     run("""
         export PATH=/sbin:$PATH
@@ -2919,11 +2922,10 @@ def cuda_toolkit(install=True):
     permit("/usr/share/keyrings/cuda-archive-keyring.gpg")
     permit("/etc/apt/sources.list.d/CUDA.list")
 
-    if install:
-        run(f"""
-            apt-get update
-            apt-get install -y cuda-toolkit
-        """, silent=True)
+    run(f"""
+        apt-get update
+        apt-get install -y cuda-toolkit
+    """)
 
 def cuda_version():
     try:
