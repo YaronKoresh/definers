@@ -24,10 +24,10 @@ jobs:
           sudo rm -rf /usr/local/.ghcup
 
       - name: Cache dependencies
-              uses: actions/cache@v4.2.4
-              with:
-                path: ~/.cache/pip
-                key: ${{ runner.os }}-python
+        uses: actions/cache@v4.2.4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-python
 
       - name: Set up Python
         uses: actions/setup-python@v6
