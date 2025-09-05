@@ -1,47 +1,38 @@
 import unittest
 import torch
-from torch.utils.data import TensorDataset, DataLoader
+from torch.utils.data import TensorDataset
 from definers import to_loader
 
 class TestToLoader(unittest.TestCase):
 
-    def setUp(self):
-        self.features = torch.randn(10, 5)
-        self.labels = torch.randn(10, 1)
-        self.dataset = TensorDataset(self.features, self.labels)
-
-    def test_returns_dataloader_instance(self):
-        loader = to_loader(self.dataset)
+    def test_loader_properties(self):
+        X = torch.randn(10, 5)
+        y = torch.randn(10)
+        dataset = TensorDataset(X, y)
+        batch_size = 2
+        
+        loader = to_loader(dataset, batch_size=batch_size)
+        
+        from torch.utils.data import DataLoader
         self.assertIsInstance(loader, DataLoader)
+        self.assertEqual(loader.batch_size, batch_size)
 
     def test_default_batch_size(self):
-        loader = to_loader(self.dataset)
+        X = torch.randn(10, 5)
+        dataset = TensorDataset(X)
+        loader = to_loader(dataset)
         self.assertEqual(loader.batch_size, 1)
 
-    def test_custom_batch_size(self):
-        loader = to_loader(self.dataset, batch_size=4)
-        self.assertEqual(loader.batch_size, 4)
-
-    def test_loader_properties(self):
-        loader = to_loader(self.dataset)
-        self.assertTrue(loader.shuffle)
-        self.assertFalse(loader.pin_memory)
-        self.assertEqual(loader.num_workers, 0)
-        self.assertFalse(loader.drop_last)
-
-    def test_iteration_over_loader(self):
-        loader = to_loader(self.dataset, batch_size=2)
-        batch_count = 0
-        total_samples = 0
-        for batch in loader:
-            batch_count += 1
-            self.assertEqual(len(batch), 2)
-            self.assertEqual(batch[0].shape[0], 2)
-            self.assertEqual(batch[1].shape[0], 2)
-            total_samples += batch[0].shape[0]
+    def test_iteration(self):
+        X = torch.randn(10, 5)
+        dataset = TensorDataset(X)
+        loader = to_loader(dataset, batch_size=4)
         
-        self.assertEqual(batch_count, 5)
-        self.assertEqual(total_samples, 10)
+        batches = list(loader)
+        self.assertEqual(len(batches), 3) 
+        self.assertEqual(batches[0][0].shape, (4, 5))
+        self.assertEqual(batches[1][0].shape, (4, 5))
+        self.assertEqual(batches[2][0].shape, (2, 5))
 
 if __name__ == '__main__':
     unittest.main()

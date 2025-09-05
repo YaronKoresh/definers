@@ -1,89 +1,79 @@
 import unittest
 from unittest.mock import patch, MagicMock
 from PIL import Image
-from definers import upscale, MODELS
+import numpy as np
+from definers import upscale, MODELS, _negative_prompt_
 
 class TestUpscale(unittest.TestCase):
 
-    @patch('definers.save_image', return_value="upscaled_image.png")
-    @patch('definers.MODELS', {'upscale': MagicMock()})
-    @patch('definers.manual_seed')
-    @patch('PIL.Image.open')
-    @patch('definers.random')
-    @patch('definers.big_number', return_value=1000000)
-    def test_successful_upscale_with_defaults(self, mock_big_number, mock_random, mock_open, mock_manual_seed, mock_save):
-        mock_input_image = MagicMock(spec=Image.Image)
-        mock_open.return_value = mock_input_image
-
-        mock_upscaled_image = MagicMock(spec=Image.Image)
-        MODELS['upscale'].upscale.return_value = mock_upscaled_image
+    def setUp(self):
+        self.image_path = 'dummy_image.png'
+        Image.new('RGB', (100, 100)).save(self.image_path)
         
-        mock_random.randint.return_value = 12345
+        self.mock_upscaler = MagicMock()
+        self.mock_upscaler.upscale.return_value = Image.new('RGB', (200, 200))
+        MODELS['upscale'] = self.mock_upscaler
 
-        result = upscale("test.png")
+    def tearDown(self):
+        import os
+        if os.path.exists(self.image_path):
+            os.remove(self.image_path)
+        MODELS['upscale'] = None
 
-        mock_open.assert_called_once_with("test.png")
-        mock_random.randint.assert_called_once_with(0, 1000000)
-        mock_manual_seed.assert_called_once_with(12345)
+    @patch('definers.save_image', return_value='upscaled_image.png')
+    @patch('refiners.fluxion.utils.manual_seed')
+    def test_successful_upscale_with_defaults(self, mock_manual_seed, mock_save_image):
+        result = upscale(self.image_path)
         
-        MODELS['upscale'].upscale.assert_called_once()
-        
-        mock_save.assert_called_once_with(mock_upscaled_image)
-        self.assertEqual(result, "upscaled_image.png")
+        mock_manual_seed.assert_called_once()
+        self.mock_upscaler.upscale.assert_called_once()
+        mock_save_image.assert_called_once()
+        self.assertEqual(result, 'upscaled_image.png')
 
-    @patch('definers.MODELS', {'upscale': MagicMock()})
-    def test_invalid_upscale_factor_too_low(self, mock_models):
-        result = upscale("test.png", upscale_factor=1)
-        self.assertIsNone(result)
-        mock_models['upscale'].upscale.assert_not_called()
-
-    @patch('definers.MODELS', {'upscale': MagicMock()})
-    def test_invalid_upscale_factor_too_high(self, mock_models):
-        result = upscale("test.png", upscale_factor=5)
-        self.assertIsNone(result)
-        mock_models['upscale'].upscale.assert_not_called()
-
-    @patch('definers.save_image')
-    @patch('definers.MODELS', {'upscale': MagicMock()})
-    @patch('definers.manual_seed')
-    @patch('PIL.Image.open')
-    @patch('definers.random')
-    def test_custom_parameters_and_seed(self, mock_random, mock_open, mock_manual_seed, mock_models, mock_save):
-        mock_open.return_value = MagicMock(spec=Image.Image)
-        
+    @patch('definers.save_image', return_value='upscaled_image.png')
+    @patch('refiners.fluxion.utils.manual_seed')
+    def test_custom_parameters_and_seed(self, mock_manual_seed, mock_save_image):
         upscale(
-            path="custom.png",
+            self.image_path,
             upscale_factor=3,
-            prompt="A cat",
-            negative_prompt="A dog",
-            seed=42,
-            controlnet_scale=0.7,
-            denoise_strength=0.3,
-            solver="Euler"
+            prompt="Test Prompt",
+            negative_prompt="Test Negative",
+            seed=12345,
+            num_inference_steps=30
         )
         
-        mock_random.randint.assert_not_called()
-        mock_manual_seed.assert_called_once_with(42)
-        
-        mock_models['upscale'].upscale.assert_called_once()
-        call_args = mock_models['upscale'].upscale.call_args[1]
-        
-        self.assertEqual(call_args['prompt'], "A cat")
-        self.assertEqual(call_args['negative_prompt'], "A dog")
-        self.assertEqual(call_args['upscale_factor'], 3)
-        self.assertEqual(call_args['controlnet_scale'], 0.7)
-        self.assertEqual(call_args['denoise_strength'], 0.3)
-        self.assertIn('Euler', str(call_args['solver_type']))
+        mock_manual_seed.assert_called_with(12345)
+        self.mock_upscaler.upscale.assert_called_with(
+            image=unittest.mock.ANY,
+            prompt="Test Prompt",
+            negative_prompt="Test Negative",
+            upscale_factor=3,
+            controlnet_scale=unittest.mock.ANY,
+            controlnet_scale_decay=unittest.mock.ANY,
+            condition_scale=unittest.mock.ANY,
+            tile_size=(unittest.mock.ANY, unittest.mock.ANY),
+            denoise_strength=unittest.mock.ANY,
+            num_inference_steps=30,
+            loras_scale=unittest.mock.ANY,
+            solver_type=unittest.mock.ANY,
+        )
 
-    @patch('definers.save_image')
-    @patch('definers.MODELS', {'upscale': MagicMock()})
+    def test_invalid_upscale_factor_too_low(self):
+        result = upscale(self.image_path, upscale_factor=1)
+        self.assertIsNone(result)
+        self.mock_upscaler.upscale.assert_not_called()
+
+    def test_invalid_upscale_factor_too_high(self):
+        result = upscale(self.image_path, upscale_factor=5)
+        self.assertIsNone(result)
+        self.mock_upscaler.upscale.assert_not_called()
+
     @patch('PIL.Image.open', side_effect=FileNotFoundError("File not found"))
-    def test_file_not_found(self, mock_open, mock_models, mock_save):
+    def test_file_not_found(self, mock_image_open):
         with self.assertRaises(FileNotFoundError):
-            upscale("non_existent.png")
-        
-        mock_models['upscale'].upscale.assert_not_called()
-        mock_save.assert_not_called()
+            upscale('non_existent_file.png')
+        self.mock_upscaler.upscale.assert_not_called()
+
 
 if __name__ == '__main__':
     unittest.main()

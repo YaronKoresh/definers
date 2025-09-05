@@ -588,7 +588,7 @@ def initialize_linear_regression(input_dim, model_path):
         model_torch = LinearRegressionTorch(input_dim)
         print("Created new model.")
 
-    model_torch.cuda()
+    model_torch.to(device())
     return model_torch
 
 def train_linear_regression(X, y, model_path, learning_rate=0.01):
@@ -598,8 +598,9 @@ def train_linear_regression(X, y, model_path, learning_rate=0.01):
     criterion = torch.nn.MSELoss()
     optimizer = torch.optim.SGD(model_torch.parameters(), lr=learning_rate)
 
-    X_torch = torch.tensor(X, dtype=torch.float32, device='cuda')
-    y_torch = torch.tensor(y, dtype=torch.float32, device='cuda')
+    d = device()
+    X_torch = torch.tensor(X, dtype=torch.float32, device=d)
+    y_torch = torch.tensor(y, dtype=torch.float32, device=d)
 
     y_pred = model_torch(X_torch).squeeze()
     loss = criterion(y_pred, y_torch)
@@ -2427,7 +2428,7 @@ def simple_text(prompt):
     prompt = re.sub("(-){2,}", "-", prompt)
     prompt = re.sub(punc, '', prompt)
     prompt = prompt.lower().strip()
-    prompt = prompt.replace(" -","-")
+    prompt = prompt.replace(" -", "-").replace("- ", "-")
     return prompt
 
 def exist(path):
@@ -2501,8 +2502,8 @@ def tmp(suffix:str=".data", keep:bool=True, dir=False):
     if dir:
         with tempfile.TemporaryDirectory() as temp:
             if not keep:
-                delete(temp.name)
-            return temp.name
+                delete(temp)
+            return temp
     if not suffix.startswith("."):
         if len(suffix.split(".")) > 1:
             suffix = suffix.split(".")
@@ -2615,7 +2616,7 @@ def save(path, text=""):
         file.write( str(text) )
 
 def save_temp_text(text_content):
-    if not text_content:
+    if text_content is None:
         return None
     temp_path = tmp()
     with open(temp_path, "w", encoding="utf-8") as f:

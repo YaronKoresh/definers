@@ -1,100 +1,46 @@
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
+from datasets import Dataset
 from definers import select_rows
 
 class TestSelectRows(unittest.TestCase):
 
     def setUp(self):
-        self.mock_dataset = MagicMock()
-        self.mock_dataset.column_names = ['col_a', 'col_b']
-        self.mock_dataset.__getitem__.side_effect = self.get_item_side_effect
-
-    def get_item_side_effect(self, key):
-        if key == 'col_a':
-            return [10, 20, 30, 40, 50]
-        if key == 'col_b':
-            return ['A', 'B', 'C', 'D', 'E']
-        raise KeyError(f"Column {key} not found")
-
-    @patch('definers.Dataset.from_dict')
-    def test_selects_a_slice_of_rows(self, mock_from_dict):
-        mock_from_dict.return_value = "sliced_dataset"
-        start_index = 1
-        end_index = 4
-        
-        result = select_rows(self.mock_dataset, start_index, end_index)
-        
-        expected_subset_data = {
-            'col_a': [20, 30, 40],
-            'col_b': ['B', 'C', 'D']
+        self.data = {
+            'col1': [1, 2, 3, 4, 5],
+            'col2': ['A', 'B', 'C', 'D', 'E']
         }
-        
-        mock_from_dict.assert_called_once_with(expected_subset_data)
-        self.assertEqual(result, "sliced_dataset")
+        self.dataset = Dataset.from_dict(self.data)
 
-    @patch('definers.Dataset.from_dict')
-    def test_selects_from_start(self, mock_from_dict):
-        mock_from_dict.return_value = "start_slice_dataset"
-        start_index = 0
-        end_index = 2
+    def test_selects_a_slice_of_rows(self):
+        result = select_rows(self.dataset, 1, 4)
+        self.assertEqual(len(result), 3)
+        self.assertEqual(result['col1'], [2, 3, 4])
+        self.assertEqual(result['col2'], ['B', 'C', 'D'])
 
-        result = select_rows(self.mock_dataset, start_index, end_index)
+    def test_selects_from_start(self):
+        result = select_rows(self.dataset, 0, 2)
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result['col1'], [1, 2])
+        self.assertEqual(result['col2'], ['A', 'B'])
 
-        expected_subset_data = {
-            'col_a': [10, 20],
-            'col_b': ['A', 'B']
-        }
+    def test_selects_until_end(self):
+        result = select_rows(self.dataset, 3, 5)
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result['col1'], [4, 5])
+        self.assertEqual(result['col2'], ['D', 'E'])
 
-        mock_from_dict.assert_called_once_with(expected_subset_data)
-        self.assertEqual(result, "start_slice_dataset")
+    def test_selects_single_row(self):
+        result = select_rows(self.dataset, 2, 3)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result['col1'], [3])
+        self.assertEqual(result['col2'], ['C'])
 
-    @patch('definers.Dataset.from_dict')
-    def test_selects_until_end(self, mock_from_dict):
-        mock_from_dict.return_value = "end_slice_dataset"
-        start_index = 3
-        end_index = 5
-
-        result = select_rows(self.mock_dataset, start_index, end_index)
-
-        expected_subset_data = {
-            'col_a': [40, 50],
-            'col_b': ['D', 'E']
-        }
-
-        mock_from_dict.assert_called_once_with(expected_subset_data)
-        self.assertEqual(result, "end_slice_dataset")
-
-    @patch('definers.Dataset.from_dict')
-    def test_selects_single_row(self, mock_from_dict):
-        mock_from_dict.return_value = "single_row_dataset"
-        start_index = 2
-        end_index = 3
-
-        result = select_rows(self.mock_dataset, start_index, end_index)
-
-        expected_subset_data = {
-            'col_a': [30],
-            'col_b': ['C']
-        }
-
-        mock_from_dict.assert_called_once_with(expected_subset_data)
-        self.assertEqual(result, "single_row_dataset")
-        
-    @patch('definers.Dataset.from_dict')
-    def test_handles_empty_slice(self, mock_from_dict):
-        mock_from_dict.return_value = "empty_dataset"
-        start_index = 2
-        end_index = 2
-
-        result = select_rows(self.mock_dataset, start_index, end_index)
-
-        expected_subset_data = {
-            'col_a': [],
-            'col_b': []
-        }
-
-        mock_from_dict.assert_called_once_with(expected_subset_data)
-        self.assertEqual(result, "empty_dataset")
+    def test_handles_empty_slice(self):
+        result = select_rows(self.dataset, 2, 2)
+        self.assertEqual(len(result), 0)
+        self.assertEqual(result['col1'], [])
+        self.assertEqual(result['col2'], [])
 
 if __name__ == '__main__':
     unittest.main()
