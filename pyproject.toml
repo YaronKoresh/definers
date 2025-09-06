@@ -255,8 +255,9 @@ Repository = "https://github.com/YaronKoresh/definers"
 
 [project.optional-dependencies]
 dev = [
-    "flake8==7.3.0",
+    "autoflake==2.3.1",
     "pytest==8.4.2",
+    "pytest-cov=6.3.0",
     "black==25.1.0",
     "isort==6.0.1",
     "hypothesis==6.138.14",
@@ -280,11 +281,14 @@ cuda = [
     'nvidia-nvtx-cu12==12.8.90; platform_system == "Linux" and platform_machine == "x86_64"',
 ]
 
+[tool.autoflake]
+check = true
+
 [tool.isort]
 profile = "black"
 
 [tool.black]
-line-length = 88
+line-length = 70
 target-version = ["py310", "py311"]
 exclude = '''
 /(
@@ -301,12 +305,6 @@ exclude = '''
 )/
 '''
 
-[tool.flake8]
-max-line-length = 88
-extend-ignore = [
-    "E203",
-    "W503",
-]
 extend-exclude = [
     ".git",
     "__pycache__",

@@ -1,4 +1,4 @@
-name: Code Quality Check & Auto-Formatter
+name: Code Auto-Format
 
 permissions:
   contents: write
@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  lint-and-format:
+  format-code:
 
     strategy:
       matrix:
@@ -46,14 +46,14 @@ jobs:
       - name: Install dependencies
         run: pip install .[dev]
 
+      - name: Remove unused imports and variables
+        run: autoflake --in-place --recursive --remove-duplicate-keys --remove-all-unused-imports --remove-unused-variables --expand-star-imports .
+
       - name: Sort imports with isort
         run: isort .
 
       - name: Run formatter (Black)
         run: black .
-
-      - name: Run linter (Flake8)
-        run: flake8 . --count --show-source --statistics
 
       - name: Create Pull Request
         if: github.event_name == 'push'
