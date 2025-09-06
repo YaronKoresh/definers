@@ -3700,12 +3700,20 @@ def init_pretrained_model(task:str,turbo:bool=False):
 
         import torch
         from transformers import TRANSFORMERS_CACHE, AutoConfig, AutoProcessor, AutoModelForCausalLM, AutoTokenizer
+        from huggingface_hub import snapshot_download
 
-        config = AutoConfig.from_pretrained(tasks[task], trust_remote_code=True)
-        module_name, class_name = config.auto_map["AutoModelForCausalLM"].rsplit(".", 1)
-        model_cache_path = Path(TRANSFORMERS_CACHE) / f"models--{module_name.replace('/', '--')}"
-        snapshot_dir = next(model_cache_path.glob("snapshots/*"))
+        print("Ensuring model python files are downloaded...")
+        snapshot_dir = snapshot_download(
+            repo_id=model_name,
+            allow_patterns=["*.py", "*.json"],
+        )
+        print(f"Model files located at: {snapshot_dir}")
+
         sys.path.append(str(snapshot_dir))
+
+        config = AutoConfig.from_pretrained(snapshot_dir)
+        module_name, class_name = config.auto_map["AutoModelForCausalLM"].rsplit(".", 1)
+
         module = importlib.import_module(module_name)
         cls = getattr(module, class_name)
         if not hasattr(cls, "prepare_inputs_for_generation"):
