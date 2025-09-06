@@ -283,7 +283,7 @@ cuda = [
 
 [tool.autoflake]
 check = true
-exclude=__init__.py
+exclude="__init__.py"
 
 [tool.isort]
 profile = "black"
