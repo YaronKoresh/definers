@@ -2579,60 +2579,46 @@ def write_on_image(
 
     draw = ImageDraw.Draw(img)
 
-    labels_distance = 1 / 3
+    def draw_text_block(text_block, vertical_position):
+        if not text_block:
+            return
 
-    if top_title:
-        rows = len(top_title.split("\n"))
-        textheight = min(math.ceil(w / 10), math.ceil(h / 5))
-        font = ImageFont.truetype("Alef-Bold.ttf", textheight)
-        textwidth = draw.textlength(top_title, font)
-        x = math.ceil((w - textwidth) / 2)
-        y = h - (textheight * rows / 2) - (h / 2)
-        y = math.ceil(y - (h / 2 * labels_distance))
-        draw.text(
-            (x, y),
-            top_title,
-            (255, 255, 255),
-            font=font,
-            spacing=2,
-            stroke_width=math.ceil(textheight / 20),
-            stroke_fill=(0, 0, 0),
-        )
+        lines = text_block.strip().split('\n')
+        num_lines = len(lines)
+        
+        font_size = min(math.ceil(w / 12), math.ceil(h / (num_lines * 4)))
+        font = ImageFont.truetype("Alef-Bold.ttf", font_size)
 
-    if middle_title:
-        rows = len(middle_title.split("\n"))
-        textheight = min(math.ceil(w / 12), math.ceil(h / 6))
-        font = ImageFont.truetype("Alef-Bold.ttf", textheight)
-        textwidth = draw.textlength(middle_title, font)
-        x = math.ceil((w - textwidth) / 2)
-        y = h - (textheight * rows / 2) - (h / 2)
-        draw.text(
-            (x, y),
-            middle_title,
-            (255, 255, 255),
-            font=font,
-            spacing=4,
-            stroke_width=math.ceil(textheight / 40),
-            stroke_fill=(64, 64, 64),
-        )
+        line_heights = [draw.textbbox((0, 0), line, font=font)[3] for line in lines]
+        total_text_height = sum(line_heights) + (num_lines - 1) * 4
 
-    if bottom_title:
-        rows = len(bottom_title.split("\n"))
-        textheight = min(math.ceil(w / 10), math.ceil(h / 5))
-        font = ImageFont.truetype("Alef-Bold.ttf", textheight)
-        textwidth = draw.textlength(bottom_title, font)
-        x = math.ceil((w - textwidth) / 2)
-        y = h - (textheight * rows / 2) - (h / 2)
-        y = math.ceil(y + (h / 2 * labels_distance))
-        draw.text(
-            (x, y),
-            bottom_title,
-            (0, 0, 0),
-            font=font,
-            spacing=2,
-            stroke_width=math.ceil(textheight / 20),
-            stroke_fill=(255, 255, 255),
-        )
+        if vertical_position == "top":
+            y = h * 0.15 - total_text_height / 2
+        elif vertical_position == "middle":
+            y = h / 2 - total_text_height / 2
+        else:
+            y = h * 0.85 - total_text_height / 2
+        
+        for i, line in enumerate(lines):
+            bbox = draw.textbbox((0, 0), line, font=font)
+            line_width = bbox[2] - bbox[0]
+            x = (w - line_width) / 2
+            
+            stroke_width = math.ceil(font_size / 20)
+            
+            if vertical_position == "top":
+                fill_color, stroke_color = (255, 255, 255), (0, 0, 0)
+            elif vertical_position == "middle":
+                fill_color, stroke_color = (255, 255, 255), (64, 64, 64)
+            else:
+                fill_color, stroke_color = (0, 0, 0), (255, 255, 255)
+
+            draw.text((x, y), line, font=font, fill=fill_color, stroke_width=stroke_width, stroke_fill=stroke_color, spacing=4)
+            y += line_heights[i] + 4
+
+    draw_text_block(top_title, "top")
+    draw_text_block(middle_title, "middle")
+    draw_text_block(bottom_title, "bottom")
 
     return save_image(img)
 
@@ -4973,7 +4959,7 @@ def init_pretrained_model(task: str, turbo: bool = False):
 
         sys.path.append(str(snapshot_dir))
 
-        config = AutoConfig.from_pretrained(snapshot_dir)
+        config = AutoConfig.from_pretrained(snapshot_dir, trust_remote_code=True,)
         module_name, class_name = config.auto_map[
             "AutoModelForCausalLM"
         ].rsplit(".", 1)
@@ -6132,7 +6118,7 @@ def LinearRegressionTorch(input_dim):
 
     class _LinearRegressionTorch(torch.nn.Module):
         def __init__(self, input_dim):
-            super(LinearRegressionTorch, self).__init__()
+            super(_LinearRegressionTorch, self).__init__()
             self.linear = torch.nn.Linear(input_dim, 1)
 
         def forward(self, x):

@@ -9,7 +9,7 @@ from definers import split_mp3
 
 class TestSplitMp3(unittest.TestCase):
 
-    @patch("definers.AudioSegment")
+    @patch("pydub.AudioSegment")
     @patch("definers.Path")
     def test_split_audio_evenly(
         self, mock_path_cls, mock_audio_segment_cls
@@ -47,7 +47,7 @@ class TestSplitMp3(unittest.TestCase):
         self.assertEqual(mock_audio.__getitem__.call_count, 6)
         self.assertEqual(len(mock_chunks[0].export.call_args_list), 1)
 
-    @patch("definers.AudioSegment")
+    @patch("pydub.AudioSegment")
     @patch("definers.Path")
     def test_split_audio_unevenly(
         self, mock_path_cls, mock_audio_segment_cls
@@ -70,7 +70,7 @@ class TestSplitMp3(unittest.TestCase):
         for chunk in mock_chunks:
             chunk.export.assert_called_once()
 
-    @patch("definers.AudioSegment")
+    @patch("pydub.AudioSegment")
     @patch("definers.Path")
     def test_audio_shorter_than_chunk(
         self, mock_path_cls, mock_audio_segment_cls

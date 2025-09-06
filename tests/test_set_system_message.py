@@ -1,110 +1,77 @@
 import unittest
 from unittest.mock import patch
 
-from definers import set_system_message
+import definers
 
 
 class TestSetSystemMessage(unittest.TestCase):
 
     def setUp(self):
-        from definers import _system_message
-
-        self.original_system_message = _system_message
+        self.original_system_message = definers.SYSTEM_MESSAGE
 
     def tearDown(self):
-        import definers
+        definers.SYSTEM_MESSAGE = self.original_system_message
 
-        definers._system_message = self.original_system_message
+    def test_default_message(self):
+        definers.set_system_message()
+        self.assertIn("You are a helpful AI assistant.", definers.SYSTEM_MESSAGE)
 
-    @patch("definers.log")
-    def test_default_message(self, mock_log):
-        import definers
+    def test_with_role_and_name(self):
+        definers.set_system_message(role="a code assistant", name="Definer")
+        self.assertIn("You are a code assistant.", definers.SYSTEM_MESSAGE)
+        self.assertIn("Your name is Definer.", definers.SYSTEM_MESSAGE)
 
-        definers._system_message = ""  # Reset for this test
-        returned_message = set_system_message()
-        self.assertIn(
-            "You are a helpful AI assistant.", returned_message
-        )
-        self.assertEqual(returned_message, definers._system_message)
-        mock_log.assert_called_once()
+    def test_with_style_instructions(self):
+        definers.set_system_message(tone="friendly", chattiness="concise", interaction_style="ask questions")
+        self.assertIn("Your tone should be friendly.", definers.SYSTEM_MESSAGE)
+        self.assertIn("In terms of verbosity, concise.", definers.SYSTEM_MESSAGE)
+        self.assertIn("When interacting, ask questions.", definers.SYSTEM_MESSAGE)
 
-    @patch("definers.log")
-    def test_with_role_and_name(self, mock_log):
-        message = set_system_message(
-            role="a code assistant", name="Definer"
-        )
-        self.assertIn("You are a code assistant.", message)
-        self.assertIn("Your name is Definer.", message)
+    def test_with_persona_data(self):
+        persona = {"creator": "John Doe", "version": "1.0"}
+        definers.set_system_message(persona_data=persona)
+        self.assertIn("creator is John Doe", definers.SYSTEM_MESSAGE)
+        self.assertIn("version is 1.0", definers.SYSTEM_MESSAGE)
 
-    @patch("definers.log")
-    def test_with_style_instructions(self, mock_log):
-        message = set_system_message(
-            tone="friendly",
-            chattiness="concise",
-            interaction_style="ask clarifying questions",
-        )
-        self.assertIn("Your tone should be friendly.", message)
-        self.assertIn("In terms of verbosity, concise.", message)
-        self.assertIn(
-            "When interacting, ask clarifying questions.", message
-        )
+    def test_with_goals(self):
+        goals = ["answer questions", "be helpful"]
+        definers.set_system_message(goals=goals)
+        self.assertIn("answer questions; be helpful.", definers.SYSTEM_MESSAGE)
 
-    @patch("definers.log")
-    def test_with_persona_data(self, mock_log):
-        message = set_system_message(
-            persona_data={"creator": "John Doe"}
-        )
-        self.assertIn("creator is John Doe", message)
+    def test_with_task_rules_and_output_format(self):
+        rules = ["Do not mention you are an AI."]
+        output_format = "JSON"
+        definers.set_system_message(task_rules=rules, output_format=output_format)
+        self.assertIn("You must strictly follow these rules:", definers.SYSTEM_MESSAGE)
+        self.assertIn("1. Do not mention you are an AI.", definers.SYSTEM_MESSAGE)
+        self.assertIn("2. Your final output must be exclusively in the following format: JSON.", definers.SYSTEM_MESSAGE)
 
-    @patch("definers.log")
-    def test_with_goals(self, mock_log):
-        message = set_system_message(
-            goals=["answer questions", "be helpful"]
-        )
-        self.assertIn("answer questions; be helpful.", message)
-
-    @patch("definers.log")
-    def test_with_task_rules_and_output_format(self, mock_log):
-        message = set_system_message(
-            task_rules=["Do not mention you are an AI."],
-            output_format="JSON",
-        )
-        self.assertIn(
-            "You must strictly follow these rules:", message
-        )
-        self.assertIn("1. Do not mention you are an AI.", message)
-        self.assertIn(
-            "2. Your final output must be exclusively in the following format: JSON.",
-            message,
-        )
-
-    @patch("definers.log")
-    def test_all_parameters(self, mock_log):
-        message = set_system_message(
-            role="a travel guide",
-            name="Wanderer",
-            tone="enthusiastic",
-            chattiness="detailed",
-            persona_data={"specialty": "Europe"},
-            goals=["provide travel tips"],
-            task_rules=["Avoid tourist traps"],
-            output_format="Markdown",
-        )
-        self.assertIn("You are a travel guide.", message)
-        self.assertIn("Your name is Wanderer.", message)
-        self.assertIn("Your tone should be enthusiastic.", message)
-        self.assertIn("specialty is Europe", message)
-        self.assertIn("provide travel tips.", message)
-        self.assertIn("1. Avoid tourist traps", message)
-        self.assertIn(
-            "2. Your final output must be exclusively in the following format: Markdown.",
-            message,
-        )
-
-    @patch("definers.log")
+    @patch('definers.log')
     def test_log_is_called(self, mock_log):
-        set_system_message()
-        mock_log.assert_called()
+        definers.set_system_message(name="Tester")
+        mock_log.assert_called_once_with("System Message Updated", definers.SYSTEM_MESSAGE)
+
+    def test_all_parameters(self):
+        definers.set_system_message(
+            name="ChatBot",
+            role="a friendly guide",
+            tone="encouraging",
+            goals=["guide the user"],
+            chattiness="detailed",
+            persona_data={"language": "Python"},
+            task_rules=["Always be positive"],
+            interaction_style="offer examples",
+            output_format="Markdown"
+        )
+        self.assertIn("You are a friendly guide.", definers.SYSTEM_MESSAGE)
+        self.assertIn("Your name is ChatBot.", definers.SYSTEM_MESSAGE)
+        self.assertIn("Your tone should be encouraging.", definers.SYSTEM_MESSAGE)
+        self.assertIn("guide the user.", definers.SYSTEM_MESSAGE)
+        self.assertIn("In terms of verbosity, detailed.", definers.SYSTEM_MESSAGE)
+        self.assertIn("language is Python", definers.SYSTEM_MESSAGE)
+        self.assertIn("1. Always be positive", definers.SYSTEM_MESSAGE)
+        self.assertIn("When interacting, offer examples.", definers.SYSTEM_MESSAGE)
+        self.assertIn("format: Markdown", definers.SYSTEM_MESSAGE)
 
 
 if __name__ == "__main__":
