@@ -1136,7 +1136,7 @@ def init_custom_model(model_type, model_path=None):
 
 def files_to_dataset(features_paths: list, labels_paths: list = None):
     import torch
-    from torch.utils.data import DataLoader, TensorDataset
+    from torch.utils.data import TensorDataset, DataLoader
 
     features = []
     labels = []
@@ -1144,90 +1144,62 @@ def files_to_dataset(features_paths: list, labels_paths: list = None):
     try:
         for feature_path in features_paths:
             loaded = load_as_numpy(feature_path, training=True)
-
+            if loaded is None:
+                print(f"Error loading feature file: {feature_path}")
+                return None
             if isinstance(loaded, list):
-                for l in loaded:
-                    feature = cupy_to_numpy(l)
-                    if feature is None:
-                        print(
-                            f"Error loading feature file: {feature_path}"
-                        )
-                        return None
-                    features.append(feature)
+                features.extend([cupy_to_numpy(l) for l in loaded if l is not None])
             else:
-                feature = cupy_to_numpy(loaded)
-                if feature is None:
-                    print(
-                        f"Error loading feature file: {feature_path}"
-                    )
-                    return None
-                features.append(feature)
+                features.append(cupy_to_numpy(loaded))
 
         if labels_paths:
             for label_path in labels_paths:
                 loaded = load_as_numpy(label_path, training=True)
-
+                if loaded is None:
+                    print(f"Error loading label file: {label_path}")
+                    return None
                 if isinstance(loaded, list):
-                    for l in loaded:
-                        label = cupy_to_numpy(l)
-                        if label is None:
-                            print(
-                                f"Error loading label file: {label_path}"
-                            )
-                            return None
-                        labels.append(label)
+                    labels.extend([cupy_to_numpy(l) for l in loaded if l is not None])
                 else:
-                    label = cupy_to_numpy(loaded)
-                    if label is None:
-                        print(
-                            f"Error loading label file: {label_path}"
-                        )
-                        return None
-                    labels.append(label)
+                    labels.append(cupy_to_numpy(loaded))
 
     except Exception as e:
-        print(f"Error loading data: {e}")
+        print(f"Error during data loading: {e}")
         return None
 
-    max_lens = get_max_shapes(*features, *labels)
+    if not features and not labels:
+        print("No valid data loaded.")
+        return None
+
+    all_data = features + labels if labels else features
+    if not all_data:
+        return None
+
+    max_lens = get_max_shapes(*all_data)
 
     try:
-        features = convert_tensor_dtype(
+        features_tensor = convert_tensor_dtype(
             torch.stack(
-                [
-                    torch.tensor(reshape_numpy(_, lengths=max_lens))
-                    for _ in features
-                ]
+                [torch.tensor(reshape_numpy(f, lengths=max_lens)) for f in features]
             )
         )
 
         if labels:
-            labels = convert_tensor_dtype(
+            labels_tensor = convert_tensor_dtype(
                 torch.stack(
-                    [
-                        torch.tensor(
-                            reshape_numpy(_, lengths=max_lens)
-                        )
-                        for _ in labels
-                    ]
+                    [torch.tensor(reshape_numpy(l, lengths=max_lens)) for l in labels]
                 )
             )
-
-        if labels is not None and len(labels) > 0:
-            dataset = TensorDataset(features, labels)
-        elif features is not None and len(features) > 0:
-            dataset = TensorDataset(features)
+            dataset = TensorDataset(features_tensor, labels_tensor)
         else:
-            print("No features or labels loaded.")
-            return None
+            dataset = TensorDataset(features_tensor)
 
         return dataset
 
-    except Exception as e_label:
-        catch(f"{type(e_label)}")
-        catch(e_label)
+    except Exception as e_tensor:
+        catch(f"Error creating tensor dataset: {type(e_tensor)}")
+        catch(e_tensor)
         return None
-
 
 def merge_columns(X, y=None):
     from torch.utils.data import DataLoader, TensorDataset
@@ -2216,27 +2188,13 @@ def features_to_image(predicted_features, image_shape=(1024, 1024, 3)):
         print(f"Error generating image from features: {e}")
         return None
 
-
-
-def features_to_video(predicted_features, frame_interval=10, fps=24):
-    """
-    Generates a video from predicted video features, assuming the features
-    were extracted using the provided 'extract_video_features' function.
-
-    Args:
-        predicted_features (numpy.ndarray): 2D NumPy array, where each row represents features from a frame.
-        frame_interval (int): Frame interval used during feature extraction.
-        fps (int): Frames per second of the output video.
-
-    Returns:
-        bool: True if video generation was successful, False otherwise.
-    """
-
+def features_to_video(predicted_features, frame_interval=10, fps=24, video_shape=(1024, 1024, 3)):
     import cv2
 
-    output_path = tmp("mp4")
+    if predicted_features is None or predicted_features.size == 0:
+        return False
 
-    video_shape = (1024, 1024, 3)
+    output_path = tmp("mp4")
 
     try:
         height, width, channels = video_shape
@@ -2244,77 +2202,36 @@ def features_to_video(predicted_features, frame_interval=10, fps=24):
         lbp_size = height * width
         edge_size = height * width
 
-        fourcc = cv2.VideoWriter_fourcc(
-            *"mp4v"
-        )  # Or another suitable codec
-        out = cv2.VideoWriter(
-            output_path, fourcc, fps, (width, height)
-        )
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+
+        if predicted_features.ndim == 1:
+             predicted_features = predicted_features.reshape(1, -1)
+
 
         for frame_features in predicted_features:
             color_hist = frame_features[:hist_size].reshape(3, 256)
-            lbp_features = frame_features[
-                hist_size : hist_size + lbp_size
-            ].reshape(height, width)
-            edge_features = frame_features[
-                hist_size + lbp_size :
-            ].reshape(height, width)
+            lbp_features = frame_features[hist_size:hist_size + lbp_size].reshape(height, width)
+            edge_features = frame_features[hist_size + lbp_size:].reshape(height, width)
 
-            reconstructed_frame = np.zeros(
-                video_shape, dtype=np.uint8
-            )
+            reconstructed_frame = np.zeros(video_shape, dtype=np.uint8)
 
-            # Reconstruct color channels (simplified)
             for c in range(channels):
                 for i in range(256):
                     if c == 0:
-                        reconstructed_frame[:, :, 0] += np.uint8(
-                            color_hist[0][i]
-                            / np.max(color_hist[0])
-                            * 255
-                        )
+                        reconstructed_frame[:, :, 0] += np.uint8(color_hist[0][i] / np.max(color_hist[0]) * 255)
                     elif c == 1:
-                        reconstructed_frame[:, :, 1] += np.uint8(
-                            color_hist[1][i]
-                            / np.max(color_hist[1])
-                            * 255
-                        )
+                        reconstructed_frame[:, :, 1] += np.uint8(color_hist[1][i] / np.max(color_hist[1]) * 255)
                     else:
-                        reconstructed_frame[:, :, 2] += np.uint8(
-                            color_hist[2][i]
-                            / np.max(color_hist[2])
-                            * 255
-                        )
+                        reconstructed_frame[:, :, 2] += np.uint8(color_hist[2][i] / np.max(color_hist[2]) * 255)
 
-            # Reconstruct LBP and Edge (simplified)
-            lbp_scaled = cv2.normalize(
-                lbp_features, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U
-            )
-            edge_scaled = cv2.normalize(
-                edge_features,
-                None,
-                0,
-                255,
-                cv2.NORM_MINMAX,
-                cv2.CV_8U,
-            )
+            lbp_scaled = cv2.normalize(lbp_features, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
+            edge_scaled = cv2.normalize(edge_features, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
 
-            reconstructed_frame_gray = cv2.addWeighted(
-                lbp_scaled, 0.5, edge_scaled, 0.5, 0
-            )
-            reconstructed_frame = cv2.cvtColor(
-                reconstructed_frame, cv2.COLOR_BGR2GRAY
-            )
-            reconstructed_frame = cv2.addWeighted(
-                reconstructed_frame,
-                0.5,
-                reconstructed_frame_gray,
-                0.5,
-                0,
-            )
-            reconstructed_frame = cv2.cvtColor(
-                reconstructed_frame, cv2.COLOR_GRAY2BGR
-            )
+            reconstructed_frame_gray = cv2.addWeighted(lbp_scaled, 0.5, edge_scaled, 0.5, 0)
+            reconstructed_frame = cv2.cvtColor(reconstructed_frame, cv2.COLOR_BGR2GRAY)
+            reconstructed_frame = cv2.addWeighted(reconstructed_frame, 0.5, reconstructed_frame_gray, 0.5, 0)
+            reconstructed_frame = cv2.cvtColor(reconstructed_frame, cv2.COLOR_GRAY2BGR)
 
             out.write(reconstructed_frame)
 
@@ -4902,7 +4819,7 @@ setup(
         print(f"Successfully installed '{package_name}'.")
 
         from transformers import AutoConfig
-        config = AutoConfig.from_pretrained(str(snapshot_dir))
+        config = AutoConfig.from_pretrained(str(snapshot_dir), trust_remote_code=True)
         module_name, class_name = config.auto_map["AutoModelForCausalLM"].rsplit(".", 1)
 
         print(f"Importing module '{module_name}'...")

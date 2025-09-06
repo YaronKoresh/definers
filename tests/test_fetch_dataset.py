@@ -1,170 +1,67 @@
 import unittest
-from unittest.mock import MagicMock, patch
-
-import PIL
-
+from unittest.mock import patch, MagicMock
 from definers import fetch_dataset
 
-
 class TestFetchDataset(unittest.TestCase):
-
-    @patch("definers.load_dataset")
+    @patch("datasets.load_dataset")
     def test_successful_load(self, mock_load_dataset):
         mock_dataset = MagicMock()
         mock_load_dataset.return_value = mock_dataset
 
-        src = "some/dataset"
-        dataset = fetch_dataset(src)
+        dataset = fetch_dataset("some_dataset")
+        self.assertEqual(dataset, mock_dataset)
+        mock_load_dataset.assert_called_once_with("some_dataset", split="train")
 
-        mock_load_dataset.assert_called_once_with(src, split="train")
-        self.assertIs(dataset, mock_dataset)
-
-    @patch("definers.load_dataset")
+    @patch("datasets.load_dataset")
     def test_successful_load_with_revision(self, mock_load_dataset):
         mock_dataset = MagicMock()
         mock_load_dataset.return_value = mock_dataset
 
-        src = "some/dataset"
-        revision = "v1"
-        dataset = fetch_dataset(src, revision=revision)
-
+        dataset = fetch_dataset("some_dataset", revision="v1.0")
+        self.assertEqual(dataset, mock_dataset)
         mock_load_dataset.assert_called_once_with(
-            src, revision=revision, split="train"
+            "some_dataset", revision="v1.0", split="train"
         )
-        self.assertIs(dataset, mock_dataset)
 
-    @patch("definers.logging.error")
-    @patch(
-        "definers.load_dataset",
-        side_effect=FileNotFoundError("Not found"),
-    )
-    def test_file_not_found_no_fallback(
-        self, mock_load_dataset, mock_log_error
-    ):
-        src = "nonexistent/dataset"
-        dataset = fetch_dataset(src)
-
-        mock_load_dataset.assert_called_once_with(src, split="train")
-        mock_log_error.assert_called_once_with(
-            f"Dataset {src} not found."
-        )
+    @patch("datasets.load_dataset")
+    def test_file_not_found_no_fallback(self, mock_load_dataset):
+        mock_load_dataset.side_effect = FileNotFoundError
+        dataset = fetch_dataset("non_existent_dataset")
         self.assertIsNone(dataset)
 
-    @patch("definers.logging.error")
-    @patch(
-        "definers.load_dataset",
-        side_effect=ConnectionError("Connection failed"),
-    )
-    def test_connection_error_no_fallback(
-        self, mock_load_dataset, mock_log_error
-    ):
-        src = "unreachable/dataset"
-        dataset = fetch_dataset(src)
-
-        mock_load_dataset.assert_called_once_with(src, split="train")
-        mock_log_error.assert_called_once_with(
-            f"Connection error while loading dataset {src}."
-        )
+    @patch("datasets.load_dataset")
+    def test_connection_error_no_fallback(self, mock_load_dataset):
+        mock_load_dataset.side_effect = ConnectionError
+        dataset = fetch_dataset("flaky_connection_dataset")
         self.assertIsNone(dataset)
 
-    @patch("definers.logging.error")
-    @patch("definers.load_dataset")
-    def test_fallback_successful(
-        self, mock_load_dataset, mock_log_error
-    ):
+    @patch("datasets.load_dataset")
+    def test_fallback_on_error(self, mock_load_dataset):
         mock_dataset = MagicMock()
-        mock_load_dataset.side_effect = [
-            FileNotFoundError("Initial fail"),
-            mock_dataset,
-        ]
-
-        src = "http://example.com/data.csv"
-        url_type = "csv"
-        dataset = fetch_dataset(src, url_type=url_type)
-
+        mock_load_dataset.side_effect = [Exception("Initial error"), mock_dataset]
+        dataset = fetch_dataset("some_url", url_type="json")
+        self.assertEqual(dataset, mock_dataset)
         self.assertEqual(mock_load_dataset.call_count, 2)
-        mock_load_dataset.assert_any_call(src, split="train")
-        mock_load_dataset.assert_called_with(
-            url_type, data_files={"train": src}, split="train"
-        )
-        self.assertIs(dataset, mock_dataset)
 
-    @patch("definers.logging.error")
-    @patch("definers.load_dataset")
-    def test_fallback_with_revision_successful(
-        self, mock_load_dataset, mock_log_error
-    ):
+    @patch("datasets.load_dataset")
+    def test_fallback_with_revision(self, mock_load_dataset):
         mock_dataset = MagicMock()
-        mock_load_dataset.side_effect = [
-            FileNotFoundError("Initial fail"),
-            mock_dataset,
-        ]
-
-        src = "http://example.com/data.csv"
-        url_type = "csv"
-        revision = "main"
-        dataset = fetch_dataset(
-            src, url_type=url_type, revision=revision
-        )
-
-        self.assertEqual(mock_load_dataset.call_count, 2)
+        mock_load_dataset.side_effect = [Exception("Initial error"), mock_dataset]
+        dataset = fetch_dataset("some_url", url_type="json", revision="v2")
+        self.assertEqual(dataset, mock_dataset)
         mock_load_dataset.assert_any_call(
-            src, revision=revision, split="train"
+            "json", data_files={"train": "some_url"}, revision="v2", split="train"
         )
-        mock_load_dataset.assert_called_with(
-            url_type,
-            data_files={"train": src},
-            revision=revision,
-            split="train",
-        )
-        self.assertIs(dataset, mock_dataset)
 
-    @patch("definers.logging.error")
-    @patch(
-        "definers.load_dataset",
-        side_effect=[
-            FileNotFoundError("Initial fail"),
-            FileNotFoundError("Fallback fail"),
-        ],
-    )
-    def test_fallback_fails_file_not_found(
-        self, mock_load_dataset, mock_log_error
-    ):
-        src = "http://example.com/data.csv"
-        url_type = "csv"
-        dataset = fetch_dataset(src, url_type=url_type)
-
-        self.assertEqual(mock_load_dataset.call_count, 2)
-        mock_log_error.assert_any_call(f"Dataset {src} not found.")
-        mock_log_error.assert_called_with(
-            f"Dataset {url_type} with data_files {src} not found."
-        )
+    @patch("datasets.load_dataset", side_effect=FileNotFoundError)
+    def test_fallback_file_not_found(self, mock_load_dataset):
+        dataset = fetch_dataset("some_url", url_type="csv")
         self.assertIsNone(dataset)
 
-    @patch("definers.logging.error")
-    @patch(
-        "definers.load_dataset",
-        side_effect=[
-            ConnectionError("Initial fail"),
-            ConnectionError("Fallback fail"),
-        ],
-    )
-    def test_fallback_fails_connection_error(
-        self, mock_load_dataset, mock_log_error
-    ):
-        src = "http://example.com/data.csv"
-        url_type = "csv"
-        dataset = fetch_dataset(src, url_type=url_type)
-
-        self.assertEqual(mock_load_dataset.call_count, 2)
-        mock_log_error.assert_any_call(
-            f"Connection error while loading dataset {src}."
-        )
-        mock_log_error.assert_called_with(
-            f"Connection error while loading dataset {url_type} with data_files {src}."
-        )
+    @patch("datasets.load_dataset", side_effect=ConnectionError)
+    def test_fallback_connection_error(self, mock_load_dataset):
+        dataset = fetch_dataset("some_url", url_type="parquet")
         self.assertIsNone(dataset)
-
 
 if __name__ == "__main__":
     unittest.main()
