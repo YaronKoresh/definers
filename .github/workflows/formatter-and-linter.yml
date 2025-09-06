@@ -25,6 +25,13 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v5
 
+      - name: Free up disk space on runner
+        run: |
+          sudo apt-get clean
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /usr/local/.ghcup
+
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
@@ -47,6 +54,7 @@ jobs:
 
       - name: Run linter (Flake8)
         run: flake8 . --count --show-source --statistics
+
       - name: Create Pull Request
         if: github.event_name == 'push'
         uses: peter-evans/create-pull-request@v6
