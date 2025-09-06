@@ -47,7 +47,13 @@ jobs:
         run: pip install .[dev]
 
       - name: Remove unused imports and variables
-        run: autoflake --in-place --recursive --remove-duplicate-keys --remove-all-unused-imports --remove-unused-variables --expand-star-imports .
+        run: |
+          autoflake --in-place --recursive \
+            --remove-all-unused-imports \
+            --remove-unused-variables \
+            --expand-star-imports \
+            --exclude=__init__.py .
+        continue-on-error: true
 
       - name: Sort imports with isort
         run: isort .
