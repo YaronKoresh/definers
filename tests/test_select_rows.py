@@ -1,7 +1,9 @@
+from definers import select_rows
+
+from datasets import Dataset
+
 import unittest
 from unittest.mock import MagicMock
-from datasets import Dataset
-from definers import select_rows
 
 class TestSelectRows(unittest.TestCase):
 

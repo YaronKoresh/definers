@@ -283,6 +283,7 @@ cuda = [
 
 [tool.autoflake]
 check = true
+exclude=__init__.py
 
 [tool.isort]
 profile = "black"
@@ -304,11 +305,12 @@ exclude = '''
   | dist
 )/
 '''
-
-extend-exclude = [
-    ".git",
-    "__pycache__",
-    "build",
-    "dist",
-    ".venv",
-]
+extend-exclude = '''
+/(
+  | \.git
+  | \__pycache__
+  | build
+  | dist
+  | \.venv
+)/
+'''

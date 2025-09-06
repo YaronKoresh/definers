@@ -51,7 +51,7 @@ import collections
 import collections.abc
 collections.MutableSequence = collections.abc.MutableSequence
 
-def init_logger():
+def _init_logger():
     logger = logging.getLogger(__name__)
     logger.setLevel(logging.DEBUG)
     console_handler = logging.StreamHandler()
@@ -61,9 +61,9 @@ def init_logger():
         logger.addHandler(console_handler)
     return logger
 
-logger = init_logger()
+logger = _init_logger()
 
-def init_cupy_numpy():
+def _init_cupy_numpy():
     import numpy as _np
     try:
         import cupy as np
@@ -75,7 +75,16 @@ def init_cupy_numpy():
         np.int = np.int64
     return np, _np
 
-np, _np = init_cupy_numpy()
+np, _np = _init_cupy_numpy()
+
+def _find_spec(mod_name):
+    try:
+        mod = importlib.import_module(mod_name)
+        return mod.__spec__
+    except:
+        return None
+
+importlib.util.find_spec = _find_spec
 
 language_codes = {'af': 'afrikaans', 'sq': 'albanian', 'am': 'amharic', 'ar': 'arabic', 'hy': 'armenian', 'as': 'assamese', 'ay': 'aymara', 'az': 'azerbaijani', 'bm': 'bambara', 'eu': 'basque', 'be': 'belarusian', 'bn': 'bengali', 'bho': 'bhojpuri', 'bs': 'bosnian', 'bg': 'bulgarian', 'ca': 'catalan', 'ceb': 'cebuano', 'ny': 'chichewa', 'zh-CN': 'chinese (simplified)', 'zh-TW': 'chinese (traditional)', 'co': 'corsican', 'hr': 'croatian', 'cs': 'czech', 'da': 'danish', 'dv': 'dhivehi', 'doi': 'dogri', 'nl': 'dutch', 'en': 'english', 'eo': 'esperanto', 'et': 'estonian', 'ee': 'ewe', 'tl': 'filipino', 'fi': 'finnish', 'fr': 'french', 'fy': 'frisian', 'gl': 'galician', 'ka': 'georgian', 'de': 'german', 'el': 'greek', 'gn': 'guarani', 'gu': 'gujarati', 'ht': 'haitian creole', 'ha': 'hausa', 'haw': 'hawaiian', 'iw': 'hebrew', 'he': 'hebrew', 'hi': 'hindi', 'hmn': 'hmong', 'hu': 'hungarian', 'is': 'icelandic', 'ig': 'igbo', 'ilo': 'ilocano', 'id': 'indonesian', 'ga': 'irish', 'it': 'italian', 'ja': 'japanese', 'jw': 'javanese', 'kn': 'kannada', 'kk': 'kazakh', 'km': 'khmer', 'rw': 'kinyarwanda', 'gom': 'konkani', 'ko': 'korean', 'kri': 'krio', 'ku': 'kurdish (kurmanji)', 'ckb': 'kurdish (sorani)', 'ky': 'kyrgyz', 'lo': 'lao', 'la': 'latin', 'lv': 'latvian', 'ln': 'lingala', 'lt': 'lithuanian', 'lg': 'luganda', 'lb': 'luxembourgish', 'mk': 'macedonian', 'mai': 'maithili', 'mg': 'malagasy', 'ms': 'malay', 'ml': 'malayalam', 'mt': 'maltese', 'mi': 'maori', 'mr': 'marathi', 'mni-Mtei': 'meiteilon (manipuri)', 'lus': 'mizo', 'mn': 'mongolian', 'my': 'myanmar', 'ne': 'nepali', 'no': 'norwegian', 'or': 'odia (oriya)', 'om': 'oromo', 'ps': 'pashto', 'fa': 'persian', 'pl': 'polish', 'pt': 'portuguese', 'pa': 'punjabi', 'qu': 'quechua', 'ro': 'romanian', 'ru': 'russian', 'sm': 'samoan', 'sa': 'sanskrit', 'gd': 'scots gaelic', 'nso': 'sepedi', 'sr': 'serbian', 'st': 'sesotho', 'sn': 'shona', 'sd': 'sindhi', 'si': 'sinhala', 'sk': 'slovak', 'sl': 'slovenian', 'so': 'somali', 'es': 'spanish', 'su': 'sundanese', 'sw': 'swahili', 'sv': 'swedish', 'tg': 'tajik', 'ta': 'tamil', 'tt': 'tatar', 'te': 'telugu', 'th': 'thai', 'ti': 'tigrinya', 'ts': 'tsonga', 'tr': 'turkish', 'tk': 'turkmen', 'ak': 'twi', 'uk': 'ukrainian', 'ur': 'urdu', 'ug': 'uyghur', 'uz': 'uzbek', 'vi': 'vietnamese', 'cy': 'welsh', 'xh': 'xhosa', 'yi': 'yiddish', 'yo': 'yoruba', 'zu': 'zulu'}
 
@@ -614,9 +623,6 @@ def train_linear_regression(X, y, model_path, learning_rate=0.01):
     return model_torch
 
 def fetch_dataset(src, url_type=None, revision=None):
-    import PIL
-    PIL.__spec__ = PIL.Image.__spec__
-
     from datasets import load_dataset
     try:
         if revision:
@@ -665,9 +671,6 @@ def select_columns(dataset, cols):
     return drop_columns(dataset, cols_to_drop)
 
 def select_rows(dataset, start_index, end_index):
-    import PIL
-    PIL.__spec__ = PIL.Image.__spec__
-
     from datasets import Dataset
 
     subset_data = {}
@@ -3704,7 +3707,7 @@ def init_pretrained_model(task:str,turbo:bool=False):
 
         print("Ensuring model python files are downloaded...")
         snapshot_dir = snapshot_download(
-            repo_id=model_name,
+            repo_id=tasks[task],
             allow_patterns=["*.py", "*.json"],
         )
         print(f"Model files located at: {snapshot_dir}")
