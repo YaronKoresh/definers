@@ -615,6 +615,8 @@ def train_linear_regression(X, y, model_path, learning_rate=0.01):
 
 def fetch_dataset(src, url_type=None, revision=None):
     import PIL
+    PIL.__spec__ = PIL.Image.__spec__
+
     from datasets import load_dataset
     try:
         if revision:
@@ -664,6 +666,8 @@ def select_columns(dataset, cols):
 
 def select_rows(dataset, start_index, end_index):
     import PIL
+    PIL.__spec__ = PIL.Image.__spec__
+
     from datasets import Dataset
 
     subset_data = {}

@@ -1,6 +1,9 @@
 import unittest
 from unittest.mock import MagicMock
+
 import PIL
+PIL.__spec__ = PIL.Image.__spec__
+
 from datasets import Dataset
 from definers import select_rows
 
