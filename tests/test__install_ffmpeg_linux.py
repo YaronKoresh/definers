@@ -77,7 +77,7 @@ class TestInstallFfmpegLinux(unittest.TestCase):
 
     @patch("os.geteuid", return_value=0)
     @patch("shutil.which", return_value=None)
-    @patch("sys.exit")
+    @patch("definers.sys.exit")
     @patch("builtins.print")
     def test_no_package_manager_found(
         self, mock_print, mock_exit, mock_which, mock_geteuid
@@ -99,7 +99,7 @@ class TestInstallFfmpegLinux(unittest.TestCase):
         "subprocess.run",
         side_effect=subprocess.CalledProcessError(1, "cmd"),
     )
-    @patch("sys.exit")
+    @patch("definers.sys.exit")
     @patch("builtins.print")
     def test_install_command_fails(
         self,

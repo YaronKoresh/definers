@@ -14,7 +14,7 @@ from definers import _install_ffmpeg_windows
 class TestInstallFfmpegWindows(unittest.TestCase):
 
     @patch("definers.is_admin_windows", return_value=False)
-    @patch("sys.exit")
+    @patch("definers.sys.exit")
     @patch("builtins.print")
     def test_not_admin_exits(
         self, mock_print, mock_exit, mock_is_admin
@@ -61,7 +61,7 @@ class TestInstallFfmpegWindows(unittest.TestCase):
     @patch("os.remove")
     @patch("tempfile.gettempdir", return_value="/tmp")
     @patch("builtins.print")
-    @patch("sys.exit")
+    @patch("definers.sys.exit")
     def test_manual_install_success_after_winget_fail(
         self,
         mock_exit,
@@ -137,7 +137,7 @@ class TestInstallFfmpegWindows(unittest.TestCase):
     @patch("subprocess.run", side_effect=FileNotFoundError)
     @patch("requests.get", side_effect=Exception("Download failed"))
     @patch("builtins.print")
-    @patch("sys.exit")
+    @patch("definers.sys.exit")
     def test_manual_install_download_fails(
         self,
         mock_exit,

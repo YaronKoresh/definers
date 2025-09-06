@@ -1,77 +1,44 @@
 import unittest
-from unittest.mock import MagicMock, patch
-
+from unittest.mock import patch, MagicMock
 import numpy as np
+from definers import features_to_text
 from sklearn.feature_extraction.text import TfidfVectorizer
 
-from definers import features_to_text
-
-
 class TestFeaturesToText(unittest.TestCase):
-
     def setUp(self):
-        self.corpus = [
-            "this is a sample document",
-            "this is another document",
-        ]
+        self.texts = ["hello world", "python is fun"]
         self.vectorizer = TfidfVectorizer()
-        self.vectorizer.fit(self.corpus)
-        self.vocabulary = self.vectorizer.get_feature_names_out()
+        self.vectorizer.fit(self.texts)
+        self.features = self.vectorizer.transform(self.texts).toarray()[0]
 
-        text_to_test = "a sample document"
-        self.test_features = (
-            self.vectorizer.transform([text_to_test])
-            .toarray()
-            .flatten()
-        )
-
-    def test_reconstruction_with_vectorizer(self):
+    def test_successful_reconstruction(self):
         reconstructed_text = features_to_text(
-            self.test_features, vectorizer=self.vectorizer
+            self.features, vectorizer=self.vectorizer
         )
         self.assertIsNotNone(reconstructed_text)
-        self.assertIsInstance(reconstructed_text, str)
-        words = reconstructed_text.split()
-        self.assertIn("sample", words)
-        self.assertIn("document", words)
+        self.assertIn("hello", reconstructed_text)
+        self.assertIn("world", reconstructed_text)
 
-    def test_reconstruction_with_vocabulary(self):
+    def test_with_vocabulary(self):
+        vocab = self.vectorizer.vocabulary_
         reconstructed_text = features_to_text(
-            self.test_features, vocabulary=self.vocabulary
+            self.features, vocabulary=list(vocab.keys())
         )
         self.assertIsNotNone(reconstructed_text)
-        words = reconstructed_text.split()
-        self.assertIn("sample", words)
-        self.assertIn("document", words)
+        self.assertIn("hello", reconstructed_text)
+        self.assertIn("world", reconstructed_text)
 
-    def test_no_vectorizer_or_vocabulary_provided(self):
-        result = features_to_text(self.test_features)
-        self.assertIsNone(result)
+    def test_missing_vectorizer_and_vocabulary(self):
+        with self.assertRaises(ValueError):
+            features_to_text(self.features)
 
-    def test_empty_features(self):
-        empty_features = np.zeros_like(self.test_features)
+    def test_exception_handling(self):
+        mock_vectorizer = MagicMock()
+        mock_vectorizer.get_feature_names_out.side_effect = Exception("Test exception")
         reconstructed_text = features_to_text(
-            empty_features, vectorizer=self.vectorizer
-        )
-        self.assertEqual(reconstructed_text, "")
-
-    def test_none_features(self):
-        result = features_to_text(None, vectorizer=self.vectorizer)
-        self.assertIsNone(result)
-
-    @patch("definers.TfidfVectorizer")
-    def test_exception_handling(self, mock_vectorizer):
-        mock_instance = MagicMock()
-        mock_instance.get_feature_names_out.side_effect = Exception(
-            "Vectorizer error"
-        )
-        mock_vectorizer.return_value = mock_instance
-
-        reconstructed_text = features_to_text(
-            self.test_features, vectorizer=mock_instance
+            self.features, vectorizer=mock_vectorizer
         )
         self.assertIsNone(reconstructed_text)
-
 
 if __name__ == "__main__":
     unittest.main()

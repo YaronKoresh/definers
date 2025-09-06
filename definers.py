@@ -333,8 +333,6 @@ common_audio_formats = [
 
 punc = r'["!#$%&()*+,\./:;<=>?@\[\\\]^_`\{\|\}~]'
 
-durl_empty = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAoAAAAKACAYAAAAMzckjAAAAAXNSR0IArs4c6QAAIABJREFUeF7t1kEBAAAIAjHpX9ogNxswfLBzBAgQIECAAAECKYGl0gpLgAABAgQIECBwBqAnIECAAAECBAjEBAzAWOHiEiBAgAABAgQMQD9AgAABAgQIEIgJGICxwsUlQIAAAQIECBiAfoAAAQIECBAgEBMwAGOFi0uAAAECBAgQMAD9AAECBAgQIEAgJmAAxgoXlwABAgQIECBgAPoBAgQIECBAgEBMwACMFS4uAQIECBAgQMAA9AMECBAgQIAAgZiAARgrXFwCBAgQIECAgAHoBwgQIECAAAECMQEDMFa4uAQIECBAgAABA9APECBAgAABAgRiAgZgrHBxCRAgQIAAAQIGoB8gQIAAAQIECMQEDMBY4eISIECAAAECBAxAP0CAAAECBAgQiAkYgLHCxSVAgAABAgQIGIB+gAABAgQIECAQEzAAY4WLS4AAAQIECBAwAP0AAQIECBAgQCAmYADGCheXAAECBAgQIGAA+gECBAgQIECAQEzAAIwVLi4BAgQIECBAwAD0AwQIECBAgACBmIABGCtcXAIECBAgQICAAegHCBAgQIAAAQIxAQMwVri4BAgQIECAAAED0A8QIECAAAECBGICBmCscHEJECBAgAABAgagHyBAgAABAgQIxAQMwFjh4hIgQIAAAQIEDEA/QIAAAQIECBCICRiAscLFJUCAAAECBAgYgH6AAAECBAgQIBATMABjhYtLgAABAgQIEDAA/QABAgQIECBAICZgAMYKF5cAAQIECBAgYAD6AQIECBAgQIBATMAAjBUuLgECBAgQIEDAAPQDBAgQIECAAIGYgAEYK1xcAgQIECBAgIAB6AcIECBAgAABAjEBAzBWuLgECBAgQIAAAQPQDxAgQIAAAQIEYgIGYKxwcQkQIECAAAECBqAfIECAAAECBAjEBAzAWOHiEiBAgAABAgQMQD9AgAABAgQIEIgJGICxwsUlQIAAAQIECBiAfoAAAQIECBAgEBMwAGOFi0uAAAECBAgQMAD9AAECBAgQIEAgJmAAxgoXlwABAgQIECBgAPoBAgQIECBAgEBMwACMFS4uAQIECBAgQMAA9AMECBAgQIAAgZiAARgrXFwCBAgQIECAgAHoBwgQIECAAAECMQEDMFa4uAQIECBAgAABA9APECBAgAABAgRiAgZgrHBxCRAgQIAAAQIGoB8gQIAAAQIECMQEDMBY4eISIECAAAECBAxAP0CAAAECBAgQiAkYgLHCxSVAgAABAgQIGIB+gAABAgQIECAQEzAAY4WLS4AAAQIECBAwAP0AAQIECBAgQCAmYADGCheXAAECBAgQIGAA+gECBAgQIECAQEzAAIwVLi4BAgQIECBAwAD0AwQIECBAgACBmIABGCtcXAIECBAgQICAAegHCBAgQIAAAQIxAQMwVri4BAgQIECAAAED0A8QIECAAAECBGICBmCscHEJECBAgAABAgagHyBAgAABAgQIxAQMwFjh4hIgQIAAAQIEDEA/QIAAAQIECBCICRiAscLFJUCAAAECBAgYgH6AAAECBAgQIBATMABjhYtLgAABAgQIEDAA/QABAgQIECBAICZgAMYKF5cAAQIECBAgYAD6AQIECBAgQIBATMAAjBUuLgECBAgQIEDAAPQDBAgQIECAAIGYgAEYK1xcAgQIECBAgIAB6AcIECBAgAABAjEBAzBWuLgECBAgQIAAAQPQDxAgQIAAAQIEYgIGYKxwcQkQIECAAAECBqAfIECAAAECBAjEBAzAWOHiEiBAgAABAgQMQD9AgAABAgQIEIgJGICxwsUlQIAAAQIECBiAfoAAAQIECBAgEBMwAGOFi0uAAAECBAgQMAD9AAECBAgQIEAgJmAAxgoXlwABAgQIECBgAPoBAgQIECBAgEBMwACMFS4uAQIECBAgQMAA9AMECBAgQIAAgZiAARgrXFwCBAgQIECAgAHoBwgQIECAAAECMQEDMFa4uAQIECBAgAABA9APECBAgAABAgRiAgZgrHBxCRAgQIAAAQIGoB8gQIAAAQIECMQEDMBY4eISIECAAAECBAxAP0CAAAECBAgQiAkYgLHCxSVAgAABAgQIGIB+gAABAgQIECAQEzAAY4WLS4AAAQIECBAwAP0AAQIECBAgQCAmYADGCheXAAECBAgQIGAA+gECBAgQIECAQEzAAIwVLi4BAgQIECBAwAD0AwQIECBAgACBmIABGCtcXAIECBAgQICAAegHCBAgQIAAAQIxAQMwVri4BAgQIECAAAED0A8QIECAAAECBGICBmCscHEJECBAgAABAgagHyBAgAABAgQIxAQMwFjh4hIgQIAAAQIEDEA/QIAAAQIECBCICRiAscLFJUCAAAECBAgYgH6AAAECBAgQIBATMABjhYtLgAABAgQIEDAA/QABAgQIECBAICZgAMYKF5cAAQIECBAgYAD6AQIECBAgQIBATMAAjBUuLgECBAgQIEDAAPQDBAgQIECAAIGYgAEYK1xcAgQIECBAgIAB6AcIECBAgAABAjEBAzBWuLgECBAgQIAAAQPQDxAgQIAAAQIEYgIGYKxwcQkQIECAAAECBqAfIECAAAECBAjEBAzAWOHiEiBAgAABAgQMQD9AgAABAgQIEIgJGICxwsUlQIAAAQIECBiAfoAAAQIECBAgEBMwAGOFi0uAAAECBAgQMAD9AAECBAgQIEAgJmAAxgoXlwABAgQIECBgAPoBAgQIECBAgEBMwACMFS4uAQIECBAgQMAA9AMECBAgQIAAgZiAARgrXFwCBAgQIECAgAHoBwgQIECAAAECMQEDMFa4uAQIECBAgAABA9APECBAgAABAgRiAgZgrHBxCRAgQIAAAQIGoB8gQIAAAQIECMQEDMBY4eISIECAAAECBAxAP0CAAAECBAgQiAkYgLHCxSVAgAABAgQIGIB+gAABAgQIECAQEzAAY4WLS4AAAQIECBAwAP0AAQIECBAgQCAmYADGCheXAAECBAgQIGAA+gECBAgQIECAQEzAAIwVLi4BAgQIECBAwAD0AwQIECBAgACBmIABGCtcXAIECBAgQICAAegHCBAgQIAAAQIxAQMwVri4BAgQIECAAAED0A8QIECAAAECBGICBmCscHEJECBAgAABAgagHyBAgAABAgQIxAQMwFjh4hIgQIAAAQIEDEA/QIAAAQIECBCICRiAscLFJUCAAAECBAgYgH6AAAECBAgQIBATMABjhYtLgAABAgQIEDAA/QABAgQIECBAICZgAMYKF5cAAQIECBAgYAD6AQIECBAgQIBATMAAjBUuLgECBAgQIEDAAPQDBAgQIECAAIGYgAEYK1xcAgQIECBAgIAB6AcIECBAgAABAjEBAzBWuLgECBAgQIAAAQPQDxAgQIAAAQIEYgIGYKxwcQkQIECAAAECBqAfIECAAAECBAjEBAzAWOHiEiBAgAABAgQMQD9AgAABAgQIEIgJGICxwsUlQIAAAQIECBiAfoAAAQIECBAgEBMwAGOFi0uAAAECBAgQMAD9AAECBAgQIEAgJmAAxgoXlwABAgQIECBgAPoBAgQIECBAgEBMwACMFS4uAQIECBAgQMAA9AMECBAgQIAAgZiAARgrXFwCBAgQIECAgAHoBwgQIECAAAECMQEDMFa4uAQIECBAgAABA9APECBAgAABAgRiAgZgrHBxCRAgQIAAAQIGoB8gQIAAAQIECMQEDMBY4eISIECAAAECBAxAP0CAAAECBAgQiAkYgLHCxSVAgAABAgQIGIB+gAABAgQIECAQEzAAY4WLS4AAAQIECBAwAP0AAQIECBAgQCAmYADGCheXAAECBAgQIGAA+gECBAgQIECAQEzAAIwVLi4BAgQIECBAwAD0AwQIECBAgACBmIABGCtcXAIECBAgQICAAegHCBAgQIAAAQIxAQMwVri4BAgQIECAAAED0A8QIECAAAECBGICBmCscHEJECBAgAABAgagHyBAgAABAgQIxAQMwFjh4hIgQIAAAQIEDEA/QIAAAQIECBCICRiAscLFJUCAAAECBAgYgH6AAAECBAgQIBATMABjhYtLgAABAgQIEDAA/QABAgQIECBAICZgAMYKF5cAAQIECBAgYAD6AQIECBAgQIBATMAAjBUuLgECBAgQIEDAAPQDBAgQIECAAIGYgAEYK1xcAgQIECBAgIAB6AcIECBAgAABAjEBAzBWuLgECBAgQIAAAQPQDxAgQIAAAQIEYgIGYKxwcQkQIECAAAECBqAfIECAAAECBAjEBAzAWOHiEiBAgAABAgQMQD9AgAABAgQIEIgJGICxwsUlQIAAAQIECBiAfoAAAQIECBAgEBMwAGOFi0uAAAECBAgQMAD9AAECBAgQIEAgJmAAxgoXlwABAgQIECBgAPoBAgQIECBAgEBMwACMFS4uAQIECBAgQMAA9AMECBAgQIAAgZiAARgrXFwCBAgQIECAgAHoBwgQIECAAAECMQEDMFa4uAQIECBAgAABA9APECBAgAABAgRiAgZgrHBxCRAgQIAAAQIGoB8gQIAAAQIECMQEDMBY4eISIECAAAECBAxAP0CAAAECBAgQiAkYgLHCxSVAgAABAgQIGIB+gAABAgQIECAQEzAAY4WLS4AAAQIECBAwAP0AAQIECBAgQCAmYADGCheXAAECBAgQIGAA+gECBAgQIECAQEzAAIwVLi4BAgQIECBAwAD0AwQIECBAgACBmIABGCtcXAIECBAgQICAAegHCBAgQIAAAQIxAQMwVri4BAgQIECAAAED0A8QIECAAAECBGICBmCscHEJECBAgAABAgagHyBAgAABAgQIxAQMwFjh4hIgQIAAAQIEDEA/QIAAAQIECBCICRiAscLFJUCAAAECBAgYgH6AAAECBAgQIBATMABjhYtLgAABAgQIEDAA/QABAgQIECBAICZgAMYKF5cAAQIECBAgYAD6AQIECBAgQIBATMAAjBUuLgECBAgQIEDAAPQDBAgQIECAAIGYgAEYK1xcAgQIECBAgIAB6AcIECBAgAABAjEBAzBWuLgECBAgQIAAAQPQDxAgQIAAAQIEYgIGYKxwcQkQIECAAAECBqAfIECAAAECBAjEBAzAWOHiEiBAgAABAgQMQD9AgAABAgQIEIgJGICxwsUlQIAAAQIECBiAfoAAAQIECBAgEBMwAGOFi0uAAAECBAgQMAD9AAECBAgQIEAgJmAAxgoXlwABAgQIECBgAPoBAgQIECBAgEBMwACMFS4uAQIECBAgQMAA9AMECBAgQIAAgZiAARgrXFwCBAgQIECAgAHoBwgQIECAAAECMQEDMFa4uAQIECBAgAABA9APECBAgAABAgRiAgZgrHBxCRAgQIAAAQIGoB8gQIAAAQIECMQEDMBY4eISIECAAAECBAxAP0CAAAECBAgQiAkYgLHCxSVAgAABAgQIGIB+gAABAgQIECAQEzAAY4WLS4AAAQIECBAwAP0AAQIECBAgQCAmYADGCheXAAECBAgQIGAA+gECBAgQIECAQEzAAIwVLi4BAgQIECBAwAD0AwQIECBAgACBmIABGCtcXAIECBAgQICAAegHCBAgQIAAAQIxAQMwVri4BAgQIECAAAED0A8QIECAAAECBGICBmCscHEJECBAgAABAgagHyBAgAABAgQIxAQMwFjh4hIgQIAAAQIEDEA/QIAAAQIECBCICRiAscLFJUCAAAECBAgYgH6AAAECBAgQIBATMABjhYtLgAABAgQIEDAA/QABAgQIECBAICZgAMYKF5cAAQIECBAgYAD6AQIECBAgQIBATMAAjBUuLgECBAgQIEDAAPQDBAgQIECAAIGYgAEYK1xcAgQIECBAgIAB6AcIECBAgAABAjEBAzBWuLgECBAgQIAAAQPQDxAgQIAAAQIEYgIGYKxwcQkQIECAAAECBqAfIECAAAECBAjEBAzAWOHiEiBAgAABAgQMQD9AgAABAgQIEIgJGICxwsUlQIAAAQIECBiAfoAAAQIECBAgEBMwAGOFi0uAAAECBAgQMAD9AAECBAgQIEAgJmAAxgoXlwABAgQIECBgAPoBAgQIECBAgEBMwACMFS4uAQIECBAgQMAA9AMECBAgQIAAgZiAARgrXFwCBAgQIECAgAHoBwgQIECAAAECMQEDMFa4uAQIECBAgAABA9APECBAgAABAgRiAgZgrHBxCRAgQIAAAQIGoB8gQIAAAQIECMQEDMBY4eISIECAAAECBAxAP0CAAAECBAgQiAkYgLHCxSVAgAABAgQIGIB+gAABAgQIECAQEzAAY4WLS4AAAQIECBAwAP0AAQIECBAgQCAmYADGCheXAAECBAgQIGAA+gECBAgQIECAQEzAAIwVLi4BAgQIECBAwAD0AwQIECBAgACBmIABGCtcXAIECBAgQICAAegHCBAgQIAAAQIxAQMwVri4BAgQIECAAAED0A8QIECAAAECBGICBmCscHEJECBAgAABAgagHyBAgAABAgQIxAQMwFjh4hIgQIAAAQIEDEA/QIAAAQIECBCICRiAscLFJUCAAAECBAgYgH6AAAECBAgQIBATMABjhYtLgAABAgQIEDAA/QABAgQIECBAICZgAMYKF5cAAQIECBAgYAD6AQIECBAgQIBATMAAjBUuLgECBAgQIEDAAPQDBAgQIECAAIGYgAEYK1xcAgQIECBAgIAB6AcIECBAgAABAjEBAzBWuLgECBAgQIAAAQPQDxAgQIAAAQIEYgIGYKxwcQkQIECAAAECBqAfIECAAAECBAjEBAzAWOHiEiBAgAABAgQMQD9AgAABAgQIEIgJGICxwsUlQIAAAQIECBiAfoAAAQIECBAgEBMwAGOFi0uAAAECBAgQMAD9AAECBAgQIEAgJmAAxgoXlwABAgQIECBgAPoBAgQIECBAgEBMwACMFS4uAQIECBAgQMAA9AMECBAgQIAAgZiAARgrXFwCBAgQIECAgAHoBwgQIECAAAECMQEDMFa4uAQIECBAgAABA9APECBAgAABAgRiAgZgrHBxCRAgQIAAAQIGoB8gQIAAAQIECMQEDMBY4eISIECAAAECBAxAP0CAAAECBAgQiAkYgLHCxSVAgAABAgQIGIB+gAABAgQIECAQEzAAY4WLS4AAAQIECBAwAP0AAQIECBAgQCAmYADGCheXAAECBAgQIGAA+gECBAgQIECAQEzAAIwVLi4BAgQIECBAwAD0AwQIECBAgACBmIABGCtcXAIECBAgQICAAegHCBAgQIAAAQIxAQMwVri4BAgQIECAAAED0A8QIECAAAECBGICBmCscHEJECBAgAABAgagHyBAgAABAgQIxAQMwFjh4hIgQIAAAQIEDEA/QIAAAQIECBCICRiAscLFJUCAAAECBAgYgH6AAAECBAgQIBATMABjhYtLgAABAgQIEDAA/QABAgQIECBAICZgAMYKF5cAAQIECBAgYAD6AQIECBAgQIBATMAAjBUuLgECBAgQIEDAAPQDBAgQIECAAIGYgAEYK1xcAgQIECBAgIAB6AcIECBAgAABAjEBAzBWuLgECBAgQIAAAQPQDxAgQIAAAQIEYgIGYKxwcQkQIECAAAECBqAfIECAAAECBAjEBAzAWOHiEiBAgAABAgQMQD9AgAABAgQIEIgJGICxwsUlQIAAAQIECBiAfoAAAQIECBAgEBMwAGOFi0uAAAECBAgQMAD9AAECBAgQIEAgJmAAxgoXlwABAgQIECBgAPoBAgQIECBAgEBMwACMFS4uAQIECBAgQMAA9AMECBAgQIAAgZiAARgrXFwCBAgQIECAgAHoBwgQIECAAAECMQEDMFa4uAQIECBAgAABA9APECBAgAABAgRiAgZgrHBxCRAgQIAAAQIGoB8gQIAAAQIECMQEDMBY4eISIECAAAECBAxAP0CAAAECBAgQiAkYgLHCxSVAgAABAgQIGIB+gAABAgQIECAQEzAAY4WLS4AAAQIECBAwAP0AAQIECBAgQCAmYADGCheXAAECBAgQIGAA+gECBAgQIECAQEzAAIwVLi4BAgQIECBAwAD0AwQIECBAgACBmIABGCtcXAIECBAgQICAAegHCBAgQIAAAQIxAQMwVri4BAgQIECAAAED0A8QIECAAAECBGICBmCscHEJECBAgAABAgagHyBAgAABAgQIxAQMwFjh4hIgQIAAAQIEDEA/QIAAAQIECBCICRiAscLFJUCAAAECBAgYgH6AAAECBAgQIBATMABjhYtLgAABAgQIEDAA/QABAgQIECBAICZgAMYKF5cAAQIECBAgYAD6AQIECBAgQIBATMAAjBUuLgECBAgQIEDAAPQDBAgQIECAAIGYgAEYK1xcAgQIECBAgIAB6AcIECBAgAABAjEBAzBWuLgECBAgQIAAAQPQDxAgQIAAAQIEYgIGYKxwcQkQIECAAAECBqAfIECAAAECBAjEBAzAWOHiEiBAgAABAgQMQD9AgAABAgQIEIgJGICxwsUlQIAAAQIECBiAfoAAAQIECBAgEBMwAGOFi0uAAAECBAgQMAD9AAECBAgQIEAgJmAAxgoXlwABAgQIECBgAPoBAgQIECBAgEBMwACMFS4uAQIECBAgQMAA9AMECBAgQIAAgZiAARgrXFwCBAgQIECAgAHoBwgQIECAAAECMQEDMFa4uAQIECBAgAABA9APECBAgAABAgRiAgZgrHBxCRAgQIAAAQIGoB8gQIAAAQIECMQEDMBY4eISIECAAAECBAxAP0CAAAECBAgQiAkYgLHCxSVAgAABAgQIGIB+gAABAgQIECAQEzAAY4WLS4AAAQIECBAwAP0AAQIECBAgQCAmYADGCheXAAECBAgQIGAA+gECBAgQIECAQEzAAIwVLi4BAgQIECBAwAD0AwQIECBAgACBmIABGCtcXAIECBAgQICAAegHCBAgQIAAAQIxAQMwVri4BAgQIECAAAED0A8QIECAAAECBGICBmCscHEJECBAgAABAgagHyBAgAABAgQIxAQMwFjh4hIgQIAAAQIEDEA/QIAAAQIECBCICRiAscLFJUCAAAECBAgYgH6AAAECBAgQIBATMABjhYtLgAABAgQIEDAA/QABAgQIECBAICZgAMYKF5cAAQIECBAgYAD6AQIECBAgQIBATMAAjBUuLgECBAgQIEDAAPQDBAgQIECAAIGYgAEYK1xcAgQIECBAgIAB6AcIECBAgAABAjEBAzBWuLgECBAgQIAAAQPQDxAgQIAAAQIEYgIGYKxwcQkQIECAAAECBqAfIECAAAECBAjEBAzAWOHiEiBAgAABAgQMQD9AgAABAgQIEIgJGICxwsUlQIAAAQIECBiAfoAAAQIECBAgEBMwAGOFi0uAAAECBAgQMAD9AAECBAgQIEAgJmAAxgoXlwABAgQIECBgAPoBAgQIECBAgEBMwACMFS4uAQIECBAgQMAA9AMECBAgQIAAgZiAARgrXFwCBAgQIECAgAHoBwgQIECAAAECMQEDMFa4uAQIECBAgAABA9APECBAgAABAgRiAgZgrHBxCRAgQIAAAQIGoB8gQIAAAQIECMQEDMBY4eISIECAAAECBAxAP0CAAAECBAgQiAkYgLHCxSVAgAABAgQIGIB+gAABAgQIECAQEzAAY4WLS4AAAQIECBAwAP0AAQIECBAgQCAmYADGCheXAAECBAgQIGAA+gECBAgQIECAQEzAAIwVLi4BAgQIECBAwAD0AwQIECBAgACBmIABGCtcXAIECBAgQICAAegHCBAgQIAAAQIxAQMwVri4BAgQIECAAAED0A8QIECAAAECBGICBmCscHEJECBAgAABAgagHyBAgAABAgQIxAQMwFjh4hIgQIAAAQIEDEA/QIAAAQIECBCICRiAscLFJUCAAAECBAgYgH6AAAECBAgQIBATMABjhYtLgAABAgQIEDAA/QABAgQIECBAICZgAMYKF5cAAQIECBAgYAD6AQIECBAgQIBATMAAjBUuLgECBAgQIEDAAPQDBAgQIECAAIGYgAEYK1xcAgQIECBAgIAB6AcIECBAgAABAjEBAzBWuLgECBAgQIAAAQPQDxAgQIAAAQIEYgIGYKxwcQkQIECAAAECBqAfIECAAAECBAjEBAzAWOHiEiBAgAABAgQMQD9AgAABAgQIEIgJGICxwsUlQIAAAQIECBiAfoAAAQIECBAgEBMwAGOFi0uAAAECBAgQMAD9AAECBAgQIEAgJmAAxgoXlwABAgQIECBgAPoBAgQIECBAgEBMwACMFS4uAQIECBAgQMAA9AMECBAgQIAAgZiAARgrXFwCBAgQIECAgAHoBwgQIECAAAECMQEDMFa4uAQIECBAgAABA9APECBAgAABAgRiAgZgrHBxCRAgQIAAAQIGoB8gQIAAAQIECMQEDMBY4eISIECAAAECBAxAP0CAAAECBAgQiAkYgLHCxSVAgAABAgQIGIB+gAABAgQIECAQEzAAY4WLS4AAAQIECBAwAP0AAQIECBAgQCAmYADGCheXAAECBAgQIGAA+gECBAgQIECAQEzAAIwVLi4BAgQIECBAwAD0AwQIECBAgACBmIABGCtcXAIECBAgQICAAegHCBAgQIAAAQIxAQMwVri4BAgQIECAAAED0A8QIECAAAECBGICBmCscHEJECBAgAABAgagHyBAgAABAgQIxAQMwFjh4hIgQIAAAQIEDEA/QIAAAQIECBCICRiAscLFJUCAAAECBAgYgH6AAAECBAgQIBATMABjhYtLgAABAgQIEDAA/QABAgQIECBAICZgAMYKF5cAAQIECBAgYAD6AQIECBAgQIBATMAAjBUuLgECBAgQIEDAAPQDBAgQIECAAIGYgAEYK1xcAgQIECBAgIAB6AcIECBAgAABAjEBAzBWuLgECBAgQIAAAQPQDxAgQIAAAQIEYgIGYKxwcQkQIEB6uwAFAAAAwElEQVSAAAECBqAfIECAAAECBAjEBAzAWOHiEiBAgAABAgQMQD9AgAABAgQIEIgJGICxwsUlQIAAAQIECBiAfoAAAQIECBAgEBMwAGOFi0uAAAECBAgQMAD9AAECBAgQIEAgJmAAxgoXlwABAgQIECBgAPoBAgQIECBAgEBMwACMFS4uAQIECBAgQMAA9AMECBAgQIAAgZiAARgrXFwCBAgQIECAgAHoBwgQIECAAAECMQEDMFa4uAQIECBAgACBB3r2AoFVBl6GAAAAAElFTkSuQmCC"
-
 negative_keywords = [
     # Quality & Style
     "low quality",
@@ -697,7 +695,7 @@ def merge_system_message(data):
                     else:
                         text += f"{k}: {v}\n"
                 text += "<|end|>\n"
-    return text
+    return text.trim()
 
 
 def set_system_message(
@@ -814,7 +812,8 @@ def answer(history: list):
     for h in history:
 
         if h["role"] == "assistant":
-            messages.append(end)
+            if messages[-1] != end:
+                messages.append(end)
             messages.append(ai)
         elif h["role"] == "user":
             messages.append(human)
@@ -831,7 +830,7 @@ def answer(history: list):
             for p in ps:
                 ext = p.split(".")[-1]
                 if ext in common_audio_formats:
-                    audio, samplerate = sf.read(audio_url)
+                    audio, samplerate = sf.read(p)
                     snd_list.append((audio, samplerate))
                     messages.append(
                         snd.replace("X", str(len(snd_list)))
@@ -1595,7 +1594,7 @@ def train(
 def create_vectorizer(texts):
     from sklearn.feature_extraction.text import TfidfVectorizer
 
-    vectorizer = TfidfVectorizer()
+    vectorizer = TfidfVectorizer(token_pattern=r'(?u)\b\w+\b')
     vectorizer.fit(texts)
     return vectorizer
 
@@ -1703,13 +1702,13 @@ def extract_text_features(text, vectorizer=None):
     from sklearn.feature_extraction.text import TfidfVectorizer
 
     try:
-        vectorizer = vectorizer or TfidfVectorizer()
+        vectorizer = vectorizer or TfidfVectorizer(token_pattern=r"(?u)\b\w+\b")
         tfidf_matrix = vectorizer.fit_transform(
             [text]
-        )  # Input must be a list of strings
+        )
         features = (
             tfidf_matrix.toarray().flatten().astype(_np.float32)
-        )  # convert to float 32 for cuml
+        )
         return features
 
     except Exception as e:
@@ -2007,32 +2006,15 @@ def predict_linear_regression(X_new, model_path):
         print(f"Error during prediction: {e}")
         return None
 
-
 def features_to_audio(
     predicted_features,
-    sr=None,
-    n_mfcc=None,
-    n_mels=None,
-    n_fft=None,
+    sr=32000,
+    n_mfcc=20,
+    n_mels=80,
+    n_fft=2048,
     hop_length=512,
 ):
     import librosa
-
-    sr = sr if sr is not None else 32000
-    n_mfcc = n_mfcc if n_mfcc is not None else 20
-    n_mels = n_mels if n_mels is not None else 80
-    n_fft = n_fft if n_fft is not None else 2048
-
-    if (
-        sr is None
-        or n_mfcc is None
-        or n_mels is None
-        or n_fft is None
-    ):
-        print(
-            "Error: Audio parameters (sr, n_mfcc, n_mels, n_fft) are not provided and global defaults are not set."
-        )
-        return None
 
     expected_freq_bins = n_fft // 2 + 1
 
@@ -2041,102 +2023,54 @@ def features_to_audio(
         remainder = predicted_features.size % n_mfcc
         if remainder != 0:
             padding_needed = n_mfcc - remainder
-            print(
-                f"Padding with {padding_needed} zeros to make the predicted features ({predicted_features.size}) a multiple of n_mfcc ({n_mfcc})."
-            )
-            predicted_features = _np.pad(
-                predicted_features,
-                (0, padding_needed),
-                mode="constant",
-                constant_values=0,
-            )
+            print(f"Padding with {padding_needed} zeros to make the predicted features ({predicted_features.size}) a multiple of n_mfcc ({n_mfcc}).")
+            predicted_features = _np.pad(predicted_features, (0, padding_needed), mode='constant', constant_values=0)
 
         mfccs = predicted_features.reshape((n_mfcc, -1))
 
         if mfccs.shape[1] == 0:
-            print(
-                "Error: Reshaped MFCCs have zero frames. Cannot proceed with audio reconstruction."
-            )
+            print("Error: Reshaped MFCCs have zero frames. Cannot proceed with audio reconstruction.")
             return None
 
-        mel_spectrogram_db = librosa.feature.inverse.mfcc_to_mel(
-            mfccs, n_mels=n_mels
-        )
+        mel_spectrogram_db = librosa.feature.inverse.mfcc_to_mel(mfccs, n_mels=n_mels)
 
         mel_spectrogram = librosa.db_to_amplitude(mel_spectrogram_db)
-        mel_spectrogram = _np.nan_to_num(
-            mel_spectrogram,
-            nan=0.0,
-            posinf=_np.finfo(_np.float16).max,
-            neginf=_np.finfo(_np.float16).min,
-        )
+        mel_spectrogram = _np.nan_to_num(mel_spectrogram, nan=0.0, posinf=_np.finfo(_np.float16).max, neginf=_np.finfo(_np.float16).min)
         mel_spectrogram = _np.maximum(0, mel_spectrogram)
 
-        magnitude_spectrogram = librosa.feature.inverse.mel_to_stft(
-            M=mel_spectrogram, sr=sr, n_fft=n_fft
-        )
-        magnitude_spectrogram = _np.nan_to_num(
-            magnitude_spectrogram,
-            nan=0.0,
-            posinf=_np.finfo(_np.float16).max,
-            neginf=_np.finfo(_np.float16).min,
-        )
+        magnitude_spectrogram = librosa.feature.inverse.mel_to_stft(M = mel_spectrogram, sr = sr, n_fft = n_fft)
+        magnitude_spectrogram = _np.nan_to_num(magnitude_spectrogram, nan=0.0, posinf=_np.finfo(_np.float16).max, neginf=_np.finfo(_np.float16).min)
         magnitude_spectrogram = _np.maximum(0, magnitude_spectrogram)
-        magnitude_spectrogram = _np.nan_to_num(
-            magnitude_spectrogram,
-            nan=0.0,
-            posinf=_np.finfo(_np.float16).max,
-            neginf=_np.finfo(_np.float16).min,
-        )
+        magnitude_spectrogram = _np.nan_to_num(magnitude_spectrogram, nan=0.0, posinf=_np.finfo(_np.float16).max, neginf=_np.finfo(_np.float16).min)
 
         if magnitude_spectrogram.shape[0] != expected_freq_bins:
-            print(
-                f"Error: Magnitude spectrogram has incorrect frequency bin count ({magnitude_spectrogram.shape[0]}) for n_fft ({n_fft}).\nExpected {expected_freq_bins}.\nCannot perform Griffin-Lim."
-            )
+            print(f"Error: Magnitude spectrogram has incorrect frequency bin count ({magnitude_spectrogram.shape[0]}) for n_fft ({n_fft}).\nExpected {expected_freq_bins}.\nCannot perform Griffin-Lim.")
             return None
 
         if magnitude_spectrogram.shape[1] == 0:
-            print(
-                "Error: Magnitude spectrogram has zero frames. Skipping Griffin-Lim."
-            )
+            print("Error: Magnitude spectrogram has zero frames. Skipping Griffin-Lim.")
             return None
 
         griffin_lim_iterations = [12, 32]
 
         for n_iter in griffin_lim_iterations:
             try:
-                audio_waveform = librosa.griffinlim(
-                    magnitude_spectrogram,
-                    n_fft=n_fft,
-                    hop_length=hop_length,
-                    n_iter=n_iter,
-                )
+                audio_waveform = librosa.griffinlim(magnitude_spectrogram, n_fft=n_fft, hop_length=hop_length, n_iter=n_iter)
 
                 if audio_waveform.size > 0:
                     print(f"Griffin-Lim finished {n_iter} iterations")
 
-                    audio_waveform = _np.nan_to_num(
-                        audio_waveform,
-                        nan=0.0,
-                        posinf=_np.finfo(_np.float16).max,
-                        neginf=_np.finfo(_np.float16).min,
-                    )
-                    audio_waveform = _np.clip(
-                        audio_waveform, -1.0, 1.0
-                    )
+                    audio_waveform = _np.nan_to_num( audio_waveform, nan=0.0, posinf=_np.finfo(_np.float16).max, neginf=_np.finfo(_np.float16).min )                        
+                    audio_waveform = _np.clip(audio_waveform, -1.0, 1.0)
 
                     if not _np.all(_np.isfinite(audio_waveform)):
-                        print(
-                            "Warning: Audio waveform contains non-finite values after clipping.\nThis is unexpected.\nReturning None."
-                        )
-                        return None
+                         print("Warning: Audio waveform contains non-finite values after clipping.\nThis is unexpected.\nReturning None.")
+                         return None
 
                     return audio_waveform
 
                 else:
-                    print(
-                        f"Griffin-Lim with n_iter={n_iter} produced an empty output."
-                    )
+                    print(f"Griffin-Lim with n_iter={n_iter} produced an empty output.")
 
             except Exception as e:
                 print(f"Griffin-Lim with n_iter={n_iter} failed!")
@@ -2244,71 +2178,44 @@ def predict_audio(model, audio_file):
         return None
 
 
-def features_to_image(predicted_features):
+def features_to_image(predicted_features, image_shape=(1024, 1024, 3)):
     import cv2
-
-    image_shape = (1024, 1024, 3)
 
     try:
         height, width, channels = image_shape
         hist_size = 256 * 3  # Color histograms (B, G, R)
         lbp_size = height * width  # LBP features
-        edge_size = height * width  # Canny edge features
+        edge_size = height * width # Canny edge features
 
-        # Split the predicted features
         color_hist = predicted_features[:hist_size].reshape(3, 256)
-        lbp_features = predicted_features[
-            hist_size : hist_size + lbp_size
-        ].reshape(height, width)
-        edge_features = predicted_features[
-            hist_size + lbp_size :
-        ].reshape(height, width)
+        lbp_features = predicted_features[hist_size:hist_size + lbp_size].reshape(height, width)
+        edge_features = predicted_features[hist_size + lbp_size:].reshape(height, width)
 
-        # Create a blank image
         reconstructed_image = np.zeros(image_shape, dtype=np.uint8)
 
-        # Reconstruct color channels (simplified)
         for c in range(channels):
-            for i in range(256):
-                if c == 0:
-                    reconstructed_image[:, :, 0] += np.uint8(
-                        color_hist[0][i] / np.max(color_hist[0]) * 255
-                    )
-                elif c == 1:
-                    reconstructed_image[:, :, 1] += np.uint8(
-                        color_hist[1][i] / np.max(color_hist[1]) * 255
-                    )
-                else:
-                    reconstructed_image[:, :, 2] += np.uint8(
-                        color_hist[2][i] / np.max(color_hist[2]) * 255
-                    )
+          for i in range(256):
+            if c == 0:
+              reconstructed_image[:,:,0] += np.uint8(color_hist[0][i]/np.max(color_hist[0]) * 255)
+            elif c == 1:
+              reconstructed_image[:,:,1] += np.uint8(color_hist[1][i]/np.max(color_hist[1]) * 255)
+            else:
+              reconstructed_image[:,:,2] += np.uint8(color_hist[2][i]/np.max(color_hist[2]) * 255)
 
-        # Reconstruct LBP and Edge (simplified)
-        lbp_scaled = cv2.normalize(
-            lbp_features, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U
-        )
-        edge_scaled = cv2.normalize(
-            edge_features, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U
-        )
+        lbp_scaled = cv2.normalize(lbp_features, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
+        edge_scaled = cv2.normalize(edge_features, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
 
-        reconstructed_image_gray = cv2.addWeighted(
-            lbp_scaled, 0.5, edge_scaled, 0.5, 0
-        )
-        reconstructed_image = cv2.cvtColor(
-            reconstructed_image, cv2.COLOR_BGR2GRAY
-        )
-        reconstructed_image = cv2.addWeighted(
-            reconstructed_image, 0.5, reconstructed_image_gray, 0.5, 0
-        )
-        reconstructed_image = cv2.cvtColor(
-            reconstructed_image, cv2.COLOR_GRAY2BGR
-        )
+        reconstructed_image_gray = cv2.addWeighted(lbp_scaled, 0.5, edge_scaled, 0.5, 0)
+        reconstructed_image = cv2.cvtColor(reconstructed_image, cv2.COLOR_BGR2GRAY)
+        reconstructed_image = cv2.addWeighted(reconstructed_image, 0.5, reconstructed_image_gray, 0.5, 0)
+        reconstructed_image = cv2.cvtColor(reconstructed_image, cv2.COLOR_GRAY2BGR)
 
         return reconstructed_image
 
     except Exception as e:
         print(f"Error generating image from features: {e}")
         return None
+
 
 
 def features_to_video(predicted_features, frame_interval=10, fps=24):
@@ -3096,8 +3003,8 @@ def init_upscale():
 def upscale(
     path,
     upscale_factor: int = 2,
-    prompt: str = "Reasonable, Accurate, Natural, Real, Convincing.",
-    negative_prompt: str = "Fake, Polished, Shiny, Blurry, Painted, Anime.",
+    prompt: str = _base_prompt_,
+    negative_prompt: str = _negative_prompt_,
     seed: int = None,
     controlnet_scale: float = 0.5,
     controlnet_decay: float = 0.8,
@@ -3337,10 +3244,7 @@ def simple_text(prompt):
 
 def exist(path):
     path = os.path.abspath(os.path.expanduser(path.strip()))
-    ret = run(f'ls -1 "{ path }"', silent=True)
-    if not ret:
-        return False
-    return True
+    return os.path.exists(path)
 
 
 def add_path(path):
@@ -3971,7 +3875,7 @@ def cuda_version():
         output = result.stdout
         match = re.search(r"Build cuda_([\d\.]+)", output)
         if match:
-            cuda_version = match.group(1)
+            cuda_version = match.group(1).strip('.')
             return cuda_version
         else:
             return False
@@ -4967,36 +4871,49 @@ def init_pretrained_model(task: str, turbo: bool = False):
             AutoTokenizer,
         )
 
-        print("Ensuring model python files are downloaded...")
-        snapshot_dir = snapshot_download(
+        package_name = "phi4_temp_package"
+
+        print(f"Downloading source files for {tasks[task]}...")
+        snapshot_dir = Path(snapshot_download(
             repo_id=tasks[task],
             allow_patterns=["*.py", "*.json"],
+        ))
+        print(f"Source files downloaded to: {snapshot_dir}")
+
+        setup_py_content = f"""
+from setuptools import setup, find_packages
+
+setup(
+    name='{package_name}',
+    version='0.0.1',
+    packages=find_packages(),
+    author='Dynamic Patcher',
+    author_email='patcher@example.com',
+    description='A dynamically generated package for the Phi-4 model code.',
+)
+        """
+        (snapshot_dir / "setup.py").write_text(setup_py_content)
+        print("Dynamically created setup.py file.")
+
+        print(f"Installing '{package_name}' from local source...")
+        subprocess.check_call(
+            [sys.executable, "-m", "pip", "install", "-e", str(snapshot_dir)]
         )
-        print(f"Model files located at: {snapshot_dir}")
+        print(f"Successfully installed '{package_name}'.")
 
-        sys.path.append(str(snapshot_dir))
+        from transformers import AutoConfig
+        config = AutoConfig.from_pretrained(str(snapshot_dir))
+        module_name, class_name = config.auto_map["AutoModelForCausalLM"].rsplit(".", 1)
 
-        config = AutoConfig.from_pretrained(
-            snapshot_dir,
-            trust_remote_code=True,
-        )
-        module_name, class_name = config.auto_map[
-            "AutoModelForCausalLM"
-        ].rsplit(".", 1)
-
+        print(f"Importing module '{module_name}'...")
         module = importlib.import_module(module_name)
         cls = getattr(module, class_name)
+
         if not hasattr(cls, "prepare_inputs_for_generation"):
-            cls.prepare_inputs_for_generation = (
-                prepare_inputs_for_generation
-            )
-            print(
-                f"✅ Successfully patched '{class_name}' with 'prepare_inputs_for_generation'."
-            )
+            cls.prepare_inputs_for_generation = prepare_inputs_for_generation
+            print(f"✅✅✅ Successfully patched '{class_name}' with 'prepare_inputs_for_generation'.")
         else:
-            print(
-                f"✅ Method 'prepare_inputs_for_generation' already exists on '{class_name}'. No patch needed."
-            )
+            print(f"✅ Method 'prepare_inputs_for_generation' already exists on '{class_name}'. No patch needed.")
 
         tok = AutoTokenizer.from_pretrained(tasks[task])
         prc = AutoProcessor.from_pretrained(
@@ -5018,6 +4935,7 @@ def init_pretrained_model(task: str, turbo: bool = False):
             repetition_penalty=1.2,
             no_repeat_ngram_size=3,
         )
+
     elif task in ["summary"]:
 
         from transformers import (
