@@ -3610,6 +3610,23 @@ def summary(text, max_words=50):
     else:
         return _summarize(text, is_chunk=False)
 
+def prepare_inputs_for_generation(
+    self,
+    input_ids,
+    past_key_values=None,
+    attention_mask=None,
+    **kwargs,
+):
+    if past_key_values is not None:
+        input_ids = input_ids[:, -1:]
+
+    return {
+        "input_ids": input_ids,
+        "past_key_values": past_key_values,
+        "attention_mask": attention_mask,
+        **kwargs,
+    }
+
 def init_pretrained_model(task:str,turbo:bool=False):
 
     free()
@@ -3681,7 +3698,14 @@ def init_pretrained_model(task:str,turbo:bool=False):
 
     elif task in ["answer"]:
 
-        from transformers import AutoProcessor, AutoModelForCausalLM, AutoTokenizer
+        import torch
+        from transformers import AutoConfig, AutoProcessor, AutoModelForCausalLM, AutoTokenizer
+
+        config = AutoConfig.from_pretrained(tasks[task], trust_remote_code=True)
+        module_name, class_name = config.auto_map["AutoModelForCausalLM"].rsplit(".", 1)
+        module = importlib.import_module(module_name)
+        cls = getattr(module, class_name)
+        cls.prepare_inputs_for_generation = prepare_inputs_for_generation
 
         tok = AutoTokenizer.from_pretrained(tasks[task])
         prc = AutoProcessor.from_pretrained(tasks[task], trust_remote_code=True)
