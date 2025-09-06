@@ -1,5 +1,7 @@
 import unittest
+
 from definers import simple_text
+
 
 class TestSimpleText(unittest.TestCase):
 
@@ -44,7 +46,9 @@ class TestSimpleText(unittest.TestCase):
         self.assertEqual(simple_text(prompt), expected)
 
     def test_complex_string(self):
-        prompt = "  Here IS --- a COMPLEX,,, \t text!!\n\nTo test...  "
+        prompt = (
+            "  Here IS --- a COMPLEX,,, \t text!!\n\nTo test...  "
+        )
         expected = "here is-a complex text\nto test"
         self.assertEqual(simple_text(prompt), expected)
 
@@ -53,5 +57,6 @@ class TestSimpleText(unittest.TestCase):
         expected = "this is a clean string"
         self.assertEqual(simple_text(prompt), expected)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

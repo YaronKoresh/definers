@@ -1,17 +1,26 @@
 import unittest
+
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
-from definers import unvectorize, create_vectorizer, vectorize
+
+from definers import create_vectorizer, unvectorize, vectorize
+
 
 class TestUnvectorize(unittest.TestCase):
 
     def setUp(self):
-        self.texts = ["alpha bravo charlie", "delta echo foxtrot", "alpha foxtrot golf"]
+        self.texts = [
+            "alpha bravo charlie",
+            "delta echo foxtrot",
+            "alpha foxtrot golf",
+        ]
         self.vectorizer = create_vectorizer(self.texts)
         self.vectorized_data = vectorize(self.vectorizer, self.texts)
 
     def test_unvectorize_basic(self):
-        unvectorized_texts = unvectorize(self.vectorizer, self.vectorized_data)
+        unvectorized_texts = unvectorize(
+            self.vectorizer, self.vectorized_data
+        )
         self.assertIsInstance(unvectorized_texts, list)
         self.assertEqual(len(unvectorized_texts), 3)
         self.assertIn("alpha", unvectorized_texts[0])
@@ -33,9 +42,16 @@ class TestUnvectorize(unittest.TestCase):
 
     def test_unvectorize_single_document(self):
         single_vector = vectorize(self.vectorizer, ["alpha golf"])
-        unvectorized_text = unvectorize(self.vectorizer, single_vector)
+        unvectorized_text = unvectorize(
+            self.vectorizer, single_vector
+        )
         self.assertEqual(len(unvectorized_text), 1)
-        self.assertTrue(all(word in unvectorized_text[0] for word in ["alpha", "golf"]))
+        self.assertTrue(
+            all(
+                word in unvectorized_text[0]
+                for word in ["alpha", "golf"]
+            )
+        )
 
     def test_unvectorize_zeros_vector(self):
         zeros_vector = np.zeros((1, len(self.vectorizer.vocabulary_)))
@@ -43,5 +59,6 @@ class TestUnvectorize(unittest.TestCase):
         self.assertEqual(len(unvectorized_text), 1)
         self.assertEqual(unvectorized_text[0], "")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

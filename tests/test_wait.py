@@ -1,9 +1,11 @@
-import unittest
-from unittest.mock import Mock
 import threading
 import time
+import unittest
 from queue import Queue
-from definers import wait, thread
+from unittest.mock import Mock
+
+from definers import thread, wait
+
 
 class TestWait(unittest.TestCase):
 
@@ -47,12 +49,15 @@ class TestWait(unittest.TestCase):
         self.assertFalse(t2.is_alive())
         self.assertEqual(q1.get_nowait(), "done")
         self.assertEqual(q2.get_nowait(), "done")
-        
+
     def test_wait_no_threads(self):
         try:
             wait()
         except Exception as e:
-            self.fail(f"wait() raised an exception with no arguments: {e}")
+            self.fail(
+                f"wait() raised an exception with no arguments: {e}"
+            )
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

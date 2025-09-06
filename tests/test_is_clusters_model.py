@@ -1,6 +1,8 @@
 import unittest
 from unittest.mock import MagicMock
+
 from definers import is_clusters_model
+
 
 class TestIsClustersModel(unittest.TestCase):
 
@@ -11,8 +13,8 @@ class TestIsClustersModel(unittest.TestCase):
 
     def test_returns_false_for_model_without_cluster_centers(self):
         mock_model = MagicMock()
-        if hasattr(mock_model, 'cluster_centers_'):
-            delattr(mock_model, 'cluster_centers_')
+        if hasattr(mock_model, "cluster_centers_"):
+            delattr(mock_model, "cluster_centers_")
         self.assertFalse(is_clusters_model(mock_model))
 
     def test_returns_false_for_non_model_object_like_string(self):
@@ -26,5 +28,6 @@ class TestIsClustersModel(unittest.TestCase):
         mock_object.some_other_attribute = "value"
         self.assertFalse(is_clusters_model(mock_object))
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()
