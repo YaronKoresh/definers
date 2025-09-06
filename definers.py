@@ -3703,7 +3703,7 @@ def init_pretrained_model(task:str,turbo:bool=False):
 
         config = AutoConfig.from_pretrained(tasks[task], trust_remote_code=True)
         module_name, class_name = config.auto_map["AutoModelForCausalLM"].rsplit(".", 1)
-        model_cache_path = Path(TRANSFORMERS_CACHE) / f"models--{model_name.replace('/', '--')}"
+        model_cache_path = Path(TRANSFORMERS_CACHE) / f"models--{module_name.replace('/', '--')}"
         snapshot_dir = next(model_cache_path.glob("snapshots/*"))
         sys.path.append(str(snapshot_dir))
         module = importlib.import_module(module_name)
