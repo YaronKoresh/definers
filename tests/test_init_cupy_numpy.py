@@ -6,14 +6,14 @@ from unittest.mock import patch, MagicMock
 if 'cupy' in sys.modules:
     del sys.modules['cupy']
 
-from definers import init_cupy_numpy
+from definers import _init_cupy_numpy
 
 class TestInitCupyNumpy(unittest.TestCase):
 
     @patch.dict('sys.modules', {'cupy': None})
     def test_fallback_to_numpy_when_cupy_not_installed(self):
         import numpy
-        np, _np = init_cupy_numpy()
+        np, _np = _init_cupy_numpy()
         self.assertIs(np, numpy)
         self.assertIs(_np, numpy)
 
@@ -25,18 +25,18 @@ class TestInitCupyNumpy(unittest.TestCase):
         mock_cupy.float64 = "float64_val"
         mock_cupy.int64 = "int64_val"
         with patch.dict('sys.modules', {'cupy': mock_cupy}):
-            np, _np = init_cupy_numpy()
+            np, _np = _init_cupy_numpy()
             self.assertIs(np, mock_cupy)
 
     def test_float_attribute_is_set_on_numpy(self):
         import numpy
-        np, _ = init_cupy_numpy()
+        np, _ = _init_cupy_numpy()
         self.assertTrue(hasattr(np, 'float'))
         self.assertEqual(np.float, np.float64)
 
     def test_int_attribute_is_set_on_numpy(self):
         import numpy
-        np, _ = init_cupy_numpy()
+        np, _ = _init_cupy_numpy()
         self.assertTrue(hasattr(np, 'int'))
         self.assertEqual(np.int, np.int64)
 
@@ -48,7 +48,7 @@ class TestInitCupyNumpy(unittest.TestCase):
         # Simulate that 'float' is not present
         del mock_cupy.float
         with patch.dict('sys.modules', {'cupy': mock_cupy}):
-             np, _ = init_cupy_numpy()
+             np, _ = _init_cupy_numpy()
              self.assertTrue(hasattr(np, 'float'))
              self.assertEqual(np.float, "float64_val")
 
@@ -60,12 +60,12 @@ class TestInitCupyNumpy(unittest.TestCase):
         # Simulate that 'int' is not present
         del mock_cupy.int
         with patch.dict('sys.modules', {'cupy': mock_cupy}):
-            np, _ = init_cupy_numpy()
+            np, _ = _init_cupy_numpy()
             self.assertTrue(hasattr(np, 'int'))
             self.assertEqual(np.int, "int64_val")
 
     def test_returns_two_modules(self):
-        np, _np = init_cupy_numpy()
+        np, _np = _init_cupy_numpy()
         self.assertTrue(hasattr(np, '__version__'))
         self.assertTrue(hasattr(_np, '__version__'))
 

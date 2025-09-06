@@ -1,6 +1,6 @@
 import unittest
 from unittest.mock import patch, MagicMock
-from definers import catch, init_logger
+from definers import catch, _init_logger
 
 class TestCatch(unittest.TestCase):
 
@@ -22,7 +22,7 @@ class TestCatch(unittest.TestCase):
             mock_logger_exception.assert_called_once_with(None)
 
     def test_catch_integration_with_real_logger(self):
-        logger = init_logger()
+        logger = _init_logger()
         with patch.object(logger, 'exception') as mock_method:
             test_exception = RuntimeError("Integration test")
             with patch('definers.logger', logger):
