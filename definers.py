@@ -2583,13 +2583,18 @@ def write_on_image(
         if not text_block:
             return
 
-        lines = text_block.strip().split('\n')
+        lines = text_block.strip().split("\n")
         num_lines = len(lines)
-        
-        font_size = min(math.ceil(w / 12), math.ceil(h / (num_lines * 4)))
+
+        font_size = min(
+            math.ceil(w / 12), math.ceil(h / (num_lines * 4))
+        )
         font = ImageFont.truetype("Alef-Bold.ttf", font_size)
 
-        line_heights = [draw.textbbox((0, 0), line, font=font)[3] for line in lines]
+        line_heights = [
+            draw.textbbox((0, 0), line, font=font)[3]
+            for line in lines
+        ]
         total_text_height = sum(line_heights) + (num_lines - 1) * 4
 
         if vertical_position == "top":
@@ -2598,22 +2603,34 @@ def write_on_image(
             y = h / 2 - total_text_height / 2
         else:
             y = h * 0.85 - total_text_height / 2
-        
+
         for i, line in enumerate(lines):
             bbox = draw.textbbox((0, 0), line, font=font)
             line_width = bbox[2] - bbox[0]
             x = (w - line_width) / 2
-            
+
             stroke_width = math.ceil(font_size / 20)
-            
+
             if vertical_position == "top":
                 fill_color, stroke_color = (255, 255, 255), (0, 0, 0)
             elif vertical_position == "middle":
-                fill_color, stroke_color = (255, 255, 255), (64, 64, 64)
+                fill_color, stroke_color = (255, 255, 255), (
+                    64,
+                    64,
+                    64,
+                )
             else:
                 fill_color, stroke_color = (0, 0, 0), (255, 255, 255)
 
-            draw.text((x, y), line, font=font, fill=fill_color, stroke_width=stroke_width, stroke_fill=stroke_color, spacing=4)
+            draw.text(
+                (x, y),
+                line,
+                font=font,
+                fill=fill_color,
+                stroke_width=stroke_width,
+                stroke_fill=stroke_color,
+                spacing=4,
+            )
             y += line_heights[i] + 4
 
     draw_text_block(top_title, "top")
@@ -4959,7 +4976,10 @@ def init_pretrained_model(task: str, turbo: bool = False):
 
         sys.path.append(str(snapshot_dir))
 
-        config = AutoConfig.from_pretrained(snapshot_dir, trust_remote_code=True,)
+        config = AutoConfig.from_pretrained(
+            snapshot_dir,
+            trust_remote_code=True,
+        )
         module_name, class_name = config.auto_map[
             "AutoModelForCausalLM"
         ].rsplit(".", 1)

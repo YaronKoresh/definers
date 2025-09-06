@@ -4,6 +4,7 @@ import torch
 
 from definers import tensor_length
 
+
 class TestTensorLength(unittest.TestCase):
 
     def test_scalar_tensor(self):
