@@ -3699,13 +3699,20 @@ def init_pretrained_model(task:str,turbo:bool=False):
     elif task in ["answer"]:
 
         import torch
-        from transformers import AutoConfig, AutoProcessor, AutoModelForCausalLM, AutoTokenizer
+        from transformers import TRANSFORMERS_CACHE, AutoConfig, AutoProcessor, AutoModelForCausalLM, AutoTokenizer
 
         config = AutoConfig.from_pretrained(tasks[task], trust_remote_code=True)
         module_name, class_name = config.auto_map["AutoModelForCausalLM"].rsplit(".", 1)
+        model_cache_path = Path(TRANSFORMERS_CACHE) / f"models--{model_name.replace('/', '--')}"
+        snapshot_dir = next(model_cache_path.glob("snapshots/*"))
+        sys.path.append(str(snapshot_dir))
         module = importlib.import_module(module_name)
         cls = getattr(module, class_name)
-        cls.prepare_inputs_for_generation = prepare_inputs_for_generation
+        if not hasattr(cls, "prepare_inputs_for_generation"):
+            cls.prepare_inputs_for_generation = prepare_inputs_for_generation
+            print(f"✅ Successfully patched '{class_name}' with 'prepare_inputs_for_generation'.")
+        else:
+            print(f"✅ Method 'prepare_inputs_for_generation' already exists on '{class_name}'. No patch needed.")
 
         tok = AutoTokenizer.from_pretrained(tasks[task])
         prc = AutoProcessor.from_pretrained(tasks[task], trust_remote_code=True)
