@@ -3716,8 +3716,7 @@ def init_pretrained_model(task:str,turbo:bool=False):
             _attn_implementation="eager",
         ).to(device())
 
-        model = BeamSearch(mod, tok, prc, device(), length_penalty=0.1)
-
+        model = BeamSearch(mod, tok, prc, device(), length_penalty=2.0, repetition_penalty=1.2, no_repeat_ngram_size=3)
     elif task in ["summary"]:
 
         from transformers import T5ForConditionalGeneration, T5Tokenizer
