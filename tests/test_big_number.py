@@ -1,5 +1,7 @@
 import unittest
+
 from definers import big_number
+
 
 class TestBigNumber(unittest.TestCase):
 
@@ -21,5 +23,6 @@ class TestBigNumber(unittest.TestCase):
     def test_return_type(self):
         self.assertIsInstance(big_number(), int)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

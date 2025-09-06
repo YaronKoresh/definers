@@ -1,6 +1,9 @@
 import unittest
+
 import torch
+
 from definers import tensor_length
+
 
 class TestTensorLength(unittest.TestCase):
 
@@ -28,5 +31,6 @@ class TestTensorLength(unittest.TestCase):
         tensor = torch.randn(100, 100)
         self.assertEqual(tensor_length(tensor), 10000)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

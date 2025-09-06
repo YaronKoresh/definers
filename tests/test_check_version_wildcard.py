@@ -1,5 +1,7 @@
 import unittest
+
 from definers import check_version_wildcard
+
 
 class TestCheckVersionWildcard(unittest.TestCase):
 
@@ -41,9 +43,16 @@ class TestCheckVersionWildcard(unittest.TestCase):
         self.assertFalse(check_version_wildcard("", "1.0.0"))
 
     def test_with_text_and_special_chars(self):
-        self.assertTrue(check_version_wildcard("2.5.0-alpha", "2.5.0-alpha"))
-        self.assertTrue(check_version_wildcard("2.5.*-alpha", "2.5.0-alpha"))
-        self.assertFalse(check_version_wildcard("2.5.*-beta", "2.5.0-alpha"))
+        self.assertTrue(
+            check_version_wildcard("2.5.0-alpha", "2.5.0-alpha")
+        )
+        self.assertTrue(
+            check_version_wildcard("2.5.*-alpha", "2.5.0-alpha")
+        )
+        self.assertFalse(
+            check_version_wildcard("2.5.*-beta", "2.5.0-alpha")
+        )
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

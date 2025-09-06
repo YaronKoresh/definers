@@ -1,12 +1,14 @@
 import unittest
+
 from definers import merge_system_message
+
 
 class TestMergeSystemMessage(unittest.TestCase):
 
     def test_simple_string_values(self):
         data = {
             "message1": "Hello World",
-            "message2": "This is a test."
+            "message2": "This is a test.",
         }
         expected_output = "<|system|>\nHello World\n<|end|>\n<|system|>\nThis is a test.\n<|end|>\n"
         self.assertEqual(merge_system_message(data), expected_output)
@@ -15,7 +17,7 @@ class TestMergeSystemMessage(unittest.TestCase):
         data = {
             "users": [
                 {"name": "Alice", "role": "admin"},
-                {"name": "Bob", "role": "user"}
+                {"name": "Bob", "role": "user"},
             ]
         }
         expected_output = (
@@ -30,7 +32,9 @@ class TestMergeSystemMessage(unittest.TestCase):
                 {"greetings": {"en": "Hello", "fr": "Bonjour"}}
             ]
         }
-        expected_output = "<|system|>\nen: Hello\nfr: Bonjour\n<|end|>\n"
+        expected_output = (
+            "<|system|>\nen: Hello\nfr: Bonjour\n<|end|>\n"
+        )
         self.assertEqual(merge_system_message(data), expected_output)
 
     def test_mixed_content(self):
@@ -38,9 +42,9 @@ class TestMergeSystemMessage(unittest.TestCase):
             "initial_prompt": "System initialized.",
             "rules": [
                 {"rule_id": "001", "description": "Be helpful."},
-                {"rule_id": "002", "description": "Be concise."}
+                {"rule_id": "002", "description": "Be concise."},
             ],
-            "final_prompt": "Awaiting user input."
+            "final_prompt": "Awaiting user input.",
         }
         expected_output = (
             "<|system|>\nSystem initialized.\n<|end|>\n"
@@ -60,10 +64,11 @@ class TestMergeSystemMessage(unittest.TestCase):
             "message": "A string",
             "number": 123,
             "boolean": True,
-            "none_value": None
+            "none_value": None,
         }
         expected_output = "<|system|>\nA string\n<|end|>\n"
         self.assertEqual(merge_system_message(data), expected_output)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

@@ -1,9 +1,11 @@
-import unittest
 import os
-import tempfile
 import shutil
+import tempfile
+import unittest
 from pathlib import Path
-from definers import remove, exist
+
+from definers import exist, remove
+
 
 class TestRemove(unittest.TestCase):
 
@@ -32,12 +34,16 @@ class TestRemove(unittest.TestCase):
         self.assertFalse(exist(dir_to_remove))
 
     def test_remove_non_existent_path(self):
-        non_existent_path = os.path.join(self.test_dir, "does_not_exist")
+        non_existent_path = os.path.join(
+            self.test_dir, "does_not_exist"
+        )
         self.assertFalse(exist(non_existent_path))
         try:
             remove(non_existent_path)
         except Exception as e:
-            self.fail(f"remove() raised an exception for a non-existent path: {e}")
+            self.fail(
+                f"remove() raised an exception for a non-existent path: {e}"
+            )
         self.assertFalse(exist(non_existent_path))
 
     def test_remove_empty_directory(self):
@@ -52,14 +58,14 @@ class TestRemove(unittest.TestCase):
         link_path = os.path.join(self.test_dir, "link.txt")
         with open(target_file, "w") as f:
             f.write("target")
-        
-        if hasattr(os, 'symlink'):
+
+        if hasattr(os, "symlink"):
             os.symlink(target_file, link_path)
             self.assertTrue(os.path.islink(link_path))
             self.assertTrue(exist(target_file))
-            
+
             remove(link_path)
-            
+
             self.assertFalse(exist(link_path))
             self.assertTrue(exist(target_file))
 
@@ -67,16 +73,19 @@ class TestRemove(unittest.TestCase):
         target_dir = os.path.join(self.test_dir, "target_dir")
         os.makedirs(target_dir)
         link_path = os.path.join(self.test_dir, "link_dir")
-        
-        if hasattr(os, 'symlink'):
-            os.symlink(target_dir, link_path, target_is_directory=True)
+
+        if hasattr(os, "symlink"):
+            os.symlink(
+                target_dir, link_path, target_is_directory=True
+            )
             self.assertTrue(os.path.islink(link_path))
             self.assertTrue(exist(target_dir))
-            
+
             remove(link_path)
-            
+
             self.assertFalse(exist(link_path))
             self.assertTrue(exist(target_dir))
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

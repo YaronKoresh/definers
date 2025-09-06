@@ -1,15 +1,19 @@
-import unittest
 import os
-import tempfile
 import shutil
+import tempfile
+import unittest
+
 from definers import load
+
 
 class TestLoad(unittest.TestCase):
 
     def setUp(self):
         self.test_dir = tempfile.mkdtemp()
         self.file_path = os.path.join(self.test_dir, "test_file.txt")
-        self.binary_file_path = os.path.join(self.test_dir, "test_binary.dat")
+        self.binary_file_path = os.path.join(
+            self.test_dir, "test_binary.dat"
+        )
         self.dir_path = os.path.join(self.test_dir, "test_dir")
         os.makedirs(self.dir_path)
 
@@ -24,7 +28,7 @@ class TestLoad(unittest.TestCase):
         self.assertEqual(loaded_content, content)
 
     def test_load_binary_file(self):
-        content = b'\x01\x02\x03\x04\x05'
+        content = b"\x01\x02\x03\x04\x05"
         with open(self.binary_file_path, "wb") as f:
             f.write(content)
         loaded_content = load(self.binary_file_path)
@@ -44,7 +48,9 @@ class TestLoad(unittest.TestCase):
         self.assertEqual(len(dir_content), 2)
 
     def test_load_non_existent_file(self):
-        non_existent_path = os.path.join(self.test_dir, "non_existent.txt")
+        non_existent_path = os.path.join(
+            self.test_dir, "non_existent.txt"
+        )
         self.assertIsNone(load(non_existent_path))
 
     def test_load_empty_file(self):
@@ -64,5 +70,6 @@ class TestLoad(unittest.TestCase):
         loaded_content = load(self.file_path)
         self.assertEqual(loaded_content, content)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

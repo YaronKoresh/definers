@@ -1,9 +1,11 @@
-import unittest
 import os
-import tempfile
 import shutil
+import tempfile
+import unittest
 from unittest.mock import patch
+
 from definers import cwd
+
 
 class TestCwd(unittest.TestCase):
 
@@ -34,15 +36,16 @@ class TestCwd(unittest.TestCase):
                 pass
         self.assertEqual(os.getcwd(), self.original_cwd)
 
-    @patch('definers.os.path.dirname')
+    @patch("definers.os.path.dirname")
     def test_cwd_with_no_directory_provided(self, mock_dirname):
-        mock_script_dir = '/fake/script/dir'
+        mock_script_dir = "/fake/script/dir"
         mock_dirname.return_value = mock_script_dir
-        
+
         with cwd():
             self.assertEqual(os.getcwd(), mock_script_dir)
-        
+
         self.assertEqual(os.getcwd(), self.original_cwd)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

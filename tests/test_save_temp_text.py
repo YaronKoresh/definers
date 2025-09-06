@@ -1,7 +1,9 @@
-import unittest
 import os
 import tempfile
-from definers import save_temp_text, read
+import unittest
+
+from definers import read, save_temp_text
+
 
 class TestSaveTempText(unittest.TestCase):
 
@@ -46,15 +48,19 @@ class TestSaveTempText(unittest.TestCase):
         temp_path = save_temp_text(content)
         self.assertIsNotNone(temp_path)
         self.temp_files.append(temp_path)
-        self.assertTrue(os.path.basename(temp_path).startswith(tempfile.gettempprefix()))
+        self.assertTrue(
+            os.path.basename(temp_path).startswith(
+                tempfile.gettempprefix()
+            )
+        )
 
     def test_file_has_correct_extension(self):
         content = "more content"
         temp_path = save_temp_text(content)
         self.assertIsNotNone(temp_path)
         self.temp_files.append(temp_path)
-        self.assertTrue(temp_path.endswith('.data'))
+        self.assertTrue(temp_path.endswith(".data"))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

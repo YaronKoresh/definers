@@ -1,7 +1,9 @@
+import time
 import unittest
 from unittest.mock import MagicMock
-import time
+
 from definers import thread
+
 
 class TestThread(unittest.TestCase):
 
@@ -13,12 +15,13 @@ class TestThread(unittest.TestCase):
 
     def test_thread_with_args_and_kwargs(self):
         func = MagicMock()
-        t = thread(func, 1, 2, key='value')
+        t = thread(func, 1, 2, key="value")
         t.join()
-        func.assert_called_once_with(1, 2, key='value')
+        func.assert_called_once_with(1, 2, key="value")
 
     def test_thread_returns_thread_object(self):
         import threading
+
         func = MagicMock()
         t = thread(func)
         self.assertIsInstance(t, threading.Thread)
@@ -27,11 +30,11 @@ class TestThread(unittest.TestCase):
     def test_thread_exception_handling(self):
         def func_that_raises():
             raise ValueError("Test Error")
-        
+
         t = thread(func_that_raises)
         t.join()
         self.assertTrue(True)
 
-if __name__ == '__main__':
-    unittest.main()
 
+if __name__ == "__main__":
+    unittest.main()

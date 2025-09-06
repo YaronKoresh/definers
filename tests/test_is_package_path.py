@@ -1,9 +1,11 @@
-import unittest
-import tempfile
-import shutil
 import os
+import shutil
+import tempfile
+import unittest
 from pathlib import Path
+
 from definers import is_package_path
+
 
 class TestIsPackagePath(unittest.TestCase):
 
@@ -14,7 +16,9 @@ class TestIsPackagePath(unittest.TestCase):
         shutil.rmtree(self.test_dir)
 
     def test_path_does_not_exist(self):
-        non_existent_path = os.path.join(self.test_dir, "non_existent")
+        non_existent_path = os.path.join(
+            self.test_dir, "non_existent"
+        )
         self.assertFalse(is_package_path(non_existent_path))
 
     def test_path_is_file(self):
@@ -49,18 +53,27 @@ class TestIsPackagePath(unittest.TestCase):
         package_dir = os.path.join(self.test_dir, "my_package")
         os.makedirs(package_dir)
         Path(os.path.join(package_dir, "__init__.py")).touch()
-        self.assertTrue(is_package_path(package_dir, package_name="my_package"))
+        self.assertTrue(
+            is_package_path(package_dir, package_name="my_package")
+        )
 
     def test_package_with_name_mismatch(self):
         package_dir = os.path.join(self.test_dir, "my_package")
         os.makedirs(package_dir)
         Path(os.path.join(package_dir, "__init__.py")).touch()
-        self.assertFalse(is_package_path(package_dir, package_name="another_package"))
+        self.assertFalse(
+            is_package_path(
+                package_dir, package_name="another_package"
+            )
+        )
 
     def test_package_with_name_but_not_package(self):
         package_dir = os.path.join(self.test_dir, "not_a_package")
         os.makedirs(package_dir)
-        self.assertFalse(is_package_path(package_dir, package_name="not_a_package"))
+        self.assertFalse(
+            is_package_path(package_dir, package_name="not_a_package")
+        )
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()
