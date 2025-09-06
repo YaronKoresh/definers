@@ -254,7 +254,14 @@ Homepage = "https://github.com/YaronKoresh/definers"
 Repository = "https://github.com/YaronKoresh/definers"
 
 [project.optional-dependencies]
-dev = ["flake8", "pytest", "black", "hypothesis", "expecttest"]
+dev = [
+    "flake8==7.1.0",
+    "pytest==8.3.2",
+    "black==24.8.2",
+    "isort==5.13.2",
+    "hypothesis==6.100.5",
+    "expecttest==1.4.1",
+]
 cuda = [
     "cupy-cuda12x==13.3.0",
     "cuml-cu12==24.8.0",
@@ -270,10 +277,40 @@ cuda = [
     'nvidia-cusparselt-cu12==0.7.1; platform_system == "Linux" and platform_machine == "x86_64"',
     'nvidia-nccl-cu12==2.27.3; platform_system == "Linux" and platform_machine == "x86_64"',
     'nvidia-nvjitlink-cu12==12.8.93; platform_system == "Linux" and platform_machine == "x86_64"',
-    'nvidia-nvtx-cu12==12.8.90; platform_system == "Linux" and platform_machine == "x86_64"'
+    'nvidia-nvtx-cu12==12.8.90; platform_system == "Linux" and platform_machine == "x86_64"',
 ]
 
+[tool.isort]
+profile = "black"
+
+[tool.black]
+line-length = 88
+target-version = ["py310", "py311"]
+exclude = '''
+/(
+    \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+)/
+'''
+
 [tool.flake8]
-max-line-length = 127
-extend-ignore = ""
-extend-exclude = ""
+max-line-length = 88
+extend-ignore = [
+    "E203",
+    "W503",
+]
+extend-exclude = [
+    ".git",
+    "__pycache__",
+    "build",
+    "dist",
+    ".venv",
+]

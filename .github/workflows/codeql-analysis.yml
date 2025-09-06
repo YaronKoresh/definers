@@ -3,16 +3,14 @@ name: "Code scanning - action"
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
+  security-events: write
 
 jobs:
   CodeQL:
-
-    permissions:
-      contents: read
-      security-events: write
 
     runs-on: ubuntu-latest
 
