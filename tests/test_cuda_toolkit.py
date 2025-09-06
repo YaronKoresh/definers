@@ -1,20 +1,26 @@
 import unittest
-from unittest.mock import patch, call
+from unittest.mock import call, patch
+
 from definers import cuda_toolkit
+
 
 class TestCudaToolkit(unittest.TestCase):
 
-    @patch('definers.run')
-    @patch('definers.permit')
-    @patch('definers.directory')
-    def test_cuda_toolkit_execution_flow(self, mock_directory, mock_permit, mock_run):
+    @patch("definers.run")
+    @patch("definers.permit")
+    @patch("definers.directory")
+    def test_cuda_toolkit_execution_flow(
+        self, mock_directory, mock_permit, mock_run
+    ):
         cuda_toolkit()
 
         expected_directory_calls = [
             call("/usr/share/keyrings/"),
-            call("/etc/modprobe.d/")
+            call("/etc/modprobe.d/"),
         ]
-        mock_directory.assert_has_calls(expected_directory_calls, any_order=True)
+        mock_directory.assert_has_calls(
+            expected_directory_calls, any_order=True
+        )
 
         expected_permit_calls = [
             call("/tmp"),
@@ -22,14 +28,17 @@ class TestCudaToolkit(unittest.TestCase):
             call("/usr/lib"),
             call("/usr/local"),
             call("/usr/share/keyrings/cuda-archive-keyring.gpg"),
-            call("/etc/apt/sources.list.d/CUDA.list")
+            call("/etc/apt/sources.list.d/CUDA.list"),
         ]
-        mock_permit.assert_has_calls(expected_permit_calls, any_order=True)
+        mock_permit.assert_has_calls(
+            expected_permit_calls, any_order=True
+        )
 
         expected_run_calls = [
             call("apt-get update"),
             call("apt-get install -y curl"),
-            call("""
+            call(
+                """
         export PATH=/sbin:$PATH
         apt-get update
         apt-get purge nvidia-*
@@ -45,13 +54,17 @@ class TestCudaToolkit(unittest.TestCase):
         rm -r /usr/share/keyrings/usr/
         rm -r /usr/share/keyrings/etc/
         echo "deb [signed-by=/usr/share/keyrings/cuda-archive-keyring.gpg] https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/ /" > /etc/apt/sources.list.d/CUDA.list
-    """),
-            call("""
+    """
+            ),
+            call(
+                """
         apt-get update
         apt-get install -y cuda-toolkit
-    """)
+    """
+            ),
         ]
         mock_run.assert_has_calls(expected_run_calls)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

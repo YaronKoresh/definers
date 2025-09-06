@@ -1,0 +1,339 @@
+Metadata-Version: 2.4
+Name: definers
+Version: 0.1.0
+Summary: A comprehensive Python toolkit for AI, data processing, media manipulation, and system utilities.
+Author-email: Yaron Koresh <aharonkoresh1@gmail.com>
+License: MIT
+Project-URL: Homepage, https://github.com/YaronKoresh/definers
+Project-URL: Repository, https://github.com/YaronKoresh/definers
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: pip==24.0
+Requires-Dist: absl-py==2.3.1
+Requires-Dist: accelerate==1.10.1
+Requires-Dist: aiofiles==23.2.1
+Requires-Dist: aiohappyeyeballs==2.6.1
+Requires-Dist: aiohttp==3.12.15
+Requires-Dist: aiosignal==1.4.0
+Requires-Dist: altair==5.5.0
+Requires-Dist: annotated-types==0.7.0
+Requires-Dist: antlr4-python3-runtime==4.9.3
+Requires-Dist: anyio==4.10.0
+Requires-Dist: appdirs==1.4.4
+Requires-Dist: astunparse==1.6.3
+Requires-Dist: async-timeout==5.0.1
+Requires-Dist: attrs==25.3.0
+Requires-Dist: audioread==3.0.1
+Requires-Dist: av==12.1.0
+Requires-Dist: backoff==2.2.1
+Requires-Dist: beautifulsoup4==4.12.3
+Requires-Dist: bitarray==2.8.5
+Requires-Dist: certifi==2025.8.3
+Requires-Dist: cffi==1.17.1
+Requires-Dist: cfgv==3.4.0
+Requires-Dist: charset-normalizer==3.4.3
+Requires-Dist: click==8.2.1
+Requires-Dist: cloudpickle==3.1.1
+Requires-Dist: colorama==0.4.6
+Requires-Dist: coloredlogs==15.0.1
+Requires-Dist: compressed-tensors==0.11.0
+Requires-Dist: conformer==0.3.2
+Requires-Dist: contourpy==1.3.2
+Requires-Dist: cssselect==1.2.0
+Requires-Dist: cycler==0.12.1
+Requires-Dist: cython==3.0.12
+Requires-Dist: datasets==4.0.0
+Requires-Dist: decorator==4.4.2
+Requires-Dist: demucs==4.0.1
+Requires-Dist: diffusers==0.29.0
+Requires-Dist: dill==0.3.8
+Requires-Dist: distlib==0.4.0
+Requires-Dist: dora-search==0.1.12
+Requires-Dist: einops==0.8.1
+Requires-Dist: exceptiongroup==1.3.0
+Requires-Dist: fake-useragent==2.2.0
+Requires-Dist: fastapi==0.116.1
+Requires-Dist: ffmpy==0.6.1
+Requires-Dist: filelock==3.19.1
+Requires-Dist: flatbuffers==25.2.10
+Requires-Dist: fonttools==4.59.2
+Requires-Dist: frozendict==2.4.6
+Requires-Dist: frozenlist==1.7.0
+Requires-Dist: fsspec==2024.5.0
+Requires-Dist: gast==0.6.0
+Requires-Dist: google-pasta==0.2.0
+Requires-Dist: googledrivedownloader==1.1.0
+Requires-Dist: gradio==5.44.1
+Requires-Dist: greenlet==3.0.3
+Requires-Dist: grpcio==1.74.0
+Requires-Dist: h11==0.16.0
+Requires-Dist: h5py==3.14.0
+Requires-Dist: hf-transfer==0.1.9
+Requires-Dist: hf-xet==1.1.9
+Requires-Dist: httpcore==1.0.9
+Requires-Dist: httpx==0.28.1
+Requires-Dist: huggingface-hub==0.34.4
+Requires-Dist: humanfriendly==10.0
+Requires-Dist: hydra-core==1.3.2
+Requires-Dist: hyper-connections==0.2.1
+Requires-Dist: identify==2.6.13
+Requires-Dist: idna==3.10
+Requires-Dist: imageio==2.34.2
+Requires-Dist: imageio-ffmpeg==0.6.0
+Requires-Dist: jaxtyping==0.3.2
+Requires-Dist: jinja2==3.1.6
+Requires-Dist: joblib==1.5.2
+Requires-Dist: jsonschema==4.25.1
+Requires-Dist: jsonschema-specifications==2025.4.1
+Requires-Dist: julius==0.2.7
+Requires-Dist: keras==3.11.3
+Requires-Dist: kiwisolver==1.4.9
+Requires-Dist: lameenc==1.8.1
+Requires-Dist: langdetect==1.0.9
+Requires-Dist: lazy-loader==0.4
+Requires-Dist: libclang==18.1.1
+Requires-Dist: librosa==0.11.0
+Requires-Dist: llvmlite==0.43.0
+Requires-Dist: local-attention==1.11.2
+Requires-Dist: lxml[html_clean]==5.2.2
+Requires-Dist: markdown==3.8.2
+Requires-Dist: markdown-it-py==4.0.0
+Requires-Dist: markupsafe==2.1.5
+Requires-Dist: matchering==2.0.6
+Requires-Dist: matplotlib==3.9.4
+Requires-Dist: mdurl==0.1.2
+Requires-Dist: midi2audio==0.1.1
+Requires-Dist: mido==1.3.3
+Requires-Dist: mir-eval==0.8.2
+Requires-Dist: ml-dtypes==0.4.1
+Requires-Dist: moviepy==2.2.1
+Requires-Dist: mpmath==1.3.0
+Requires-Dist: msgpack==1.1.1
+Requires-Dist: multidict==6.6.4
+Requires-Dist: multiprocess==0.70.16
+Requires-Dist: namex==0.1.0
+Requires-Dist: narwhals==2.3.0
+Requires-Dist: networkx==3.4.2
+Requires-Dist: nodeenv==1.9.1
+Requires-Dist: numba==0.60.0
+Requires-Dist: numpy==1.26.4
+Requires-Dist: omegaconf==2.3.0
+Requires-Dist: onnx==1.17.0
+Requires-Dist: onnxconverter-common==1.16.0
+Requires-Dist: onnxruntime==1.18.1
+Requires-Dist: opencv-contrib-python-headless==4.10.0.84
+Requires-Dist: openunmix==1.3.0
+Requires-Dist: opt-einsum==3.4.0
+Requires-Dist: optree==0.17.0
+Requires-Dist: orjson==3.11.3
+Requires-Dist: packaging==25.0
+Requires-Dist: pandas==2.2.2
+Requires-Dist: parse==1.20.2
+Requires-Dist: patsy==1.0.1
+Requires-Dist: peft==0.17.1
+Requires-Dist: pillow==11.3.0
+Requires-Dist: pillow-heif==0.16.0
+Requires-Dist: platformdirs==4.4.0
+Requires-Dist: playwright==1.45.1
+Requires-Dist: pooch==1.8.2
+Requires-Dist: portalocker==3.2.0
+Requires-Dist: praat-parselmouth==0.4.6
+Requires-Dist: pre-commit==4.3.0
+Requires-Dist: pretty-midi==0.2.10
+Requires-Dist: proglog==0.1.12
+Requires-Dist: propcache==0.3.2
+Requires-Dist: protobuf==5.29.5
+Requires-Dist: psutil==5.9.8
+Requires-Dist: pyarrow==16.1.0
+Requires-Dist: pyarrow-hotfix==0.7
+Requires-Dist: pycparser==2.22
+Requires-Dist: pydantic==2.11.7
+Requires-Dist: pydantic-core==2.33.2
+Requires-Dist: pydub==0.25.1
+Requires-Dist: pyee==11.1.0
+Requires-Dist: pygments==2.19.2
+Requires-Dist: pyparsing==3.2.3
+Requires-Dist: pyppeteer==0.0.25
+Requires-Dist: pyquery==2.0.1
+Requires-Dist: python-dateutil==2.9.0.post0
+Requires-Dist: python-multipart==0.0.20
+Requires-Dist: pytz==2025.2
+Requires-Dist: pyworld==0.3.5
+Requires-Dist: pyyaml==6.0.2
+Requires-Dist: referencing==0.36.2
+Requires-Dist: regex==2025.9.1
+Requires-Dist: requests==2.32.5
+Requires-Dist: requests-html==0.10.0
+Requires-Dist: resampy==0.4.2
+Requires-Dist: resemble-perth==1.0.1
+Requires-Dist: retrying==1.4.2
+Requires-Dist: rich==14.1.0
+Requires-Dist: rpds-py==0.27.1
+Requires-Dist: ruff==0.12.11
+Requires-Dist: s3tokenizer==0.2.0
+Requires-Dist: sacrebleu==2.4.3
+Requires-Dist: safetensors==0.5.3
+Requires-Dist: scikit-image==0.24.0
+Requires-Dist: scikit-learn==1.5.2
+Requires-Dist: scipy==1.12.0
+Requires-Dist: semantic-version==2.10.0
+Requires-Dist: sentencepiece==0.2.1
+Requires-Dist: setuptools==80.9.0
+Requires-Dist: shellingham==1.5.4
+Requires-Dist: six==1.17.0
+Requires-Dist: skl2onnx==1.17.0
+Requires-Dist: sniffio==1.3.1
+Requires-Dist: sounddevice==0.5.2
+Requires-Dist: soundfile==0.12.1
+Requires-Dist: soupsieve==2.8
+Requires-Dist: sox==1.5.0
+Requires-Dist: soxr==0.5.0.post1
+Requires-Dist: starlette==0.47.3
+Requires-Dist: statsmodels==0.14.5
+Requires-Dist: submitit==1.5.3
+Requires-Dist: sympy==1.13.3
+Requires-Dist: tabulate==0.9.0
+Requires-Dist: tensorboard==2.18.0
+Requires-Dist: tensorboard-data-server==0.7.2
+Requires-Dist: tensorboardX==2.6.4
+Requires-Dist: tensorflow==2.18.0
+Requires-Dist: tensorflow-io-gcs-filesystem==0.37.1
+Requires-Dist: termcolor==3.1.0
+Requires-Dist: tf-keras==2.18.0
+Requires-Dist: tflite-runtime==2.14.0
+Requires-Dist: threadpoolctl==3.6.0
+Requires-Dist: tifffile==2025.5.10
+Requires-Dist: tokenizers==0.21.4
+Requires-Dist: tomlkit==0.12.0
+Requires-Dist: torch==2.8.0
+Requires-Dist: torchaudio==2.8.0
+Requires-Dist: torchcrepe==0.0.24
+Requires-Dist: torchfcpe==0.0.4
+Requires-Dist: torchsde==0.2.6
+Requires-Dist: torchvision==0.23.0
+Requires-Dist: tqdm==4.67.1
+Requires-Dist: trampoline==0.1.2
+Requires-Dist: transformers==4.53.0
+Requires-Dist: treetable==0.2.6
+Requires-Dist: triton==3.4.0; platform_system == "Linux" and platform_machine == "x86_64"
+Requires-Dist: typer==0.17.3
+Requires-Dist: typing-inspection==0.4.1
+Requires-Dist: typing-extensions==4.15.0
+Requires-Dist: tzdata==2025.2
+Requires-Dist: urllib3==2.5.0
+Requires-Dist: uvicorn==0.35.0
+Requires-Dist: virtualenv==20.34.0
+Requires-Dist: w3lib==2.3.1
+Requires-Dist: wadler-lindig==0.1.7
+Requires-Dist: websockets==11.0.3
+Requires-Dist: werkzeug==3.1.3
+Requires-Dist: wheel==0.45.1
+Requires-Dist: wrapt==1.17.3
+Requires-Dist: xxhash==3.5.0
+Requires-Dist: yarl==1.20.1
+Requires-Dist: zipp==3.23.0
+Requires-Dist: chatterbox-tts@ git+https://github.com/YaronKoresh/chatterbox.git
+Requires-Dist: fairseq@ git+https://github.com/YaronKoresh/fairseq.git
+Requires-Dist: basic-pitch@ git+https://github.com/YaronKoresh/basic-pitch.git
+Requires-Dist: madmom@ git+https://github.com/CPJKU/madmom@0551aa8f48d71a367d92b5d3a347a0cf7cd97cc9
+Requires-Dist: refiners@ git+https://github.com/finegrain-ai/refiners@d288e94fa8eed1386bd28cd0d5ceb8109c3ff398
+Provides-Extra: dev
+Requires-Dist: autoflake==2.3.1; extra == "dev"
+Requires-Dist: pytest==8.4.2; extra == "dev"
+Requires-Dist: pytest-cov==6.3.0; extra == "dev"
+Requires-Dist: black==25.1.0; extra == "dev"
+Requires-Dist: isort==6.0.1; extra == "dev"
+Requires-Dist: hypothesis==6.138.14; extra == "dev"
+Requires-Dist: expecttest==0.3.0; extra == "dev"
+Provides-Extra: cuda
+Requires-Dist: cupy-cuda12x==13.3.0; extra == "cuda"
+Requires-Dist: cuml-cu12==24.8.0; extra == "cuda"
+Requires-Dist: nvidia-cublas-cu12==12.8.4.1; (platform_system == "Linux" and platform_machine == "x86_64") and extra == "cuda"
+Requires-Dist: nvidia-cuda-cupti-cu12==12.8.90; (platform_system == "Linux" and platform_machine == "x86_64") and extra == "cuda"
+Requires-Dist: nvidia-cuda-nvrtc-cu12==12.8.93; (platform_system == "Linux" and platform_machine == "x86_64") and extra == "cuda"
+Requires-Dist: nvidia-cuda-runtime-cu12==12.8.90; (platform_system == "Linux" and platform_machine == "x86_64") and extra == "cuda"
+Requires-Dist: nvidia-cudnn-cu12==9.10.2.21; (platform_system == "Linux" and platform_machine == "x86_64") and extra == "cuda"
+Requires-Dist: nvidia-cufft-cu12==11.3.3.83; (platform_system == "Linux" and platform_machine == "x86_64") and extra == "cuda"
+Requires-Dist: nvidia-curand-cu12==10.3.9.90; (platform_system == "Linux" and platform_machine == "x86_64") and extra == "cuda"
+Requires-Dist: nvidia-cusolver-cu12==11.7.3.90; (platform_system == "Linux" and platform_machine == "x86_64") and extra == "cuda"
+Requires-Dist: nvidia-cusparse-cu12==12.5.8.93; (platform_system == "Linux" and platform_machine == "x86_64") and extra == "cuda"
+Requires-Dist: nvidia-cusparselt-cu12==0.7.1; (platform_system == "Linux" and platform_machine == "x86_64") and extra == "cuda"
+Requires-Dist: nvidia-nccl-cu12==2.27.3; (platform_system == "Linux" and platform_machine == "x86_64") and extra == "cuda"
+Requires-Dist: nvidia-nvjitlink-cu12==12.8.93; (platform_system == "Linux" and platform_machine == "x86_64") and extra == "cuda"
+Requires-Dist: nvidia-nvtx-cu12==12.8.90; (platform_system == "Linux" and platform_machine == "x86_64") and extra == "cuda"
+Dynamic: license-file
+
+# Definers: Your All-in-One Python Toolkit
+
+[![codecov](https://codecov.io/gh/YaronKoresh/definers/graph/badge.svg?token=QRZ33FO9N3)](https://codecov.io/gh/YaronKoresh/definers)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+**Definers** is a powerful and versatile Python library designed to streamline a wide range of tasks, from machine learning and AI-powered media generation to everyday file and system operations. Whether you're a data scientist, a developer, or an AI enthusiast, Definers provides the tools you need to get the job done efficiently.
+
+## Features
+
+-   **AI Media Generation**: Create images, videos, music, and summaries using state-of-the-art models.
+-   **Machine Learning**: Train and predict with hybrid models, perform linear regression, and get K-means suggestions.
+-   **Data Processing**: Effortlessly extract features from audio, video, images, and text.
+-   **File & System Utilities**: A robust set of tools for file manipulation, command execution, and environment management.
+-   **Web Scraping & Translation**: Extract text from web pages and translate it with ease.
+-   **GPU Acceleration**: Built-in support for CUDA via CuPy and RAPIDS for high-performance computing.
+
+## Installation without CUDA Support
+
+You can install the core components of **Definers** directly from its GitHub repository:
+
+```bash
+pip install git+https://github.com/YaronKoresh/definers.git
+```
+
+### Installation with CUDA Support
+
+If you don't have CUDA installed, and you are using linux with bash, you can install CUDA Toolkit, by using the following format:
+
+```bash
+wget https://raw.githubusercontent.com/YaronKoresh/definers/refs/heads/main/scripts/setup_cuda.sh
+chmod +x setup_cuda.sh
+./setup_cuda.sh
+```
+
+Now, after you have CUDA installed, you can install definers with CUDA acceleration:
+
+```bash
+pip install "definers[cuda] @ git+https://github.com/YaronKoresh/definers.git" --extra-index-url https://pypi.nvidia.com
+```
+
+## Quick Start
+
+Here’s a quick example of how to use Definers to summarize a piece of text:
+
+```python
+from definers import summary, init_pretrained_model
+
+init_pretrained_model("summary",turbo=True)
+
+long_text = """
+The burgeoning field of artificial intelligence is rapidly transforming industries worldwide.
+From healthcare to finance, AI algorithms are optimizing processes, uncovering insights from vast datasets,
+and enabling innovations that were previously unimaginable. As the technology matures, it promises to
+tackle even more complex challenges, heralding a new era of technological advancement.
+"""
+short_summary = summary(long_text, max_words=20)
+
+print("Original Text Length:", len(long_text.split()))
+print("Summary Text Length:", len(short_summary.split()))
+print("\nSummary:")
+print(short_summary)
+```
+
+## Contributing
+
+Contributions are welcome! If you have a feature request, bug report, or want to contribute to the code, please feel free to open an issue or submit a pull request on our [GitHub repository](https://github.com/YaronKoresh/definers).
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](https://github.com/YaronKoresh/definers/LICENSE) file for details.
