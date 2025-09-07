@@ -4971,6 +4971,11 @@ build-backend = "setuptools.build_meta"
 name = "{package_name}"
 version = "0.0.1"
 description = "A dynamically generated package for the Phi-4 model code."
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["*"]
+namespaces = false
         """
         (snapshot_dir / "pyproject.toml").write_text(
             pyproject_toml_content
