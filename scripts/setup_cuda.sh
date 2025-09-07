@@ -1,28 +1,28 @@
 #!/bin/bash
 
-mkdir /etc/modprobe.d
+sudo mkdir /etc/modprobe.d
 
-chmod a+rwx /tmp
+sudo chmod a+rwx /tmp
 
-apt-get update
-apt-get install -y curl dkms
+sudo apt-get update
+sudo apt-get install -y curl dkms
 
-apt-get purge -y nvidia-*
-apt-get autoremove -y
+sudo apt-get purge -y nvidia-*
+sudo apt-get autoremove -y
 
-cat > /etc/modprobe.d/blacklist-nouveau.conf <<EOF
+sudo cat > /etc/modprobe.d/blacklist-nouveau.conf <<EOF
 blacklist nouveau
 options nouveau modeset=0
 EOF
 
-update-initramfs -u
+sudo update-initramfs -u
 
 curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/cuda-keyring_1.1-1_all.deb -o /tmp/cuda-keyring.deb
-dpkg -i /tmp/cuda-keyring.deb
-rm /tmp/cuda-keyring.deb
+sudo dpkg -i /tmp/cuda-keyring.deb
+sudo rm /tmp/cuda-keyring.deb
 
-apt-get update
-apt-get install -y cuda-toolkit
+sudo apt-get update
+sudo apt-get install -y cuda-toolkit
 
 CU_PATHS=("/usr/local/cuda-12/" "/usr/local/cuda/" "/opt/cuda/")
 LD_PATHS=("/usr/local/cuda-12/lib64/" "/usr/local/cuda/lib64/" "/opt/cuda/lib64/")

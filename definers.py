@@ -5006,8 +5006,8 @@ py-modules = {py_modules}
             "AutoModelForCausalLM"
         ].rsplit(".", 1)
 
-        print(f"Importing module '{package_name}.{module_name}'...")
-        module = importlib.import_module(f"{package_name}.{module_name}")
+        print(f"Importing module '{module_name}'...")
+        module = importlib.import_module(module_name)
         cls = getattr(module, class_name)
 
         if not hasattr(cls, "prepare_inputs_for_generation"):
