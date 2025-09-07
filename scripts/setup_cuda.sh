@@ -3,6 +3,7 @@
 sudo mkdir /etc/modprobe.d
 
 sudo chmod a+rwx /tmp
+sudo chmod a+rwx /etc/modprobe.d/
 
 sudo apt-get update
 sudo apt-get install -y curl dkms

@@ -47,11 +47,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          if [ -f "./scripts/setup_cuda.sh" ]; then
-            chmod +x ./scripts/setup_cuda.sh
-            ./scripts/setup_cuda.sh
-          fi
-          pip install .[cuda,dev] --extra-index-url https://pypi.nvidia.com
+          pip install .[dev] --extra-index-url https://pypi.nvidia.com
 
       - name: Run tests and generate coverage report
         run: |
