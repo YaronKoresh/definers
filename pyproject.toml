@@ -266,6 +266,9 @@ dev = [
 cuda = [
     "cupy-cuda12x==13.3.0",
     "cuml-cu12==24.8.0",
+    "cudf-cu12==24.8.3",
+    "dask==2024.7.1",
+    "dask-cudf-cu12==24.8.3",
     'nvidia-cublas-cu12==12.8.4.1; platform_system == "Linux" and platform_machine == "x86_64"',
     'nvidia-cuda-cupti-cu12==12.8.90; platform_system == "Linux" and platform_machine == "x86_64"',
     "nvidia-cuda-nvrtc-cu12==12.8.93; platform_system == 'Linux' and platform_machine == 'x86_64'",

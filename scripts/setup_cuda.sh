@@ -1,10 +1,5 @@
 #!/bin/bash
 
-if [ "$EUID" -ne 0 ]; then
-    echo "Please run this script with sudo."
-    exit
-fi
-
 mkdir /usr/share/keyrings/
 mkdir /etc/modprobe.d
 
