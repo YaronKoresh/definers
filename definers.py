@@ -3339,6 +3339,7 @@ def add_path(path):
         site.addsitedir(path)
         importlib.invalidate_caches()
 
+
 def paths(*patterns):
 
     patterns = [
@@ -4993,7 +4994,10 @@ description = "A dynamically generated package for the Phi-4 model code."
 py-modules = {py_modules}
         """
 
-        log("Phi-4 generated package pyproject.toml content", pyproject_toml_content)
+        log(
+            "Phi-4 generated package pyproject.toml content",
+            pyproject_toml_content,
+        )
 
         (snapshot_dir / "pyproject.toml").write_text(
             pyproject_toml_content
