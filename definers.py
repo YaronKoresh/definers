@@ -3327,7 +3327,10 @@ def simple_text(prompt):
 
 
 def exist(path):
-    path = os.path.abspath(os.path.expanduser(path.strip()))
+    stripped_path = path.strip()
+    if not stripped_path:
+        return False
+    path = os.path.abspath(os.path.expanduser(stripped_path))
     return os.path.exists(path)
 
 

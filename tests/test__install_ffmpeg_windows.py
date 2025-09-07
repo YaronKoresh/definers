@@ -31,17 +31,23 @@ class TestInstallFfmpegWindows(unittest.TestCase):
     @patch("definers.is_admin_windows", return_value=True)
     @patch(
         "definers.subprocess.run",
-        side_effect=FileNotFoundError,
+        side_effect=[FileNotFoundError, MagicMock()],  # Winget fails, setx succeeds
     )
-    @patch("definers.requests.get")
-    @patch("definers.zipfile.ZipFile")
+    @patch("requests.get")
+    @patch("zipfile.ZipFile")
     @patch("definers.shutil.move")
-    @patch("definers.os.path.exists", return_value=False)
+    @patch("definers.shutil.rmtree")
+    @patch("definers.os.remove")
+    @patch("definers.os.path.exists", return_value=True) # Mock existence for cleanup
+    @patch("definers.os.listdir", return_value=["ffmpeg-build-123"])
     @patch("definers.tempfile.gettempdir", return_value="/tmp")
     def test_manual_download_if_winget_fails(
         self,
         mock_gettempdir,
+        mock_listdir,
         mock_exists,
+        mock_os_remove,
+        mock_rmtree,
         mock_move,
         mock_zipfile,
         mock_requests_get,
@@ -49,14 +55,24 @@ class TestInstallFfmpegWindows(unittest.TestCase):
         mock_is_admin,
     ):
         mock_response = MagicMock()
+        mock_response.raise_for_status.return_value = None
         mock_response.iter_content.return_value = [b"zip_data"]
         mock_requests_get.return_value.__enter__.return_value = (
             mock_response
         )
+        
+        # Mock the context manager for zipfile.ZipFile
+        mock_zip_instance = MagicMock()
+        mock_zipfile.return_value.__enter__.return_value = mock_zip_instance
+
         _install_ffmpeg_windows()
+
+        # Assertions
+        self.assertEqual(mock_run.call_count, 2) # winget and setx
         mock_requests_get.assert_called_once()
-        mock_zipfile.assert_called_once()
-        self.assertGreater(mock_move.call_count, 0)
+        mock_zipfile.assert_called_once_with("/tmp/ffmpeg.zip", "r")
+        mock_zip_instance.extractall.assert_called_once_with("/tmp/ffmpeg_extracted")
+        mock_move.assert_called_once()
 
 
 if __name__ == "__main__":
