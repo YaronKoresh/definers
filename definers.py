@@ -4955,7 +4955,7 @@ def init_pretrained_model(task: str, turbo: bool = False):
             print("✅ Source code appears to be already patched. Skipping injection.")
         else:
             try:
-                line_number = original_code_lines.index(target_class_declaration)
+                line_number = original_code_lines.index(target_class_line)
                 
                 injection_point = line_number + 1
                 original_code_lines.insert(injection_point, prepare_inputs_for_generation_code)
