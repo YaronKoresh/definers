@@ -55,9 +55,9 @@ class TestInstallFfmpegLinux(unittest.TestCase):
             "\n[SUCCESS] FFmpeg installed successfully."
         )
 
-    @mock.patch("os.geteuid", return_value=1000)
-    @mock.patch("shutil.which", return_value="/usr/bin/apt")
-    @mock.patch("subprocess.run")
+    @patch("os.geteuid", return_value=1000)
+    @patch("shutil.which", return_value="/usr/bin/apt")
+    @patch("subprocess.run")
     def test_permission_denied_triggers_exit(
         self, mock_subprocess_run, mock_which, mock_geteuid, capsys
     ):

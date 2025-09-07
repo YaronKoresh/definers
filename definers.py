@@ -2404,7 +2404,7 @@ def features_to_text(
     try:
         if vectorizer is None:
             vectorizer = TfidfVectorizer(
-                vocabulary=vocabulary, token_pattern=r"(?u)\b\w+\b"
+                token_pattern=r"(?u)\b\w+\b"
             )
             vectorizer.fit(vocabulary)
 
