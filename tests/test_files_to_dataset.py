@@ -54,13 +54,12 @@ class TestFilesToDataset(unittest.TestCase):
 
     @patch("definers.load_as_numpy", return_value=[np.array([1]), np.array([2])])
     def test_load_returns_list(self, mock_load):
-        # Test the case where load_as_numpy returns a list (e.g., from split audio)
         features_paths = ["features.list"]
         dataset = files_to_dataset(features_paths)
         self.assertIsInstance(dataset, TensorDataset)
         self.assertEqual(len(dataset), 2)
 
-    @patch("definers.torch.stack", side_effect=Exception("Tensor creation failed"))
+    @patch("torch.stack", side_effect=Exception("Tensor creation failed"))
     @patch("definers.catch")
     @patch("definers.load_as_numpy", return_value=np.array([1]))
     def test_tensor_creation_fails(self, mock_load, mock_catch, mock_stack):

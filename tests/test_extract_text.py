@@ -1,12 +1,12 @@
 import unittest
 from unittest.mock import MagicMock, patch
-
+import playwright
 from definers import extract_text
 
 
 class TestExtractText(unittest.TestCase):
 
-    @patch("definers.sync_playwright")
+    @patch("playwright.sync_api.sync_playwright")
     def test_extract_text_successfully(self, mock_sync_playwright):
         mock_page = MagicMock()
         mock_page.content.return_value = '<html><body><div class="content">Expected Text</div></body></html>'
@@ -25,7 +25,7 @@ class TestExtractText(unittest.TestCase):
         result = extract_text("http://example.com", ".content")
         self.assertEqual(result, "Expected Text")
 
-    @patch("definers.sync_playwright")
+    @patch("playwright.sync_api.sync_playwright")
     def test_selector_not_found(self, mock_sync_playwright):
         mock_page = MagicMock()
         mock_page.content.return_value = '<html><body><div class="other">Some Text</div></body></html>'
@@ -44,7 +44,7 @@ class TestExtractText(unittest.TestCase):
         result = extract_text("http://example.com", ".nonexistent")
         self.assertEqual(result, "")
 
-    @patch("definers.sync_playwright")
+    @patch("playwright.sync_api.sync_playwright")
     def test_empty_page_content(self, mock_sync_playwright):
         mock_page = MagicMock()
         mock_page.content.return_value = ""
@@ -64,7 +64,7 @@ class TestExtractText(unittest.TestCase):
         self.assertIsNone(result)
 
     @patch(
-        "definers.sync_playwright",
+        "playwright.sync_api.sync_playwright",
         side_effect=Exception("Playwright Error"),
     )
     def test_playwright_error(self, mock_sync_playwright):

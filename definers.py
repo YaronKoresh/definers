@@ -14,7 +14,7 @@ import logging
 import math
 import multiprocessing
 import os
-import pathlib
+import pathlibf
 import platform
 import queue
 import random
@@ -1905,18 +1905,17 @@ def read_as_numpy(path: str):
 
 
 def get_prediction_file_extension(pred_type):
-    """Returns the correct file extension for the prediction type."""
-    if pred_type == "video":
+    pred_type_lower = pred_type.lower().trim()
+    if pred_type_lower == "video":
         return "mp4"
-    elif pred_type == "image":
+    elif pred_type_lower == "image":
         return "png"
-    elif pred_type == "audio":
+    elif pred_type_lower == "audio":
         return "wav"
-    elif pred_type == "text":
+    elif pred_type_lower == "text":
         return "txt"
     else:
         return "data"
-
 
 def process_rows(batch):
     try:
@@ -2243,48 +2242,24 @@ def features_to_video(predicted_features, frame_interval=10, fps=24, video_shape
         return False
 
 
-def features_to_text(
-    predicted_features, vectorizer=None, vocabulary=None
-):
-    """
-    Generates text from predicted TF-IDF features, assuming the features
-    were extracted using the provided 'extract_text_features' function.
-
-    Args:
-        predicted_features (numpy.ndarray): 1D NumPy array of predicted TF-IDF features.
-        vectorizer (TfidfVectorizer, optional): The trained TfidfVectorizer used to extract features.
-                                                  If None, a vocabulary must be provided.
-        vocabulary (list, optional): The vocabulary (list of words) used to create the features.
-                                      Required if vectorizer is None.
-
-    Returns:
-        str: Reconstructed text string, or None if an error occurs.
-    """
-
+def features_to_text(predicted_features, vectorizer=None, vocabulary=None):
     from sklearn.feature_extraction.text import TfidfVectorizer
 
+    if vectorizer is None and vocabulary is None:
+        print("Error generating text from features: Either a vectorizer or a vocabulary must be provided.")
+        raise ValueError("Either a vectorizer or a vocabulary must be provided.")
+
     try:
-        if vectorizer is None and vocabulary is None:
-            raise ValueError(
-                "Either a vectorizer or a vocabulary must be provided."
-            )
-
         if vectorizer is None:
-            vectorizer = TfidfVectorizer(vocabulary=vocabulary)
-            vectorizer.fit(
-                vocabulary
-            )  # Need to fit with vocabulary to get correct mapping
+            vectorizer = TfidfVectorizer(vocabulary=vocabulary, token_pattern=r"(?u)\b\w+\b")
+            vectorizer.fit(vocabulary)
 
-        # Reconstruct the TF-IDF matrix (1 sample)
         tfidf_matrix = predicted_features.reshape(1, -1)
 
-        # Inverse transform to get word indices
         word_indices = tfidf_matrix.nonzero()[1]
 
-        # Get feature names (words)
         feature_names = vectorizer.get_feature_names_out()
 
-        # Reconstruct the text
         reconstructed_words = [feature_names[i] for i in word_indices]
         reconstructed_text = " ".join(reconstructed_words)
 
@@ -3024,11 +2999,35 @@ def find_latest_rvc_checkpoint(
 def get_max_resolution(width, height, mega_pixels=0.25, factor=16):
     max_pixels = mega_pixels * 1000 * 1000
     ratio = width / height
-    new_height = (max_pixels / ratio) ** 0.5
-    new_width = ratio * new_height
-    new_height = int(int(new_height) - (int(new_height) % factor))
-    new_width = int(int(new_width) - (int(new_width) % factor))
-    return new_width, new_height
+
+    best_w, best_h = 0, 0
+    max_found_pixels = 0
+
+    h_estimate = int((max_pixels / ratio) ** 0.5)
+    search_range = range(max(factor, h_estimate - factor * 4), h_estimate + factor * 4)
+
+    for h_test in search_range:
+        h_rounded = (h_test // factor) * factor
+        if h_rounded == 0:
+            continue
+
+        w_rounded = round(h_rounded * ratio / factor) * factor
+        if w_rounded == 0:
+            continue
+
+        current_pixels = w_rounded * h_rounded
+
+        if current_pixels <= max_pixels and current_pixels > max_found_pixels:
+            max_found_pixels = current_pixels
+            best_w, best_h = w_rounded, h_rounded
+
+    if best_w > 0 and best_h > 0:
+        return best_w, best_h
+
+    h = int((max_pixels / ratio) ** 0.5)
+    new_h = (h // factor) * factor
+    new_w = (int(new_h * ratio) // factor) * factor
+    return new_w, new_h
 
 
 def master(source_path, strength, format_choice):
@@ -3927,7 +3926,15 @@ def device():
 def get_python_version():
     try:
         version_info = sys.version_info
-        version_str = f"{version_info.major}.{version_info.minor}.{version_info.micro}"
+
+        if not hasattr(version_info, 'major'):
+             raise AttributeError("sys.version_info is missing essential version attributes")
+
+        major = version_info.major
+        minor = getattr(version_info, 'minor', 0)
+        micro = getattr(version_info, 'micro', 0)
+        
+        version_str = f"{major}.{minor}.{micro}"
         return version_str
     except Exception as e:
         print(f"Error getting Python version: {e}")
@@ -4797,20 +4804,18 @@ def init_pretrained_model(task: str, turbo: bool = False):
         ))
         print(f"Source files downloaded to: {snapshot_dir}")
 
-        setup_py_content = f"""
-from setuptools import setup, find_packages
+        pyproject_toml_content = f"""
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
 
-setup(
-    name='{package_name}',
-    version='0.0.1',
-    packages=find_packages(),
-    author='Dynamic Patcher',
-    author_email='patcher@example.com',
-    description='A dynamically generated package for the Phi-4 model code.',
-)
+[project]
+name = "{package_name}"
+version = "0.0.1"
+description = "A dynamically generated package for the Phi-4 model code."
         """
-        (snapshot_dir / "setup.py").write_text(setup_py_content)
-        print("Dynamically created setup.py file.")
+        (snapshot_dir / "pyproject.toml").write_text(pyproject_toml_content)
+        print("Dynamically created pyproject.toml file.")
 
         print(f"Installing '{package_name}' from local source...")
         subprocess.check_call(
@@ -4818,7 +4823,9 @@ setup(
         )
         print(f"Successfully installed '{package_name}'.")
 
-        from transformers import AutoConfig
+        importlib.invalidate_caches()
+        print("Import caches invalidated.")
+
         config = AutoConfig.from_pretrained(str(snapshot_dir), trust_remote_code=True)
         module_name, class_name = config.auto_map["AutoModelForCausalLM"].rsplit(".", 1)
 
@@ -5181,12 +5188,13 @@ def str_to_numpy(txt):
 
 
 def one_dim_numpy(v):
-    return two_dim_numpy(v).flatten()
+    return numpy_to_cupy(two_dim_numpy(v).flatten())
 
 
 def two_dim_numpy(v):
     import torch
-
+    if "cupy" in str(type(v)):
+        v = cupy_to_numpy(v)
     if isinstance(v, torch.Tensor):
         v = v.cpu().numpy()
     elif isinstance(v, str):
@@ -5196,40 +5204,34 @@ def two_dim_numpy(v):
             v = numpy_to_str(v)
             v = str_to_numpy(v)
         elif not np.issubdtype(v.dtype, np.number):
-            raise TypeError(
-                f"CuPy array of dtype {v.dtype} is not supported."
-            )
+            raise TypeError(f"CuPy array of dtype {v.dtype} is not supported.")
     elif isinstance(v, (list, tuple)):
         v = np.array(v)
     elif not np.issubdtype(type(v), _np.number):
         try:
             v = np.array(v).astype(float)
         except Exception as e:
-            raise TypeError(
-                f"Input of type {type(v)} is not supported: {e}"
-            )
+            raise TypeError(f"Input of type {type(v)} is not supported: {e}")
     else:
         v = np.array([v])
 
     if v.ndim == 0:
-        return v.reshape(1, 1)
+        return numpy_to_cupy(v.reshape(1, 1))
     elif v.ndim == 1:
-        return v.reshape(-1, 1)
+        return numpy_to_cupy(v.reshape(-1, 1))
     elif v.ndim == 2:
-        return v
+        return numpy_to_cupy(v)
     else:
         try:
             new_shape = (-1, v.shape[-1])
-            return v.reshape(new_shape)
+            return numpy_to_cupy(v.reshape(new_shape))
         except ValueError as e:
-            raise ValueError(
-                f"Cannot reshape array of shape {v.shape} to 2D: {e}"
-            )
-
+            raise ValueError(f"Cannot reshape array of shape {v.shape} to 2D: {e}")
 
 def three_dim_numpy(v):
     import torch
-
+    if "cupy" in str(type(v)):
+        v = cupy_to_numpy(v)
     if isinstance(v, torch.Tensor):
         v = v.cpu().numpy()
     elif isinstance(v, str):
@@ -5239,33 +5241,27 @@ def three_dim_numpy(v):
             v = numpy_to_str(v)
             v = str_to_numpy(v)
         elif not np.issubdtype(v.dtype, np.number):
-            raise TypeError(
-                f"CuPy array of dtype {v.dtype} is not supported."
-            )
+            raise TypeError(f"CuPy array of dtype {v.dtype} is not supported.")
     elif isinstance(v, (list, tuple)):
         v = np.array(v)
     elif not np.issubdtype(type(v), _np.number):
         try:
             v = np.array(v).astype(float)
         except Exception as e:
-            raise TypeError(
-                f"Input of type {type(v)} is not supported: {e}"
-            )
+            raise TypeError(f"Input of type {type(v)} is not supported: {e}")
     else:
         v = np.array([v])
 
     if v.ndim <= 2:
-        return v.reshape(-1, 1, 1)
+        return numpy_to_cupy(v.reshape(-1, 1, 1))
     elif v.ndim == 3:
-        return v
+        return numpy_to_cupy(v)
     else:
         try:
             new_shape = (-1, v.shape[-2], v.shape[-1])
-            return v.reshape(new_shape)
+            return numpy_to_cupy(v.reshape(new_shape))
         except ValueError as e:
-            raise ValueError(
-                f"Cannot reshape array of shape {v.shape} to 3D: {e}"
-            )
+            raise ValueError(f"Cannot reshape array of shape {v.shape} to 3D: {e}")
 
 
 def resize_video(
