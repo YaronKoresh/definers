@@ -1,13 +1,13 @@
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
 from definers import _install_ffmpeg_windows, is_admin_windows
+
 
 class TestInstallFfmpegWindows(unittest.TestCase):
     @patch("definers.is_admin_windows", return_value=True)
     @patch("definers.subprocess.run")
-    def test_winget_install_succeeds(
-        self, mock_run, mock_is_admin
-    ):
+    def test_winget_install_succeeds(self, mock_run, mock_is_admin):
         mock_run.return_value = MagicMock(
             check=True, stdout="Success", stderr=""
         )
@@ -57,6 +57,7 @@ class TestInstallFfmpegWindows(unittest.TestCase):
         mock_requests_get.assert_called_once()
         mock_zipfile.assert_called_once()
         self.assertGreater(mock_move.call_count, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

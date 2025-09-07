@@ -1,6 +1,8 @@
 import unittest
-from unittest.mock import patch, call
+from unittest.mock import call, patch
+
 from definers import _install_ffmpeg_linux
+
 
 class TestInstallFfmpegLinux(unittest.TestCase):
     @patch("os.geteuid", return_value=0)
@@ -14,7 +16,9 @@ class TestInstallFfmpegLinux(unittest.TestCase):
         mock_run.assert_has_calls(
             [
                 call(["apt-get", "update"], check=True),
-                call(["apt-get", "install", "ffmpeg", "-y"], check=True),
+                call(
+                    ["apt-get", "install", "ffmpeg", "-y"], check=True
+                ),
             ]
         )
         mock_print.assert_any_call(
@@ -78,11 +82,18 @@ class TestInstallFfmpegLinux(unittest.TestCase):
 
     @patch("os.geteuid", return_value=0)
     @patch("shutil.which", return_value="apt-get")
-    @patch("definers.subprocess.run", side_effect=Exception("Test error"))
+    @patch(
+        "definers.subprocess.run", side_effect=Exception("Test error")
+    )
     @patch("definers.sys.exit", side_effect=SystemExit)
     @patch("builtins.print")
     def test_unexpected_error(
-        self, mock_print, mock_exit, mock_run, mock_which, mock_geteuid
+        self,
+        mock_print,
+        mock_exit,
+        mock_run,
+        mock_which,
+        mock_geteuid,
     ):
         with self.assertRaises(SystemExit):
             _install_ffmpeg_linux()
@@ -91,6 +102,6 @@ class TestInstallFfmpegLinux(unittest.TestCase):
         )
         mock_exit.assert_called_once_with(1)
 
+
 if __name__ == "__main__":
     unittest.main()
-

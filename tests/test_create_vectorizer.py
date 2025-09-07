@@ -1,6 +1,9 @@
 import unittest
+
 from sklearn.feature_extraction.text import TfidfVectorizer
+
 from definers import create_vectorizer
+
 
 class TestCreateVectorizer(unittest.TestCase):
 
@@ -31,5 +34,6 @@ class TestCreateVectorizer(unittest.TestCase):
         self.assertIn("single", vectorizer.vocabulary_)
         self.assertIn("document", vectorizer.vocabulary_)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()
