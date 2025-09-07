@@ -22,7 +22,7 @@ class TestInstallFfmpegLinux(unittest.TestCase):
             ]
         )
         mock_print.assert_any_call(
-            "[SUCCESS] FFmpeg installed successfully."
+            "\n[SUCCESS] FFmpeg installed successfully."
         )
 
     @patch("os.geteuid", return_value=0)
@@ -37,7 +37,7 @@ class TestInstallFfmpegLinux(unittest.TestCase):
             ["dnf", "install", "ffmpeg", "-y"], check=True
         )
         mock_print.assert_any_call(
-            "[SUCCESS] FFmpeg installed successfully."
+            "\n[SUCCESS] FFmpeg installed successfully."
         )
 
     @patch("os.geteuid", return_value=0)
@@ -52,7 +52,7 @@ class TestInstallFfmpegLinux(unittest.TestCase):
             ["pacman", "-S", "ffmpeg", "--noconfirm"], check=True
         )
         mock_print.assert_any_call(
-            "[SUCCESS] FFmpeg installed successfully."
+            "\n[SUCCESS] FFmpeg installed successfully."
         )
 
     @patch("os.geteuid", return_value=1)
@@ -98,7 +98,7 @@ class TestInstallFfmpegLinux(unittest.TestCase):
         with self.assertRaises(SystemExit):
             _install_ffmpeg_linux()
         mock_print.assert_any_call(
-            "[ERROR] An unexpected error occurred: Test error"
+            "\n[ERROR] An unexpected error occurred: Test error"
         )
         mock_exit.assert_called_once_with(1)
 
