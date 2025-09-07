@@ -94,6 +94,20 @@ def _find_spec(mod_name):
 
 importlib.util.find_spec = _find_spec
 
+if _find_spec("dask"):
+    import dask
+
+    d_copy = dask
+
+    dask.core = d_copy
+    dask.dataframe.core = d_copy.dataframe
+    dask.widgets.core = d_copy.widgets
+    dask.diagnostics.core = d_copy.diagnostics
+    dask.bytes.core = d_copy.bytes
+    dask.bag.core = d_copy.bag
+    dask.array.core = d_copy.array
+
+
 language_codes = {
     "af": "afrikaans",
     "sq": "albanian",
