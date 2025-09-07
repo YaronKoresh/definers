@@ -1,10 +1,8 @@
 #!/bin/bash
 
-mkdir /usr/share/keyrings/
 mkdir /etc/modprobe.d
 
-chmod -R a+rwx /tmp
-chmod -R a+rwx /usr/local
+chmod a+rwx /tmp
 
 apt-get update
 apt-get install -y curl dkms
