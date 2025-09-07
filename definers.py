@@ -4962,6 +4962,8 @@ def init_pretrained_model(task: str, turbo: bool = False):
         )
         print(f"Source files downloaded to: {snapshot_dir}")
 
+        py_modules = [p.stem for p in snapshot_dir.glob("*.py")]
+
         pyproject_toml_content = f"""
 [build-system]
 requires = ["setuptools>=61.0"]
@@ -4972,10 +4974,8 @@ name = "{package_name}"
 version = "0.0.1"
 description = "A dynamically generated package for the Phi-4 model code."
 
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["*"]
-namespaces = false
+[tool.setuptools]
+py-modules = {py_modules}
         """
         (snapshot_dir / "pyproject.toml").write_text(
             pyproject_toml_content
