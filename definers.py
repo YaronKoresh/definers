@@ -3337,7 +3337,7 @@ def add_path(path):
         permit(path)
         sys.path.append(path)
         site.addsitedir(path)
-
+        importlib.invalidate_caches()
 
 def paths(*patterns):
 
@@ -4992,6 +4992,9 @@ description = "A dynamically generated package for the Phi-4 model code."
 [tool.setuptools]
 py-modules = {py_modules}
         """
+
+        log("Phi-4 generated package pyproject.toml content", pyproject_toml_content)
+
         (snapshot_dir / "pyproject.toml").write_text(
             pyproject_toml_content
         )
@@ -5010,8 +5013,8 @@ py-modules = {py_modules}
         )
         print(f"Successfully installed '{package_name}'.")
 
-        importlib.invalidate_caches()
-        print("Import caches invalidated.")
+        str_snapshot_dir = str(snapshot_dir)
+        add_path(str_snapshot_dir)
 
         config = AutoConfig.from_pretrained(
             str(snapshot_dir), trust_remote_code=True
