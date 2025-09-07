@@ -4977,6 +4977,15 @@ def init_pretrained_model(task: str, turbo: bool = False):
         )
         print(f"Source files downloaded to: {snapshot_dir}")
 
+        for py_file in snapshot_dir.glob("*.py"):
+            content = py_file.read_text()
+            modified_content = re.sub(r"from \.([\w_]+)", r"from \1", content)
+            modified_content = re.sub(r"import \.([\w_]+)", r"import \1", modified_content)
+            if content != modified_content:
+                print(f"  - Rewrote imports in {py_file.name}")
+                py_file.write_text(modified_content)
+
+
         py_modules = [p.stem for p in snapshot_dir.glob("*.py")]
         print(py_modules)
 
