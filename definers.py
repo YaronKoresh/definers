@@ -4948,7 +4948,7 @@ def init_pretrained_model(task: str, turbo: bool = False):
         target_class_line = "class Phi4MMModel(Phi4MMPreTrainedModel):"
 
         print(f"Preparing to inject patch into {target_file}...")
-        original_code = target_file.read_text()
+        original_code_lines = target_file.read_text().splitlines()
 
         if any("dynamically injected to fix a compatibility issue" in line for line in original_code_lines):
             print("✅ Source code appears to be already patched. Skipping injection.")
