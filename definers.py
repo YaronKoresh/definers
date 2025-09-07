@@ -101,7 +101,7 @@ if _find_spec("dask"):
     from dask import base
     from dask import graph_manipulation
     from dask.optimization import cull, fuse, inline, inline_functions
-    from dask.utils import key_split, istask
+    from dask.utils import key_split
 
     dask.core = base
 
@@ -111,7 +111,6 @@ if _find_spec("dask"):
     dask.core.inline_functions = inline_functions
 
     dask.core.key_split = key_split
-    dask.core.istask = istask
 
     dask.core.get_dependencies = graph_manipulation.get_dependencies
     dask.core.subs = graph_manipulation.subs
