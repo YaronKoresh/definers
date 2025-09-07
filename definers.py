@@ -4817,24 +4817,6 @@ def summary(text, max_words=50):
         return _summarize(text, is_chunk=False)
 
 
-def prepare_inputs_for_generation(
-    self,
-    input_ids,
-    past_key_values=None,
-    attention_mask=None,
-    **kwargs,
-):
-    if past_key_values is not None:
-        input_ids = input_ids[:, -1:]
-
-    return {
-        "input_ids": input_ids,
-        "past_key_values": past_key_values,
-        "attention_mask": attention_mask,
-        **kwargs,
-    }
-
-
 def init_pretrained_model(task: str, turbo: bool = False):
 
     free()
@@ -4961,14 +4943,8 @@ def init_pretrained_model(task: str, turbo: bool = False):
         )
 
         package_name = "phi4_package"
-
         print(f"Downloading source files for {tasks[task]}...")
-        snapshot_dir = Path(
-            snapshot_download(
-                repo_id=tasks[task],
-                allow_patterns=["*.py", "*.json"],
-            )
-        )
+        snapshot_dir = Path(snapshot_download(repo_id=tasks[task], allow_patterns=["*.py", "*.json"]))
         print(f"Source files downloaded to: {snapshot_dir}")
 
         for py_file in snapshot_dir.glob("*.py"):
@@ -4997,11 +4973,6 @@ description = "A dynamically generated package for the Phi-4 model code."
 py-modules = {py_modules}
         """
 
-        log(
-            "Phi-4 generated package pyproject.toml content",
-            pyproject_toml_content,
-        )
-
         (snapshot_dir / "pyproject.toml").write_text(
             pyproject_toml_content
         )
@@ -5016,44 +4987,65 @@ py-modules = {py_modules}
                 "install",
                 "-e",
                 str(snapshot_dir),
-            ]
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
         )
         print(f"Successfully installed '{package_name}'.")
 
         str_snapshot_dir = str(snapshot_dir)
         add_path(str_snapshot_dir)
 
-        module_to_patch = "modeling_phi4mm"
-        base_class_to_patch = "Phi4MMModel" 
+        def prepare_inputs_for_generation(
+            self,
+            input_ids,
+            past_key_values=None,
+            attention_mask=None,
+            **kwargs,
+        ):
+            if past_key_values is not None:
+                input_ids = input_ids[:, -1:]
 
-        print(f"Importing module '{module_to_patch}'...")
-        module = importlib.import_module(module_to_patch)
+            return {
+                "input_ids": input_ids,
+                "past_key_values": past_key_values,
+                "attention_mask": attention_mask,
+                **kwargs,
+            }
 
-        print(f"Retrieving class '{base_class_to_patch}' to patch...")
-        cls_to_patch = getattr(module, base_class_to_patch)
+        original_from_pretrained = AutoModelForCausalLM.from_pretrained
 
-        if not hasattr(cls_to_patch, "prepare_inputs_for_generation"):
-            cls_to_patch.prepare_inputs_for_generation = (
-                prepare_inputs_for_generation
-            )
-            print(
-                f"✅✅✅ Successfully patched '{base_class_to_patch}' with 'prepare_inputs_for_generation'."
-            )
-        else:
-            print(
-                f"✅ Method 'prepare_inputs_for_generation' already exists on '{base_class_to_patch}'. No patch needed."
-            )
+        def patched_from_pretrained(*args, **kwargs):
+            print("--> Intercepted `from_pretrained` call.")
+            
+            module_to_patch = "modeling_phi4mm"
+            base_class_to_patch = "Phi4MMModel" 
+            module = importlib.import_module(module_to_patch)
+            cls_to_patch = getattr(module, base_class_to_patch)
 
-        tok = AutoTokenizer.from_pretrained(str(snapshot_dir))
+            if not hasattr(cls_to_patch, "prepare_inputs_for_generation"):
+                cls_to_patch.prepare_inputs_for_generation = prepare_inputs_for_generation
+                print(f"--> Just-in-time patch applied to '{base_class_to_patch}'.")
+            
+            print("--> Calling original `from_pretrained` with patched class...")
+            return original_from_pretrained(*args, **kwargs)
+
+        AutoModelForCausalLM.from_pretrained = patched_from_pretrained
+
+        print("Loading tokenizer, processor, and model via patched loader...")
+        tok = AutoTokenizer.from_pretrained(tasks[task])
         prc = AutoProcessor.from_pretrained(
-            str(snapshot_dir), trust_remote_code=True
+            tasks[task], trust_remote_code=True
         )
         mod = AutoModelForCausalLM.from_pretrained(
-            str(snapshot_dir),
+            tasks[task],
             torch_dtype=dtype(),
             trust_remote_code=True,
             _attn_implementation="eager",
         ).to(device())
+
+        AutoModelForCausalLM.from_pretrained = original_from_pretrained
+        print("✅ Model loaded successfully and original loader restored!")
 
         model = BeamSearch(
             mod,
