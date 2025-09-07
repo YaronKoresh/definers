@@ -99,9 +99,9 @@ if _find_spec("dask"):
     import dask
 
     from dask import base
-    from dask import graph_manipulation
     from dask.optimization import cull, fuse, inline, inline_functions
     from dask.utils import key_split
+    from dask.graph_manipulation import checkpoint, bind, wait_on, clone
 
     dask.core = base
 
@@ -112,9 +112,11 @@ if _find_spec("dask"):
 
     dask.core.key_split = key_split
 
-    dask.core.get_dependencies = graph_manipulation.get_dependencies
-    dask.core.subs = graph_manipulation.subs
-
+    dask.core.checkpoint = checkpoint
+    dask.core.bind = bind
+    dask.core.wait_on = wait_on
+    dask.core.clone = clone
+    
     dask.core.get = dask.get
 
     def _visualize_wrapper(dsk, **kwargs):
