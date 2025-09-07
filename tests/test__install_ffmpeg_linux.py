@@ -55,16 +55,24 @@ class TestInstallFfmpegLinux(unittest.TestCase):
             "\n[SUCCESS] FFmpeg installed successfully."
         )
 
-    @patch("os.geteuid", return_value=1)
-    @patch("shutil.which", return_value="apt-get")
-    @patch("builtins.print")
-    def test_non_root_user_warning(
-        self, mock_print, mock_which, mock_geteuid
+    @mock.patch("os.geteuid", return_value=1000)
+    @mock.patch("shutil.which", return_value="/usr/bin/apt")
+    @mock.patch("subprocess.run")
+    def test_permission_denied_triggers_exit(
+        self, mock_subprocess_run, mock_which, mock_geteuid, capsys
     ):
-        _install_ffmpeg_linux()
-        mock_print.assert_any_call(
-            "[WARN] This script needs sudo privileges to install packages."
+        mock_subprocess_run.side_effect = subprocess.CalledProcessError(
+            returncode=13, cmd=["apt-get", "update"]
         )
+
+        with pytest.raises(SystemExit) as excinfo:
+            _install_ffmpeg_linux()
+
+        assert excinfo.value.code == 1
+
+        captured = capsys.readouterr()
+        assert "[WARN] This script needs sudo privileges" in captured.out
+        assert "[ERROR] The installation command failed" in captured.out
 
     @patch("os.geteuid", return_value=0)
     @patch("shutil.which", return_value=None)

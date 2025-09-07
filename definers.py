@@ -97,10 +97,8 @@ importlib.util.find_spec = _find_spec
 if _find_spec("dask"):
     import dask
     import dask.dataframe
-    import dask.widgets
     import dask.diagnostics
     import dask.bytes
-    import dask.bag
     import dask.array
 
     d_copy = dask
@@ -109,17 +107,11 @@ if _find_spec("dask"):
     d_copy = dask.dataframe
     dask.dataframe.core = d_copy
 
-    d_copy = dask.widgets
-    dask.widgets.core = d_copy
-
     d_copy = dask.diagnostics
     dask.diagnostics.core = d_copy
 
     d_copy = dask.bytes
     dask.bytes.core = d_copy
-
-    d_copy = dask.bag
-    dask.bag.core = d_copy
 
     d_copy = dask.array
     dask.array.core = d_copy
@@ -711,24 +703,6 @@ def install_audio_effects():
     print("\nInstalling Python packages with pip...")
 
 
-def merge_system_message(data):
-    text = ""
-    for key, value in data.items():
-        if isinstance(value, str):
-            text += f"<|system|>\n{value}\n<|end|>\n"
-        elif isinstance(value, list):
-            for item in value:
-                text += "<|system|>\n"
-                for k, v in item.items():
-                    if isinstance(v, dict):
-                        for lang, content in v.items():
-                            text += f"{lang}: {content}\n"
-                    else:
-                        text += f"{k}: {v}\n"
-                text += "<|end|>\n"
-    return text.trim()
-
-
 def set_system_message(
     name: Optional[str] = None,
     role: Optional[str] = None,
@@ -835,7 +809,7 @@ def answer(history: list):
     img = "<|image_X|>"
     snd = "<|audio_X|>"
 
-    messages = [merge_system_message(SYSTEM_MESSAGE)]
+    messages = [SYSTEM_MESSAGE]
 
     img_list = []
     snd_list = []
@@ -1957,7 +1931,7 @@ def read_as_numpy(path: str):
 
 
 def get_prediction_file_extension(pred_type):
-    pred_type_lower = pred_type.lower().trim()
+    pred_type_lower = pred_type.lower().strip()
     if pred_type_lower == "video":
         return "mp4"
     elif pred_type_lower == "image":
@@ -5049,16 +5023,14 @@ py-modules = {py_modules}
         str_snapshot_dir = str(snapshot_dir)
         add_path(str_snapshot_dir)
 
-        config = AutoConfig.from_pretrained(
-            str(snapshot_dir), trust_remote_code=True
-        )
-        module_name, class_name = config.auto_map[
-            "AutoModelForCausalLM"
-        ].rsplit(".", 1)
+        module_to_patch = "modeling_phi4mm"
+        base_class_to_patch = "Phi4MMModel" 
 
-        print(f"Importing module '{module_name}'...")
-        module = importlib.import_module(module_name)
-        cls = getattr(module, class_name)
+        print(f"Importing module '{module_to_patch}'...")
+        module = importlib.import_module(module_to_patch)
+
+        print(f"Retrieving class '{base_class_to_patch}' to patch...")
+        cls_to_patch = getattr(module, base_class_to_patch)
 
         if not hasattr(cls, "prepare_inputs_for_generation"):
             cls.prepare_inputs_for_generation = (
@@ -5072,7 +5044,7 @@ py-modules = {py_modules}
                 f"✅ Method 'prepare_inputs_for_generation' already exists on '{class_name}'. No patch needed."
             )
 
-        tok = AutoTokenizer.from_pretrained(tasks[task])
+        tok = AutoTokenizer.from_pretrained(str(snapshot_dir))
         prc = AutoProcessor.from_pretrained(
             str(snapshot_dir), trust_remote_code=True
         )
