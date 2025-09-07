@@ -1,7 +1,9 @@
+import os
 import unittest
 from unittest.mock import patch
-import os
+
 from definers import exist
+
 
 class TestExist(unittest.TestCase):
     @patch("os.path.exists")
@@ -43,6 +45,6 @@ class TestExist(unittest.TestCase):
         mock_abspath.assert_called_once_with("/home/user/some_file")
         mock_exists.assert_called_once_with("/home/user/some_file")
 
+
 if __name__ == "__main__":
     unittest.main()
-

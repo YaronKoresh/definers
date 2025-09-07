@@ -1,6 +1,8 @@
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
 from definers import fetch_dataset
+
 
 class TestFetchDataset(unittest.TestCase):
     @patch("datasets.load_dataset")
@@ -10,7 +12,9 @@ class TestFetchDataset(unittest.TestCase):
 
         dataset = fetch_dataset("some_dataset")
         self.assertEqual(dataset, mock_dataset)
-        mock_load_dataset.assert_called_once_with("some_dataset", split="train")
+        mock_load_dataset.assert_called_once_with(
+            "some_dataset", split="train"
+        )
 
     @patch("datasets.load_dataset")
     def test_successful_load_with_revision(self, mock_load_dataset):
@@ -38,7 +42,10 @@ class TestFetchDataset(unittest.TestCase):
     @patch("datasets.load_dataset")
     def test_fallback_on_error(self, mock_load_dataset):
         mock_dataset = MagicMock()
-        mock_load_dataset.side_effect = [Exception("Initial error"), mock_dataset]
+        mock_load_dataset.side_effect = [
+            Exception("Initial error"),
+            mock_dataset,
+        ]
         dataset = fetch_dataset("some_url", url_type="json")
         self.assertEqual(dataset, mock_dataset)
         self.assertEqual(mock_load_dataset.call_count, 2)
@@ -46,11 +53,19 @@ class TestFetchDataset(unittest.TestCase):
     @patch("datasets.load_dataset")
     def test_fallback_with_revision(self, mock_load_dataset):
         mock_dataset = MagicMock()
-        mock_load_dataset.side_effect = [Exception("Initial error"), mock_dataset]
-        dataset = fetch_dataset("some_url", url_type="json", revision="v2")
+        mock_load_dataset.side_effect = [
+            Exception("Initial error"),
+            mock_dataset,
+        ]
+        dataset = fetch_dataset(
+            "some_url", url_type="json", revision="v2"
+        )
         self.assertEqual(dataset, mock_dataset)
         mock_load_dataset.assert_any_call(
-            "json", data_files={"train": "some_url"}, revision="v2", split="train"
+            "json",
+            data_files={"train": "some_url"},
+            revision="v2",
+            split="train",
         )
 
     @patch("datasets.load_dataset", side_effect=FileNotFoundError)
@@ -62,6 +77,7 @@ class TestFetchDataset(unittest.TestCase):
     def test_fallback_connection_error(self, mock_load_dataset):
         dataset = fetch_dataset("some_url", url_type="parquet")
         self.assertIsNone(dataset)
+
 
 if __name__ == "__main__":
     unittest.main()

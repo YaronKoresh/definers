@@ -1,7 +1,10 @@
 import unittest
-from sklearn.feature_extraction.text import TfidfVectorizer
+
 import numpy as np
+from sklearn.feature_extraction.text import TfidfVectorizer
+
 from definers import extract_text_features
+
 
 class TestExtractTextFeatures(unittest.TestCase):
 
@@ -36,6 +39,7 @@ class TestExtractTextFeatures(unittest.TestCase):
     def test_none_input(self):
         features = extract_text_features(None)
         self.assertIsNone(features)
+
 
 if __name__ == "__main__":
     unittest.main()

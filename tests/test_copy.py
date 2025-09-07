@@ -1,8 +1,10 @@
-import unittest
 import os
 import shutil
+import unittest
 from unittest.mock import patch
+
 from definers import copy
+
 
 class TestCopy(unittest.TestCase):
     def setUp(self):
@@ -34,7 +36,12 @@ class TestCopy(unittest.TestCase):
     @patch("pathlib.Path.resolve")
     @patch("pathlib.Path.is_symlink", return_value=True)
     def test_copy_directory_with_symlink(
-        self, mock_is_symlink, mock_resolve, mock_isdir, mock_copytree, mock_copy
+        self,
+        mock_is_symlink,
+        mock_resolve,
+        mock_isdir,
+        mock_copytree,
+        mock_copy,
     ):
         src = "/test/src_symlink"
         dst = "/test/dst_dir"
@@ -70,7 +77,12 @@ class TestCopy(unittest.TestCase):
     @patch("pathlib.Path.resolve")
     @patch("pathlib.Path.is_symlink", return_value=True)
     def test_copy_symlink_to_file(
-        self, mock_is_symlink, mock_resolve, mock_isdir, mock_copytree, mock_copy
+        self,
+        mock_is_symlink,
+        mock_resolve,
+        mock_isdir,
+        mock_copytree,
+        mock_copy,
     ):
         src = "/test/src_symlink_file"
         dst = "/test/dst_file.txt"
@@ -83,6 +95,6 @@ class TestCopy(unittest.TestCase):
         mock_copytree.assert_not_called()
         mock_isdir.assert_any_call(str(resolved_path))
 
+
 if __name__ == "__main__":
     unittest.main()
-

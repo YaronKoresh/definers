@@ -1,7 +1,10 @@
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
 import numpy as np
-from definers import feed, HybridModel
+
+from definers import HybridModel, feed
+
 
 class TestFeed(unittest.TestCase):
     def setUp(self):
@@ -24,7 +27,9 @@ class TestFeed(unittest.TestCase):
 
     @patch("definers.log")
     @patch("definers.np.concatenate", wraps=np.concatenate)
-    def test_feed_unsupervised_append(self, mock_concatenate, mock_log):
+    def test_feed_unsupervised_append(
+        self, mock_concatenate, mock_log
+    ):
         initial_model = HybridModel()
         initial_model.X_all = np.array([[0, 0]])
         model = feed(initial_model, self.X_new_np)
@@ -54,6 +59,7 @@ class TestFeed(unittest.TestCase):
         expected_X = np.concatenate([self.X_new_np] * epochs, axis=0)
         np.testing.assert_array_equal(model.X_all, expected_X)
         self.assertEqual(mock_concatenate.call_count, epochs - 1)
+
 
 if __name__ == "__main__":
     unittest.main()

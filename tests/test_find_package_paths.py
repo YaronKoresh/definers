@@ -1,6 +1,7 @@
+import sys
 import unittest
 from unittest.mock import patch
-import sys
+
 from definers import find_package_paths
 
 
@@ -89,4 +90,3 @@ class TestFindPackagePaths(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

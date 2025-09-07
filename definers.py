@@ -1136,7 +1136,7 @@ def init_custom_model(model_type, model_path=None):
 
 def files_to_dataset(features_paths: list, labels_paths: list = None):
     import torch
-    from torch.utils.data import TensorDataset, DataLoader
+    from torch.utils.data import DataLoader, TensorDataset
 
     features = []
     labels = []
@@ -1148,7 +1148,13 @@ def files_to_dataset(features_paths: list, labels_paths: list = None):
                 print(f"Error loading feature file: {feature_path}")
                 return None
             if isinstance(loaded, list):
-                features.extend([cupy_to_numpy(l) for l in loaded if l is not None])
+                features.extend(
+                    [
+                        cupy_to_numpy(l)
+                        for l in loaded
+                        if l is not None
+                    ]
+                )
             else:
                 features.append(cupy_to_numpy(loaded))
 
@@ -1159,7 +1165,13 @@ def files_to_dataset(features_paths: list, labels_paths: list = None):
                     print(f"Error loading label file: {label_path}")
                     return None
                 if isinstance(loaded, list):
-                    labels.extend([cupy_to_numpy(l) for l in loaded if l is not None])
+                    labels.extend(
+                        [
+                            cupy_to_numpy(l)
+                            for l in loaded
+                            if l is not None
+                        ]
+                    )
                 else:
                     labels.append(cupy_to_numpy(loaded))
 
@@ -1180,14 +1192,22 @@ def files_to_dataset(features_paths: list, labels_paths: list = None):
     try:
         features_tensor = convert_tensor_dtype(
             torch.stack(
-                [torch.tensor(reshape_numpy(f, lengths=max_lens)) for f in features]
+                [
+                    torch.tensor(reshape_numpy(f, lengths=max_lens))
+                    for f in features
+                ]
             )
         )
 
         if labels:
             labels_tensor = convert_tensor_dtype(
                 torch.stack(
-                    [torch.tensor(reshape_numpy(l, lengths=max_lens)) for l in labels]
+                    [
+                        torch.tensor(
+                            reshape_numpy(l, lengths=max_lens)
+                        )
+                        for l in labels
+                    ]
                 )
             )
             dataset = TensorDataset(features_tensor, labels_tensor)
@@ -1200,6 +1220,7 @@ def files_to_dataset(features_paths: list, labels_paths: list = None):
         catch(f"Error creating tensor dataset: {type(e_tensor)}")
         catch(e_tensor)
         return None
+
 
 def merge_columns(X, y=None):
     from torch.utils.data import DataLoader, TensorDataset
@@ -1566,7 +1587,7 @@ def train(
 def create_vectorizer(texts):
     from sklearn.feature_extraction.text import TfidfVectorizer
 
-    vectorizer = TfidfVectorizer(token_pattern=r'(?u)\b\w+\b')
+    vectorizer = TfidfVectorizer(token_pattern=r"(?u)\b\w+\b")
     vectorizer.fit(texts)
     return vectorizer
 
@@ -1674,10 +1695,10 @@ def extract_text_features(text, vectorizer=None):
     from sklearn.feature_extraction.text import TfidfVectorizer
 
     try:
-        vectorizer = vectorizer or TfidfVectorizer(token_pattern=r"(?u)\b\w+\b")
-        tfidf_matrix = vectorizer.fit_transform(
-            [text]
+        vectorizer = vectorizer or TfidfVectorizer(
+            token_pattern=r"(?u)\b\w+\b"
         )
+        tfidf_matrix = vectorizer.fit_transform([text])
         features = (
             tfidf_matrix.toarray().flatten().astype(_np.float32)
         )
@@ -1917,6 +1938,7 @@ def get_prediction_file_extension(pred_type):
     else:
         return "data"
 
+
 def process_rows(batch):
     try:
         from cuml.preprocessing import (
@@ -1977,6 +1999,7 @@ def predict_linear_regression(X_new, model_path):
         print(f"Error during prediction: {e}")
         return None
 
+
 def features_to_audio(
     predicted_features,
     sr=32000,
@@ -1994,54 +2017,102 @@ def features_to_audio(
         remainder = predicted_features.size % n_mfcc
         if remainder != 0:
             padding_needed = n_mfcc - remainder
-            print(f"Padding with {padding_needed} zeros to make the predicted features ({predicted_features.size}) a multiple of n_mfcc ({n_mfcc}).")
-            predicted_features = _np.pad(predicted_features, (0, padding_needed), mode='constant', constant_values=0)
+            print(
+                f"Padding with {padding_needed} zeros to make the predicted features ({predicted_features.size}) a multiple of n_mfcc ({n_mfcc})."
+            )
+            predicted_features = _np.pad(
+                predicted_features,
+                (0, padding_needed),
+                mode="constant",
+                constant_values=0,
+            )
 
         mfccs = predicted_features.reshape((n_mfcc, -1))
 
         if mfccs.shape[1] == 0:
-            print("Error: Reshaped MFCCs have zero frames. Cannot proceed with audio reconstruction.")
+            print(
+                "Error: Reshaped MFCCs have zero frames. Cannot proceed with audio reconstruction."
+            )
             return None
 
-        mel_spectrogram_db = librosa.feature.inverse.mfcc_to_mel(mfccs, n_mels=n_mels)
+        mel_spectrogram_db = librosa.feature.inverse.mfcc_to_mel(
+            mfccs, n_mels=n_mels
+        )
 
         mel_spectrogram = librosa.db_to_amplitude(mel_spectrogram_db)
-        mel_spectrogram = _np.nan_to_num(mel_spectrogram, nan=0.0, posinf=_np.finfo(_np.float16).max, neginf=_np.finfo(_np.float16).min)
+        mel_spectrogram = _np.nan_to_num(
+            mel_spectrogram,
+            nan=0.0,
+            posinf=_np.finfo(_np.float16).max,
+            neginf=_np.finfo(_np.float16).min,
+        )
         mel_spectrogram = _np.maximum(0, mel_spectrogram)
 
-        magnitude_spectrogram = librosa.feature.inverse.mel_to_stft(M = mel_spectrogram, sr = sr, n_fft = n_fft)
-        magnitude_spectrogram = _np.nan_to_num(magnitude_spectrogram, nan=0.0, posinf=_np.finfo(_np.float16).max, neginf=_np.finfo(_np.float16).min)
+        magnitude_spectrogram = librosa.feature.inverse.mel_to_stft(
+            M=mel_spectrogram, sr=sr, n_fft=n_fft
+        )
+        magnitude_spectrogram = _np.nan_to_num(
+            magnitude_spectrogram,
+            nan=0.0,
+            posinf=_np.finfo(_np.float16).max,
+            neginf=_np.finfo(_np.float16).min,
+        )
         magnitude_spectrogram = _np.maximum(0, magnitude_spectrogram)
-        magnitude_spectrogram = _np.nan_to_num(magnitude_spectrogram, nan=0.0, posinf=_np.finfo(_np.float16).max, neginf=_np.finfo(_np.float16).min)
+        magnitude_spectrogram = _np.nan_to_num(
+            magnitude_spectrogram,
+            nan=0.0,
+            posinf=_np.finfo(_np.float16).max,
+            neginf=_np.finfo(_np.float16).min,
+        )
 
         if magnitude_spectrogram.shape[0] != expected_freq_bins:
-            print(f"Error: Magnitude spectrogram has incorrect frequency bin count ({magnitude_spectrogram.shape[0]}) for n_fft ({n_fft}).\nExpected {expected_freq_bins}.\nCannot perform Griffin-Lim.")
+            print(
+                f"Error: Magnitude spectrogram has incorrect frequency bin count ({magnitude_spectrogram.shape[0]}) for n_fft ({n_fft}).\nExpected {expected_freq_bins}.\nCannot perform Griffin-Lim."
+            )
             return None
 
         if magnitude_spectrogram.shape[1] == 0:
-            print("Error: Magnitude spectrogram has zero frames. Skipping Griffin-Lim.")
+            print(
+                "Error: Magnitude spectrogram has zero frames. Skipping Griffin-Lim."
+            )
             return None
 
         griffin_lim_iterations = [12, 32]
 
         for n_iter in griffin_lim_iterations:
             try:
-                audio_waveform = librosa.griffinlim(magnitude_spectrogram, n_fft=n_fft, hop_length=hop_length, n_iter=n_iter)
+                audio_waveform = librosa.griffinlim(
+                    magnitude_spectrogram,
+                    n_fft=n_fft,
+                    hop_length=hop_length,
+                    n_iter=n_iter,
+                )
 
                 if audio_waveform.size > 0:
                     print(f"Griffin-Lim finished {n_iter} iterations")
 
-                    audio_waveform = _np.nan_to_num( audio_waveform, nan=0.0, posinf=_np.finfo(_np.float16).max, neginf=_np.finfo(_np.float16).min )                        
-                    audio_waveform = _np.clip(audio_waveform, -1.0, 1.0)
+                    audio_waveform = _np.nan_to_num(
+                        audio_waveform,
+                        nan=0.0,
+                        posinf=_np.finfo(_np.float16).max,
+                        neginf=_np.finfo(_np.float16).min,
+                    )
+                    audio_waveform = _np.clip(
+                        audio_waveform, -1.0, 1.0
+                    )
 
                     if not _np.all(_np.isfinite(audio_waveform)):
-                         print("Warning: Audio waveform contains non-finite values after clipping.\nThis is unexpected.\nReturning None.")
-                         return None
+                        print(
+                            "Warning: Audio waveform contains non-finite values after clipping.\nThis is unexpected.\nReturning None."
+                        )
+                        return None
 
                     return audio_waveform
 
                 else:
-                    print(f"Griffin-Lim with n_iter={n_iter} produced an empty output.")
+                    print(
+                        f"Griffin-Lim with n_iter={n_iter} produced an empty output."
+                    )
 
             except Exception as e:
                 print(f"Griffin-Lim with n_iter={n_iter} failed!")
@@ -2149,37 +2220,61 @@ def predict_audio(model, audio_file):
         return None
 
 
-def features_to_image(predicted_features, image_shape=(1024, 1024, 3)):
+def features_to_image(
+    predicted_features, image_shape=(1024, 1024, 3)
+):
     import cv2
 
     try:
         height, width, channels = image_shape
         hist_size = 256 * 3  # Color histograms (B, G, R)
         lbp_size = height * width  # LBP features
-        edge_size = height * width # Canny edge features
+        edge_size = height * width  # Canny edge features
 
         color_hist = predicted_features[:hist_size].reshape(3, 256)
-        lbp_features = predicted_features[hist_size:hist_size + lbp_size].reshape(height, width)
-        edge_features = predicted_features[hist_size + lbp_size:].reshape(height, width)
+        lbp_features = predicted_features[
+            hist_size : hist_size + lbp_size
+        ].reshape(height, width)
+        edge_features = predicted_features[
+            hist_size + lbp_size :
+        ].reshape(height, width)
 
         reconstructed_image = np.zeros(image_shape, dtype=np.uint8)
 
         for c in range(channels):
-          for i in range(256):
-            if c == 0:
-              reconstructed_image[:,:,0] += np.uint8(color_hist[0][i]/np.max(color_hist[0]) * 255)
-            elif c == 1:
-              reconstructed_image[:,:,1] += np.uint8(color_hist[1][i]/np.max(color_hist[1]) * 255)
-            else:
-              reconstructed_image[:,:,2] += np.uint8(color_hist[2][i]/np.max(color_hist[2]) * 255)
+            for i in range(256):
+                if c == 0:
+                    reconstructed_image[:, :, 0] += np.uint8(
+                        color_hist[0][i] / np.max(color_hist[0]) * 255
+                    )
+                elif c == 1:
+                    reconstructed_image[:, :, 1] += np.uint8(
+                        color_hist[1][i] / np.max(color_hist[1]) * 255
+                    )
+                else:
+                    reconstructed_image[:, :, 2] += np.uint8(
+                        color_hist[2][i] / np.max(color_hist[2]) * 255
+                    )
 
-        lbp_scaled = cv2.normalize(lbp_features, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
-        edge_scaled = cv2.normalize(edge_features, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
+        lbp_scaled = cv2.normalize(
+            lbp_features, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U
+        )
+        edge_scaled = cv2.normalize(
+            edge_features, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U
+        )
 
-        reconstructed_image_gray = cv2.addWeighted(lbp_scaled, 0.5, edge_scaled, 0.5, 0)
-        reconstructed_image = cv2.cvtColor(reconstructed_image, cv2.COLOR_BGR2GRAY)
-        reconstructed_image = cv2.addWeighted(reconstructed_image, 0.5, reconstructed_image_gray, 0.5, 0)
-        reconstructed_image = cv2.cvtColor(reconstructed_image, cv2.COLOR_GRAY2BGR)
+        reconstructed_image_gray = cv2.addWeighted(
+            lbp_scaled, 0.5, edge_scaled, 0.5, 0
+        )
+        reconstructed_image = cv2.cvtColor(
+            reconstructed_image, cv2.COLOR_BGR2GRAY
+        )
+        reconstructed_image = cv2.addWeighted(
+            reconstructed_image, 0.5, reconstructed_image_gray, 0.5, 0
+        )
+        reconstructed_image = cv2.cvtColor(
+            reconstructed_image, cv2.COLOR_GRAY2BGR
+        )
 
         return reconstructed_image
 
@@ -2187,7 +2282,13 @@ def features_to_image(predicted_features, image_shape=(1024, 1024, 3)):
         print(f"Error generating image from features: {e}")
         return None
 
-def features_to_video(predicted_features, frame_interval=10, fps=24, video_shape=(1024, 1024, 3)):
+
+def features_to_video(
+    predicted_features,
+    frame_interval=10,
+    fps=24,
+    video_shape=(1024, 1024, 3),
+):
     import cv2
 
     if predicted_features is None or predicted_features.size == 0:
@@ -2201,36 +2302,76 @@ def features_to_video(predicted_features, frame_interval=10, fps=24, video_shape
         lbp_size = height * width
         edge_size = height * width
 
-        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-        out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        out = cv2.VideoWriter(
+            output_path, fourcc, fps, (width, height)
+        )
 
         if predicted_features.ndim == 1:
-             predicted_features = predicted_features.reshape(1, -1)
-
+            predicted_features = predicted_features.reshape(1, -1)
 
         for frame_features in predicted_features:
             color_hist = frame_features[:hist_size].reshape(3, 256)
-            lbp_features = frame_features[hist_size:hist_size + lbp_size].reshape(height, width)
-            edge_features = frame_features[hist_size + lbp_size:].reshape(height, width)
+            lbp_features = frame_features[
+                hist_size : hist_size + lbp_size
+            ].reshape(height, width)
+            edge_features = frame_features[
+                hist_size + lbp_size :
+            ].reshape(height, width)
 
-            reconstructed_frame = np.zeros(video_shape, dtype=np.uint8)
+            reconstructed_frame = np.zeros(
+                video_shape, dtype=np.uint8
+            )
 
             for c in range(channels):
                 for i in range(256):
                     if c == 0:
-                        reconstructed_frame[:, :, 0] += np.uint8(color_hist[0][i] / np.max(color_hist[0]) * 255)
+                        reconstructed_frame[:, :, 0] += np.uint8(
+                            color_hist[0][i]
+                            / np.max(color_hist[0])
+                            * 255
+                        )
                     elif c == 1:
-                        reconstructed_frame[:, :, 1] += np.uint8(color_hist[1][i] / np.max(color_hist[1]) * 255)
+                        reconstructed_frame[:, :, 1] += np.uint8(
+                            color_hist[1][i]
+                            / np.max(color_hist[1])
+                            * 255
+                        )
                     else:
-                        reconstructed_frame[:, :, 2] += np.uint8(color_hist[2][i] / np.max(color_hist[2]) * 255)
+                        reconstructed_frame[:, :, 2] += np.uint8(
+                            color_hist[2][i]
+                            / np.max(color_hist[2])
+                            * 255
+                        )
 
-            lbp_scaled = cv2.normalize(lbp_features, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
-            edge_scaled = cv2.normalize(edge_features, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
+            lbp_scaled = cv2.normalize(
+                lbp_features, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U
+            )
+            edge_scaled = cv2.normalize(
+                edge_features,
+                None,
+                0,
+                255,
+                cv2.NORM_MINMAX,
+                cv2.CV_8U,
+            )
 
-            reconstructed_frame_gray = cv2.addWeighted(lbp_scaled, 0.5, edge_scaled, 0.5, 0)
-            reconstructed_frame = cv2.cvtColor(reconstructed_frame, cv2.COLOR_BGR2GRAY)
-            reconstructed_frame = cv2.addWeighted(reconstructed_frame, 0.5, reconstructed_frame_gray, 0.5, 0)
-            reconstructed_frame = cv2.cvtColor(reconstructed_frame, cv2.COLOR_GRAY2BGR)
+            reconstructed_frame_gray = cv2.addWeighted(
+                lbp_scaled, 0.5, edge_scaled, 0.5, 0
+            )
+            reconstructed_frame = cv2.cvtColor(
+                reconstructed_frame, cv2.COLOR_BGR2GRAY
+            )
+            reconstructed_frame = cv2.addWeighted(
+                reconstructed_frame,
+                0.5,
+                reconstructed_frame_gray,
+                0.5,
+                0,
+            )
+            reconstructed_frame = cv2.cvtColor(
+                reconstructed_frame, cv2.COLOR_GRAY2BGR
+            )
 
             out.write(reconstructed_frame)
 
@@ -2242,16 +2383,24 @@ def features_to_video(predicted_features, frame_interval=10, fps=24, video_shape
         return False
 
 
-def features_to_text(predicted_features, vectorizer=None, vocabulary=None):
+def features_to_text(
+    predicted_features, vectorizer=None, vocabulary=None
+):
     from sklearn.feature_extraction.text import TfidfVectorizer
 
     if vectorizer is None and vocabulary is None:
-        print("Error generating text from features: Either a vectorizer or a vocabulary must be provided.")
-        raise ValueError("Either a vectorizer or a vocabulary must be provided.")
+        print(
+            "Error generating text from features: Either a vectorizer or a vocabulary must be provided."
+        )
+        raise ValueError(
+            "Either a vectorizer or a vocabulary must be provided."
+        )
 
     try:
         if vectorizer is None:
-            vectorizer = TfidfVectorizer(vocabulary=vocabulary, token_pattern=r"(?u)\b\w+\b")
+            vectorizer = TfidfVectorizer(
+                vocabulary=vocabulary, token_pattern=r"(?u)\b\w+\b"
+            )
             vectorizer.fit(vocabulary)
 
         tfidf_matrix = predicted_features.reshape(1, -1)
@@ -3004,7 +3153,9 @@ def get_max_resolution(width, height, mega_pixels=0.25, factor=16):
     max_found_pixels = 0
 
     h_estimate = int((max_pixels / ratio) ** 0.5)
-    search_range = range(max(factor, h_estimate - factor * 4), h_estimate + factor * 4)
+    search_range = range(
+        max(factor, h_estimate - factor * 4), h_estimate + factor * 4
+    )
 
     for h_test in search_range:
         h_rounded = (h_test // factor) * factor
@@ -3017,7 +3168,10 @@ def get_max_resolution(width, height, mega_pixels=0.25, factor=16):
 
         current_pixels = w_rounded * h_rounded
 
-        if current_pixels <= max_pixels and current_pixels > max_found_pixels:
+        if (
+            current_pixels <= max_pixels
+            and current_pixels > max_found_pixels
+        ):
             max_found_pixels = current_pixels
             best_w, best_h = w_rounded, h_rounded
 
@@ -3791,7 +3945,7 @@ def cuda_version():
         output = result.stdout
         match = re.search(r"Build cuda_([\d\.]+)", output)
         if match:
-            cuda_version = match.group(1).strip('.')
+            cuda_version = match.group(1).strip(".")
             return cuda_version
         else:
             return False
@@ -3927,13 +4081,15 @@ def get_python_version():
     try:
         version_info = sys.version_info
 
-        if not hasattr(version_info, 'major'):
-             raise AttributeError("sys.version_info is missing essential version attributes")
+        if not hasattr(version_info, "major"):
+            raise AttributeError(
+                "sys.version_info is missing essential version attributes"
+            )
 
         major = version_info.major
-        minor = getattr(version_info, 'minor', 0)
-        micro = getattr(version_info, 'micro', 0)
-        
+        minor = getattr(version_info, "minor", 0)
+        micro = getattr(version_info, "micro", 0)
+
         version_str = f"{major}.{minor}.{micro}"
         return version_str
     except Exception as e:
@@ -4798,10 +4954,12 @@ def init_pretrained_model(task: str, turbo: bool = False):
         package_name = "phi4_temp_package"
 
         print(f"Downloading source files for {tasks[task]}...")
-        snapshot_dir = Path(snapshot_download(
-            repo_id=tasks[task],
-            allow_patterns=["*.py", "*.json"],
-        ))
+        snapshot_dir = Path(
+            snapshot_download(
+                repo_id=tasks[task],
+                allow_patterns=["*.py", "*.json"],
+            )
+        )
         print(f"Source files downloaded to: {snapshot_dir}")
 
         pyproject_toml_content = f"""
@@ -4814,30 +4972,49 @@ name = "{package_name}"
 version = "0.0.1"
 description = "A dynamically generated package for the Phi-4 model code."
         """
-        (snapshot_dir / "pyproject.toml").write_text(pyproject_toml_content)
+        (snapshot_dir / "pyproject.toml").write_text(
+            pyproject_toml_content
+        )
         print("Dynamically created pyproject.toml file.")
 
         print(f"Installing '{package_name}' from local source...")
         subprocess.check_call(
-            [sys.executable, "-m", "pip", "install", "-e", str(snapshot_dir)]
+            [
+                sys.executable,
+                "-m",
+                "pip",
+                "install",
+                "-e",
+                str(snapshot_dir),
+            ]
         )
         print(f"Successfully installed '{package_name}'.")
 
         importlib.invalidate_caches()
         print("Import caches invalidated.")
 
-        config = AutoConfig.from_pretrained(str(snapshot_dir), trust_remote_code=True)
-        module_name, class_name = config.auto_map["AutoModelForCausalLM"].rsplit(".", 1)
+        config = AutoConfig.from_pretrained(
+            str(snapshot_dir), trust_remote_code=True
+        )
+        module_name, class_name = config.auto_map[
+            "AutoModelForCausalLM"
+        ].rsplit(".", 1)
 
         print(f"Importing module '{module_name}'...")
         module = importlib.import_module(module_name)
         cls = getattr(module, class_name)
 
         if not hasattr(cls, "prepare_inputs_for_generation"):
-            cls.prepare_inputs_for_generation = prepare_inputs_for_generation
-            print(f"✅✅✅ Successfully patched '{class_name}' with 'prepare_inputs_for_generation'.")
+            cls.prepare_inputs_for_generation = (
+                prepare_inputs_for_generation
+            )
+            print(
+                f"✅✅✅ Successfully patched '{class_name}' with 'prepare_inputs_for_generation'."
+            )
         else:
-            print(f"✅ Method 'prepare_inputs_for_generation' already exists on '{class_name}'. No patch needed.")
+            print(
+                f"✅ Method 'prepare_inputs_for_generation' already exists on '{class_name}'. No patch needed."
+            )
 
         tok = AutoTokenizer.from_pretrained(tasks[task])
         prc = AutoProcessor.from_pretrained(
@@ -5193,6 +5370,7 @@ def one_dim_numpy(v):
 
 def two_dim_numpy(v):
     import torch
+
     if "cupy" in str(type(v)):
         v = cupy_to_numpy(v)
     if isinstance(v, torch.Tensor):
@@ -5204,14 +5382,18 @@ def two_dim_numpy(v):
             v = numpy_to_str(v)
             v = str_to_numpy(v)
         elif not np.issubdtype(v.dtype, np.number):
-            raise TypeError(f"CuPy array of dtype {v.dtype} is not supported.")
+            raise TypeError(
+                f"CuPy array of dtype {v.dtype} is not supported."
+            )
     elif isinstance(v, (list, tuple)):
         v = np.array(v)
     elif not np.issubdtype(type(v), _np.number):
         try:
             v = np.array(v).astype(float)
         except Exception as e:
-            raise TypeError(f"Input of type {type(v)} is not supported: {e}")
+            raise TypeError(
+                f"Input of type {type(v)} is not supported: {e}"
+            )
     else:
         v = np.array([v])
 
@@ -5226,10 +5408,14 @@ def two_dim_numpy(v):
             new_shape = (-1, v.shape[-1])
             return numpy_to_cupy(v.reshape(new_shape))
         except ValueError as e:
-            raise ValueError(f"Cannot reshape array of shape {v.shape} to 2D: {e}")
+            raise ValueError(
+                f"Cannot reshape array of shape {v.shape} to 2D: {e}"
+            )
+
 
 def three_dim_numpy(v):
     import torch
+
     if "cupy" in str(type(v)):
         v = cupy_to_numpy(v)
     if isinstance(v, torch.Tensor):
@@ -5241,14 +5427,18 @@ def three_dim_numpy(v):
             v = numpy_to_str(v)
             v = str_to_numpy(v)
         elif not np.issubdtype(v.dtype, np.number):
-            raise TypeError(f"CuPy array of dtype {v.dtype} is not supported.")
+            raise TypeError(
+                f"CuPy array of dtype {v.dtype} is not supported."
+            )
     elif isinstance(v, (list, tuple)):
         v = np.array(v)
     elif not np.issubdtype(type(v), _np.number):
         try:
             v = np.array(v).astype(float)
         except Exception as e:
-            raise TypeError(f"Input of type {type(v)} is not supported: {e}")
+            raise TypeError(
+                f"Input of type {type(v)} is not supported: {e}"
+            )
     else:
         v = np.array([v])
 
@@ -5261,7 +5451,9 @@ def three_dim_numpy(v):
             new_shape = (-1, v.shape[-2], v.shape[-1])
             return numpy_to_cupy(v.reshape(new_shape))
         except ValueError as e:
-            raise ValueError(f"Cannot reshape array of shape {v.shape} to 3D: {e}")
+            raise ValueError(
+                f"Cannot reshape array of shape {v.shape} to 3D: {e}"
+            )
 
 
 def resize_video(
