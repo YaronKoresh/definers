@@ -4951,7 +4951,7 @@ def init_pretrained_model(task: str, turbo: bool = False):
             AutoTokenizer,
         )
 
-        package_name = "phi4_temp_package"
+        package_name = "phi4_package"
 
         print(f"Downloading source files for {tasks[task]}...")
         snapshot_dir = Path(
@@ -4963,6 +4963,7 @@ def init_pretrained_model(task: str, turbo: bool = False):
         print(f"Source files downloaded to: {snapshot_dir}")
 
         py_modules = [p.stem for p in snapshot_dir.glob("*.py")]
+        print(py_modules)
 
         pyproject_toml_content = f"""
 [build-system]
@@ -5005,8 +5006,8 @@ py-modules = {py_modules}
             "AutoModelForCausalLM"
         ].rsplit(".", 1)
 
-        print(f"Importing module '{module_name}'...")
-        module = importlib.import_module(module_name)
+        print(f"Importing module '{package_name}.{module_name}'...")
+        module = importlib.import_module(f"{package_name}.{module_name}")
         cls = getattr(module, class_name)
 
         if not hasattr(cls, "prepare_inputs_for_generation"):
