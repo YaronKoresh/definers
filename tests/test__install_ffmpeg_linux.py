@@ -56,23 +56,28 @@ class TestInstallFfmpegLinux(unittest.TestCase):
         )
 
     @patch("os.geteuid", return_value=1000)
+    @patch("definers.sys.exit", side_effect=SystemExit)
+    @patch("builtins.print")
     @patch("shutil.which", return_value="/usr/bin/apt")
-    @patch("subprocess.run")
+    @patch("definers.subprocess.run")
     def test_permission_denied_triggers_exit(
-        self, mock_subprocess_run, mock_which, mock_geteuid, capsys
+        self, mock_run, mock_which, mock_print, mock_exit, mock_geteuid
     ):
-        mock_subprocess_run.side_effect = subprocess.CalledProcessError(
+        mock_run.side_effect = subprocess.CalledProcessError(
             returncode=13, cmd=["apt-get", "update"]
         )
 
-        with pytest.raises(SystemExit) as excinfo:
+        with self.assertRaises(SystemExit):
             _install_ffmpeg_linux()
 
-        assert excinfo.value.code == 1
+        mock_exit.assert_called_once_with(1)
 
-        captured = capsys.readouterr()
-        assert "[WARN] This script needs sudo privileges" in captured.out
-        assert "[ERROR] The installation command failed" in captured.out
+        mock_print.assert_any_call(
+            "[WARN] This script needs sudo privileges to install packages."
+        )
+        mock_print.assert_any_call(
+            "\n[ERROR] The installation command failed with exit code 13."
+        )
 
     @patch("os.geteuid", return_value=0)
     @patch("shutil.which", return_value=None)

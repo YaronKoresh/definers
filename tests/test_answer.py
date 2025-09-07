@@ -20,7 +20,7 @@ class TestAnswer(unittest.TestCase):
     @patch("definers.MODELS", new={"answer": None})
     @patch(
         "definers.SYSTEM_MESSAGE",
-        new={"message": "Mock System Message"},
+        new="Mock System Message",
     )
     def test_basic_text_history(self):
         with patch.dict(
@@ -41,8 +41,17 @@ class TestAnswer(unittest.TestCase):
             ]
             response = answer(history)
             self.assertEqual(response, "A witty response.")
+
+            expected_prompt = (
+                "<|system|>Mock System Message<|end|>"
+                "<|user|>Hi there<|end|>"
+                "<|assistant|>Hello! How can I help?<|end|>"
+                "<|user|>Tell me a joke<|end|>"
+                "<|assistant|>"
+            )
+
             self.mock_model.generate.assert_called_once_with(
-                prompt="<|system|>message: Mock System Message\n<|end|>\n<|user|>Hi there<|end|><|assistant|>Hello! How can I help?<|user|>Tell me a joke<|end|><|assistant|>",
+                prompt=expected_prompt,
                 max_length=200,
                 beam_width=16,
             )

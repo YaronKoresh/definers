@@ -9,7 +9,7 @@ from definers import extract_text
 
 class TestExtractText(unittest.TestCase):
 
-    @patch("definers.expect")
+    @patch("playwright.sync_api.expect")
     @patch("playwright.sync_api.sync_playwright")
     def test_extract_text_successfully(self, mock_sync_playwright):
         mock_page = MagicMock()
@@ -29,7 +29,7 @@ class TestExtractText(unittest.TestCase):
         result = extract_text("http://example.com", ".content")
         self.assertEqual(result, "Expected Text")
 
-    @patch("definers.expect")
+    @patch("playwright.sync_api.expect")
     @patch("playwright.sync_api.sync_playwright")
     def test_selector_not_found(self, mock_sync_playwright):
         mock_page = MagicMock()
@@ -49,7 +49,7 @@ class TestExtractText(unittest.TestCase):
         result = extract_text("http://example.com", ".nonexistent")
         self.assertEqual(result, "")
 
-    @patch("definers.expect")
+    @patch("playwright.sync_api.expect")
     @patch("playwright.sync_api.sync_playwright")
     def test_empty_page_content(self, mock_sync_playwright, mock_expect):
         mock_page = MagicMock()

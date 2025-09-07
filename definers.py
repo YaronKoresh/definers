@@ -101,7 +101,7 @@ if _find_spec("dask"):
     from dask import base
     from dask import graph_manipulation
     from dask.optimization import cull, fuse, inline, inline_functions
-    from dask.utils import key_split, get_func_name, istask, topological_sort
+    from dask.utils import key_split, istask
 
     dask.core = base
 
@@ -111,9 +111,7 @@ if _find_spec("dask"):
     dask.core.inline_functions = inline_functions
 
     dask.core.key_split = key_split
-    dask.core.get_func_name = get_func_name
     dask.core.istask = istask
-    dask.core.topological_sort = topological_sort
 
     dask.core.get_dependencies = graph_manipulation.get_dependencies
     dask.core.subs = graph_manipulation.subs
@@ -819,7 +817,7 @@ def answer(history: list):
     img = "<|image_X|>"
     snd = "<|audio_X|>"
 
-    messages = [SYSTEM_MESSAGE]
+    messages = [internal,SYSTEM_MESSAGE,end]
 
     img_list = []
     snd_list = []
@@ -1399,40 +1397,18 @@ def fit(model):
 
     log("Features", model.X_all)
 
-    if hasattr(model, "y_all"):
-        log("Labels", model.y_all)
-        max_lens = get_max_shapes(model.X_all, model.y_all)
-        try:
-            model.X_all = numpy_to_cupy(
-                reshape_numpy(
-                    cupy_to_numpy(model.X_all), lengths=max_lens
-                )
-            )
-            model.y_all = numpy_to_cupy(
-                reshape_numpy(
-                    cupy_to_numpy(model.y_all), lengths=max_lens
-                )
-            )
-            log("Fitting Supervised", model.X_all.shape[0])
-
+    try:
+        if hasattr(model, "y_all"):
+            # Supervised fitting
+            log("Labels", model.y_all)
+            log("Fitting Supervised model...", f"Features shape: {model.X_all.shape}")
             model.fit(model.X_all, model.y_all)
-
-        except Exception as e:
-            catch(e)
-    else:
-        max_lens = get_max_shapes(model.X_all)
-        try:
-            model.X_all = numpy_to_cupy(
-                reshape_numpy(
-                    cupy_to_numpy(model.X_all), lengths=max_lens
-                )
-            )
-            log("Fitting Unsupervised", model.X_all.shape[0])
-
+        else:
+            # Unsupervised fitting
+            log("Fitting Unsupervised model...", f"Features shape: {model.X_all.shape}")
             model.fit(model.X_all)
-
-        except Exception as e:
-            catch(e)
+    except Exception as e:
+        catch(e)
 
     return model
 
@@ -1441,39 +1417,38 @@ def feed(model, X_new, y_new=None, epochs=1):
 
     if model is None:
         model = HybridModel()
-
     if y_new is None:
-
+        # Unsupervised case
+        current_X = model.X_all if hasattr(model, "X_all") else None
         for epoch in range(epochs):
-            log(f"Feeding epoch {epoch+1} X", one_dim_numpy(X_new))
-            if not hasattr(model, "X_all"):
-                model.X_all = one_dim_numpy(X_new)
+            log(f"Feeding epoch {epoch+1} X", X_new)
+            if current_X is None:
+                current_X = X_new
             else:
-                model.X_all = one_dim_numpy(
-                    np.concatenate(
-                        (model.X_all, one_dim_numpy(X_new)), axis=0
-                    )
+                current_X = np.concatenate(
+                    (current_X, X_new), axis=0
                 )
+        model.X_all = current_X
 
     else:
-
+        # Supervised case
+        current_X = model.X_all if hasattr(model, "X_all") else None
+        current_y = model.y_all if hasattr(model, "y_all") else None
         for epoch in range(epochs):
-            log(f"Feeding epoch {epoch+1} X", one_dim_numpy(X_new))
-            log(f"Feeding epoch {epoch+1} y", one_dim_numpy(y_new))
-            if not hasattr(model, "X_all"):
-                model.X_all = one_dim_numpy(X_new)
-                model.y_all = one_dim_numpy(y_new)
+            log(f"Feeding epoch {epoch+1} X", X_new)
+            log(f"Feeding epoch {epoch+1} y", y_new)
+            if current_X is None:
+                current_X = X_new
+                current_y = y_new
             else:
-                model.X_all = one_dim_numpy(
-                    np.concatenate(
-                        (model.X_all, one_dim_numpy(X_new)), axis=0
-                    )
+                current_X = np.concatenate(
+                    (current_X, X_new), axis=0
                 )
-                model.y_all = one_dim_numpy(
-                    np.concatenate(
-                        (model.y_all, one_dim_numpy(y_new)), axis=0
-                    )
+                current_y = np.concatenate(
+                    (current_y, y_new), axis=0
                 )
+        model.X_all = current_X
+        model.y_all = current_y
 
     return model
 
@@ -4975,16 +4950,22 @@ def init_pretrained_model(task: str, turbo: bool = False):
         print(f"Preparing to inject patch into {target_file}...")
         original_code = target_file.read_text()
 
-        if target_class_line in original_code and "def prepare_inputs_for_generation" not in original_code:
-            patched_code = original_code.replace(
-                target_class_line,
-                f"{target_class_line}\n{prepare_inputs_for_generation_code}"
-            )
-            target_file.write_text(patched_code)
-            print("✅✅✅ SUCCESS: Method injected directly into source code.")
+        if any("dynamically injected to fix a compatibility issue" in line for line in original_code_lines):
+            print("✅ Source code appears to be already patched. Skipping injection.")
         else:
-            print("✅ Source code already contains the patch or target class not found.")
-            
+            try:
+                line_number = original_code_lines.index(target_class_declaration)
+                
+                injection_point = line_number + 1
+                original_code_lines.insert(injection_point, prepare_inputs_for_generation_code)
+                
+                patched_code = "\n".join(original_code_lines)
+                target_file.write_text(patched_code)
+                print("✅✅✅ SUCCESS: Method injected directly into source code.")
+                
+            except ValueError:
+                print("⚠️ Could not find the target class declaration line. Aborting patch.")
+
         print("Rewriting relative imports to absolute...")
         for py_file in snapshot_dir.glob("*.py"):
             content = py_file.read_text()
