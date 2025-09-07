@@ -96,16 +96,33 @@ importlib.util.find_spec = _find_spec
 
 if _find_spec("dask"):
     import dask
+    import dask.dataframe
+    import dask.widgets
+    import dask.diagnostics
+    import dask.bytes
+    import dask.bag
+    import dask.array
 
     d_copy = dask
-
     dask.core = d_copy
-    dask.dataframe.core = d_copy.dataframe
-    dask.widgets.core = d_copy.widgets
-    dask.diagnostics.core = d_copy.diagnostics
-    dask.bytes.core = d_copy.bytes
-    dask.bag.core = d_copy.bag
-    dask.array.core = d_copy.array
+
+    d_copy = dask.dataframe
+    dask.dataframe.core = d_copy
+
+    d_copy = dask.widgets
+    dask.widgets.core = d_copy
+
+    d_copy = dask.diagnostics
+    dask.diagnostics.core = d_copy
+
+    d_copy = dask.bytes
+    dask.bytes.core = d_copy
+
+    d_copy = dask.bag
+    dask.bag.core = d_copy
+
+    d_copy = dask.array
+    dask.array.core = d_copy
 
 
 language_codes = {
@@ -5057,10 +5074,10 @@ py-modules = {py_modules}
 
         tok = AutoTokenizer.from_pretrained(tasks[task])
         prc = AutoProcessor.from_pretrained(
-            tasks[task], trust_remote_code=True
+            str(snapshot_dir), trust_remote_code=True
         )
         mod = AutoModelForCausalLM.from_pretrained(
-            tasks[task],
+            str(snapshot_dir),
             torch_dtype=dtype(),
             trust_remote_code=True,
             _attn_implementation="eager",
