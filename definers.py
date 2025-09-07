@@ -94,27 +94,37 @@ def _find_spec(mod_name):
 
 importlib.util.find_spec = _find_spec
 
+
 if _find_spec("dask"):
     import dask
-    import dask.dataframe
-    import dask.diagnostics
-    import dask.bytes
-    import dask.array
 
-    d_copy = dask
-    dask.core = d_copy
+    from dask import base
+    from dask import graph_manipulation
+    from dask.optimization import cull, fuse, inline, inline_functions
+    from dask.utils import key_split, get_func_name, istask, topological_sort
 
-    d_copy = dask.dataframe
-    dask.dataframe.core = d_copy
+    dask.core = base
 
-    d_copy = dask.diagnostics
-    dask.diagnostics.core = d_copy
+    dask.core.fuse = fuse
+    dask.core.cull = cull
+    dask.core.inline = inline
+    dask.core.inline_functions = inline_functions
 
-    d_copy = dask.bytes
-    dask.bytes.core = d_copy
+    dask.core.key_split = key_split
+    dask.core.get_func_name = get_func_name
+    dask.core.istask = istask
+    dask.core.topological_sort = topological_sort
 
-    d_copy = dask.array
-    dask.array.core = d_copy
+    dask.core.get_dependencies = graph_manipulation.get_dependencies
+    dask.core.subs = graph_manipulation.subs
+
+    dask.core.get = dask.get
+
+    def _visualize_wrapper(dsk, **kwargs):
+        return dask.visualize(dsk, **kwargs)
+
+    dask.core.visualize = _visualize_wrapper
+    dask.core.to_graphviz = _visualize_wrapper
 
 
 language_codes = {
@@ -4947,6 +4957,35 @@ def init_pretrained_model(task: str, turbo: bool = False):
         snapshot_dir = Path(snapshot_download(repo_id=tasks[task], allow_patterns=["*.py", "*.json"]))
         print(f"Source files downloaded to: {snapshot_dir}")
 
+        prepare_inputs_for_generation_code = """
+    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, attention_mask=None, **kwargs):
+        if past_key_values:
+            input_ids = input_ids[:, -1:]
+        
+        return {
+            "input_ids": input_ids,
+            "past_key_values": past_key_values,
+            "attention_mask": attention_mask,
+            **kwargs,
+        }
+"""
+        target_file = snapshot_dir / "modeling_phi4mm.py"
+        target_class_line = "class Phi4MMModel(Phi4MMPreTrainedModel):"
+
+        print(f"Preparing to inject patch into {target_file}...")
+        original_code = target_file.read_text()
+
+        if target_class_line in original_code and "def prepare_inputs_for_generation" not in original_code:
+            patched_code = original_code.replace(
+                target_class_line,
+                f"{target_class_line}\n{prepare_inputs_for_generation_code}"
+            )
+            target_file.write_text(patched_code)
+            print("✅✅✅ SUCCESS: Method injected directly into source code.")
+        else:
+            print("✅ Source code already contains the patch or target class not found.")
+            
+        print("Rewriting relative imports to absolute...")
         for py_file in snapshot_dir.glob("*.py"):
             content = py_file.read_text()
             modified_content = re.sub(r"from \.([\w_]+)", r"from \1", content)
@@ -4954,7 +4993,6 @@ def init_pretrained_model(task: str, turbo: bool = False):
             if content != modified_content:
                 print(f"  - Rewrote imports in {py_file.name}")
                 py_file.write_text(modified_content)
-
 
         py_modules = [p.stem for p in snapshot_dir.glob("*.py")]
         print(py_modules)
@@ -4996,56 +5034,19 @@ py-modules = {py_modules}
         str_snapshot_dir = str(snapshot_dir)
         add_path(str_snapshot_dir)
 
-        def prepare_inputs_for_generation(
-            self,
-            input_ids,
-            past_key_values=None,
-            attention_mask=None,
-            **kwargs,
-        ):
-            if past_key_values is not None:
-                input_ids = input_ids[:, -1:]
-
-            return {
-                "input_ids": input_ids,
-                "past_key_values": past_key_values,
-                "attention_mask": attention_mask,
-                **kwargs,
-            }
-
-        original_from_pretrained = AutoModelForCausalLM.from_pretrained
-
-        def patched_from_pretrained(*args, **kwargs):
-            print("--> Intercepted `from_pretrained` call.")
-            
-            module_to_patch = "modeling_phi4mm"
-            base_class_to_patch = "Phi4MMModel" 
-            module = importlib.import_module(module_to_patch)
-            cls_to_patch = getattr(module, base_class_to_patch)
-
-            if not hasattr(cls_to_patch, "prepare_inputs_for_generation"):
-                cls_to_patch.prepare_inputs_for_generation = prepare_inputs_for_generation
-                print(f"--> Just-in-time patch applied to '{base_class_to_patch}'.")
-            
-            print("--> Calling original `from_pretrained` with patched class...")
-            return original_from_pretrained(*args, **kwargs)
-
-        AutoModelForCausalLM.from_pretrained = patched_from_pretrained
-
         print("Loading tokenizer, processor, and model via patched loader...")
-        tok = AutoTokenizer.from_pretrained(tasks[task])
+        tok = AutoTokenizer.from_pretrained(str_snapshot_dir)
         prc = AutoProcessor.from_pretrained(
-            tasks[task], trust_remote_code=True
+            str_snapshot_dir, trust_remote_code=True
         )
         mod = AutoModelForCausalLM.from_pretrained(
-            tasks[task],
+            str_snapshot_dir,
             torch_dtype=dtype(),
             trust_remote_code=True,
             _attn_implementation="eager",
         ).to(device())
 
-        AutoModelForCausalLM.from_pretrained = original_from_pretrained
-        print("✅ Model loaded successfully and original loader restored!")
+        print("✅ Model loaded successfully!")
 
         model = BeamSearch(
             mod,
