@@ -5037,11 +5037,11 @@ py-modules = {py_modules}
                 prepare_inputs_for_generation
             )
             print(
-                f"✅✅✅ Successfully patched '{class_name}' with 'prepare_inputs_for_generation'."
+                f"✅✅✅ Successfully patched '{base_class_to_patch}' with 'prepare_inputs_for_generation'."
             )
         else:
             print(
-                f"✅ Method 'prepare_inputs_for_generation' already exists on '{class_name}'. No patch needed."
+                f"✅ Method 'prepare_inputs_for_generation' already exists on '{base_class_to_patch}'. No patch needed."
             )
 
         tok = AutoTokenizer.from_pretrained(str(snapshot_dir))
