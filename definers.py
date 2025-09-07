@@ -5032,8 +5032,8 @@ py-modules = {py_modules}
         print(f"Retrieving class '{base_class_to_patch}' to patch...")
         cls_to_patch = getattr(module, base_class_to_patch)
 
-        if not hasattr(cls, "prepare_inputs_for_generation"):
-            cls.prepare_inputs_for_generation = (
+        if not hasattr(cls_to_patch, "prepare_inputs_for_generation"):
+            cls_to_patch.prepare_inputs_for_generation = (
                 prepare_inputs_for_generation
             )
             print(
