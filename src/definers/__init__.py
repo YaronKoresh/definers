@@ -6075,7 +6075,6 @@ class HybridModel:
 
 class BeamSearch:
     import torch
-    import torch.nn.functional as F
 
     def __init__(
         self,
@@ -6111,6 +6110,9 @@ class BeamSearch:
         max_length: int,
         beam_width: int,
     ) -> torch.Tensor:
+
+        import torch
+        import torch.nn.functional as F
 
         input_ids = input_ids.to(self.device)
         beams = [([(input_ids, 0.0)], 0.0)]
@@ -6164,6 +6166,8 @@ class BeamSearch:
         self, prompt: str, max_length: int, beam_width: int, **kw
     ) -> str:
 
+        import torch
+        import torch.nn.functional as F
         import torch.nn.modules.module as module
 
         inputs = self.processor(prompt, return_tensors="pt", **kw).to(
