@@ -7379,11 +7379,11 @@ def beat_visualizer(
             lambda t: 1 + 0.1 * (t / duration)
         )
     elif animation_style == "Zoom Out":
-        image_clip = image_clip.resize(
+        image_clip = image_clip.resized(
             lambda t: 1.1 - 0.1 * (t / duration)
         )
     final_clip = (
-        image_clip.resize(
+        image_clip.resized(
             lambda t: image_clip.w
             * beat_resize_func(t)
             / image_clip.w
