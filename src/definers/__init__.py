@@ -7046,7 +7046,7 @@ def humanize_vocals(audio_path, amount=0.5):
     import librosa
     import soundfile as sf
 
-    output_path = tmp( audio_path.split(".")[-1], keep=False )
+    output_path = tmp(audio_path.split(".")[-1], keep=False)
 
     try:
         print(f"Loading audio from: {audio_path}")
@@ -7054,9 +7054,9 @@ def humanize_vocals(audio_path, amount=0.5):
 
         if y.ndim == 1:
             y = y.reshape(1, -1)
-        
+
         num_channels = y.shape[0]
-        
+
         y_mono = librosa.to_mono(y)
 
         n_fft = 2048
@@ -7072,50 +7072,70 @@ def humanize_vocals(audio_path, amount=0.5):
             hop_length=hop_length,
         )
         f0 = np.nan_to_num(f0)
-        
+
         target_f0 = np.copy(f0)
 
         print("Applying humanization logic...")
         for i in range(len(f0)):
             if voiced_flag[i] and f0[i] > 0:
                 current_f0 = f0[i]
-                
-                cents_deviation = (np.random.rand() - 0.5) * 2 * (amount * 15)
-                
-                ratio = 2**(cents_deviation / 1200)
-                
+
+                cents_deviation = (
+                    (np.random.rand() - 0.5) * 2 * (amount * 15)
+                )
+
+                ratio = 2 ** (cents_deviation / 1200)
+
                 target_f0[i] = current_f0 * ratio
 
-        print("Resynthesizing audio with new pitch variations (per channel)...")
+        print(
+            "Resynthesizing audio with new pitch variations (per channel)..."
+        )
         y_humanized_channels = []
 
         for i in range(num_channels):
             print(f"Processing channel {i+1}/{num_channels}...")
             channel_data = y[i]
-            
-            stft_vocals = librosa.stft(channel_data, n_fft=n_fft, hop_length=hop_length)
+
+            stft_vocals = librosa.stft(
+                channel_data, n_fft=n_fft, hop_length=hop_length
+            )
             magnitudes = np.abs(stft_vocals)
             phase = np.angle(stft_vocals)
 
             new_phase = np.zeros_like(phase)
             new_phase[:, 0] = phase[:, 0]
             freqs = librosa.fft_frequencies(sr=sr, n_fft=n_fft)
-            expected_phase_advance = 2 * np.pi * freqs * hop_length / sr
+            expected_phase_advance = (
+                2 * np.pi * freqs * hop_length / sr
+            )
 
             for t in range(1, stft_vocals.shape[1]):
-                dphase = phase[:, t] - phase[:, t - 1] - expected_phase_advance
-                dphase = dphase - 2 * np.pi * np.round(dphase / (2 * np.pi))
+                dphase = (
+                    phase[:, t]
+                    - phase[:, t - 1]
+                    - expected_phase_advance
+                )
+                dphase = dphase - 2 * np.pi * np.round(
+                    dphase / (2 * np.pi)
+                )
                 true_freq = expected_phase_advance + dphase
-                
+
                 ratio = 1.0
                 if t < len(f0) and f0[t] > 0 and target_f0[t] > 0:
                     ratio = target_f0[t] / f0[t]
-                    
+
                 shifted_phase_advance = true_freq * ratio
-                new_phase[:, t] = new_phase[:, t - 1] + shifted_phase_advance
-            
+                new_phase[:, t] = (
+                    new_phase[:, t - 1] + shifted_phase_advance
+                )
+
             stft_humanized = magnitudes * np.exp(1j * new_phase)
-            y_humanized_channel = librosa.istft(stft_humanized, hop_length=hop_length, length=len(channel_data))
+            y_humanized_channel = librosa.istft(
+                stft_humanized,
+                hop_length=hop_length,
+                length=len(channel_data),
+            )
             y_humanized_channels.append(y_humanized_channel)
 
         if len(y_humanized_channels) > 1:
@@ -7724,12 +7744,16 @@ def create_spectrum_visualization(audio_path):
 
         n_fft = 2048
         hop_length = 512
-        stft_result = librosa.stft(y, n_fft=n_fft, hop_length=hop_length)
+        stft_result = librosa.stft(
+            y, n_fft=n_fft, hop_length=hop_length
+        )
         magnitude = np.abs(stft_result)
         avg_magnitude = np.mean(magnitude, axis=1)
 
         freqs = librosa.fft_frequencies(sr=sr, n_fft=n_fft)
-        magnitude_db = librosa.amplitude_to_db(avg_magnitude, ref=np.max)
+        magnitude_db = librosa.amplitude_to_db(
+            avg_magnitude, ref=np.max
+        )
 
         fig, ax = plt.subplots(figsize=(8, 5), facecolor="#f0f0f0")
         ax.set_facecolor("white")
@@ -7752,13 +7776,29 @@ def create_spectrum_visualization(audio_path):
 
         ax.set_xscale("log")
         ax.set_xlim(20, sr / 2)
-        ax.set_ylim(np.min(magnitude_db) - 1, np.max(magnitude_db) + 5)
+        ax.set_ylim(
+            np.min(magnitude_db) - 1, np.max(magnitude_db) + 5
+        )
 
         xticks = [100, 200, 500, 1000, 2000, 5000, 10000, 20000]
-        xtick_labels = ['100', '200', '500', '1k', '2k', '5k', '10k', '20k']
-        ax.set_xticks([x for x in xticks if x < sr/2])
-        ax.set_xticklabels([label for x, label in zip(xticks, xtick_labels) if x < sr/2])
-
+        xtick_labels = [
+            "100",
+            "200",
+            "500",
+            "1k",
+            "2k",
+            "5k",
+            "10k",
+            "20k",
+        ]
+        ax.set_xticks([x for x in xticks if x < sr / 2])
+        ax.set_xticklabels(
+            [
+                label
+                for x, label in zip(xticks, xtick_labels)
+                if x < sr / 2
+            ]
+        )
 
         ax.grid(
             True,
@@ -8024,7 +8064,9 @@ def midi_to_audio(midi_path, format_choice):
     return final_output_path
 
 
-def autotune_vocals(audio_path, strength, format_choice, humanize = 0.5):
+def autotune_vocals(
+    audio_path, strength, format_choice, humanize=0.5
+):
     import librosa
     import madmom
     import pydub
@@ -8055,67 +8097,117 @@ def autotune_vocals(audio_path, strength, format_choice, humanize = 0.5):
 
         print("Starting vocal rhythm correction...")
         try:
-            proc = madmom.features.beats.DBNBeatTrackingProcessor(fps=100)
-            act = madmom.features.beats.RNNBeatProcessor()(str(instrumental_path))
+            proc = madmom.features.beats.DBNBeatTrackingProcessor(
+                fps=100
+            )
+            act = madmom.features.beats.RNNBeatProcessor()(
+                str(instrumental_path)
+            )
             beat_times = proc(act)
-            vocal_intervals = librosa.effects.split(y, top_db=32, frame_length=2048, hop_length=512)
+            vocal_intervals = librosa.effects.split(
+                y, top_db=32, frame_length=2048, hop_length=512
+            )
 
             if len(vocal_intervals) > 0 and len(beat_times) > 0:
                 y_timed = np.zeros_like(y)
                 last_end_sample = 0
                 for start_frame, end_frame in vocal_intervals:
-                    start_sample = librosa.frames_to_samples(start_frame, hop_length=512)
-                    end_sample = librosa.frames_to_samples(end_frame, hop_length=512)
+                    start_sample = librosa.frames_to_samples(
+                        start_frame, hop_length=512
+                    )
+                    end_sample = librosa.frames_to_samples(
+                        end_frame, hop_length=512
+                    )
                     segment = y[start_sample:end_sample]
                     if len(segment) == 0:
                         continue
-                    
-                    start_time = librosa.samples_to_time(start_sample, sr=sr)
-                    last_end_time = librosa.samples_to_time(last_end_sample, sr=sr)
-                    
-                    future_beats = beat_times[beat_times > last_end_time]
+
+                    start_time = librosa.samples_to_time(
+                        start_sample, sr=sr
+                    )
+                    last_end_time = librosa.samples_to_time(
+                        last_end_sample, sr=sr
+                    )
+
+                    future_beats = beat_times[
+                        beat_times > last_end_time
+                    ]
 
                     final_start_pos = start_sample
 
                     if len(future_beats) > 0:
                         if len(beat_times) > 1:
-                            beat_duration = np.mean(np.diff(beat_times))
+                            beat_duration = np.mean(
+                                np.diff(beat_times)
+                            )
                         else:
                             beat_duration = 0.5
 
                         threshold = beat_duration / 4.0
 
-                        best_beat_index = np.argmin(np.abs(future_beats - start_time))
-                        time_difference = np.abs(future_beats[best_beat_index] - start_time)
+                        best_beat_index = np.argmin(
+                            np.abs(future_beats - start_time)
+                        )
+                        time_difference = np.abs(
+                            future_beats[best_beat_index] - start_time
+                        )
 
                         if time_difference < threshold:
-                            quantized_start_time = future_beats[best_beat_index]
-                            final_start_pos = librosa.time_to_samples(quantized_start_time, sr=sr)
+                            quantized_start_time = future_beats[
+                                best_beat_index
+                            ]
+                            final_start_pos = librosa.time_to_samples(
+                                quantized_start_time, sr=sr
+                            )
 
-                    safe_start_pos = max(final_start_pos, last_end_sample)
+                    safe_start_pos = max(
+                        final_start_pos, last_end_sample
+                    )
 
                     if safe_start_pos + len(segment) <= len(y_timed):
-                        y_timed[safe_start_pos : safe_start_pos + len(segment)] = segment
-                        last_end_sample = safe_start_pos + len(segment)
+                        y_timed[
+                            safe_start_pos : safe_start_pos
+                            + len(segment)
+                        ] = segment
+                        last_end_sample = safe_start_pos + len(
+                            segment
+                        )
                     else:
-                        if start_sample + len(segment) <= len(y_timed):
-                            y_timed[start_sample : start_sample + len(segment)] = segment
-                            last_end_sample = start_sample + len(segment)
-                
+                        if start_sample + len(segment) <= len(
+                            y_timed
+                        ):
+                            y_timed[
+                                start_sample : start_sample
+                                + len(segment)
+                            ] = segment
+                            last_end_sample = start_sample + len(
+                                segment
+                            )
+
                 if np.max(np.abs(y_timed)) < 0.01:
-                    print("Rhythm correction resulted in near-silence. Reverting to original vocal timing.")
+                    print(
+                        "Rhythm correction resulted in near-silence. Reverting to original vocal timing."
+                    )
                     y = y_original
                 else:
                     y = y_timed
-                    print("Vocal rhythm correction applied successfully.")
+                    print(
+                        "Vocal rhythm correction applied successfully."
+                    )
             else:
-                print("Could not detect beats or vocal segments, skipping rhythm correction.")
+                print(
+                    "Could not detect beats or vocal segments, skipping rhythm correction."
+                )
         except Exception as e:
-            catch(f"Could not apply rhythm correction, proceeding with pitch correction only. Error: {e}")
+            catch(
+                f"Could not apply rhythm correction, proceeding with pitch correction only. Error: {e}"
+            )
 
         n_fft = 2048
         hop_length = 512
-        stft_vocals = librosa.stft(y, n_fft=n_fft, hop_length=hop_length)
+        stft_vocals = librosa.stft(
+            y, n_fft=n_fft, hop_length=hop_length
+        )
         magnitudes = np.abs(stft_vocals)
 
         f0, voiced_flag, _ = librosa.pyin(
@@ -8134,14 +8226,18 @@ def autotune_vocals(audio_path, strength, format_choice, humanize = 0.5):
                 current_f0 = f0[i]
                 target_midi = round(librosa.hz_to_midi(current_f0))
                 ideal_f0 = librosa.midi_to_hz(target_midi)
-                
+
                 if humanize > 0:
-                    cents_deviation = (np.random.rand() - 0.5) * 2 * (humanize * 15)
-                    ratio = 2**(cents_deviation / 1200)
+                    cents_deviation = (
+                        (np.random.rand() - 0.5) * 2 * (humanize * 15)
+                    )
+                    ratio = 2 ** (cents_deviation / 1200)
                     ideal_f0 *= ratio
-                
-                target_f0[i] = current_f0 + (ideal_f0 - current_f0) * strength
-        
+
+                target_f0[i] = (
+                    current_f0 + (ideal_f0 - current_f0) * strength
+                )
+
         phase = np.angle(stft_vocals)
         new_phase = np.zeros_like(phase)
         new_phase[:, 0] = phase[:, 0]
@@ -8149,20 +8245,28 @@ def autotune_vocals(audio_path, strength, format_choice, humanize = 0.5):
         expected_phase_advance = 2 * np.pi * freqs * hop_length / sr
 
         for t in range(1, stft_vocals.shape[1]):
-            dphase = phase[:, t] - phase[:, t - 1] - expected_phase_advance
-            dphase = dphase - 2 * np.pi * np.round(dphase / (2 * np.pi))
+            dphase = (
+                phase[:, t] - phase[:, t - 1] - expected_phase_advance
+            )
+            dphase = dphase - 2 * np.pi * np.round(
+                dphase / (2 * np.pi)
+            )
             true_freq = expected_phase_advance + dphase
-            
+
             ratio = 1.0
             if t < len(f0) and f0[t] > 0 and target_f0[t] > 0:
                 ratio = target_f0[t] / f0[t]
-                
+
             shifted_phase_advance = true_freq * ratio
-            new_phase[:, t] = new_phase[:, t - 1] + shifted_phase_advance
-        
+            new_phase[:, t] = (
+                new_phase[:, t - 1] + shifted_phase_advance
+            )
+
         stft_tuned = magnitudes * np.exp(1j * new_phase)
-        y_tuned = librosa.istft(stft_tuned, hop_length=hop_length, length=len(y))
-        
+        y_tuned = librosa.istft(
+            stft_tuned, hop_length=hop_length, length=len(y)
+        )
+
         print("Normalizing output volume...")
         original_rms = np.sqrt(np.mean(y**2))
         tuned_rms = np.sqrt(np.mean(y_tuned**2))
@@ -8175,16 +8279,24 @@ def autotune_vocals(audio_path, strength, format_choice, humanize = 0.5):
         sf.write(temp_tuned_vocals_path, y_tuned, sr)
 
         instrumental = pydub.AudioSegment.from_file(instrumental_path)
-        tuned_vocals = pydub.AudioSegment.from_file(temp_tuned_vocals_path)
-        
+        tuned_vocals = pydub.AudioSegment.from_file(
+            temp_tuned_vocals_path
+        )
+
         if instrumental.channels == 2 and tuned_vocals.channels == 1:
             tuned_vocals = tuned_vocals.set_channels(2)
 
         combined = instrumental.overlay(tuned_vocals)
-        
-        output_stem = str(Path(audio_path).with_name(f"{Path(audio_path).stem}_autotuned"))
-        final_output_path = export_audio(combined, output_stem, format_choice)
-        
+
+        output_stem = str(
+            Path(audio_path).with_name(
+                f"{Path(audio_path).stem}_autotuned"
+            )
+        )
+        final_output_path = export_audio(
+            combined, output_stem, format_choice
+        )
+
         delete(temp_tuned_vocals_path)
         return final_output_path
     finally:
