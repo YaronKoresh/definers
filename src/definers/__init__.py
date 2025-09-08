@@ -7045,22 +7045,101 @@ def create_share_links(
     return f"""<div style='text-align:center; padding-top: 10px;'><p style='font-weight: bold;'>Share your creation!</p><a href='{twitter_link}' target='_blank' style='margin: 0 5px;'>X/Twitter</a> | <a href='{facebook_link}' target='_blank' style='margin: 0 5px;'>Facebook</a> | <a href='{reddit_link}' target='_blank' style='margin: 0 5px;'>Reddit</a> | <a href='{whatsapp_link}' target='_blank' style='margin: 0 5px;'>WhatsApp</a></div>"""
 
 
-def humanize_audio(audio_path):
+def humanize_vocals(audio_path, amount=0.5):
     import librosa
     import soundfile as sf
 
+    output_path = tmp( audio_path.split(".")[-1], keep=False )
+
     try:
-        y, sr = librosa.load(audio_path, sr=None)
-        noise = np.random.randn(len(y))
-        y_noisy = y + 0.0001 * noise
-        y_eq = y_noisy * (
-            1
-            + 0.01 * np.sin(2 * np.pi * 1000 * np.arange(len(y)) / sr)
+        print(f"Loading audio from: {audio_path}")
+        y, sr = librosa.load(audio_path, sr=None, mono=False)
+
+        if y.ndim == 1:
+            y = y.reshape(1, -1)
+        
+        num_channels = y.shape[0]
+        
+        y_mono = librosa.to_mono(y)
+
+        n_fft = 2048
+        hop_length = 512
+
+        print("Estimating fundamental frequency from mono mix...")
+        f0, voiced_flag, _ = librosa.pyin(
+            y_mono,
+            fmin=librosa.note_to_hz("C2"),
+            fmax=librosa.note_to_hz("C7"),
+            sr=sr,
+            frame_length=n_fft,
+            hop_length=hop_length,
         )
-        sf.write(audio_path, y_eq, sr)
-        return audio_path
+        f0 = np.nan_to_num(f0)
+        
+        target_f0 = np.copy(f0)
+
+        print("Applying humanization logic...")
+        for i in range(len(f0)):
+            if voiced_flag[i] and f0[i] > 0:
+                current_f0 = f0[i]
+                
+                cents_deviation = (np.random.rand() - 0.5) * 2 * (amount * 15)
+                
+                ratio = 2**(cents_deviation / 1200)
+                
+                target_f0[i] = current_f0 * ratio
+
+        print("Resynthesizing audio with new pitch variations (per channel)...")
+        y_humanized_channels = []
+
+        for i in range(num_channels):
+            print(f"Processing channel {i+1}/{num_channels}...")
+            channel_data = y[i]
+            
+            stft_vocals = librosa.stft(channel_data, n_fft=n_fft, hop_length=hop_length)
+            magnitudes = np.abs(stft_vocals)
+            phase = np.angle(stft_vocals)
+
+            new_phase = np.zeros_like(phase)
+            new_phase[:, 0] = phase[:, 0]
+            freqs = librosa.fft_frequencies(sr=sr, n_fft=n_fft)
+            expected_phase_advance = 2 * np.pi * freqs * hop_length / sr
+
+            for t in range(1, stft_vocals.shape[1]):
+                dphase = phase[:, t] - phase[:, t - 1] - expected_phase_advance
+                dphase = dphase - 2 * np.pi * np.round(dphase / (2 * np.pi))
+                true_freq = expected_phase_advance + dphase
+                
+                ratio = 1.0
+                if t < len(f0) and f0[t] > 0 and target_f0[t] > 0:
+                    ratio = target_f0[t] / f0[t]
+                    
+                shifted_phase_advance = true_freq * ratio
+                new_phase[:, t] = new_phase[:, t - 1] + shifted_phase_advance
+            
+            stft_humanized = magnitudes * np.exp(1j * new_phase)
+            y_humanized_channel = librosa.istft(stft_humanized, hop_length=hop_length, length=len(channel_data))
+            y_humanized_channels.append(y_humanized_channel)
+
+        if len(y_humanized_channels) > 1:
+            y_humanized = np.vstack(y_humanized_channels)
+        else:
+            y_humanized = y_humanized_channels[0]
+
+        print("Normalizing output volume...")
+        original_rms = np.sqrt(np.mean(y**2))
+        humanized_rms = np.sqrt(np.mean(y_humanized**2))
+
+        if humanized_rms > 1e-6:
+            rms_ratio = original_rms / humanized_rms
+            y_humanized *= rms_ratio
+
+        print(f"Saving humanized audio to: {output_path}")
+        sf.write(output_path, y_humanized.T, sr)
+        return output_path
+
     except Exception as e:
-        catch(f"Could not humanize AI output: {e}")
+        catch(f"Could not humanize audio: {e}")
         return audio_path
 
 
@@ -7098,7 +7177,7 @@ def generate_voice(
         )
         sf.write(temp_wav_path, wav, 24000)
         if humanize:
-            temp_wav_path = humanize_audio(temp_wav_path)
+            temp_wav_path = humanize_vocals(temp_wav_path)
         sound = pydub.AudioSegment.from_file(temp_wav_path)
         output_stem = tmp(keep=False).replace(".data", "")
         final_output_path = export_audio(
@@ -7127,7 +7206,7 @@ def generate_music(prompt, duration_s, format_choice, humanize):
     temp_wav_path = tmp("wav", keep=False)
     write_wav(temp_wav_path, rate=sampling_rate, data=wav_output)
     if humanize:
-        temp_wav_path = humanize_audio(temp_wav_path)
+        temp_wav_path = humanize_vocals(temp_wav_path)
     sound = pydub.AudioSegment.from_file(temp_wav_path)
     output_stem = Path(temp_wav_path).with_name(
         f"generated_{random_string()}"
@@ -7863,7 +7942,7 @@ def extend_audio(
         MODELS["music"].config.audio_encoder.sampling_rate,
     )
     if humanize:
-        temp_extension_path = humanize_audio(temp_extension_path)
+        temp_extension_path = humanize_vocals(temp_extension_path)
     original_sound = pydub.AudioSegment.from_file(audio_path)
     extension_sound = pydub.AudioSegment.from_file(
         temp_extension_path
@@ -7948,14 +8027,16 @@ def midi_to_audio(midi_path, format_choice):
     return final_output_path
 
 
-def autotune_vocals(audio_path, strength, format_choice):
+def autotune_vocals(audio_path, strength, format_choice, humanize = 0.5):
     import librosa
     import madmom
     import pydub
     import soundfile as sf
 
     separation_dir = tmp(dir=True)
+
     try:
+        print("Separating vocals... (This requires Demucs)")
         run(
             f'"{sys.executable}" -m demucs.separate -n htdemucs_ft --two-stems=vocals -o "{separation_dir}" "{audio_path}"'
         )
@@ -7969,104 +8050,69 @@ def autotune_vocals(audio_path, strength, format_choice):
         if not vocals_path.exists() or not instrumental_path.exists():
             catch("Vocal separation failed.")
             return None
+
         y_original, sr = librosa.load(
             str(vocals_path), sr=None, mono=True
         )
         y = np.copy(y_original)
+
         print("Starting vocal rhythm correction...")
         try:
-            proc = madmom.features.beats.DBNBeatTrackingProcessor(
-                fps=100
-            )
-            act = madmom.features.beats.RNNBeatProcessor()(
-                str(instrumental_path)
-            )
+            proc = madmom.features.beats.DBNBeatTrackingProcessor(fps=100)
+            act = madmom.features.beats.RNNBeatProcessor()(str(instrumental_path))
             beat_times = proc(act)
-            vocal_intervals = librosa.effects.split(
-                y, top_db=32, frame_length=2048, hop_length=512
-            )
+            vocal_intervals = librosa.effects.split(y, top_db=32, frame_length=2048, hop_length=512)
+
             if len(vocal_intervals) > 0 and len(beat_times) > 0:
                 y_timed = np.zeros_like(y)
                 last_end_sample = 0
                 for start_frame, end_frame in vocal_intervals:
-                    start_sample = librosa.frames_to_samples(
-                        start_frame, hop_length=512
-                    )
-                    end_sample = librosa.frames_to_samples(
-                        end_frame, hop_length=512
-                    )
+                    start_sample = librosa.frames_to_samples(start_frame, hop_length=512)
+                    end_sample = librosa.frames_to_samples(end_frame, hop_length=512)
                     segment = y[start_sample:end_sample]
                     if len(segment) == 0:
                         continue
-                    start_time = librosa.samples_to_time(
-                        start_sample, sr=sr
-                    )
-                    quantized_start_time_idx = np.argmin(
-                        np.abs(beat_times - start_time)
-                    )
-                    quantized_start_time = beat_times[
-                        quantized_start_time_idx
-                    ]
-                    quantized_start_sample = librosa.time_to_samples(
-                        quantized_start_time, sr=sr
-                    )
+                    
+                    start_time = librosa.samples_to_time(start_sample, sr=sr)
+                    
+                    quantized_start_time_idx = np.argmin(np.abs(beat_times - start_time))
+                    quantized_start_time = beat_times[quantized_start_time_idx]
+                    quantized_start_sample = librosa.time_to_samples(quantized_start_time, sr=sr)
+                    
                     if quantized_start_sample < last_end_sample:
-                        next_beat_candidates = beat_times[
-                            beat_times
-                            > librosa.samples_to_time(
-                                last_end_sample, sr=sr
-                            )
-                        ]
+                        next_beat_candidates = beat_times[beat_times > librosa.samples_to_time(last_end_sample, sr=sr)]
                         if len(next_beat_candidates) > 0:
-                            quantized_start_sample = (
-                                librosa.time_to_samples(
-                                    next_beat_candidates[0], sr=sr
-                                )
-                            )
+                            quantized_start_sample = librosa.time_to_samples(next_beat_candidates[0], sr=sr)
                         else:
                             quantized_start_sample = last_end_sample
+                    
                     start_pos = quantized_start_sample
                     end_pos = start_pos + len(segment)
                     segment_to_place = segment
+
                     if end_pos > len(y_timed):
-                        segment_to_place = segment[
-                            : len(y_timed) - start_pos
-                        ]
+                        segment_to_place = segment[:len(y_timed) - start_pos]
+                    
                     if len(segment_to_place) > 0:
-                        y_timed[
-                            start_pos : start_pos
-                            + len(segment_to_place)
-                        ] = segment_to_place
-                        last_end_sample = start_pos + len(
-                            segment_to_place
-                        )
-                max_amp = np.max(np.abs(y_timed))
-                if max_amp > 1.0:
-                    y_timed /= max_amp
+                        y_timed[start_pos : start_pos + len(segment_to_place)] = segment_to_place
+                        last_end_sample = start_pos + len(segment_to_place)
+                
                 if np.max(np.abs(y_timed)) < 0.01:
-                    print(
-                        "Rhythm correction resulted in near-silence. Reverting to original vocal timing."
-                    )
+                    print("Rhythm correction resulted in near-silence. Reverting to original vocal timing.")
                     y = y_original
                 else:
                     y = y_timed
-                    print(
-                        "Vocal rhythm correction applied successfully."
-                    )
+                    print("Vocal rhythm correction applied successfully.")
             else:
-                print(
-                    "Could not detect beats or vocal segments, skipping rhythm correction."
-                )
+                print("Could not detect beats or vocal segments, skipping rhythm correction.")
         except Exception as e:
-            catch(
-                f"Could not apply rhythm correction, proceeding with pitch correction only. Error: {e}"
-            )
+            catch(f"Could not apply rhythm correction, proceeding with pitch correction only. Error: {e}")
+
         n_fft = 2048
         hop_length = 512
-        stft_vocals = librosa.stft(
-            y, n_fft=n_fft, hop_length=hop_length
-        )
+        stft_vocals = librosa.stft(y, n_fft=n_fft, hop_length=hop_length)
         magnitudes = np.abs(stft_vocals)
+
         f0, voiced_flag, _ = librosa.pyin(
             y,
             fmin=librosa.note_to_hz("C2"),
@@ -8077,59 +8123,63 @@ def autotune_vocals(audio_path, strength, format_choice):
         )
         f0 = np.nan_to_num(f0)
         target_f0 = np.copy(f0)
+
         for i in range(len(f0)):
-            if voiced_flag[i]:
+            if voiced_flag[i] and f0[i] > 0:
                 current_f0 = f0[i]
-                if current_f0 > 0:
-                    target_midi = round(
-                        librosa.hz_to_midi(current_f0)
-                    )
-                    ideal_f0 = librosa.midi_to_hz(target_midi)
-                    target_f0[i] = (
-                        current_f0
-                        + (ideal_f0 - current_f0) * strength
-                    )
+                target_midi = round(librosa.hz_to_midi(current_f0))
+                ideal_f0 = librosa.midi_to_hz(target_midi)
+                
+                if humanize > 0:
+                    cents_deviation = (np.random.rand() - 0.5) * 2 * (humanize * 15)
+                    ratio = 2**(cents_deviation / 1200)
+                    ideal_f0 *= ratio
+                
+                target_f0[i] = current_f0 + (ideal_f0 - current_f0) * strength
+        
         phase = np.angle(stft_vocals)
         new_phase = np.zeros_like(phase)
         new_phase[:, 0] = phase[:, 0]
         freqs = librosa.fft_frequencies(sr=sr, n_fft=n_fft)
         expected_phase_advance = 2 * np.pi * freqs * hop_length / sr
+
         for t in range(1, stft_vocals.shape[1]):
-            dphase = (
-                phase[:, t] - phase[:, t - 1] - expected_phase_advance
-            )
-            dphase = dphase - 2 * np.pi * np.round(
-                dphase / (2 * np.pi)
-            )
+            dphase = phase[:, t] - phase[:, t - 1] - expected_phase_advance
+            dphase = dphase - 2 * np.pi * np.round(dphase / (2 * np.pi))
             true_freq = expected_phase_advance + dphase
+            
             ratio = 1.0
             if t < len(f0) and f0[t] > 0 and target_f0[t] > 0:
                 ratio = target_f0[t] / f0[t]
+                
             shifted_phase_advance = true_freq * ratio
-            new_phase[:, t] = (
-                new_phase[:, t - 1] + shifted_phase_advance
-            )
+            new_phase[:, t] = new_phase[:, t - 1] + shifted_phase_advance
+        
         stft_tuned = magnitudes * np.exp(1j * new_phase)
-        y_tuned = librosa.istft(
-            stft_tuned, hop_length=hop_length, length=len(y)
-        )
+        y_tuned = librosa.istft(stft_tuned, hop_length=hop_length, length=len(y))
+        
+        print("Normalizing output volume...")
+        original_rms = np.sqrt(np.mean(y**2))
+        tuned_rms = np.sqrt(np.mean(y_tuned**2))
+
+        if tuned_rms > 1e-6:
+            rms_ratio = original_rms / tuned_rms
+            y_tuned *= rms_ratio
+
         temp_tuned_vocals_path = tmp("tuned_vocals.wav")
         sf.write(temp_tuned_vocals_path, y_tuned, sr)
+
         instrumental = pydub.AudioSegment.from_file(instrumental_path)
-        tuned_vocals = pydub.AudioSegment.from_file(
-            temp_tuned_vocals_path
-        )
+        tuned_vocals = pydub.AudioSegment.from_file(temp_tuned_vocals_path)
+        
         if instrumental.channels == 2 and tuned_vocals.channels == 1:
             tuned_vocals = tuned_vocals.set_channels(2)
+
         combined = instrumental.overlay(tuned_vocals)
-        output_stem = str(
-            Path(audio_path).with_name(
-                f"{Path(audio_path).stem}_autotuned"
-            )
-        )
-        final_output_path = export_audio(
-            combined, output_stem, format_choice
-        )
+        
+        output_stem = str(Path(audio_path).with_name(f"{Path(audio_path).stem}_autotuned"))
+        final_output_path = export_audio(combined, output_stem, format_choice)
+        
         delete(temp_tuned_vocals_path)
         return final_output_path
     finally:
