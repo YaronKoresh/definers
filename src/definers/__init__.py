@@ -3563,7 +3563,7 @@ def save(path, text=""):
 def save_temp_text(text_content):
     if text_content is None:
         return None
-    temp_path = tmp()
+    temp_path = tmp("txt")
     with open(temp_path, "w", encoding="utf-8") as f:
         f.write(text_content)
     return temp_path
