@@ -8143,7 +8143,7 @@ def autotune_vocals(
         y_original, sr = librosa.load(
             str(vocals_path), sr=None, mono=True
         )
-        print(f"Vocal track loaded. Sample rate: {sr}, Duration: {len(y)/sr:.2f}s")
+        print(f"Vocal track loaded. Sample rate: {sr}, Duration: {len(y_original)/sr:.2f}s")
         print(f"Original samples max value: {np.max(np.abs(y_original))}")
         y = np.copy(y_original)
         print(f"Copied samples max value: {np.max(np.abs(y))}")
