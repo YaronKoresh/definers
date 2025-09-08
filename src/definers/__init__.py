@@ -820,7 +820,7 @@ def set_system_message(
 
     log("System Message Updated", _system_message)
 
-    return _system_message
+    SYSTEM_MESSAGE = _system_message
 
 
 def answer(history: list):
@@ -889,6 +889,18 @@ def answer(history: list):
         status="",
     )
 
+    has_images = len(img_list) > 0
+    has_audio = len(snd_list) > 0
+
+    if has_images and has_audio:
+        mode = InputMode.VISION_SPEECH
+    elif has_images:
+        mode = InputMode.VISION
+    elif has_audio:
+        mode = InputMode.SPEECH
+    else:
+        mode = InputMode.LANGUAGE
+
     lsts = {}
     if len(snd_list) > 0:
         lsts["audios"] = snd_list
@@ -896,7 +908,11 @@ def answer(history: list):
         lsts["images"] = img_list
 
     response = MODELS["answer"].generate(
-        prompt=prompt, max_length=200, beam_width=16, **lsts
+        prompt=prompt, 
+        max_length=200, 
+        beam_width=16, 
+        input_mode=mode,
+        **lsts
     )
     return response
 
@@ -6149,6 +6165,7 @@ def BeamSearch(
         input_ids: torch.Tensor,
         max_length: int,
         beam_width: int,
+        input_mode: Any,
     ) -> torch.Tensor:
         input_ids = input_ids.to(self.device)
         beams = [([(input_ids, 0.0)], 0.0)]
@@ -6165,7 +6182,7 @@ def BeamSearch(
                     continue
 
                 with torch.no_grad():
-                    outputs = self.model(seq)
+                    outputs = self.model(seq, input_mode=input_mode)
                     logits = outputs.logits[:, -1, :] # Get logits for the next token
 
                     logits = self._apply_penalties(logits, seq)
@@ -6206,11 +6223,11 @@ def BeamSearch(
         best_seq, _ = best_beam[-1]
         return best_seq.cpu()
 
-    def generate(self, prompt: str, max_length: int, beam_width: int, **kw) -> str:
+    def generate(self, prompt: str, max_length: int, beam_width: int, input_mode: Any, **kw) -> str:
         inputs = self.processor(prompt, return_tensors="pt", **kw).to(self.device)
         input_ids = inputs["input_ids"]
 
-        generated_ids = self.search(input_ids, max_length, beam_width)
+        generated_ids = self.search(input_ids, max_length, beam_width, input_mode=input_mode)
         
         output_ids = generated_ids[:, input_ids.shape[1]:]
 
