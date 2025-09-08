@@ -7196,7 +7196,7 @@ def value_to_keys(dictionary, target_value):
 def transcribe_audio(audio_path, language):
     if MODELS["speech-recognition"] is None:
         init_pretrained_model("speech-recognition")
-    lang_code = value_to_keys(language_codes, language)
+    lang_code = value_to_keys(language_codes, language)[0]
     return MODELS["speech-recognition"](
         audio_path,
         generate_kwargs={"language": lang_code},
@@ -7259,7 +7259,7 @@ def generate_music(prompt, duration_s, format_choice, humanize):
 
 
 def dj_mix(
-    files, mix_type, target_bpm, transition_sec, format_choice
+    files, mix_type, target_bpm=None, transition_sec=5, format_choice="mp3"
 ):
     import madmom
     import pydub
