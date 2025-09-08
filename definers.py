@@ -5079,7 +5079,7 @@ py-modules = {py_modules}
             torch_dtype=dtype(),
             trust_remote_code=True,
             _attn_implementation="eager",
-        ).to(device())
+        )
 
         print("✅ Model loaded successfully!")
 
@@ -5137,14 +5137,16 @@ py-modules = {py_modules}
             model.enable_vae_tiling()
         except Exception as e:
             pass
-        else:
+        try:
+            model.enable_model_cpu_offload()
+        except Exception as e:
+            pass
+        if turbo is False:
             try:
-                model.enable_model_cpu_offload()
-            except Exception as e:
-                pass
-            if turbo is False:
                 model.enable_sequential_cpu_offload()
                 model.enable_attention_slicing(1)
+            except Exception as e:
+                pass
     except Exception as e:
         pass
 
