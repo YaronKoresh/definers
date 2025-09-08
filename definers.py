@@ -4930,7 +4930,7 @@ def init_pretrained_model(task: str, turbo: bool = False):
 
         package_name = "phi4_package"
         print(f"Downloading source files for {tasks[task]}...")
-        snapshot_dir = Path(snapshot_download(repo_id=tasks[task], allow_patterns=["*.py", "*.json"]))
+        snapshot_dir = Path(snapshot_download(repo_id=tasks[task], allow_patterns=["*.txt", "*.py", "*.json", "*.safetensors"]))
         print(f"Source files downloaded to: {snapshot_dir}")
 
         prepare_inputs_for_generation_code = """
