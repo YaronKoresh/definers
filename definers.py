@@ -7646,27 +7646,14 @@ def create_spectrum_visualization(audio_path):
     try:
         y, sr = librosa.load(audio_path)
 
-        n_fft = 128
+        n_fft = 2048
+        hop_length = 512
+        stft_result = librosa.stft(y, n_fft=n_fft, hop_length=hop_length)
+        magnitude = np.abs(stft_result)
+        avg_magnitude = np.mean(magnitude, axis=1)
 
-        start_sample = (len(y) - n_fft) // 2
-        y_sample = y[start_sample : start_sample + n_fft]
-
-        if len(y_sample) < n_fft:
-            y_sample = np.pad(y_sample, (0, n_fft - len(y_sample)))
-
-        window = np.hanning(len(y_sample))
-        y_windowed = y_sample * window
-
-        fft_result = np.fft.fft(y_windowed)
-        freqs = np.fft.fftfreq(len(fft_result), 1 / sr)
-
-        mask = freqs >= 0
-        freqs = freqs[mask]
-        magnitude = np.abs(fft_result[mask])
-
-        magnitude_db = 20 * np.log10(magnitude + 1e-9)
-
-        magnitude_db -= np.max(magnitude_db)
+        freqs = librosa.fft_frequencies(sr=sr, n_fft=n_fft)
+        magnitude_db = librosa.amplitude_to_db(avg_magnitude, ref=np.max)
 
         fig, ax = plt.subplots(figsize=(8, 5), facecolor="#f0f0f0")
         ax.set_facecolor("white")
@@ -7674,7 +7661,7 @@ def create_spectrum_visualization(audio_path):
         ax.fill_between(
             freqs,
             magnitude_db,
-            y2=-84,
+            y2=np.min(magnitude_db) - 1,
             color="#7c3aed",
             alpha=0.8,
             zorder=2,
@@ -7688,14 +7675,15 @@ def create_spectrum_visualization(audio_path):
         )
 
         ax.set_xscale("log")
-        ax.set_xlim(20, 22000)
-        ax.set_ylim(-84, 0)
+        ax.set_xlim(20, sr / 2)
+        ax.set_ylim(np.min(magnitude_db) - 1, np.max(magnitude_db) + 5)
 
-        xticks = [400, 1000, 2000, 4000, 7000, 20000]
-        ax.set_xticks(xticks)
-        ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
+        xticks = [100, 200, 500, 1000, 2000, 5000, 10000, 20000]
+        xtick_labels = ['100', '200', '500', '1k', '2k', '5k', '10k', '20k']
+        ax.set_xticks([x for x in xticks if x < sr/2])
+        ax.set_xticklabels([label for x, label in zip(xticks, xtick_labels) if x < sr/2])
 
-        ax.set_yticks(np.arange(-84, 1, 12))
+
         ax.grid(
             True,
             which="both",
