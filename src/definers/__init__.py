@@ -7390,8 +7390,8 @@ def beat_visualizer(
             * beat_resize_func(t)
             / image_clip.w
         )
-        .set_position(("center", "center"))
-        .set_audio(audio_clip)
+        .with_position(("center", "center"))
+        .with_audio(audio_clip)
     )
     final_clip.write_videofile(
         output_path,
@@ -7461,7 +7461,7 @@ def music_video(audio_path):
     output_path = tmp(".mp4")
     animation = VideoClip(make_frame, duration=duration)
     audio_clip = AudioFileClip(audio_path)
-    final_clip = animation.set_audio(audio_clip)
+    final_clip = animation.with_audio(audio_clip)
     final_clip.write_videofile(
         output_path, codec="libx264", audio_codec="aac", fps=fps
     )
@@ -7524,14 +7524,14 @@ def lyric_video(
             stroke_color="black",
             stroke_width=2,
         )
-        .set_position(text_position)
-        .set_start(i * line_duration)
-        .set_duration(line_duration)
+        .with_position(text_position)
+        .with_start(i * line_duration)
+        .with_duration(line_duration)
         for i, line in enumerate(lines)
     ]
     final_clip = CompositeVideoClip(
         [background_clip] + lyric_clips, size=background_clip.size
-    ).set_audio(audio_clip)
+    ).with_audio(audio_clip)
     output_path = tmp(".mp4")
     final_clip.write_videofile(
         output_path,
@@ -8145,8 +8145,10 @@ def autotune_vocals(
         y_original, sr = librosa.load(
             str(vocals_path), sr=None, mono=True
         )
-        y = np.copy(y_original)
         print(f"Vocal track loaded. Sample rate: {sr}, Duration: {len(y)/sr:.2f}s")
+        print(f"Original samples max value: {np.max(np.abs(y_original))}")
+        y = np.copy(y_original)
+        print(f"Copied samples max value: {np.max(np.abs(y))}")
 
         print("\n--- Rhythm Correction ---")
         try:
@@ -8157,9 +8159,27 @@ def autotune_vocals(
             print(f"Found {len(beat_times)} beats.")
 
             print("Splitting vocal track into non-silent segments...")
-            vocal_intervals = librosa.effects.split(
-                y, top_db=35, frame_length=2048, hop_length=512
-            )
+
+            onset_frames = librosa.onset.onset_detect(y=y, sr=sr, hop_length=512, units='frames')
+            onset_frames = np.concatenate([onset_frames, [len(y) // 512]])
+
+            vocal_intervals = []
+            for i in range(len(onset_frames) - 1):
+                start_frame = onset_frames[i]
+                end_frame = onset_frames[i+1]
+
+                print(f"Current start frame: {start_frame}")
+                print(f"Current end frame: {end_frame}")
+
+                if end_frame > start_frame:
+                    start_sample = start_frame * 512
+                    end_sample = end_frame * 512
+                    segment_energy = np.mean(y[start_sample:end_sample]**2)
+                    print(f"Current segment energy: {segment_energy}")
+                    if segment_energy > 1e-6:
+                        print(f"Appending current segment")
+                        vocal_intervals.append((start_frame, end_frame))
+
             print(f"Found {len(vocal_intervals)} vocal segments.")
 
             if len(vocal_intervals) > 0 and len(beat_times) > 0:
@@ -8168,9 +8188,18 @@ def autotune_vocals(
                 
                 print("Quantizing vocal segments to beat grid...")
                 for i, (start_frame, end_frame) in enumerate(vocal_intervals):
+
+                    print(f"Start frame: {start_frame}")
+                    print(f"End frame: {end_frame}")
+
                     start_sample = librosa.frames_to_samples(start_frame, hop_length=512)
                     end_sample = librosa.frames_to_samples(end_frame, hop_length=512)
+
+                    print(f"Start sample: {start_sample}")
+                    print(f"End sample: {end_sample}")
+
                     segment = y[start_sample:end_sample]
+                    print(f"Segment: {segment}")
 
                     if len(segment) == 0:
                         continue
@@ -8179,22 +8208,35 @@ def autotune_vocals(
                     print(f"  Processing segment {i+1}/{len(vocal_intervals)}: Original start time {start_time:.2f}s")
                     
                     beat_duration = np.mean(np.diff(beat_times)) if len(beat_times) > 1 else 0.5
+                    print(f"Beat duration: {beat_duration}")
+
                     threshold = beat_duration / 2.0
+                    print(f"Threshold: {threshold}")
 
                     future_beats = beat_times[beat_times > librosa.samples_to_time(last_end_sample, sr=sr)]
+                    print(f"Future beats: {future_beats}")
                     
                     final_pos = start_sample
 
                     if len(future_beats) > 0:
                         best_beat_index = np.argmin(np.abs(future_beats - start_time))
+                        print(f"Best beat index: {best_beat_index}")
+
                         time_difference = np.abs(future_beats[best_beat_index] - start_time)
+                        print(f"Time difference: {time_difference}")
 
                         if time_difference < threshold:
                             quantized_time = future_beats[best_beat_index]
+                            print(f"Quantized time: {quantized_time}")
+
                             quantized_pos = librosa.time_to_samples(quantized_time, sr=sr)
-                            
+                            print(f"Quantized position: {quantized_pos}")
+
                             is_overlapping = quantized_pos < last_end_sample
+                            print(f"Is overlapping? {is_overlapping}")
+
                             is_out_of_bounds = quantized_pos + len(segment) > len(y_timed)
+                            print(f"Is out of bounds? {is_out_of_bounds}")
 
                             if not is_overlapping and not is_out_of_bounds:
                                 final_pos = quantized_pos
@@ -8203,6 +8245,7 @@ def autotune_vocals(
                                 print(f"    - Quantization candidate {quantized_time:.2f}s rejected (overlap/out of bounds). Reverting to original timing.")
 
                     final_pos = max(final_pos, last_end_sample)
+                    print(f"Final position: {final_pos}")
                     
                     if final_pos + len(segment) <= len(y_timed):
                         y_timed[final_pos : final_pos + len(segment)] = segment
@@ -8293,7 +8336,7 @@ def autotune_vocals(
             y_tuned *= rms_ratio
             print(f"Applied RMS normalization ratio: {rms_ratio:.4f}")
 
-        temp_tuned_vocals_path = tmp(extension=".wav")
+        temp_tuned_vocals_path = tmp(".wav")
         print(f"Writing tuned vocals to temporary file: {temp_tuned_vocals_path}")
         sf.write(temp_tuned_vocals_path, y_tuned, sr)
 
