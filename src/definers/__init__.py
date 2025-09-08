@@ -7460,7 +7460,7 @@ def lyric_video(
         TextClip,
         VideoFileClip,
     )
-    from moviepy.video.fx import all as vfx
+    from moviepy.video import fx as vfx
 
     font_path = "./Alef-Bold.ttf"
     if not os.path.exists(font_path):
