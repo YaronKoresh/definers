@@ -4863,8 +4863,7 @@ def init_pretrained_model(task: str, turbo: bool = False):
                 f"Downloading {name} ({file_id}) to {dest_path}"
             )
             try:
-                with cwd():
-                    google_drive_download(id=file_id, dest=dest_path)
+                google_drive_download(id=file_id, dest=dest_path)
 
             except Exception as e:
                 logger.error(f"Failed to download {name}: {e}")
@@ -7342,6 +7341,7 @@ def lyric_video(
         TextClip,
         VideoFileClip,
     )
+    from moviepy.video.fx import all as vfx
 
     font_path = "./Alef-Bold.ttf"
     if not os.path.exists(font_path):
@@ -7367,7 +7367,7 @@ def lyric_video(
         background_clip = ColorClip(
             size=(1280, 720), color=(0, 0, 0), duration=duration
         )
-    background_clip = background_clip.resize(width=1280)
+    background_clip = background_clip.fx(vfx.resize, width=1280)
     lines = [
         line
         for line in lyrics_text.strip().split("\n")
