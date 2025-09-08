@@ -8071,28 +8071,36 @@ def autotune_vocals(audio_path, strength, format_choice, humanize = 0.5):
                         continue
                     
                     start_time = librosa.samples_to_time(start_sample, sr=sr)
+                    last_end_time = librosa.samples_to_time(last_end_sample, sr=sr)
                     
-                    quantized_start_time_idx = np.argmin(np.abs(beat_times - start_time))
-                    quantized_start_time = beat_times[quantized_start_time_idx]
-                    quantized_start_sample = librosa.time_to_samples(quantized_start_time, sr=sr)
-                    
-                    if quantized_start_sample < last_end_sample:
-                        next_beat_candidates = beat_times[beat_times > librosa.samples_to_time(last_end_sample, sr=sr)]
-                        if len(next_beat_candidates) > 0:
-                            quantized_start_sample = librosa.time_to_samples(next_beat_candidates[0], sr=sr)
-                        else:
-                            quantized_start_sample = last_end_sample
-                    
-                    start_pos = quantized_start_sample
-                    end_pos = start_pos + len(segment)
-                    segment_to_place = segment
+                    future_beats = beat_times[beat_times > last_end_time]
 
-                    if end_pos > len(y_timed):
-                        segment_to_place = segment[:len(y_timed) - start_pos]
-                    
-                    if len(segment_to_place) > 0:
-                        y_timed[start_pos : start_pos + len(segment_to_place)] = segment_to_place
-                        last_end_sample = start_pos + len(segment_to_place)
+                    final_start_pos = start_sample
+
+                    if len(future_beats) > 0:
+                        if len(beat_times) > 1:
+                            beat_duration = np.mean(np.diff(beat_times))
+                        else:
+                            beat_duration = 0.5
+
+                        threshold = beat_duration / 4.0
+
+                        best_beat_index = np.argmin(np.abs(future_beats - start_time))
+                        time_difference = np.abs(future_beats[best_beat_index] - start_time)
+
+                        if time_difference < threshold:
+                            quantized_start_time = future_beats[best_beat_index]
+                            final_start_pos = librosa.time_to_samples(quantized_start_time, sr=sr)
+
+                    safe_start_pos = max(final_start_pos, last_end_sample)
+
+                    if safe_start_pos + len(segment) <= len(y_timed):
+                        y_timed[safe_start_pos : safe_start_pos + len(segment)] = segment
+                        last_end_sample = safe_start_pos + len(segment)
+                    else:
+                        if start_sample + len(segment) <= len(y_timed):
+                            y_timed[start_sample : start_sample + len(segment)] = segment
+                            last_end_sample = start_sample + len(segment)
                 
                 if np.max(np.abs(y_timed)) < 0.01:
                     print("Rhythm correction resulted in near-silence. Reverting to original vocal timing.")
