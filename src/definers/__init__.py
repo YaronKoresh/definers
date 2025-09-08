@@ -115,9 +115,6 @@ if _find_spec("dask"):
     dask.array.core = dask.array
 
     sys.modules["dask.dataframe.core"] = sys.modules["dask.dataframe"]
-    sys.modules["dask.distributed.core"] = sys.modules[
-        "dask.distributed"
-    ]
     sys.modules["dask.diagnostics.core"] = sys.modules[
         "dask.diagnostics"
     ]
