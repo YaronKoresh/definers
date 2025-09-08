@@ -4863,7 +4863,8 @@ def init_pretrained_model(task: str, turbo: bool = False):
                 f"Downloading {name} ({file_id}) to {dest_path}"
             )
             try:
-                google_drive_download(id=file_id, dest=dest_path)
+                with cwd():
+                    google_drive_download(id=file_id, dest=dest_path)
 
             except Exception as e:
                 logger.error(f"Failed to download {name}: {e}")
