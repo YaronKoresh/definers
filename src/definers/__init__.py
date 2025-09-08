@@ -760,7 +760,7 @@ def set_system_message(
     Returns:
         str: The newly constructed system message.
     """
-    global _system_message
+    global SYSTEM_MESSAGE
 
     message_parts = []
 
@@ -816,11 +816,9 @@ def set_system_message(
         )
         message_parts.append(f"{rules_header}\n{formatted_rules}")
 
-    _system_message = "\n\n".join(message_parts)
+    SYSTEM_MESSAGE = "\n\n".join(message_parts)
 
-    log("System Message Updated", _system_message)
-
-    SYSTEM_MESSAGE = _system_message
+    log("System Message Updated", SYSTEM_MESSAGE)
 
 
 def answer(history: list):
@@ -893,13 +891,13 @@ def answer(history: list):
     has_audio = len(snd_list) > 0
 
     if has_images and has_audio:
-        mode = InputMode.VISION_SPEECH
+        mode = 3
     elif has_images:
-        mode = InputMode.VISION
+        mode = 1
     elif has_audio:
-        mode = InputMode.SPEECH
+        mode = 2
     else:
-        mode = InputMode.LANGUAGE
+        mode = 0
 
     lsts = {}
     if len(snd_list) > 0:
