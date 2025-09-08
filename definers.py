@@ -95,7 +95,7 @@ def _find_spec(mod_name):
 importlib.util.find_spec = _find_spec
 
 
-if _find_spec("dask"):
+if _find_spec("dask") and _find_spec("dask.dataframe.core") is None:
     import dask
     from dask import base
     from dask.graph_manipulation import (
@@ -106,6 +106,16 @@ if _find_spec("dask"):
     )
     from dask.optimization import cull, fuse, inline, inline_functions
     from dask.utils import key_split
+
+    import dask.dataframe
+    import dask.distributed 
+    import dask.diagnostics
+    import dask.array
+
+    sys.modules['dask.dataframe.core'] = sys.modules['dask.dataframe']
+    sys.modules['dask.distributed .core'] = sys.modules['dask.distributed']
+    sys.modules['dask.diagnostics.core'] = sys.modules['dask.diagnostics']
+    sys.modules['dask.array.core'] = sys.modules['dask.array']
 
     dask.core = base
 
@@ -5070,9 +5080,6 @@ py-modules = {py_modules}
             tok,
             prc,
             device(),
-            length_penalty=2.0,
-            repetition_penalty=1.2,
-            no_repeat_ngram_size=3,
         )
 
     elif task in ["summary"]:
@@ -6071,7 +6078,9 @@ class BeamSearch:
         tokenizer,
         processor,
         device,
-        length_penalty: float = 1.0,
+        length_penalty: float = 2.0,
+        repetition_penalty=1.2,
+        no_repeat_ngram_size=3,
         score_function=None,
     ):
 
