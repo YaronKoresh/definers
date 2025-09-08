@@ -95,7 +95,7 @@ def _find_spec(mod_name):
 importlib.util.find_spec = _find_spec
 
 
-if _find_spec("dask") and _find_spec("dask.dataframe.core") is None:
+if _find_spec("dask"):
     import dask
     import dask.array
     import dask.dataframe
@@ -117,7 +117,7 @@ if _find_spec("dask") and _find_spec("dask.dataframe.core") is None:
     dask.array.core = dask.array
 
     sys.modules["dask.dataframe.core"] = sys.modules["dask.dataframe"]
-    sys.modules["dask.distributed .core"] = sys.modules[
+    sys.modules["dask.distributed.core"] = sys.modules[
         "dask.distributed"
     ]
     sys.modules["dask.diagnostics.core"] = sys.modules[
