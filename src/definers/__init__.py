@@ -906,11 +906,11 @@ def answer(history: list):
         lsts["images"] = img_list
 
     response = MODELS["answer"].generate(
-        prompt=prompt, 
-        max_length=200, 
-        beam_width=16, 
+        prompt=prompt,
+        max_length=200,
+        beam_width=16,
         input_mode=mode,
-        **lsts
+        **lsts,
     )
     return response
 
@@ -6087,159 +6087,194 @@ class HybridModel:
 
         return predictions
 
+
 def BeamSearch(
-  model,
-  tokenizer,
-  processor,
-  device,
-  length_penalty: float = 1.0,
-  repetition_penalty: float = 1.2,
-  no_repeat_ngram_size: int = 3,
-  score_function=None
+    model,
+    tokenizer,
+    processor,
+    device,
+    length_penalty: float = 1.0,
+    repetition_penalty: float = 1.2,
+    no_repeat_ngram_size: int = 3,
+    score_function=None,
 ):
-  import torch
-  
-  class _BeamSearch:
-    def __init__(
-        self,
-        model,
-        tokenizer,
-        processor,
-        device,
-        length_penalty,
-        repetition_penalty,
-        no_repeat_ngram_size,
-        score_function
-    ):
-        self.model = model.to(device).eval()
-        self.tokenizer = tokenizer
-        self.processor = processor
-        self.device = device
-        self.eos_token_id = tokenizer.eos_token_id
-        self.length_penalty = length_penalty
-        self.repetition_penalty = repetition_penalty
-        self.no_repeat_ngram_size = no_repeat_ngram_size
-        self.score_function = (
-            score_function or self._default_score_function
-        )
+    import torch
 
-    def _default_score_function(self, _arg) -> float:
-        beam, total_score = _arg
-        seq, _ = beam[-1]
-        seq_len = seq.shape[1]
-        return total_score / (seq_len**self.length_penalty)
+    class _BeamSearch:
+        def __init__(
+            self,
+            model,
+            tokenizer,
+            processor,
+            device,
+            length_penalty,
+            repetition_penalty,
+            no_repeat_ngram_size,
+            score_function,
+        ):
+            self.model = model.to(device).eval()
+            self.tokenizer = tokenizer
+            self.processor = processor
+            self.device = device
+            self.eos_token_id = tokenizer.eos_token_id
+            self.length_penalty = length_penalty
+            self.repetition_penalty = repetition_penalty
+            self.no_repeat_ngram_size = no_repeat_ngram_size
+            self.score_function = (
+                score_function or self._default_score_function
+            )
 
-    def _apply_penalties(self, logits, current_sequence):
-        if self.repetition_penalty != 1.0:
-            score = torch.gather(logits, 1, current_sequence)
-            score = torch.where(score < 0, score * self.repetition_penalty, score / self.repetition_penalty)
-            logits.scatter_(1, current_sequence, score)
+        def _default_score_function(self, _arg) -> float:
+            beam, total_score = _arg
+            seq, _ = beam[-1]
+            seq_len = seq.shape[1]
+            return total_score / (seq_len**self.length_penalty)
 
-        if self.no_repeat_ngram_size > 0:
-            banned_tokens = self._get_banned_ngram_tokens(current_sequence, self.no_repeat_ngram_size)
-            logits[:, banned_tokens] = -float("inf")
-        
-        return logits
+        def _apply_penalties(self, logits, current_sequence):
+            if self.repetition_penalty != 1.0:
+                score = torch.gather(logits, 1, current_sequence)
+                score = torch.where(
+                    score < 0,
+                    score * self.repetition_penalty,
+                    score / self.repetition_penalty,
+                )
+                logits.scatter_(1, current_sequence, score)
 
-    def _get_banned_ngram_tokens(self, sequence, n):
-        if sequence.shape[1] < n:
-            return []
-        
-        ngrams = set()
-        for i in range(sequence.shape[1] - n + 1):
-            ngram = tuple(sequence[0, i : i + n].tolist())
-            ngrams.add(ngram)
-        
-        banned_tokens = []
-        prefix = tuple(sequence[0, -n + 1 :].tolist())
-        for token_id in range(self.model.config.vocab_size):
-            if prefix + (token_id,) in ngrams:
-                banned_tokens.append(token_id)
-        
-        return banned_tokens
+            if self.no_repeat_ngram_size > 0:
+                banned_tokens = self._get_banned_ngram_tokens(
+                    current_sequence, self.no_repeat_ngram_size
+                )
+                logits[:, banned_tokens] = -float("inf")
 
-    def search(
-        self,
-        input_ids: torch.Tensor,
-        max_length: int,
-        beam_width: int,
-        input_mode: Any,
-    ) -> torch.Tensor:
-        input_ids = input_ids.to(self.device)
-        beams = [([(input_ids, 0.0)], 0.0)]
-        completed_beams = []
+            return logits
 
-        for _ in range(max_length - input_ids.shape[1]):
-            new_beams = []
-            
-            for beam, total_score in beams:
-                seq, _ = beam[-1]
+        def _get_banned_ngram_tokens(self, sequence, n):
+            if sequence.shape[1] < n:
+                return []
 
-                if self.eos_token_id is not None and seq[0, -1].item() == self.eos_token_id:
-                    completed_beams.append((beam, total_score))
-                    continue
+            ngrams = set()
+            for i in range(sequence.shape[1] - n + 1):
+                ngram = tuple(sequence[0, i : i + n].tolist())
+                ngrams.add(ngram)
 
-                with torch.no_grad():
-                    outputs = self.model(seq, input_mode=input_mode)
-                    logits = outputs.logits[:, -1, :] # Get logits for the next token
+            banned_tokens = []
+            prefix = tuple(sequence[0, -n + 1 :].tolist())
+            for token_id in range(self.model.config.vocab_size):
+                if prefix + (token_id,) in ngrams:
+                    banned_tokens.append(token_id)
 
-                    logits = self._apply_penalties(logits, seq)
-                    
-                    probs = F.log_softmax(logits, dim=-1)
+            return banned_tokens
 
-                topk_probs, topk_indices = torch.topk(probs, beam_width)
+        def search(
+            self,
+            input_ids: torch.Tensor,
+            max_length: int,
+            beam_width: int,
+            input_mode: Any,
+        ) -> torch.Tensor:
+            input_ids = input_ids.to(self.device)
+            beams = [([(input_ids, 0.0)], 0.0)]
+            completed_beams = []
 
-                for i in range(beam_width):
-                    token_id = topk_indices[:, i].unsqueeze(-1)
-                    log_prob = topk_probs[:, i].item()
-                    
-                    new_seq = torch.cat([seq, token_id], dim=-1)
-                    
-                    new_beams.append(
-                        (
-                            beam + [(new_seq, log_prob)],
-                            total_score + log_prob,
+            for _ in range(max_length - input_ids.shape[1]):
+                new_beams = []
+
+                for beam, total_score in beams:
+                    seq, _ = beam[-1]
+
+                    if (
+                        self.eos_token_id is not None
+                        and seq[0, -1].item() == self.eos_token_id
+                    ):
+                        completed_beams.append((beam, total_score))
+                        continue
+
+                    with torch.no_grad():
+                        outputs = self.model(
+                            seq, input_mode=input_mode
                         )
+                        logits = outputs.logits[
+                            :, -1, :
+                        ]  # Get logits for the next token
+
+                        logits = self._apply_penalties(logits, seq)
+
+                        probs = F.log_softmax(logits, dim=-1)
+
+                    topk_probs, topk_indices = torch.topk(
+                        probs, beam_width
                     )
 
-            all_candidates = new_beams + completed_beams
-            
-            beams = sorted(
-                all_candidates, key=self.score_function, reverse=True
-            )[:beam_width]
+                    for i in range(beam_width):
+                        token_id = topk_indices[:, i].unsqueeze(-1)
+                        log_prob = topk_probs[:, i].item()
 
-            if all(
-                self.eos_token_id is not None and beam[-1][0][0, -1].item() == self.eos_token_id
-                for beam, _ in beams
-            ):
-                break
-        
-        if not completed_beams:
-            completed_beams = beams
-        
-        best_beam, _ = sorted(completed_beams, key=self.score_function, reverse=True)[0]
-        best_seq, _ = best_beam[-1]
-        return best_seq.cpu()
+                        new_seq = torch.cat([seq, token_id], dim=-1)
 
-    def generate(self, prompt: str, max_length: int, beam_width: int, input_mode: Any, **kw) -> str:
-        inputs = self.processor(prompt, return_tensors="pt", **kw).to(self.device)
-        input_ids = inputs["input_ids"]
+                        new_beams.append(
+                            (
+                                beam + [(new_seq, log_prob)],
+                                total_score + log_prob,
+                            )
+                        )
 
-        generated_ids = self.search(input_ids, max_length, beam_width, input_mode=input_mode)
-        
-        output_ids = generated_ids[:, input_ids.shape[1]:]
+                all_candidates = new_beams + completed_beams
 
-        response = self.processor.batch_decode(
-            output_ids,
-            skip_special_tokens=True,
-            clean_up_tokenization_spaces=False,
-        )[0]
-        
-        print(f"Response: {response}")
+                beams = sorted(
+                    all_candidates,
+                    key=self.score_function,
+                    reverse=True,
+                )[:beam_width]
 
-        return response
+                if all(
+                    self.eos_token_id is not None
+                    and beam[-1][0][0, -1].item() == self.eos_token_id
+                    for beam, _ in beams
+                ):
+                    break
 
-  return _BeamSearch(
+            if not completed_beams:
+                completed_beams = beams
+
+            best_beam, _ = sorted(
+                completed_beams, key=self.score_function, reverse=True
+            )[0]
+            best_seq, _ = best_beam[-1]
+            return best_seq.cpu()
+
+        def generate(
+            self,
+            prompt: str,
+            max_length: int,
+            beam_width: int,
+            input_mode: Any,
+            **kw,
+        ) -> str:
+            inputs = self.processor(
+                prompt, return_tensors="pt", **kw
+            ).to(self.device)
+            input_ids = inputs["input_ids"]
+
+            generated_ids = self.search(
+                input_ids,
+                max_length,
+                beam_width,
+                input_mode=input_mode,
+            )
+
+            output_ids = generated_ids[:, input_ids.shape[1] :]
+
+            response = self.processor.batch_decode(
+                output_ids,
+                skip_special_tokens=True,
+                clean_up_tokenization_spaces=False,
+            )[0]
+
+            print(f"Response: {response}")
+
+            return response
+
+    return _BeamSearch(
         model,
         tokenizer,
         processor,
@@ -6247,8 +6282,9 @@ def BeamSearch(
         length_penalty,
         repetition_penalty,
         no_repeat_ngram_size,
-        score_function
-  )
+        score_function,
+    )
+
 
 def LinearRegressionTorch(input_dim):
     import torch
@@ -7276,7 +7312,11 @@ def generate_music(prompt, duration_s, format_choice, humanize):
 
 
 def dj_mix(
-    files, mix_type, target_bpm=None, transition_sec=5, format_choice="mp3"
+    files,
+    mix_type,
+    target_bpm=None,
+    transition_sec=5,
+    format_choice="mp3",
 ):
     import madmom
     import pydub
@@ -8124,7 +8164,7 @@ def autotune_vocals(
         run(
             f'"{sys.executable}" -m demucs.separate -n htdemucs_ft --two-stems=vocals -o "{separation_dir}" "{audio_path}"'
         )
-        
+
         separated_dir = (
             Path(separation_dir)
             / "htdemucs_ft"
@@ -8134,37 +8174,51 @@ def autotune_vocals(
         instrumental_path = separated_dir / "no_vocals.wav"
         print(f"Vocals path: {vocals_path}")
         print(f"Instrumental path: {instrumental_path}")
-        
+
         if not vocals_path.exists() or not instrumental_path.exists():
-            catch("Vocal separation failed. Could not find separated files.")
+            catch(
+                "Vocal separation failed. Could not find separated files."
+            )
             return None
 
         print("Loading separated vocal track with Librosa...")
         y_original, sr = librosa.load(
             str(vocals_path), sr=None, mono=True
         )
-        print(f"Vocal track loaded. Sample rate: {sr}, Duration: {len(y_original)/sr:.2f}s")
-        print(f"Original samples max value: {np.max(np.abs(y_original))}")
+        print(
+            f"Vocal track loaded. Sample rate: {sr}, Duration: {len(y_original)/sr:.2f}s"
+        )
+        print(
+            f"Original samples max value: {np.max(np.abs(y_original))}"
+        )
         y = np.copy(y_original)
         print(f"Copied samples max value: {np.max(np.abs(y))}")
 
         print("\n--- Rhythm Correction ---")
         try:
             print("Detecting beats in instrumental...")
-            proc = madmom.features.beats.DBNBeatTrackingProcessor(fps=100)
-            act = madmom.features.beats.RNNBeatProcessor()(str(instrumental_path))
+            proc = madmom.features.beats.DBNBeatTrackingProcessor(
+                fps=100
+            )
+            act = madmom.features.beats.RNNBeatProcessor()(
+                str(instrumental_path)
+            )
             beat_times = proc(act)
             print(f"Found {len(beat_times)} beats.")
 
             print("Splitting vocal track into non-silent segments...")
 
-            onset_frames = librosa.onset.onset_detect(y=y, sr=sr, hop_length=512, units='frames')
-            onset_frames = np.concatenate([onset_frames, [len(y) // 512]])
+            onset_frames = librosa.onset.onset_detect(
+                y=y, sr=sr, hop_length=512, units="frames"
+            )
+            onset_frames = np.concatenate(
+                [onset_frames, [len(y) // 512]]
+            )
 
             vocal_intervals = []
             for i in range(len(onset_frames) - 1):
                 start_frame = onset_frames[i]
-                end_frame = onset_frames[i+1]
+                end_frame = onset_frames[i + 1]
 
                 print(f"Current start frame: {start_frame}")
                 print(f"Current end frame: {end_frame}")
@@ -8172,26 +8226,36 @@ def autotune_vocals(
                 if end_frame > start_frame:
                     start_sample = start_frame * 512
                     end_sample = end_frame * 512
-                    segment_energy = np.mean(y[start_sample:end_sample]**2)
+                    segment_energy = np.mean(
+                        y[start_sample:end_sample] ** 2
+                    )
                     print(f"Current segment energy: {segment_energy}")
                     if segment_energy > 1e-6:
                         print(f"Appending current segment")
-                        vocal_intervals.append((start_frame, end_frame))
+                        vocal_intervals.append(
+                            (start_frame, end_frame)
+                        )
 
             print(f"Found {len(vocal_intervals)} vocal segments.")
 
             if len(vocal_intervals) > 0 and len(beat_times) > 0:
                 y_timed = np.zeros_like(y)
                 last_end_sample = 0
-                
+
                 print("Quantizing vocal segments to beat grid...")
-                for i, (start_frame, end_frame) in enumerate(vocal_intervals):
+                for i, (start_frame, end_frame) in enumerate(
+                    vocal_intervals
+                ):
 
                     print(f"Start frame: {start_frame}")
                     print(f"End frame: {end_frame}")
 
-                    start_sample = librosa.frames_to_samples(start_frame, hop_length=512)
-                    end_sample = librosa.frames_to_samples(end_frame, hop_length=512)
+                    start_sample = librosa.frames_to_samples(
+                        start_frame, hop_length=512
+                    )
+                    end_sample = librosa.frames_to_samples(
+                        end_frame, hop_length=512
+                    )
 
                     print(f"Start sample: {start_sample}")
                     print(f"End sample: {end_sample}")
@@ -8202,71 +8266,123 @@ def autotune_vocals(
                     if len(segment) == 0:
                         continue
 
-                    start_time = librosa.samples_to_time(start_sample, sr=sr)
-                    print(f"  Processing segment {i+1}/{len(vocal_intervals)}: Original start time {start_time:.2f}s")
-                    
-                    beat_duration = np.mean(np.diff(beat_times)) if len(beat_times) > 1 else 0.5
+                    start_time = librosa.samples_to_time(
+                        start_sample, sr=sr
+                    )
+                    print(
+                        f"  Processing segment {i+1}/{len(vocal_intervals)}: Original start time {start_time:.2f}s"
+                    )
+
+                    beat_duration = (
+                        np.mean(np.diff(beat_times))
+                        if len(beat_times) > 1
+                        else 0.5
+                    )
                     print(f"Beat duration: {beat_duration}")
 
                     threshold = beat_duration / 2.0
                     print(f"Threshold: {threshold}")
 
-                    future_beats = beat_times[beat_times > librosa.samples_to_time(last_end_sample, sr=sr)]
+                    future_beats = beat_times[
+                        beat_times
+                        > librosa.samples_to_time(
+                            last_end_sample, sr=sr
+                        )
+                    ]
                     print(f"Future beats: {future_beats}")
-                    
+
                     final_pos = start_sample
 
                     if len(future_beats) > 0:
-                        best_beat_index = np.argmin(np.abs(future_beats - start_time))
+                        best_beat_index = np.argmin(
+                            np.abs(future_beats - start_time)
+                        )
                         print(f"Best beat index: {best_beat_index}")
 
-                        time_difference = np.abs(future_beats[best_beat_index] - start_time)
+                        time_difference = np.abs(
+                            future_beats[best_beat_index] - start_time
+                        )
                         print(f"Time difference: {time_difference}")
 
                         if time_difference < threshold:
-                            quantized_time = future_beats[best_beat_index]
+                            quantized_time = future_beats[
+                                best_beat_index
+                            ]
                             print(f"Quantized time: {quantized_time}")
 
-                            quantized_pos = librosa.time_to_samples(quantized_time, sr=sr)
-                            print(f"Quantized position: {quantized_pos}")
+                            quantized_pos = librosa.time_to_samples(
+                                quantized_time, sr=sr
+                            )
+                            print(
+                                f"Quantized position: {quantized_pos}"
+                            )
 
-                            is_overlapping = quantized_pos < last_end_sample
+                            is_overlapping = (
+                                quantized_pos < last_end_sample
+                            )
                             print(f"Is overlapping? {is_overlapping}")
 
-                            is_out_of_bounds = quantized_pos + len(segment) > len(y_timed)
-                            print(f"Is out of bounds? {is_out_of_bounds}")
+                            is_out_of_bounds = quantized_pos + len(
+                                segment
+                            ) > len(y_timed)
+                            print(
+                                f"Is out of bounds? {is_out_of_bounds}"
+                            )
 
-                            if not is_overlapping and not is_out_of_bounds:
+                            if (
+                                not is_overlapping
+                                and not is_out_of_bounds
+                            ):
                                 final_pos = quantized_pos
-                                print(f"    - Quantizing to beat at {quantized_time:.2f}s.")
+                                print(
+                                    f"    - Quantizing to beat at {quantized_time:.2f}s."
+                                )
                             else:
-                                print(f"    - Quantization candidate {quantized_time:.2f}s rejected (overlap/out of bounds). Reverting to original timing.")
+                                print(
+                                    f"    - Quantization candidate {quantized_time:.2f}s rejected (overlap/out of bounds). Reverting to original timing."
+                                )
 
                     final_pos = max(final_pos, last_end_sample)
                     print(f"Final position: {final_pos}")
-                    
+
                     if final_pos + len(segment) <= len(y_timed):
-                        y_timed[final_pos : final_pos + len(segment)] = segment
+                        y_timed[
+                            final_pos : final_pos + len(segment)
+                        ] = segment
                         last_end_sample = final_pos + len(segment)
                     else:
-                        print(f"Warning: Could not place a vocal segment starting at {start_time:.2f}s. Skipping it.")
+                        print(
+                            f"Warning: Could not place a vocal segment starting at {start_time:.2f}s. Skipping it."
+                        )
 
                 if np.max(np.abs(y_timed)) < 0.01:
-                    print("Rhythm correction resulted in near-silence. Reverting to original vocal timing.")
+                    print(
+                        "Rhythm correction resulted in near-silence. Reverting to original vocal timing."
+                    )
                     y = y_original
                 else:
                     y = y_timed
-                    print("Vocal rhythm correction applied successfully.")
+                    print(
+                        "Vocal rhythm correction applied successfully."
+                    )
             else:
-                print("Could not detect beats or vocal segments, skipping rhythm correction.")
+                print(
+                    "Could not detect beats or vocal segments, skipping rhythm correction."
+                )
         except Exception as e:
-            catch(f"Could not apply rhythm correction, proceeding with pitch correction only. Error: {e}")
+            catch(
+                f"Could not apply rhythm correction, proceeding with pitch correction only. Error: {e}"
+            )
 
         print("\n--- Pitch Correction ---")
-        print("Performing Short-Time Fourier Transform (STFT) on vocal track...")
+        print(
+            "Performing Short-Time Fourier Transform (STFT) on vocal track..."
+        )
         n_fft = 2048
         hop_length = 512
-        stft_vocals = librosa.stft(y, n_fft=n_fft, hop_length=hop_length)
+        stft_vocals = librosa.stft(
+            y, n_fft=n_fft, hop_length=hop_length
+        )
         magnitudes = np.abs(stft_vocals)
         print("STFT complete.")
 
@@ -8282,9 +8398,11 @@ def autotune_vocals(
         print("f0 estimation complete.")
         f0 = np.nan_to_num(f0)
         target_f0 = np.copy(f0)
-        
+
         voiced_frames = np.count_nonzero(voiced_flag)
-        print(f"Found {voiced_frames} voiced frames out of {len(f0)} total frames.")
+        print(
+            f"Found {voiced_frames} voiced frames out of {len(f0)} total frames."
+        )
         print("Applying pitch correction to voiced frames...")
 
         for i in range(len(f0)):
@@ -8294,11 +8412,15 @@ def autotune_vocals(
                 ideal_f0 = librosa.midi_to_hz(target_midi)
 
                 if humanize > 0:
-                    cents_deviation = ((np.random.rand() - 0.5) * 2 * (humanize * 15))
+                    cents_deviation = (
+                        (np.random.rand() - 0.5) * 2 * (humanize * 15)
+                    )
                     ratio = 2 ** (cents_deviation / 1200)
                     ideal_f0 *= ratio
 
-                target_f0[i] = current_f0 + (ideal_f0 - current_f0) * strength
+                target_f0[i] = (
+                    current_f0 + (ideal_f0 - current_f0) * strength
+                )
 
         print("Reconstructing phase and performing inverse STFT...")
         phase = np.angle(stft_vocals)
@@ -8308,8 +8430,12 @@ def autotune_vocals(
         expected_phase_advance = 2 * np.pi * freqs * hop_length / sr
 
         for t in range(1, stft_vocals.shape[1]):
-            dphase = phase[:, t] - phase[:, t - 1] - expected_phase_advance
-            dphase = dphase - 2 * np.pi * np.round(dphase / (2 * np.pi))
+            dphase = (
+                phase[:, t] - phase[:, t - 1] - expected_phase_advance
+            )
+            dphase = dphase - 2 * np.pi * np.round(
+                dphase / (2 * np.pi)
+            )
             true_freq = expected_phase_advance + dphase
 
             ratio = 1.0
@@ -8317,17 +8443,23 @@ def autotune_vocals(
                 ratio = target_f0[t] / f0[t]
 
             shifted_phase_advance = true_freq * ratio
-            new_phase[:, t] = new_phase[:, t - 1] + shifted_phase_advance
+            new_phase[:, t] = (
+                new_phase[:, t - 1] + shifted_phase_advance
+            )
 
         stft_tuned = magnitudes * np.exp(1j * new_phase)
-        y_tuned = librosa.istft(stft_tuned, hop_length=hop_length, length=len(y))
+        y_tuned = librosa.istft(
+            stft_tuned, hop_length=hop_length, length=len(y)
+        )
         print("Pitch correction complete.")
 
         print("\n--- Final Mixdown ---")
         print("Normalizing output volume...")
         original_rms = np.sqrt(np.mean(y_original**2))
         tuned_rms = np.sqrt(np.mean(y_tuned**2))
-        print(f"Original vocal RMS: {original_rms:.4f}, Tuned vocal RMS: {tuned_rms:.4f}")
+        print(
+            f"Original vocal RMS: {original_rms:.4f}, Tuned vocal RMS: {tuned_rms:.4f}"
+        )
 
         if tuned_rms > 1e-6:
             rms_ratio = original_rms / tuned_rms
@@ -8335,27 +8467,41 @@ def autotune_vocals(
             print(f"Applied RMS normalization ratio: {rms_ratio:.4f}")
 
         temp_tuned_vocals_path = tmp(".wav")
-        print(f"Writing tuned vocals to temporary file: {temp_tuned_vocals_path}")
+        print(
+            f"Writing tuned vocals to temporary file: {temp_tuned_vocals_path}"
+        )
         sf.write(temp_tuned_vocals_path, y_tuned, sr)
 
         print("Loading audio segments with Pydub...")
         instrumental = pydub.AudioSegment.from_file(instrumental_path)
-        tuned_vocals = pydub.AudioSegment.from_file(temp_tuned_vocals_path)
+        tuned_vocals = pydub.AudioSegment.from_file(
+            temp_tuned_vocals_path
+        )
         print("Audio segments loaded.")
 
         if instrumental.channels > tuned_vocals.channels:
-            print(f"Upmixing vocals to {instrumental.channels} channels.")
-            tuned_vocals = tuned_vocals.set_channels(instrumental.channels)
-        
-        print("Adjusting final vocal volume and overlaying onto instrumental...")
+            print(
+                f"Upmixing vocals to {instrumental.channels} channels."
+            )
+            tuned_vocals = tuned_vocals.set_channels(
+                instrumental.channels
+            )
+
+        print(
+            "Adjusting final vocal volume and overlaying onto instrumental..."
+        )
         final_vocals = tuned_vocals - 1.5
         combined = instrumental.overlay(final_vocals)
         print("Overlay complete.")
 
         output_stem = str(
-            Path(audio_path).with_name(f"{Path(audio_path).stem}_autotuned")
+            Path(audio_path).with_name(
+                f"{Path(audio_path).stem}_autotuned"
+            )
         )
-        final_output_path = export_audio(combined, output_stem, format_choice)
+        final_output_path = export_audio(
+            combined, output_stem, format_choice
+        )
         print(f"\n--- Autotune Complete ---")
         print(f"Final audio saved to: {final_output_path}")
 
