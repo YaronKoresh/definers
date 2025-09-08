@@ -5082,7 +5082,7 @@ py-modules = {py_modules}
             mod,
             tok,
             prc,
-            device(),
+            "cpu",
         )
 
     elif task in ["summary"]:
