@@ -97,11 +97,15 @@ importlib.util.find_spec = _find_spec
 
 if _find_spec("dask"):
     import dask
-
     from dask import base
+    from dask.graph_manipulation import (
+        bind,
+        checkpoint,
+        clone,
+        wait_on,
+    )
     from dask.optimization import cull, fuse, inline, inline_functions
     from dask.utils import key_split
-    from dask.graph_manipulation import checkpoint, bind, wait_on, clone
 
     dask.core = base
 
@@ -116,7 +120,7 @@ if _find_spec("dask"):
     dask.core.bind = bind
     dask.core.wait_on = wait_on
     dask.core.clone = clone
-    
+
     dask.core.get = dask.get
 
     def _visualize_wrapper(dsk, **kwargs):
@@ -818,7 +822,7 @@ def answer(history: list):
     img = "<|image_X|>"
     snd = "<|audio_X|>"
 
-    messages = [internal,SYSTEM_MESSAGE,end]
+    messages = [internal, SYSTEM_MESSAGE, end]
 
     img_list = []
     snd_list = []
@@ -1402,11 +1406,17 @@ def fit(model):
         if hasattr(model, "y_all"):
             # Supervised fitting
             log("Labels", model.y_all)
-            log("Fitting Supervised model...", f"Features shape: {model.X_all.shape}")
+            log(
+                "Fitting Supervised model...",
+                f"Features shape: {model.X_all.shape}",
+            )
             model.fit(model.X_all, model.y_all)
         else:
             # Unsupervised fitting
-            log("Fitting Unsupervised model...", f"Features shape: {model.X_all.shape}")
+            log(
+                "Fitting Unsupervised model...",
+                f"Features shape: {model.X_all.shape}",
+            )
             model.fit(model.X_all)
     except Exception as e:
         catch(e)
@@ -1426,9 +1436,7 @@ def feed(model, X_new, y_new=None, epochs=1):
             if current_X is None:
                 current_X = X_new
             else:
-                current_X = np.concatenate(
-                    (current_X, X_new), axis=0
-                )
+                current_X = np.concatenate((current_X, X_new), axis=0)
         model.X_all = current_X
 
     else:
@@ -1442,12 +1450,8 @@ def feed(model, X_new, y_new=None, epochs=1):
                 current_X = X_new
                 current_y = y_new
             else:
-                current_X = np.concatenate(
-                    (current_X, X_new), axis=0
-                )
-                current_y = np.concatenate(
-                    (current_y, y_new), axis=0
-                )
+                current_X = np.concatenate((current_X, X_new), axis=0)
+                current_y = np.concatenate((current_y, y_new), axis=0)
         model.X_all = current_X
         model.y_all = current_y
 
@@ -2389,9 +2393,7 @@ def features_to_text(
 
     try:
         if vectorizer is None:
-            vectorizer = TfidfVectorizer(
-                token_pattern=r"(?u)\b\w+\b"
-            )
+            vectorizer = TfidfVectorizer(token_pattern=r"(?u)\b\w+\b")
             vectorizer.fit(vocabulary)
 
         tfidf_matrix = predicted_features.reshape(1, -1)
@@ -4930,7 +4932,17 @@ def init_pretrained_model(task: str, turbo: bool = False):
 
         package_name = "phi4_package"
         print(f"Downloading source files for {tasks[task]}...")
-        snapshot_dir = Path(snapshot_download(repo_id=tasks[task], allow_patterns=["*.txt", "*.py", "*.json", "*.safetensors"]))
+        snapshot_dir = Path(
+            snapshot_download(
+                repo_id=tasks[task],
+                allow_patterns=[
+                    "*.txt",
+                    "*.py",
+                    "*.json",
+                    "*.safetensors",
+                ],
+            )
+        )
         print(f"Source files downloaded to: {snapshot_dir}")
 
         prepare_inputs_for_generation_code = """
@@ -4946,32 +4958,53 @@ def init_pretrained_model(task: str, turbo: bool = False):
         }
 """
         target_file = snapshot_dir / "modeling_phi4mm.py"
-        target_class_line = "class Phi4MMModel(Phi4MMPreTrainedModel):"
+        target_class_line = (
+            "class Phi4MMModel(Phi4MMPreTrainedModel):"
+        )
 
         print(f"Preparing to inject patch into {target_file}...")
         original_code_lines = target_file.read_text().splitlines()
 
-        if any("dynamically injected to fix a compatibility issue" in line for line in original_code_lines):
-            print("✅ Source code appears to be already patched. Skipping injection.")
+        if any(
+            "dynamically injected to fix a compatibility issue"
+            in line
+            for line in original_code_lines
+        ):
+            print(
+                "✅ Source code appears to be already patched. Skipping injection."
+            )
         else:
             try:
-                line_number = original_code_lines.index(target_class_line)
-                
+                line_number = original_code_lines.index(
+                    target_class_line
+                )
+
                 injection_point = line_number + 1
-                original_code_lines.insert(injection_point, prepare_inputs_for_generation_code)
-                
+                original_code_lines.insert(
+                    injection_point,
+                    prepare_inputs_for_generation_code,
+                )
+
                 patched_code = "\n".join(original_code_lines)
                 target_file.write_text(patched_code)
-                print("✅✅✅ SUCCESS: Method injected directly into source code.")
-                
+                print(
+                    "✅✅✅ SUCCESS: Method injected directly into source code."
+                )
+
             except ValueError:
-                print("⚠️ Could not find the target class declaration line. Aborting patch.")
+                print(
+                    "⚠️ Could not find the target class declaration line. Aborting patch."
+                )
 
         print("Rewriting relative imports to absolute...")
         for py_file in snapshot_dir.glob("*.py"):
             content = py_file.read_text()
-            modified_content = re.sub(r"from \.([\w_]+)", r"from \1", content)
-            modified_content = re.sub(r"import \.([\w_]+)", r"import \1", modified_content)
+            modified_content = re.sub(
+                r"from \.([\w_]+)", r"from \1", content
+            )
+            modified_content = re.sub(
+                r"import \.([\w_]+)", r"import \1", modified_content
+            )
             if content != modified_content:
                 print(f"  - Rewrote imports in {py_file.name}")
                 py_file.write_text(modified_content)
@@ -5009,14 +5042,16 @@ py-modules = {py_modules}
                 str(snapshot_dir),
             ],
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL
+            stderr=subprocess.DEVNULL,
         )
         print(f"Successfully installed '{package_name}'.")
 
         str_snapshot_dir = str(snapshot_dir)
         add_path(str_snapshot_dir)
 
-        print("Loading tokenizer, processor, and model via patched loader...")
+        print(
+            "Loading tokenizer, processor, and model via patched loader..."
+        )
         tok = AutoTokenizer.from_pretrained(str_snapshot_dir)
         prc = AutoProcessor.from_pretrained(
             str_snapshot_dir, trust_remote_code=True

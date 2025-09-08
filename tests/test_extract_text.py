@@ -51,7 +51,9 @@ class TestExtractText(unittest.TestCase):
 
     @patch("playwright.sync_api.expect")
     @patch("playwright.sync_api.sync_playwright")
-    def test_empty_page_content(self, mock_sync_playwright, mock_expect):
+    def test_empty_page_content(
+        self, mock_sync_playwright, mock_expect
+    ):
         mock_page = MagicMock()
         mock_page.content.return_value = ""
         mock_context = MagicMock()
@@ -67,7 +69,7 @@ class TestExtractText(unittest.TestCase):
         )
 
         result = extract_text("http://example.com", ".content")
-        
+
         self.assertEqual(result, "")
 
     @patch(
