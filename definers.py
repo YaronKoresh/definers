@@ -7210,6 +7210,7 @@ def beat_visualizer(
 ):
     import librosa
     from moviepy import AudioFileClip, ImageClip
+    from PIL import Image
 
     img = Image.open(image_path)
     effect_map = {
