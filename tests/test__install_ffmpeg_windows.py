@@ -31,14 +31,19 @@ class TestInstallFfmpegWindows(unittest.TestCase):
     @patch("definers.is_admin_windows", return_value=True)
     @patch(
         "definers.subprocess.run",
-        side_effect=[FileNotFoundError, MagicMock()],  # Winget fails, setx succeeds
+        side_effect=[
+            FileNotFoundError,
+            MagicMock(),
+        ],  # Winget fails, setx succeeds
     )
     @patch("requests.get")
     @patch("zipfile.ZipFile")
     @patch("definers.shutil.move")
     @patch("definers.shutil.rmtree")
     @patch("definers.os.remove")
-    @patch("definers.os.path.exists", return_value=True) # Mock existence for cleanup
+    @patch(
+        "definers.os.path.exists", return_value=True
+    )  # Mock existence for cleanup
     @patch("definers.os.listdir", return_value=["ffmpeg-build-123"])
     @patch("definers.tempfile.gettempdir", return_value="/tmp")
     def test_manual_download_if_winget_fails(
@@ -60,18 +65,22 @@ class TestInstallFfmpegWindows(unittest.TestCase):
         mock_requests_get.return_value.__enter__.return_value = (
             mock_response
         )
-        
+
         # Mock the context manager for zipfile.ZipFile
         mock_zip_instance = MagicMock()
-        mock_zipfile.return_value.__enter__.return_value = mock_zip_instance
+        mock_zipfile.return_value.__enter__.return_value = (
+            mock_zip_instance
+        )
 
         _install_ffmpeg_windows()
 
         # Assertions
-        self.assertEqual(mock_run.call_count, 2) # winget and setx
+        self.assertEqual(mock_run.call_count, 2)  # winget and setx
         mock_requests_get.assert_called_once()
         mock_zipfile.assert_called_once_with("/tmp/ffmpeg.zip", "r")
-        mock_zip_instance.extractall.assert_called_once_with("/tmp/ffmpeg_extracted")
+        mock_zip_instance.extractall.assert_called_once_with(
+            "/tmp/ffmpeg_extracted"
+        )
         mock_move.assert_called_once()
 
 

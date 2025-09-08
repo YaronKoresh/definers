@@ -61,7 +61,12 @@ class TestInstallFfmpegLinux(unittest.TestCase):
     @patch("shutil.which", return_value="/usr/bin/apt")
     @patch("definers.subprocess.run")
     def test_permission_denied_triggers_exit(
-        self, mock_run, mock_which, mock_print, mock_exit, mock_geteuid
+        self,
+        mock_run,
+        mock_which,
+        mock_print,
+        mock_exit,
+        mock_geteuid,
     ):
         mock_run.side_effect = subprocess.CalledProcessError(
             returncode=13, cmd=["apt-get", "update"]
