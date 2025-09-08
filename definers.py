@@ -7995,7 +7995,7 @@ def autotune_vocals(audio_path, strength, format_choice):
             )
             beat_times = proc(act)
             vocal_intervals = librosa.effects.split(
-                y, top_db=40, frame_length=2048, hop_length=512
+                y, top_db=32, frame_length=2048, hop_length=512
             )
             if len(vocal_intervals) > 0 and len(beat_times) > 0:
                 y_timed = np.zeros_like(y)
@@ -8048,7 +8048,7 @@ def autotune_vocals(audio_path, strength, format_choice):
                         y_timed[
                             start_pos : start_pos
                             + len(segment_to_place)
-                        ] += segment_to_place
+                        ] = segment_to_place
                         last_end_sample = start_pos + len(
                             segment_to_place
                         )
