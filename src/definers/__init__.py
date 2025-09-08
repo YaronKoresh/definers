@@ -6083,6 +6083,8 @@ def BeamSearch(
   no_repeat_ngram_size: int = 3,
   score_function=None
 ):
+  import torch
+  
   class _BeamSearch:
     def __init__(
         self,
