@@ -111,6 +111,11 @@ if _find_spec("dask") and _find_spec("dask.dataframe.core") is None:
     from dask.optimization import cull, fuse, inline, inline_functions
     from dask.utils import key_split
 
+    dask.dataframe.core = dask.dataframe
+    dask.distributed.core = dask.distributed
+    dask.diagnostics.core = dask.diagnostics
+    dask.array.core = dask.array
+
     sys.modules["dask.dataframe.core"] = sys.modules["dask.dataframe"]
     sys.modules["dask.distributed .core"] = sys.modules[
         "dask.distributed"
