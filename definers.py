@@ -97,6 +97,10 @@ importlib.util.find_spec = _find_spec
 
 if _find_spec("dask") and _find_spec("dask.dataframe.core") is None:
     import dask
+    import dask.array
+    import dask.dataframe
+    import dask.diagnostics
+    import dask.distributed
     from dask import base
     from dask.graph_manipulation import (
         bind,
@@ -107,15 +111,14 @@ if _find_spec("dask") and _find_spec("dask.dataframe.core") is None:
     from dask.optimization import cull, fuse, inline, inline_functions
     from dask.utils import key_split
 
-    import dask.dataframe
-    import dask.distributed 
-    import dask.diagnostics
-    import dask.array
-
-    sys.modules['dask.dataframe.core'] = sys.modules['dask.dataframe']
-    sys.modules['dask.distributed .core'] = sys.modules['dask.distributed']
-    sys.modules['dask.diagnostics.core'] = sys.modules['dask.diagnostics']
-    sys.modules['dask.array.core'] = sys.modules['dask.array']
+    sys.modules["dask.dataframe.core"] = sys.modules["dask.dataframe"]
+    sys.modules["dask.distributed .core"] = sys.modules[
+        "dask.distributed"
+    ]
+    sys.modules["dask.diagnostics.core"] = sys.modules[
+        "dask.diagnostics"
+    ]
+    sys.modules["dask.array.core"] = sys.modules["dask.array"]
 
     dask.core = base
 
