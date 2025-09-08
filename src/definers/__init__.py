@@ -100,7 +100,6 @@ if _find_spec("dask"):
     import dask.array
     import dask.dataframe
     import dask.diagnostics
-    import dask.distributed
     from dask import base
     from dask.graph_manipulation import (
         bind,
@@ -112,7 +111,6 @@ if _find_spec("dask"):
     from dask.utils import key_split
 
     dask.dataframe.core = dask.dataframe
-    dask.distributed.core = dask.distributed
     dask.diagnostics.core = dask.diagnostics
     dask.array.core = dask.array
 
