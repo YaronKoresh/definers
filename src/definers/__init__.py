@@ -7818,22 +7818,24 @@ def stem_mixer(files, format_choice):
         if sr != target_sr:
             y = librosa.resample(y, orig_sr=sr, target_sr=target_sr)
 
-        beat_act = madmom.features.beats.RNNBeatProcessor()(file.name)
-        downbeat_proc = (
-            madmom.features.downbeats.DBNDownBeatTrackingProcessor(
-                beats_per_bar=[4, 4], fps=100
-            )
+        proc = madmom.features.beats.RNNBeatProcessor()
+        downbeat_proc_act = madmom.features.downbeats.RNNDownBeatProcessor()
+
+        beat_act = proc(file.name)
+        downbeat_act = downbeat_proc_act(file.name)
+
+        combined_act = np.c_[beat_act, downbeat_act]
+        print(" - Combined beat and downbeat activations.")
+
+        downbeat_tracker = madmom.features.downbeats.DBNDownBeatTrackingProcessor(
+            beats_per_bar=[4, 4], fps=100
         )
 
-        if beat_act.ndim == 1:
-            beat_act = beat_act.reshape(-1, 1)
-            print("  - Reshaped beat activations to 2D array.")
-
-        beat_info = downbeat_proc(beat_act)
+        beat_info = downbeat_tracker(combined_act)
 
         first_downbeat_time = 0.0
-        if beat_info.ndim == 2 and beat_info.shape[1] == 2:
-            beats = downbeat_proc(beat_act)
+        if beat_info.ndim == 2 and beat_info.shape[1] == 2 and len(beat_info) > 1:
+            beats = beat_info[:, 0]
             tempo = np.median(60 / np.diff(beats))
 
             downbeats = beat_info[beat_info[:, 1] == 1]
@@ -7896,7 +7898,9 @@ def stem_mixer(files, format_choice):
         mixed_y[start_sample:end_sample] += s["audio"]
 
     print("Mixing complete. Normalizing volume...")
-    mixed_y /= len(processed_stems)
+    peak_amplitude = np.max(np.abs(mixed_y))
+    if peak_amplitude > 0:
+        mixed_y = mixed_y / peak_amplitude * 0.99
 
     print("Exporting final mix...")
     temp_wav_path = tmp(".wav")
