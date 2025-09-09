@@ -3278,7 +3278,7 @@ def master(source_path, strength, format_choice):
                     results=[mg.pcm24(str(result_wav_path))],
                     config=mg.Config(
                         max_length=15 * 60,
-                        threshold=0.8 / strength,
+                        threshold=0.9 / strength,
                         internal_sample_rate=44100,
                     ),
                 )
@@ -3287,10 +3287,8 @@ def master(source_path, strength, format_choice):
             processed_path = source_path
             processed_path = _master(processed_path)
             processed_path = normalize_audio_to_peak(
-                processed_path, 0.9
+                processed_path, 0.95
             )
-            strength = 1
-            processed_path = _master(processed_path)
             final_sound = pydub.AudioSegment.from_file(processed_path)
             output_path = export_audio(
                 final_sound, output_stem, format_choice
@@ -7576,7 +7574,7 @@ def lyric_video(
         background_clip = ColorClip(
             size=(1280, 720), color=(0, 0, 0), duration=duration
         )
-    background_clip = background_clip.fx(vfx.resize, width=1280)
+    background_clip = background_clip.resized(width=1280)
     lines = [
         line
         for line in lyrics_text.strip().split("\n")
@@ -7904,9 +7902,7 @@ def create_spectrum_visualization(audio_path):
             2000,
             5000,
             10000,
-            12000,
-            15000,
-            18000,
+            20000,
         ]
         xtick_labels = [
             "50",
@@ -7917,9 +7913,7 @@ def create_spectrum_visualization(audio_path):
             "2k",
             "5k",
             "10k",
-            "12k",
-            "15k",
-            "18k",
+            "20k",
         ]
         ax.set_xticks([x for x in xticks if x < sr / 2])
         ax.set_xticklabels(
