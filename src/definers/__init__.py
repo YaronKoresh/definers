@@ -7823,6 +7823,11 @@ def stem_mixer(files, format_choice):
                 beats_per_bar=[4, 4], fps=100
             )
         )
+
+        if beat_act.ndim == 1:
+            beat_act = beat_act.reshape(-1, 1)
+            print("  - Reshaped beat activations to 2D array.")
+
         beat_info = downbeat_proc(beat_act)
 
         first_downbeat_time = 0.0
