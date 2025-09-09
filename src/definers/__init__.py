@@ -8462,8 +8462,8 @@ def autotune_vocals(
         print(
             "Adjusting final vocal volume and overlaying onto instrumental..."
         )
-        final_vocals = tuned_vocals - 1.5
-        combined = instrumental.overlay(final_vocals + 6)
+        final_vocals = tuned_vocals + 3
+        combined = instrumental.overlay(final_vocals)
         print("Overlay complete.")
 
         output_stem = str(
