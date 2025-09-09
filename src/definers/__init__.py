@@ -870,7 +870,16 @@ def answer(history: list):
                         img.replace("X", str(len(img_list)))
                     )
         else:
-            messages.append(content.replace("|", " or "))
+            messages.append(
+                simple_text(
+                    re.sub(
+                        r'[\s!]*\?[\s!?]*',
+                        " I wonder ",
+                        content
+                        .replace("|", " or ")
+                    )
+                )
+            )
 
         messages.append(end)
 
