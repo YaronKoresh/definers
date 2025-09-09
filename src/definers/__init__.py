@@ -7832,7 +7832,7 @@ def stem_mixer(files, format_choice):
 
         first_downbeat_time = 0.0
         if beat_info.ndim == 2 and beat_info.shape[1] == 2:
-            beats = proc(act)
+            beats = downbeat_proc(beat_act)
             tempo = np.median(60 / np.diff(beats))
 
             downbeats = beat_info[beat_info[:, 1] == 1]
