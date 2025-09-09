@@ -871,13 +871,7 @@ def answer(history: list):
                     )
         else:
             messages.append(
-                simple_text(
-                    re.sub(
-                        r"[\s!]*\?[\s!?]*",
-                        " I wonder ",
-                        content.replace("|", " or "),
-                    )
-                )
+                simple_text(content)
             )
 
         messages.append(end)
@@ -3375,7 +3369,8 @@ def simple_text(prompt):
     prompt = re.sub("( ){2,}", " ", prompt)
     prompt = re.sub("(\n){2,}", "\n", prompt)
     prompt = re.sub("(-){2,}", "-", prompt)
-    prompt = re.sub("[\s!]*\?[\s!?]*", " I wonder ", prompt)
+    prompt = prompt.replace("|", " or ")
+    prompt = re.sub("[ !]*\?[ !?]*", " I wonder ", prompt)
     prompt = re.sub(punc, "", prompt)
     prompt = prompt.lower().strip()
     prompt = prompt.replace(" -", "-").replace("- ", "-")
