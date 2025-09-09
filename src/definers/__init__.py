@@ -7789,36 +7789,80 @@ def stem_mixer(files, format_choice):
     if not files or len(files) < 2:
         catch("Please upload at least two stem files.")
         return None
+
     processed_stems = []
     target_sr = None
     target_bpm = None
+
+    print("--- Processing Stems ---")
     for i, file in enumerate(files):
+        print(f"Processing file {i+1}/{len(files)}: {Path(file.name).name}")
         y, sr = librosa.load(file.name, sr=None)
+        
         if target_sr is None:
             target_sr = sr
-        y = librosa.resample(y, orig_sr=sr, target_sr=target_sr)
-        proc = madmom.features.beats.DBNBeatTrackingProcessor(fps=100)
-        act = madmom.features.beats.RNNBeatProcessor()(file.name)
-        tempo = np.median(60 / np.diff(proc(act)))
+        
+        if sr != target_sr:
+            y = librosa.resample(y, orig_sr=sr, target_sr=target_sr)
+
+        beat_act = madmom.features.beats.RNNBeatProcessor()(file.name)
+        downbeat_proc = madmom.features.downbeats.DBNDownBeatTrackingProcessor(beats_per_bar=[4, 4], fps=100)
+        beat_info = downbeat_proc(beat_act)
+
+        first_downbeat_time = 0.0
+        if beat_info.ndim == 2 and beat_info.shape[1] == 2:
+            beats = proc(act)
+            tempo = np.median(60 / np.diff(beats))
+            
+            downbeats = beat_info[beat_info[:, 1] == 1]
+            if len(downbeats) > 0:
+                first_downbeat_time = downbeats[0, 0]
+                print(f"  - Original Tempo: {tempo:.2f} BPM, First Downbeat: {first_downbeat_time:.2f}s")
+        else:
+            print("  - Warning: Could not detect beats. Tempo and alignment may be inaccurate.")
+            beats = madmom.features.beats.BeatDetectionProcessor(fps=100)(beat_act)
+            if len(beats) > 1:
+                tempo = np.median(60 / np.diff(beats))
+            else:
+                tempo = 120
+
         if i == 0:
             target_bpm = tempo
+            print(f"Target BPM set to {target_bpm:.2f}")
+
         if tempo != target_bpm:
             speed_factor = target_bpm / tempo
-            temp_stretched_path = tmp(".wav")
-            temp_original_path = tmp(".wav")
-            sf.write(temp_original_path, y, target_sr)
-            stretch_audio(
-                temp_original_path, temp_stretched_path, speed_factor
-            )
-            y, _ = librosa.load(temp_stretched_path, sr=target_sr)
-            delete(temp_original_path)
-            delete(temp_stretched_path)
-        processed_stems.append(y)
-    max_length = max(len(y) for y in processed_stems)
+            print(f"  - Stretching by factor: {speed_factor:.2f}")
+            y = librosa.effects.time_stretch(y, rate=speed_factor)
+            first_downbeat_time /= speed_factor
+
+        processed_stems.append({'audio': y, 'align_time': first_downbeat_time})
+
+    print("\n--- Aligning and Mixing Stems ---")
+    max_align_time = max(s['align_time'] for s in processed_stems)
+    print(f"Master alignment point (latest downbeat): {max_align_time:.2f}s")
+
+    max_length = 0
+    for s in processed_stems:
+        padding_time = max_align_time - s['align_time']
+        padding_samples = librosa.time_to_samples(padding_time, sr=target_sr)
+        total_length = padding_samples + len(s['audio'])
+        if total_length > max_length:
+            max_length = total_length
+    
     mixed_y = np.zeros(max_length)
-    for y in processed_stems:
-        mixed_y[: len(y)] += y
+
+    for s in processed_stems:
+        padding_time = max_align_time - s['align_time']
+        start_sample = librosa.time_to_samples(padding_time, sr=target_sr)
+        end_sample = start_sample + len(s['audio'])
+        
+        mixed_y[start_sample:end_sample] += s['audio']
+
+    print("Mixing complete. Normalizing volume...")
     mixed_y /= len(processed_stems)
+
+    print("Exporting final mix...")
     temp_wav_path = tmp(".wav")
     write_wav(
         temp_wav_path, target_sr, (mixed_y * 32767).astype(np.int16)
@@ -7829,6 +7873,7 @@ def stem_mixer(files, format_choice):
     )
     output_path = export_audio(sound, output_stem, format_choice)
     delete(temp_wav_path)
+    print(f"--- Success! Mix saved to: {output_path} ---")
     return output_path
 
 
@@ -8110,10 +8155,15 @@ def autotune_vocals(
             )
             beat_info = downbeat_proc(
                 beat_act
-            )  # This gives beats and which is beat '1'
+            )
 
-            beat_times = beat_info[beat_info[:, 1] > 0, 0]
-            downbeats = beat_info[beat_info[:, 1] == 1, 0]
+            if beat_info.ndim == 2 and beat_info.shape[1] == 2:
+                beat_times = beat_info[beat_info[:, 1] > 0, 0]
+                downbeats = beat_info[beat_info[:, 1] == 1, 0]
+            else:
+                print("Warning: Madmom could not detect any beats in the instrumental.")
+                beat_times = np.array([])
+                downbeats = np.array([])
 
             print(
                 f"Found {len(beat_times)} beats and {len(downbeats)} downbeats."
@@ -8384,7 +8434,7 @@ def autotune_vocals(
             "Adjusting final vocal volume and overlaying onto instrumental..."
         )
         final_vocals = tuned_vocals - 1.5
-        combined = instrumental.overlay(final_vocals)
+        combined = instrumental.overlay(final_vocals + 6)
         print("Overlay complete.")
 
         output_stem = str(
