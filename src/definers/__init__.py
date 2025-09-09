@@ -3269,18 +3269,19 @@ def master(source_path, strength, format_choice):
                     results=[mg.pcm24(str(result_wav_path))],
                     config=mg.Config(
                         max_length=15 * 60,
-                        threshold=0.99 / strength,
+                        threshold=0.8 / strength,
                         internal_sample_rate=44100,
                     ),
                 )
                 return result_wav_path
 
             processed_path = source_path
-            for i in range(3):
-                processed_path = _master(processed_path)
+            processed_path = _master(processed_path)
             processed_path = normalize_audio_to_peak(
-                processed_path, 0.99
+                processed_path, 0.9
             )
+            strength = 1
+            processed_path = _master(processed_path)
             final_sound = pydub.AudioSegment.from_file(processed_path)
             output_path = export_audio(
                 final_sound, output_stem, format_choice
@@ -6135,9 +6136,7 @@ def BeamSearch(
     tokenizer,
     processor,
     device,
-    length_penalty: float = 1.0,
-    repetition_penalty: float = 1.2,
-    no_repeat_ngram_size: int = 3,
+    length_penalty=2.0,
     score_function=None,
 ):
     import torch
@@ -6150,8 +6149,6 @@ def BeamSearch(
             processor,
             device,
             length_penalty,
-            repetition_penalty,
-            no_repeat_ngram_size,
             score_function,
         ):
             self.model = model.to(device).eval()
@@ -6160,8 +6157,6 @@ def BeamSearch(
             self.device = device
             self.eos_token_id = tokenizer.eos_token_id
             self.length_penalty = length_penalty
-            self.repetition_penalty = repetition_penalty
-            self.no_repeat_ngram_size = no_repeat_ngram_size
             self.score_function = (
                 score_function or self._default_score_function
             )
@@ -6171,41 +6166,6 @@ def BeamSearch(
             seq, _ = beam[-1]
             seq_len = seq.shape[1]
             return total_score / (seq_len**self.length_penalty)
-
-        def _apply_penalties(self, logits, current_sequence):
-            if self.repetition_penalty != 1.0:
-                score = torch.gather(logits, 1, current_sequence)
-                score = torch.where(
-                    score < 0,
-                    score * self.repetition_penalty,
-                    score / self.repetition_penalty,
-                )
-                logits.scatter_(1, current_sequence, score)
-
-            if self.no_repeat_ngram_size > 0:
-                banned_tokens = self._get_banned_ngram_tokens(
-                    current_sequence, self.no_repeat_ngram_size
-                )
-                logits[:, banned_tokens] = -float("inf")
-
-            return logits
-
-        def _get_banned_ngram_tokens(self, sequence, n):
-            if sequence.shape[1] < n:
-                return []
-
-            ngrams = set()
-            for i in range(sequence.shape[1] - n + 1):
-                ngram = tuple(sequence[0, i : i + n].tolist())
-                ngrams.add(ngram)
-
-            banned_tokens = []
-            prefix = tuple(sequence[0, -n + 1 :].tolist())
-            for token_id in range(self.model.config.vocab_size):
-                if prefix + (token_id,) in ngrams:
-                    banned_tokens.append(token_id)
-
-            return banned_tokens
 
         def search(
             self,
@@ -6237,9 +6197,7 @@ def BeamSearch(
                         )
                         logits = outputs.logits[
                             :, -1, :
-                        ]  # Get logits for the next token
-
-                        logits = self._apply_penalties(logits, seq)
+                        ]
 
                         probs = F.log_softmax(logits, dim=-1)
 
@@ -6322,8 +6280,6 @@ def BeamSearch(
         processor,
         device,
         length_penalty,
-        repetition_penalty,
-        no_repeat_ngram_size,
         score_function,
     )
 
@@ -6403,19 +6359,26 @@ def SklearnWrapper(sklearn_model, is_classification=False):
     return _SklearnWrapper(sklearn_model, is_classification)
 
 
+def add_chat_message(history, message):
+    for x in message["files"]:
+        history.append({"role": "user", "content": {"path": x}})
+    if message["text"] is not None:
+        txt = message["text"]
+        history.append({"role": "user", "content": txt})
+    return history
+
+
 def get_chat_response(message, history: list):
+    history = add_chat_message(history, message)
     response = answer(history)
     return response
 
 
-def init_chat(title: str, high_performance: bool = True):
+def init_chat(title: str):
     import gradio as gr
 
     if not MODELS["answer"]:
-        init_pretrained_model("answer", high_performance)
-
-    if not MODELS["summary"]:
-        init_pretrained_model("summary", high_performance)
+        init_pretrained_model("answer")
 
     chatbot = gr.Chatbot(
         elem_id="chatbot", bubble_full_width=False, type="messages"
