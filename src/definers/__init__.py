@@ -6459,11 +6459,14 @@ def train_model_rvc(experiment: str, path: str, lvl: int = 1):
     logger.info("Starting preprocessing...")
     try:
         with open(log_file_preprocess, "w") as f_preprocess:
-            cmd_preprocess = f'"{config.python_cmd}" infer/modules/train/preprocess.py "{input_root}" {sr} {n_p} "{exp_path}"'
+            cmd_preprocess = [
+                config.python_cmd, "infer/modules/train/preprocess.py",
+                input_root, str(sr), str(n_p), exp_path
+            ]
             logger.info("Execute: " + cmd_preprocess)
             subprocess.run(
                 cmd_preprocess,
-                shell=True,
+                shell=False,
                 check=True,
                 stdout=f_preprocess,
                 stderr=subprocess.STDOUT,
@@ -6477,9 +6480,12 @@ def train_model_rvc(experiment: str, path: str, lvl: int = 1):
         logger.error(
             f"Preprocessing failed with return code {e.returncode}: {e}"
         )
-        logger.error(
-            f"Preprocessing output:\n{e.stdout.decode() if e.stdout else 'N/A'}\n{e.stderr.decode() if e.stderr else 'N/A'}"
-        )
+        try:
+            with open(log_file_preprocess, "r", encoding="utf-8") as f:
+                error_output = f.read()
+            logger.error(f"Preprocessing output:\n{error_output}")
+        except Exception as log_e:
+            logger.error(f"Could not read preprocess log file: {log_e}")
         catch(e)
         return None
     except Exception as e:
@@ -6667,7 +6673,7 @@ def train_model_rvc(experiment: str, path: str, lvl: int = 1):
             if platform.system() != "Windows":
                 os.symlink(added_index_path, target_link_path)
             else:
-                os.link(added_index_path, target_link_path)
+                shutil.copy(added_index_path, target_link_path)
             logger.info("Index linking successful.")
         except Exception as e:
             logger.error(f"Linking index failed: {e}")
