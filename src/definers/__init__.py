@@ -8037,10 +8037,10 @@ def find_best_beat(
 
 
 def reformat_audio(path):
-    import librosa
+    import pydub
 
-    y, sr = librosa.load(
-        path, sr=None, mono=False
+    y = pydub.AudioSegment.from_file(
+        path
     )
     output_path = export_audio(
         y, random_string(), "wav"
