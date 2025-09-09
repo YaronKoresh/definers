@@ -7240,6 +7240,7 @@ def transcribe_audio(audio_path, language):
     if MODELS["speech-recognition"] is None:
         init_pretrained_model("speech-recognition")
     lang_code = value_to_keys(language_codes, language)[0]
+    lang_code = lang_code.replace("iw", "he")
     return MODELS["speech-recognition"](
         audio_path,
         generate_kwargs={"language": lang_code},
