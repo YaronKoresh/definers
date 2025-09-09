@@ -859,7 +859,7 @@ def answer(history: list):
         images=img_list if img_list else None,
         audios=snd_list if snd_list else None,
         return_tensors="pt",
-    ).to(device())
+    )
 
     generate_ids = MODELS["answer"].generate(
         **inputs,
