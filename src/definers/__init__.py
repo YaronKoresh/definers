@@ -6195,9 +6195,7 @@ def BeamSearch(
                         outputs = self.model(
                             seq, input_mode=input_mode
                         )
-                        logits = outputs.logits[
-                            :, -1, :
-                        ]
+                        logits = outputs.logits[:, -1, :]
 
                         probs = F.log_softmax(logits, dim=-1)
 
