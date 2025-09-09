@@ -6165,22 +6165,7 @@ def SklearnWrapper(sklearn_model, is_classification=False):
     return _SklearnWrapper(sklearn_model, is_classification)
 
 
-def add_chat_message(history, message):
-    for x in message["files"]:
-        history.append({"role": "user", "content": {"path": x}})
-    if message["text"] is not None:
-        txt = message["text"]
-        history.append({"role": "user", "content": txt})
-    return history
-
-
-def get_chat_response(message, history: list):
-    history = add_chat_message(history, message)
-    response = answer(history)
-    return response
-
-
-def init_chat(title: str):
+def init_chat(title="Chatbot", fnc=answer):
     import gradio as gr
 
     if not MODELS["answer"]:
@@ -6189,8 +6174,18 @@ def init_chat(title: str):
     chatbot = gr.Chatbot(
         elem_id="chatbot", bubble_full_width=False, type="messages"
     )
+
+    def _get_chat_response(message, history: list):
+        for x in message["files"]:
+            history.append({"role": "user", "content": {"path": x}})
+        if message["text"] is not None:
+            txt = message["text"]
+            history.append({"role": "user", "content": txt})
+        response = fnc(history)
+        return response
+
     return gr.ChatInterface(
-        fn=get_chat_response,
+        fn=_get_chat_response,
         type="messages",
         chatbot=chatbot,
         multimodal=True,
