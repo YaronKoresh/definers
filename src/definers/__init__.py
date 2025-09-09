@@ -861,6 +861,8 @@ def answer(history: list):
         return_tensors="pt",
     )
 
+    inputs = inputs.to(device())
+
     generate_ids = MODELS["answer"].generate(
         **inputs,
         max_new_tokens=1000,
