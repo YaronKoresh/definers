@@ -6385,6 +6385,8 @@ def train_model_rvc(experiment: str, path: str, lvl: int = 1):
     from .configs.config import Config
     from .i18n.i18n import I18nAuto
 
+    path = reformat_audio(path)
+
     now_dir = os.getcwd()
     index_root = os.path.join(now_dir, "logs")
 
@@ -6778,6 +6780,8 @@ def convert_vocal_rvc(
 
     from .configs.config import Config
     from .infer.modules.vc.modules import VC
+
+    path = reformat_audio(path)
 
     now_dir = os.getcwd()
     index_root = os.path.join(now_dir, "logs")
@@ -8024,6 +8028,18 @@ def find_best_beat(
 
     return None
 
+
+
+def reformat_audio(path):
+    import librosa
+
+    y, sr = librosa.load(
+        path, sr=None, mono=False
+    )
+    output_path = export_audio(
+        y, random_string(), "wav"
+    )
+    return output_path
 
 def autotune_vocals(
     audio_path,
