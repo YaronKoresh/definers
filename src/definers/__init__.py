@@ -8193,9 +8193,46 @@ def midi_to_audio(midi_path, format_choice):
     delete(temp_wav_path)
     return final_output_path
 
+def subdivide_beats(beat_times, subdivision):
+    if subdivision <= 1:
+        return beat_times
+
+    new_beats = []
+    for i in range(len(beat_times) - 1):
+        start_beat = beat_times[i]
+        end_beat = beat_times[i+1]
+        interval = (end_beat - start_beat) / subdivision
+        for j in range(subdivision):
+            new_beats.append(start_beat + j * interval)
+
+    new_beats.append(beat_times[-1])
+    return np.array(sorted(list(set(new_beats))))
+
+def find_best_beat(target_time, future_beats, downbeats, bias, threshold):
+
+    if len(future_beats) == 0:
+        return None
+
+    time_diffs = np.abs(future_beats - target_time)
+    
+    is_downbeat = np.isin(np.round(future_beats, 4), np.round(downbeats, 4))
+    weighted_diffs = time_diffs - (bias * threshold * is_downbeat)
+    
+    best_beat_index = np.argmin(weighted_diffs)
+    
+    if time_diffs[best_beat_index] < threshold:
+        return future_beats[best_beat_index]
+        
+    return None
+
 
 def autotune_vocals(
-    audio_path, strength=0.7, format_choice="mp3", humanize=0.5
+    audio_path,
+    strength=0.7,
+    format_choice="mp3",
+    humanize=0.5,
+    quantize_grid=16,
+    strong_beat_bias=0.1
 ):
     import librosa
     import madmom
@@ -8242,185 +8279,95 @@ def autotune_vocals(
         y = np.copy(y_original)
         print(f"Copied samples max value: {np.max(np.abs(y))}")
 
+
         print("\n--- Rhythm Correction ---")
         try:
-            print("Detecting beats in instrumental...")
-            proc = madmom.features.beats.DBNBeatTrackingProcessor(
-                fps=100
-            )
-            act = madmom.features.beats.RNNBeatProcessor()(
-                str(instrumental_path)
-            )
-            beat_times = proc(act)
-            print(f"Found {len(beat_times)} beats.")
+            print("Detecting beats and downbeats in instrumental...")
+            downbeat_proc = madmom.features.beats.DBNDownBeatTrackingProcessor(beats_per_bar=[4, 4], fps=100)
+            beat_act = madmom.features.beats.RNNBeatProcessor()(str(instrumental_path))
+            beat_info = downbeat_proc(beat_act) # This gives beats and which is beat '1'
+        
+            beat_times = beat_info[beat_info[:, 1] > 0, 0]
+            downbeats = beat_info[beat_info[:, 1] == 1, 0]
+        
+            print(f"Found {len(beat_times)} beats and {len(downbeats)} downbeats.")
+
+            if quantize_grid > 0 and len(beat_times) > 1:
+                subdivision_factor = quantize_grid // 4
+                quantized_beat_times = subdivide_beats(beat_times, subdivision_factor)
+                print(f"Created a quantization grid with {len(quantized_beat_times)} points ({quantize_grid}th notes).")
+            else:
+                quantized_beat_times = beat_times
 
             print("Splitting vocal track into non-silent segments...")
-
-            onset_frames = librosa.onset.onset_detect(
-                y=y, sr=sr, hop_length=512, units="frames"
-            )
-            onset_frames = np.concatenate(
-                [onset_frames, [len(y) // 512]]
-            )
-
+            onset_frames = librosa.onset.onset_detect(y=y, sr=sr, hop_length=512, units="frames")
+            onset_frames = np.concatenate([onset_frames, [len(y) // 512]]) 
+        
             vocal_intervals = []
             for i in range(len(onset_frames) - 1):
-                start_frame = onset_frames[i]
-                end_frame = onset_frames[i + 1]
-
-                print(f"Current start frame: {start_frame}")
-                print(f"Current end frame: {end_frame}")
-
+                start_frame, end_frame = onset_frames[i], onset_frames[i + 1]
                 if end_frame > start_frame:
-                    start_sample = start_frame * 512
-                    end_sample = end_frame * 512
-                    segment_energy = np.mean(
-                        y[start_sample:end_sample] ** 2
-                    )
-                    print(f"Current segment energy: {segment_energy}")
-                    if segment_energy > 1e-6:
-                        print(f"Appending current segment")
-                        vocal_intervals.append(
-                            (start_frame, end_frame)
-                        )
-
+                    start_sample, end_sample = start_frame * 512, end_frame * 512
+                    if np.mean(y[start_sample:end_sample]**2) > 1e-6:
+                         vocal_intervals.append((start_frame, end_frame))
+        
             print(f"Found {len(vocal_intervals)} vocal segments.")
 
-            if len(vocal_intervals) > 0 and len(beat_times) > 0:
+            if len(vocal_intervals) > 0 and len(quantized_beat_times) > 0:
                 y_timed = np.zeros_like(y)
                 last_end_sample = 0
 
-                print("Quantizing vocal segments to beat grid...")
-                for i, (start_frame, end_frame) in enumerate(
-                    vocal_intervals
-                ):
-
-                    print(f"Start frame: {start_frame}")
-                    print(f"End frame: {end_frame}")
-
-                    start_sample = librosa.frames_to_samples(
-                        start_frame, hop_length=512
-                    )
-                    end_sample = librosa.frames_to_samples(
-                        end_frame, hop_length=512
-                    )
-
-                    print(f"Start sample: {start_sample}")
-                    print(f"End sample: {end_sample}")
-
+                print("Quantizing vocal segments to the musical grid...")
+                for i, (start_frame, end_frame) in enumerate(vocal_intervals):
+                    start_sample = librosa.frames_to_samples(start_frame, hop_length=512)
+                    end_sample = librosa.frames_to_samples(end_frame, hop_length=512)
                     segment = y[start_sample:end_sample]
-                    print(f"Segment: {segment}")
 
                     if len(segment) == 0:
                         continue
 
-                    start_time = librosa.samples_to_time(
-                        start_sample, sr=sr
-                    )
-                    print(
-                        f"  Processing segment {i+1}/{len(vocal_intervals)}: Original start time {start_time:.2f}s"
-                    )
+                    start_time = librosa.samples_to_time(start_sample, sr=sr)
+                
+                    original_beat_duration = np.mean(np.diff(beat_times)) if len(beat_times) > 1 else 0.5
+                    threshold = original_beat_duration / 2.0
+                
+                    future_beats = quantized_beat_times[quantized_beat_times >= librosa.samples_to_time(last_end_sample, sr=sr)]
+                
+                    best_quantized_time = find_best_beat(start_time, future_beats, downbeats, strong_beat_bias, threshold)
 
-                    beat_duration = (
-                        np.mean(np.diff(beat_times))
-                        if len(beat_times) > 1
-                        else 0.5
-                    )
-                    print(f"Beat duration: {beat_duration}")
-
-                    threshold = beat_duration / 2.0
-                    print(f"Threshold: {threshold}")
-
-                    future_beats = beat_times[
-                        beat_times
-                        > librosa.samples_to_time(
-                            last_end_sample, sr=sr
-                        )
-                    ]
-                    print(f"Future beats: {future_beats}")
-
-                    final_pos = start_sample
-
-                    if len(future_beats) > 0:
-                        best_beat_index = np.argmin(
-                            np.abs(future_beats - start_time)
-                        )
-                        print(f"Best beat index: {best_beat_index}")
-
-                        time_difference = np.abs(
-                            future_beats[best_beat_index] - start_time
-                        )
-                        print(f"Time difference: {time_difference}")
-
-                        if time_difference < threshold:
-                            quantized_time = future_beats[
-                                best_beat_index
-                            ]
-                            print(f"Quantized time: {quantized_time}")
-
-                            quantized_pos = librosa.time_to_samples(
-                                quantized_time, sr=sr
-                            )
-                            print(
-                                f"Quantized position: {quantized_pos}"
-                            )
-
-                            is_overlapping = (
-                                quantized_pos < last_end_sample
-                            )
-                            print(f"Is overlapping? {is_overlapping}")
-
-                            is_out_of_bounds = quantized_pos + len(
-                                segment
-                            ) > len(y_timed)
-                            print(
-                                f"Is out of bounds? {is_out_of_bounds}"
-                            )
-
-                            if (
-                                not is_overlapping
-                                and not is_out_of_bounds
-                            ):
-                                final_pos = quantized_pos
-                                print(
-                                    f"    - Quantizing to beat at {quantized_time:.2f}s."
-                                )
-                            else:
-                                print(
-                                    f"    - Quantization candidate {quantized_time:.2f}s rejected (overlap/out of bounds). Reverting to original timing."
-                                )
+                    final_pos = start_sample # Default to original position
+                    if best_quantized_time is not None:
+                        quantized_pos = librosa.time_to_samples(best_quantized_time, sr=sr)
+                    
+                        is_safe = (quantized_pos >= last_end_sample) and (quantized_pos + len(segment) <= len(y_timed))
+                    
+                        if is_safe:
+                            final_pos = quantized_pos
+                            print(f"Segment {i+1}: Snapped to beat at {best_quantized_time:.2f}s.")
+                        else:
+                            print(f"Segment {i+1}: Quantization candidate rejected (overlap/bounds). Using original timing.")
+                    else:
+                        print(f"Segment {i+1}: No suitable beat found within threshold. Using original timing.")
 
                     final_pos = max(final_pos, last_end_sample)
-                    print(f"Final position: {final_pos}")
 
                     if final_pos + len(segment) <= len(y_timed):
-                        y_timed[
-                            final_pos : final_pos + len(segment)
-                        ] = segment
+                        y_timed[final_pos : final_pos + len(segment)] = segment
                         last_end_sample = final_pos + len(segment)
-                    else:
-                        print(
-                            f"Warning: Could not place a vocal segment starting at {start_time:.2f}s. Skipping it."
-                        )
-
+            
                 if np.max(np.abs(y_timed)) < 0.01:
-                    print(
-                        "Rhythm correction resulted in near-silence. Reverting to original vocal timing."
-                    )
+                    print("Rhythm correction resulted in near-silence. Reverting to original vocal timing.")
                     y = y_original
                 else:
                     y = y_timed
-                    print(
-                        "Vocal rhythm correction applied successfully."
-                    )
+                    print("Vocal rhythm correction applied successfully.")
             else:
-                print(
-                    "Could not detect beats or vocal segments, skipping rhythm correction."
-                )
+                print("Could not detect beats or vocal segments, skipping rhythm correction.")
+            
         except Exception as e:
-            catch(
-                f"Could not apply rhythm correction, proceeding with pitch correction only. Error: {e}"
-            )
+            print(f"Could not apply rhythm correction, proceeding with pitch correction only. Error: {e}")
+            y = y_original
+
 
         print("\n--- Pitch Correction ---")
         print(
