@@ -826,26 +826,15 @@ def answer(history: list):
     import soundfile as sf
     from PIL import Image
 
-    internal = "<|system|>"
-    human = "<|user|>"
-    ai = "<|assistant|>"
-    end = "<|end|>"
-    img = "<|image_X|>"
-    snd = "<|audio_X|>"
-
-    messages = [internal, SYSTEM_MESSAGE, end]
-
     img_list = []
     snd_list = []
 
-    for h in history:
+    history = [
+        {"role": "system", "content": SYSTEM_MESSAGE},
+        *history
+    ]
 
-        if h["role"] == "assistant":
-            if messages[-1] != end:
-                messages.append(end)
-            messages.append(ai)
-        elif h["role"] == "user":
-            messages.append(human)
+    for h in history:
 
         content = h["content"]
         if isinstance(content, dict) or isinstance(content, tuple):
@@ -861,59 +850,31 @@ def answer(history: list):
                 if ext in common_audio_formats:
                     audio, samplerate = sf.read(p)
                     snd_list.append((audio, samplerate))
-                    messages.append(
-                        snd.replace("X", str(len(snd_list)))
-                    )
                 if ext in iio_formats:
                     img_list.append(Image.open(p))
-                    messages.append(
-                        img.replace("X", str(len(img_list)))
-                    )
-        else:
-            messages.append(
-                simple_text(content)
-            )
 
-        messages.append(end)
+    prompt = PROCESSORS["answer"].tokenizer.apply_chat_template(history, tokenize=False, add_generation_prompt=True)
+    inputs = PROCESSORS["answer"](
+        text=prompt,
+        images=img_list if img_list else None,
+        audios=snd_list if snd_list else None,
+        return_tensors="pt",
+    ).to(device())
 
-    messages.append(ai)
-    prompt = "".join(messages)
-
-    log(
-        "Chat history",
-        {
-            "prompt": prompt,
-            "audios": snd_list,
-            "images": img_list,
-        },
-        status="",
+    generate_ids = MODELS["answer"].generate(
+        **inputs,
+        max_new_tokens=1000,
+        num_beams=32,
+        length_penalty=2.0,
     )
 
-    has_images = len(img_list) > 0
-    has_audio = len(snd_list) > 0
+    output_ids = generate_ids[:, inputs['input_ids'].shape[1]:]
+    response = PROCESSORS["answer"].batch_decode(
+        output_ids,
+        skip_special_tokens=True,
+        clean_up_tokenization_spaces=False
+    )[0]
 
-    if has_images and has_audio:
-        mode = 3
-    elif has_images:
-        mode = 1
-    elif has_audio:
-        mode = 2
-    else:
-        mode = 0
-
-    lsts = {}
-    if len(snd_list) > 0:
-        lsts["audios"] = snd_list
-    if len(img_list) > 0:
-        lsts["images"] = img_list
-
-    response = MODELS["answer"].generate(
-        prompt=prompt,
-        max_length=200,
-        beam_width=6,
-        input_mode=mode,
-        **lsts,
-    )
     return response
 
 
@@ -5127,24 +5088,17 @@ py-modules = {py_modules}
             "Loading tokenizer, processor, and model via patched loader..."
         )
         tok = AutoTokenizer.from_pretrained(str_snapshot_dir)
-        prc = AutoProcessor.from_pretrained(
+        PROCESSORS["answer"] = AutoProcessor.from_pretrained(
             str_snapshot_dir, trust_remote_code=True
         )
-        mod = AutoModelForCausalLM.from_pretrained(
+        model = AutoModelForCausalLM.from_pretrained(
             str_snapshot_dir,
             torch_dtype=dtype(),
             trust_remote_code=True,
             _attn_implementation="eager",
         )
 
-        print("✅ Model loaded successfully!")
-
-        model = BeamSearch(
-            mod,
-            tok,
-            prc,
-            "cpu",
-        )
+        print("✅ Phi-4 model loaded successfully!")
 
     elif task in ["summary"]:
 
@@ -6132,157 +6086,6 @@ class HybridModel:
         print(f"Predict Time: {predict_time:.4f} seconds")
 
         return predictions
-
-
-def BeamSearch(
-    model,
-    tokenizer,
-    processor,
-    device,
-    length_penalty=2.0,
-    score_function=None,
-):
-    import torch
-
-    class _BeamSearch:
-        def __init__(
-            self,
-            model,
-            tokenizer,
-            processor,
-            device,
-            length_penalty,
-            score_function,
-        ):
-            self.model = model.to(device).eval()
-            self.tokenizer = tokenizer
-            self.processor = processor
-            self.device = device
-            self.eos_token_id = tokenizer.eos_token_id
-            self.length_penalty = length_penalty
-            self.score_function = (
-                score_function or self._default_score_function
-            )
-
-        def _default_score_function(self, _arg) -> float:
-            beam, total_score = _arg
-            seq, _ = beam[-1]
-            seq_len = seq.shape[1]
-            return total_score / (seq_len**self.length_penalty)
-
-        def search(
-            self,
-            input_ids: torch.Tensor,
-            max_length: int,
-            beam_width: int,
-            input_mode: Any,
-        ) -> torch.Tensor:
-            input_ids = input_ids.to(self.device)
-            beams = [([(input_ids, 0.0)], 0.0)]
-            completed_beams = []
-
-            for _ in range(max_length - input_ids.shape[1]):
-                new_beams = []
-
-                for beam, total_score in beams:
-                    seq, _ = beam[-1]
-
-                    if (
-                        self.eos_token_id is not None
-                        and seq[0, -1].item() == self.eos_token_id
-                    ):
-                        completed_beams.append((beam, total_score))
-                        continue
-
-                    with torch.no_grad():
-                        outputs = self.model(
-                            seq, input_mode=input_mode
-                        )
-                        logits = outputs.logits[:, -1, :]
-
-                        probs = F.log_softmax(logits, dim=-1)
-
-                    topk_probs, topk_indices = torch.topk(
-                        probs, beam_width
-                    )
-
-                    for i in range(beam_width):
-                        token_id = topk_indices[:, i].unsqueeze(-1)
-                        log_prob = topk_probs[:, i].item()
-
-                        new_seq = torch.cat([seq, token_id], dim=-1)
-
-                        new_beams.append(
-                            (
-                                beam + [(new_seq, log_prob)],
-                                total_score + log_prob,
-                            )
-                        )
-
-                all_candidates = new_beams + completed_beams
-
-                beams = sorted(
-                    all_candidates,
-                    key=self.score_function,
-                    reverse=True,
-                )[:beam_width]
-
-                if all(
-                    self.eos_token_id is not None
-                    and beam[-1][0][0, -1].item() == self.eos_token_id
-                    for beam, _ in beams
-                ):
-                    break
-
-            if not completed_beams:
-                completed_beams = beams
-
-            best_beam, _ = sorted(
-                completed_beams, key=self.score_function, reverse=True
-            )[0]
-            best_seq, _ = best_beam[-1]
-            return best_seq.cpu()
-
-        def generate(
-            self,
-            prompt: str,
-            max_length: int,
-            beam_width: int,
-            input_mode: Any,
-            **kw,
-        ) -> str:
-            inputs = self.processor(
-                prompt, return_tensors="pt", **kw
-            ).to(self.device)
-            input_ids = inputs["input_ids"]
-
-            generated_ids = self.search(
-                input_ids,
-                max_length,
-                beam_width,
-                input_mode=input_mode,
-            )
-
-            output_ids = generated_ids[:, input_ids.shape[1] :]
-
-            response = self.processor.batch_decode(
-                output_ids,
-                skip_special_tokens=True,
-                clean_up_tokenization_spaces=False,
-            )[0]
-
-            print(f"Response: {response}")
-
-            return response
-
-    return _BeamSearch(
-        model,
-        tokenizer,
-        processor,
-        device,
-        length_penalty,
-        score_function,
-    )
 
 
 def LinearRegressionTorch(input_dim):
