@@ -7314,17 +7314,39 @@ def dj_mix(
     if not files or len(files) < 2:
         catch("Please upload at least two audio files.")
         return None
+
     transition_ms = int(transition_sec * 1000)
     processed_tracks = []
+
     if target_bpm is None or target_bpm == 0:
+        all_bpms = []
         proc = madmom.features.beats.DBNBeatTrackingProcessor(fps=100)
-        act = madmom.features.beats.RNNBeatProcessor()(files[0].name)
-        target_bpm = np.median(60 / np.diff(proc(act)))
+        beat_processor = madmom.features.beats.RNNBeatProcessor()
+        
+        print("Analyzing BPM for all tracks to determine the average...")
+        for file in files:
+            try:
+                act = beat_processor(file.name)
+                bpm = np.median(60 / np.diff(proc(act)))
+                if bpm > 0:
+                    all_bpms.append(bpm)
+            except Exception as e:
+                print(f"Could not analyze BPM for {Path(file.name).name}, skipping this track for BPM calculation. Error: {e}")
+                continue
+
+        if all_bpms:
+            target_bpm = np.mean(all_bpms)
+            print(f"Average target BPM calculated as: {target_bpm:.2f}")
+        else:
+            catch("Could not determine BPM for any track. Beatmatching will be skipped.")
+            target_bpm = 0
+
     for file in files:
         try:
             temp_stretched_path = None
             current_path = file.name
-            if "beatmatched" in mix_type.lower():
+
+            if "beatmatched" in mix_type.lower() and target_bpm > 0:
                 proc = madmom.features.beats.DBNBeatTrackingProcessor(
                     fps=100
                 )
