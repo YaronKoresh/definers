@@ -7834,9 +7834,9 @@ def create_spectrum_visualization(audio_path):
     import matplotlib.ticker as ticker
 
     try:
-        y, sr = librosa.load(audio_path)
+        y, sr = librosa.load(audio_path, sr=None)
 
-        n_fft = 128
+        n_fft = 131072
         hop_length = 512
         stft_result = librosa.stft(
             y, n_fft=n_fft, hop_length=hop_length
@@ -7874,8 +7874,9 @@ def create_spectrum_visualization(audio_path):
             np.min(magnitude_db) - 1, np.max(magnitude_db) + 5
         )
 
-        xticks = [100, 200, 500, 1000, 2000, 5000, 10000, 20000]
+        xticks = [50, 100, 200, 500, 1000, 2000, 5000, 10000, 12000, 15000, 18000]
         xtick_labels = [
+            "50",
             "100",
             "200",
             "500",
@@ -7883,7 +7884,9 @@ def create_spectrum_visualization(audio_path):
             "2k",
             "5k",
             "10k",
-            "20k",
+            "12k",
+            "15k",
+            "18k",
         ]
         ax.set_xticks([x for x in xticks if x < sr / 2])
         ax.set_xticklabels(
