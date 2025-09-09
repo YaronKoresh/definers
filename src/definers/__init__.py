@@ -831,7 +831,7 @@ def answer(history: list):
 
     history = [
         {"role": "system", "content": SYSTEM_MESSAGE},
-        *history
+        *history,
     ]
 
     for h in history:
@@ -853,7 +853,9 @@ def answer(history: list):
                 if ext in iio_formats:
                     img_list.append(Image.open(p))
 
-    prompt = PROCESSORS["answer"].tokenizer.apply_chat_template(history, tokenize=False, add_generation_prompt=True)
+    prompt = PROCESSORS["answer"].tokenizer.apply_chat_template(
+        history, tokenize=False, add_generation_prompt=True
+    )
     inputs = PROCESSORS["answer"](
         text=prompt,
         images=img_list if img_list else None,
@@ -870,11 +872,11 @@ def answer(history: list):
         length_penalty=2.0,
     )
 
-    output_ids = generate_ids[:, inputs['input_ids'].shape[1]:]
+    output_ids = generate_ids[:, inputs["input_ids"].shape[1] :]
     response = PROCESSORS["answer"].batch_decode(
         output_ids,
         skip_special_tokens=True,
-        clean_up_tokenization_spaces=False
+        clean_up_tokenization_spaces=False,
     )[0]
 
     return response
@@ -6457,8 +6459,12 @@ def train_model_rvc(experiment: str, path: str, lvl: int = 1):
     try:
         with open(log_file_preprocess, "w") as f_preprocess:
             cmd_preprocess = [
-                config.python_cmd, "infer/modules/train/preprocess.py",
-                input_root, str(sr), str(n_p), exp_path
+                config.python_cmd,
+                "infer/modules/train/preprocess.py",
+                input_root,
+                str(sr),
+                str(n_p),
+                exp_path,
             ]
             logger.info("Execute: " + cmd_preprocess)
             subprocess.run(
@@ -6478,11 +6484,15 @@ def train_model_rvc(experiment: str, path: str, lvl: int = 1):
             f"Preprocessing failed with return code {e.returncode}: {e}"
         )
         try:
-            with open(log_file_preprocess, "r", encoding="utf-8") as f:
+            with open(
+                log_file_preprocess, "r", encoding="utf-8"
+            ) as f:
                 error_output = f.read()
             logger.error(f"Preprocessing output:\n{error_output}")
         except Exception as log_e:
-            logger.error(f"Could not read preprocess log file: {log_e}")
+            logger.error(
+                f"Could not read preprocess log file: {log_e}"
+            )
         catch(e)
         return None
     except Exception as e:
@@ -7796,31 +7806,43 @@ def stem_mixer(files, format_choice):
 
     print("--- Processing Stems ---")
     for i, file in enumerate(files):
-        print(f"Processing file {i+1}/{len(files)}: {Path(file.name).name}")
+        print(
+            f"Processing file {i+1}/{len(files)}: {Path(file.name).name}"
+        )
         y, sr = librosa.load(file.name, sr=None)
-        
+
         if target_sr is None:
             target_sr = sr
-        
+
         if sr != target_sr:
             y = librosa.resample(y, orig_sr=sr, target_sr=target_sr)
 
         beat_act = madmom.features.beats.RNNBeatProcessor()(file.name)
-        downbeat_proc = madmom.features.downbeats.DBNDownBeatTrackingProcessor(beats_per_bar=[4, 4], fps=100)
+        downbeat_proc = (
+            madmom.features.downbeats.DBNDownBeatTrackingProcessor(
+                beats_per_bar=[4, 4], fps=100
+            )
+        )
         beat_info = downbeat_proc(beat_act)
 
         first_downbeat_time = 0.0
         if beat_info.ndim == 2 and beat_info.shape[1] == 2:
             beats = proc(act)
             tempo = np.median(60 / np.diff(beats))
-            
+
             downbeats = beat_info[beat_info[:, 1] == 1]
             if len(downbeats) > 0:
                 first_downbeat_time = downbeats[0, 0]
-                print(f"  - Original Tempo: {tempo:.2f} BPM, First Downbeat: {first_downbeat_time:.2f}s")
+                print(
+                    f"  - Original Tempo: {tempo:.2f} BPM, First Downbeat: {first_downbeat_time:.2f}s"
+                )
         else:
-            print("  - Warning: Could not detect beats. Tempo and alignment may be inaccurate.")
-            beats = madmom.features.beats.BeatDetectionProcessor(fps=100)(beat_act)
+            print(
+                "  - Warning: Could not detect beats. Tempo and alignment may be inaccurate."
+            )
+            beats = madmom.features.beats.BeatDetectionProcessor(
+                fps=100
+            )(beat_act)
             if len(beats) > 1:
                 tempo = np.median(60 / np.diff(beats))
             else:
@@ -7836,28 +7858,36 @@ def stem_mixer(files, format_choice):
             y = librosa.effects.time_stretch(y, rate=speed_factor)
             first_downbeat_time /= speed_factor
 
-        processed_stems.append({'audio': y, 'align_time': first_downbeat_time})
+        processed_stems.append(
+            {"audio": y, "align_time": first_downbeat_time}
+        )
 
     print("\n--- Aligning and Mixing Stems ---")
-    max_align_time = max(s['align_time'] for s in processed_stems)
-    print(f"Master alignment point (latest downbeat): {max_align_time:.2f}s")
+    max_align_time = max(s["align_time"] for s in processed_stems)
+    print(
+        f"Master alignment point (latest downbeat): {max_align_time:.2f}s"
+    )
 
     max_length = 0
     for s in processed_stems:
-        padding_time = max_align_time - s['align_time']
-        padding_samples = librosa.time_to_samples(padding_time, sr=target_sr)
-        total_length = padding_samples + len(s['audio'])
+        padding_time = max_align_time - s["align_time"]
+        padding_samples = librosa.time_to_samples(
+            padding_time, sr=target_sr
+        )
+        total_length = padding_samples + len(s["audio"])
         if total_length > max_length:
             max_length = total_length
-    
+
     mixed_y = np.zeros(max_length)
 
     for s in processed_stems:
-        padding_time = max_align_time - s['align_time']
-        start_sample = librosa.time_to_samples(padding_time, sr=target_sr)
-        end_sample = start_sample + len(s['audio'])
-        
-        mixed_y[start_sample:end_sample] += s['audio']
+        padding_time = max_align_time - s["align_time"]
+        start_sample = librosa.time_to_samples(
+            padding_time, sr=target_sr
+        )
+        end_sample = start_sample + len(s["audio"])
+
+        mixed_y[start_sample:end_sample] += s["audio"]
 
     print("Mixing complete. Normalizing volume...")
     mixed_y /= len(processed_stems)
@@ -8077,17 +8107,13 @@ def find_best_beat(
     return None
 
 
-
 def reformat_audio(path):
     import pydub
 
-    y = pydub.AudioSegment.from_file(
-        path
-    )
-    output_path = export_audio(
-        y, random_string(), "wav"
-    )
+    y = pydub.AudioSegment.from_file(path)
+    output_path = export_audio(y, random_string(), "wav")
     return output_path
+
 
 def autotune_vocals(
     audio_path,
@@ -8145,23 +8171,21 @@ def autotune_vocals(
         print("\n--- Rhythm Correction ---")
         try:
             print("Detecting beats and downbeats in instrumental...")
-            downbeat_proc = (
-                madmom.features.downbeats.DBNDownBeatTrackingProcessor(
-                    beats_per_bar=[4, 4], fps=100
-                )
+            downbeat_proc = madmom.features.downbeats.DBNDownBeatTrackingProcessor(
+                beats_per_bar=[4, 4], fps=100
             )
             beat_act = madmom.features.beats.RNNBeatProcessor()(
                 str(instrumental_path)
             )
-            beat_info = downbeat_proc(
-                beat_act
-            )
+            beat_info = downbeat_proc(beat_act)
 
             if beat_info.ndim == 2 and beat_info.shape[1] == 2:
                 beat_times = beat_info[beat_info[:, 1] > 0, 0]
                 downbeats = beat_info[beat_info[:, 1] == 1, 0]
             else:
-                print("Warning: Madmom could not detect any beats in the instrumental.")
+                print(
+                    "Warning: Madmom could not detect any beats in the instrumental."
+                )
                 beat_times = np.array([])
                 downbeats = np.array([])
 
