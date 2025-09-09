@@ -870,6 +870,7 @@ def answer(history: list):
         max_new_tokens=1000,
         num_beams=32,
         length_penalty=2.0,
+        num_logits_to_keep=1,
     )
 
     output_ids = generate_ids[:, inputs["input_ids"].shape[1] :]
