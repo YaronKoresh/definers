@@ -380,7 +380,7 @@ common_audio_formats = [
     "wma",
 ]
 
-punc = r'["!#$%&()*+,\./:;<=>?@\[\\\]^_`\{\|\}~]'
+punc = r'["\'!#$%&()*+,/:;<=>?@\[\\\]^_`\{\|\}~]'
 
 negative_keywords = [
     # Quality & Style
@@ -3376,9 +3376,11 @@ def simple_text(prompt):
     prompt = re.sub("( ){2,}", " ", prompt)
     prompt = re.sub("(\n){2,}", "\n", prompt)
     prompt = re.sub("(-){2,}", "-", prompt)
+    prompt = re.sub("[\s!]*\?[\s!?]*", " I wonder ", prompt)
     prompt = re.sub(punc, "", prompt)
     prompt = prompt.lower().strip()
     prompt = prompt.replace(" -", "-").replace("- ", "-")
+    prompt = re.sub("( )*[\n\.]+( )*"," and ",prompt)
     return prompt
 
 
