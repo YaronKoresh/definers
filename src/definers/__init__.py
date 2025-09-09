@@ -3204,6 +3204,40 @@ def get_max_resolution(width, height, mega_pixels=0.25, factor=16):
     return new_w, new_h
 
 
+def normalize_audio_to_peak(input_path:str, target_level:float):
+    from pydub import AudioSegment
+    from pydub.effects import normalize
+
+    output_path = tmp("wav")
+
+    if not 0.0 <= target_level <= 1.0:
+        catch("target_level must be between 0.0 and 1.0")
+        return None
+
+    try:
+        audio = AudioSegment.from_file(input_path)
+    except FileNotFoundError:
+        catch(f"Error: Input file not found at {input_path}")
+        return None
+
+    if target_level == 0.0 or audio.max_possible_amplitude == 0:
+        silent_audio = AudioSegment.silent(duration=len(audio))
+        silent_audio.export(output_path, format=output_path.split('.')[-1])
+        print(f"Target level is 0 or audio is silent. Saved silent file to '{output_path}'")
+        return output_path
+
+    target_dbfs = 20 * math.log10(target_level)
+
+    normalized_audio = normalize(audio, headroom=abs(target_dbfs))
+    
+    normalized_audio.export(output_path, format=output_path.split('.')[-1])
+
+    print(f"Successfully normalized '{input_path}' to a peak of {target_dbfs:.2f} dBFS.")
+    print(f"Saved result to '{output_path}'")
+
+    return output_path
+
+
 def master(source_path, strength, format_choice):
     import matchering as mg
     import pydub
@@ -3234,12 +3268,10 @@ def master(source_path, strength, format_choice):
                 return result_wav_path
 
             processed_path = source_path
-            for _ in range(math.floor(strength)):
+            for i in range(3):
                 processed_path = _master(processed_path)
-            final_sound = (
-                pydub.AudioSegment.from_file(processed_path)
-                + (strength - 1.0) * 6
-            )
+            processed_path = normalize_audio_to_peak(processed_path, 0.99)
+            final_sound = pydub.AudioSegment.from_file(processed_path)
             output_path = export_audio(
                 final_sound, output_stem, format_choice
             )
