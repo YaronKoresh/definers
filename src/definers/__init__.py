@@ -6361,17 +6361,7 @@ def SklearnWrapper(sklearn_model, is_classification=False):
     return _SklearnWrapper(sklearn_model, is_classification)
 
 
-def add_chat_message(history, message):
-    for x in message["files"]:
-        history.append({"role": "user", "content": {"path": x}})
-    if message["text"] is not None:
-        txt = message["text"]
-        history.append({"role": "user", "content": txt})
-    return history
-
-
 def get_chat_response(message, history: list):
-    history = add_chat_message(history, message)
     response = answer(history)
     return response
 
