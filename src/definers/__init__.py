@@ -5100,7 +5100,7 @@ py-modules = {py_modules}
             torch_dtype=dtype(),
             trust_remote_code=True,
             _attn_implementation="eager",
-        )
+        ).to(device())
 
         print("✅ Phi-4 model loaded successfully!")
 
