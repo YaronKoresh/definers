@@ -8284,7 +8284,7 @@ def autotune_vocals(
         try:
             print("Detecting beats and downbeats in instrumental...")
             downbeat_proc = (
-                madmom.features.beats.DBNDownBeatTrackingProcessor(
+                madmom.features.downbeats.DBNDownBeatTrackingProcessor(
                     beats_per_bar=[4, 4], fps=100
                 )
             )
