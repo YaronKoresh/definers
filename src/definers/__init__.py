@@ -3204,7 +3204,7 @@ def get_max_resolution(width, height, mega_pixels=0.25, factor=16):
     return new_w, new_h
 
 
-def normalize_audio_to_peak(input_path:str, target_level:float):
+def normalize_audio_to_peak(input_path: str, target_level: float):
     from pydub import AudioSegment
     from pydub.effects import normalize
 
@@ -3222,17 +3222,25 @@ def normalize_audio_to_peak(input_path:str, target_level:float):
 
     if target_level == 0.0 or audio.max_possible_amplitude == 0:
         silent_audio = AudioSegment.silent(duration=len(audio))
-        silent_audio.export(output_path, format=output_path.split('.')[-1])
-        print(f"Target level is 0 or audio is silent. Saved silent file to '{output_path}'")
+        silent_audio.export(
+            output_path, format=output_path.split(".")[-1]
+        )
+        print(
+            f"Target level is 0 or audio is silent. Saved silent file to '{output_path}'"
+        )
         return output_path
 
     target_dbfs = 20 * math.log10(target_level)
 
     normalized_audio = normalize(audio, headroom=abs(target_dbfs))
-    
-    normalized_audio.export(output_path, format=output_path.split('.')[-1])
 
-    print(f"Successfully normalized '{input_path}' to a peak of {target_dbfs:.2f} dBFS.")
+    normalized_audio.export(
+        output_path, format=output_path.split(".")[-1]
+    )
+
+    print(
+        f"Successfully normalized '{input_path}' to a peak of {target_dbfs:.2f} dBFS."
+    )
     print(f"Saved result to '{output_path}'")
 
     return output_path
@@ -3270,7 +3278,9 @@ def master(source_path, strength, format_choice):
             processed_path = source_path
             for i in range(3):
                 processed_path = _master(processed_path)
-            processed_path = normalize_audio_to_peak(processed_path, 0.99)
+            processed_path = normalize_audio_to_peak(
+                processed_path, 0.99
+            )
             final_sound = pydub.AudioSegment.from_file(processed_path)
             output_path = export_audio(
                 final_sound, output_stem, format_choice
@@ -7355,8 +7365,10 @@ def dj_mix(
         all_bpms = []
         proc = madmom.features.beats.DBNBeatTrackingProcessor(fps=100)
         beat_processor = madmom.features.beats.RNNBeatProcessor()
-        
-        print("Analyzing BPM for all tracks to determine the average...")
+
+        print(
+            "Analyzing BPM for all tracks to determine the average..."
+        )
         for file in files:
             try:
                 act = beat_processor(file.name)
@@ -7364,14 +7376,20 @@ def dj_mix(
                 if bpm > 0:
                     all_bpms.append(bpm)
             except Exception as e:
-                print(f"Could not analyze BPM for {Path(file.name).name}, skipping this track for BPM calculation. Error: {e}")
+                print(
+                    f"Could not analyze BPM for {Path(file.name).name}, skipping this track for BPM calculation. Error: {e}"
+                )
                 continue
 
         if all_bpms:
             target_bpm = np.mean(all_bpms)
-            print(f"Average target BPM calculated as: {target_bpm:.2f}")
+            print(
+                f"Average target BPM calculated as: {target_bpm:.2f}"
+            )
         else:
-            catch("Could not determine BPM for any track. Beatmatching will be skipped.")
+            catch(
+                "Could not determine BPM for any track. Beatmatching will be skipped."
+            )
             target_bpm = 0
 
     for file in files:
@@ -7907,7 +7925,19 @@ def create_spectrum_visualization(audio_path):
             np.min(magnitude_db) - 1, np.max(magnitude_db) + 5
         )
 
-        xticks = [50, 100, 200, 500, 1000, 2000, 5000, 10000, 12000, 15000, 18000]
+        xticks = [
+            50,
+            100,
+            200,
+            500,
+            1000,
+            2000,
+            5000,
+            10000,
+            12000,
+            15000,
+            18000,
+        ]
         xtick_labels = [
             "50",
             "100",
