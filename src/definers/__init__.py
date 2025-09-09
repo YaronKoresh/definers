@@ -816,7 +816,7 @@ def set_system_message(
         )
         message_parts.append(f"{rules_header}\n{formatted_rules}")
 
-    SYSTEM_MESSAGE = "\n\n".join(message_parts)
+    SYSTEM_MESSAGE = simple_text("\n\n".join(message_parts))
 
     log("System Message Updated", SYSTEM_MESSAGE)
 
@@ -917,7 +917,7 @@ def answer(history: list):
     response = MODELS["answer"].generate(
         prompt=prompt,
         max_length=200,
-        beam_width=16,
+        beam_width=6,
         input_mode=mode,
         **lsts,
     )
