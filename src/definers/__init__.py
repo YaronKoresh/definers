@@ -8429,7 +8429,7 @@ def autotune_vocals(
                 if voiced_flag[i] and f0[i] > 0 and target_f0[i] > 0:
                     sample_num = i * hop_length
                     ratio = target_f0[i] / f0[i]
-                    f.write(f"{sample_num}\t{ratio:.6f}\n")
+                    f.write(f"{sample_num} {ratio:.6f}\n")
                     
         if os.path.getsize(freq_map_path) > 0:
             print("Applying formant-preserving pitch correction...")
