@@ -6468,7 +6468,7 @@ def train_model_rvc(experiment: str, path: str, lvl: int = 1):
                 str(n_p),
                 exp_path,
             ]
-            logger.info("Execute: " + cmd_preprocess)
+            logger.info("Execute: " + " ".join(cmd_preprocess))
             subprocess.run(
                 cmd_preprocess,
                 shell=False,
