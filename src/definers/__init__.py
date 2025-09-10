@@ -8126,7 +8126,7 @@ def midi_to_audio(midi_path, format_choice):
 
 def subdivide_beats(beat_times, subdivision):
     if subdivision <= 1 or len(beat_times) < 2:
-        return np.array(beat_times):
+        return np.array(beat_times)
 
     new_beats = []
     for i in range(len(beat_times) - 1):
