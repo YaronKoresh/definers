@@ -7556,29 +7556,6 @@ def lyric_video(
     return output_path
 
 
-def stretch_audio(input_path, output_path, speed_factor, crispness=6):
-    if not os.path.exists(input_path):
-        return None
-    command = [
-        "rubberband",
-        "--tempo",
-        str(speed_factor),
-        "--crispness",
-        str(crispness),
-        "-q",
-        input_path,
-        output_path,
-    ]
-    try:
-        subprocess.run(
-            command, check=True, capture_output=True, text=True
-        )
-        return output_path
-    except Exception as e:
-        catch(f"Error during audio stretching with rubberband: {e}")
-        return None
-
-
 def get_audio_feedback(audio_path):
     import librosa
     from scipy.stats import pearsonr
@@ -8262,6 +8239,27 @@ def reformat_audio(path):
     return output_path
 
 
+def stretch_audio(input_path, output_path, speed_factor, crispness=6):
+    if not os.path.exists(input_path):
+        return None
+    command = [
+        "rubberband",
+        "--fine",
+        "--formant",
+        "--tempo",
+        str(speed_factor),
+        "-q",
+        input_path,
+        output_path,
+    ]
+    try:
+        run(" ".join(command))
+        return output_path
+    except Exception as e:
+        catch(f"Error during audio stretching with rubberband: {e}")
+        return None
+
+
 def autotune_vocals(
     audio_path,
     strength=0.7,
@@ -8329,16 +8327,25 @@ def autotune_vocals(
             else:
                 quantized_beat_times = beat_times
             
+            print("Splitting vocal track into non-silent segments...")
             onset_frames = librosa.onset.onset_detect(y=y, sr=sr, hop_length=512, units="frames")
-            onset_frames = np.concatenate([onset_frames, [len(y) // 512]])
+            onset_samples = librosa.frames_to_samples(onset_frames, hop_length=512)
+            
+            segment_boundaries = np.concatenate([ [0], onset_samples, [len(y)] ])
+            segment_boundaries = np.unique(segment_boundaries)
 
             vocal_intervals = []
-            for i in range(len(onset_frames) - 1):
-                start_frame, end_frame = onset_frames[i], onset_frames[i + 1]
-                if end_frame > start_frame:
-                    start_sample, end_sample = start_frame * 512, end_frame * 512
-                    if np.mean(y[start_sample:end_sample] ** 2) > 1e-6:
-                        vocal_intervals.append((start_sample, end_sample))
+
+            for i in range(len(segment_boundaries) - 1):
+                start_sample = segment_boundaries[i]
+                end_sample = segment_boundaries[i+1]
+                end_sample = min(end_sample, len(y))
+
+                if start_sample >= end_sample:
+                    continue
+                    
+                if np.mean(y[start_sample:end_sample] ** 2) > 1e-6:
+                    vocal_intervals.append((start_sample, end_sample))
 
             if len(vocal_intervals) > 0 and len(quantized_beat_times) > 0:
                 print("Quantizing vocal segments with crossfades (optimized)...")
@@ -8406,16 +8413,16 @@ def autotune_vocals(
                 target_f0[i] = (
                     current_f0 + (ideal_f0 - current_f0) * strength
                 )
-        pitch_map_path = tmp(".txt")
+                
+        freq_map_path = tmp(".txt")
         temp_files.append(pitch_map_path)
-        with open(pitch_map_path, "w") as f:
+        with open(freq_map_path, "w") as f:
             for i in range(len(f0)):
                 if voiced_flag[i] and f0[i] > 0 and target_f0[i] > 0:
-                    time = librosa.frames_to_time(
-                        i, sr=sr, hop_length=hop_length
-                    )
+                    sample_num = i * hop_length
                     ratio = target_f0[i] / f0[i]
-                    f.write(f"{time:.6f}\t{ratio:.6f}\n")
+                    f.write(f"{sample_num}\t{ratio:.6f}\n")
+                    
         if os.path.getsize(pitch_map_path) > 0:
             print("Applying formant-preserving pitch correction...")
             temp_vocals_in = tmp(".wav", keep=False)
@@ -8424,16 +8431,14 @@ def autotune_vocals(
             sf.write(temp_vocals_in, y, sr)
             command = [
                 "rubberband",
-                "--pitch-map",
-                pitch_map_path,
-                "--crispness",
-                "6",
+                "--fine",
+                "--formant",
+                "--freqmap",
+                freq_map_path,
                 temp_vocals_in,
                 temp_vocals_out,
             ]
-            subprocess.run(
-                command, check=True, capture_output=True, text=True
-            )
+            run(" ".join(command))
             y_tuned, _ = librosa.load(temp_vocals_out, sr=sr)
             print("Pitch correction complete.")
         else:
