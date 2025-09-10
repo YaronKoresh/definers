@@ -8227,6 +8227,8 @@ def find_best_beat(
 
 
 def calculate_active_rms(y, sr):
+    import librosa
+    
     non_silent_intervals = librosa.effects.split(
         y, top_db=40, frame_length=1024, hop_length=256
     )
