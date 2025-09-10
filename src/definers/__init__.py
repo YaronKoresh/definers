@@ -294,7 +294,7 @@ tasks = {
     "answer": "microsoft/Phi-4-multimodal-instruct",
     "summary": "t5-large",
     "music": "facebook/musicgen-small",
-    "speech-recognition": "openai/whisper-large-v3",
+    "speech-recognition": "openai/whisper-large-v2",
     "audio-classification": "MIT/ast-finetuned-audioset-10-10-0.4593",
 }
 
@@ -7345,7 +7345,7 @@ def lyric_video(
     fade_duration=0.5,
 ):
     import torch
-    import whisperx
+    import stable_whisper
     from moviepy import (
         AudioFileClip, ColorClip, CompositeVideoClip, ImageClip,
         TextClip, VideoFileClip
@@ -7367,21 +7367,27 @@ def lyric_video(
 
             device = "cuda" if torch.cuda.is_available() else "cpu"
             print(f"Using device: {device}")
-            compute_type = "float16" if device == "cuda" else "int8"
             
-            print(f"Loading alignment model for language: {detected_lang}...")
-            model_a, metadata = whisperx.load_align_model(language_code=detected_lang, device=device)
+            print("Loading multilingual transcription model (stable-ts)...")
+            model = stable_whisper.load_model("large-v2", device=device)
             
-            print("Loading multilingual transcription model (whisper-large-v3)...")
-            model = whisperx.load_model("large-v3", device, compute_type=compute_type)
+            print("Transcribing audio with music-optimized settings...")
+            result = model.transcribe_minimal(
+                audio_path,
+                language=detected_lang,
+                no_speech_threshold=None,
+                denoiser="demucs",
+                word_timestamps=True
+            )
             
-            print("Transcribing audio to get word timestamps...")
-            result = model.transcribe(audio_path, batch_size=4)
-            
-            print("Aligning transcription with lyrics...")
-            aligned_result = whisperx.align(result["segments"], model_a, metadata, audio_path, device)
-            
-            word_timestamps = [word for segment in aligned_result["segments"] for word in segment["words"]]
+            word_timestamps = []
+            for segment in result.segments:
+                for word in segment.words:
+                    word_timestamps.append({
+                        'word': word.word,
+                        'start': word.start,
+                        'end': word.end
+                    })
             
             word_idx = 0
             for line in lines:
@@ -7407,7 +7413,7 @@ def lyric_video(
                 if start_time is not None and end_time is not None:
                     timed_lyrics.append((start_time, end_time, line))
 
-            del model, model_a, metadata, result, aligned_result
+            del model, result
             gc.collect()
             torch.cuda.empty_cache()
 
