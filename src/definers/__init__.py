@@ -5,6 +5,7 @@ import collections
 import collections.abc
 import concurrent
 import ctypes
+import gc
 import getpass
 import hashlib
 import importlib
@@ -6941,117 +6942,93 @@ def humanize_vocals(audio_path, amount=0.5):
     import librosa
     import soundfile as sf
 
-    output_path = tmp(audio_path.split(".")[-1], keep=False)
+    output_path = tmp(os.path.splitext(audio_path)[1])
 
     try:
         print(f"Loading audio from: {audio_path}")
         y, sr = librosa.load(audio_path, sr=None, mono=False)
-
-        if y.ndim == 1:
-            y = y.reshape(1, -1)
-
-        num_channels = y.shape[0]
+        is_stereo = y.ndim > 1 and y.shape[0] > 1
 
         y_mono = librosa.to_mono(y)
+        side_signal = (y[0] - y[1]) / 2 if is_stereo else None
 
-        n_fft = 2048
-        hop_length = 512
+        n_fft, hop_length = 2048, 512
 
         print("Estimating fundamental frequency from mono mix...")
         f0, voiced_flag, _ = librosa.pyin(
             y_mono,
-            fmin=librosa.note_to_hz("C2"),
-            fmax=librosa.note_to_hz("C7"),
-            sr=sr,
-            frame_length=n_fft,
-            hop_length=hop_length,
+            fmin=librosa.note_to_hz("C2"), fmax=librosa.note_to_hz("C7"),
+            sr=sr, frame_length=n_fft, hop_length=hop_length,
         )
         f0 = np.nan_to_num(f0)
-
         target_f0 = np.copy(f0)
 
+        print("Generating natural pitch modulation contour...")
+        num_frames = len(f0)
+        num_points = max(2, int(num_frames / (sr / hop_length) / 2))
+        random_points = np.random.normal(0, scale=(amount * 10), size=num_points)
+        x_points = np.linspace(0, num_frames, num=num_points)
+        x_range = np.arange(num_frames)
+        pitch_modulation_cents = np.interp(x_range, x_points, random_points)
+        pitch_modulation_cents = np.clip(pitch_modulation_cents, -35, 35)
+
         print("Applying humanization logic...")
-        for i in range(len(f0)):
+        for i in range(num_frames):
             if voiced_flag[i] and f0[i] > 0:
                 current_f0 = f0[i]
-
-                cents_deviation = (
-                    (np.random.rand() - 0.5) * 2 * (amount * 15)
-                )
-
+                cents_deviation = pitch_modulation_cents[i]
                 ratio = 2 ** (cents_deviation / 1200)
-
                 target_f0[i] = current_f0 * ratio
 
-        print(
-            "Resynthesizing audio with new pitch variations (per channel)..."
+        print("Resynthesizing mono audio with new pitch variations...")
+        stft_vocals = librosa.stft(y_mono, n_fft=n_fft, hop_length=hop_length)
+        magnitudes = np.abs(stft_vocals)
+        phase = np.angle(stft_vocals)
+        new_phase = np.zeros_like(phase)
+        new_phase[:, 0] = phase[:, 0]
+        freqs = librosa.fft_frequencies(sr=sr, n_fft=n_fft)
+        expected_phase_advance = (2 * np.pi * freqs * hop_length / sr)
+
+        for t in range(1, stft_vocals.shape[1]):
+            dphase = phase[:, t] - phase[:, t - 1] - expected_phase_advance
+            dphase = dphase - 2 * np.pi * np.round(dphase / (2 * np.pi))
+            true_freq = expected_phase_advance + dphase
+            ratio = 1.0
+            if t < len(f0) and f0[t] > 0 and target_f0[t] > 0:
+                ratio = target_f0[t] / f0[t]
+            shifted_phase_advance = true_freq * ratio
+            new_phase[:, t] = new_phase[:, t - 1] + shifted_phase_advance
+
+        stft_humanized = magnitudes * np.exp(1j * new_phase)
+        y_humanized_mono = librosa.istft(
+            stft_humanized, hop_length=hop_length, length=len(y_mono)
         )
-        y_humanized_channels = []
 
-        for i in range(num_channels):
-            print(f"Processing channel {i+1}/{num_channels}...")
-            channel_data = y[i]
-
-            stft_vocals = librosa.stft(
-                channel_data, n_fft=n_fft, hop_length=hop_length
-            )
-            magnitudes = np.abs(stft_vocals)
-            phase = np.angle(stft_vocals)
-
-            new_phase = np.zeros_like(phase)
-            new_phase[:, 0] = phase[:, 0]
-            freqs = librosa.fft_frequencies(sr=sr, n_fft=n_fft)
-            expected_phase_advance = (
-                2 * np.pi * freqs * hop_length / sr
-            )
-
-            for t in range(1, stft_vocals.shape[1]):
-                dphase = (
-                    phase[:, t]
-                    - phase[:, t - 1]
-                    - expected_phase_advance
-                )
-                dphase = dphase - 2 * np.pi * np.round(
-                    dphase / (2 * np.pi)
-                )
-                true_freq = expected_phase_advance + dphase
-
-                ratio = 1.0
-                if t < len(f0) and f0[t] > 0 and target_f0[t] > 0:
-                    ratio = target_f0[t] / f0[t]
-
-                shifted_phase_advance = true_freq * ratio
-                new_phase[:, t] = (
-                    new_phase[:, t - 1] + shifted_phase_advance
-                )
-
-            stft_humanized = magnitudes * np.exp(1j * new_phase)
-            y_humanized_channel = librosa.istft(
-                stft_humanized,
-                hop_length=hop_length,
-                length=len(channel_data),
-            )
-            y_humanized_channels.append(y_humanized_channel)
-
-        if len(y_humanized_channels) > 1:
-            y_humanized = np.vstack(y_humanized_channels)
+        if is_stereo:
+            print("Reconstructing stereo image...")
+            if len(side_signal) > len(y_humanized_mono):
+                side_signal = side_signal[:len(y_humanized_mono)]
+            else:
+                side_signal = np.pad(side_signal, (0, len(y_humanized_mono) - len(side_signal)))
+            new_left = y_humanized_mono + side_signal
+            new_right = y_humanized_mono - side_signal
+            y_humanized = np.vstack([new_left, new_right])
         else:
-            y_humanized = y_humanized_channels[0]
+            y_humanized = y_humanized_mono
 
-        print("Normalizing output volume...")
-        original_rms = np.sqrt(np.mean(y**2))
-        humanized_rms = np.sqrt(np.mean(y_humanized**2))
+        print("Normalizing output volume of active audio...")
+        original_rms = calculate_active_rms(y, sr)
+        humanized_rms = calculate_active_rms(y_humanized, sr)
 
         if humanized_rms > 1e-6:
-            rms_ratio = original_rms / humanized_rms
-            y_humanized *= rms_ratio
+            y_humanized *= (original_rms / humanized_rms)
 
         print(f"Saving humanized audio to: {output_path}")
         sf.write(output_path, y_humanized.T, sr)
         return output_path
 
     except Exception as e:
-        catch(f"Could not humanize audio: {e}")
+        print(f"Could not humanize audio: {e}")
         return audio_path
 
 
@@ -7355,77 +7332,139 @@ def music_video(audio_path):
 
 
 def lyric_video(
-    audio_path, background_path, lyrics_text, text_position
+    audio_path,
+    background_path,
+    lyrics_text,
+    text_position,
+    *,
+    output_size=(1280, 720),
+    font_size=70,
+    text_color='white',
+    stroke_color='black',
+    stroke_width=2,
+    fade_duration=0.5,
 ):
+    import torch
+    import whisperx
     from moviepy import (
-        AudioFileClip,
-        ColorClip,
-        CompositeVideoClip,
-        ImageClip,
-        TextClip,
-        VideoFileClip,
+        AudioFileClip, ColorClip, CompositeVideoClip, ImageClip,
+        TextClip, VideoFileClip
     )
     from moviepy.video import fx as vfx
 
-    font_path = "./Alef-Bold.ttf"
-    if not os.path.exists(font_path):
-        print("Font not found, downloading...")
-        google_drive_download(
-            "1C48KkYWQDYu7ypbNtSXAUJ6kuzoZ42sI", font_path
-        )
-
     audio_clip = AudioFileClip(audio_path)
     duration = audio_clip.duration
-    if background_path:
-        bg_clip_class = (
-            ImageClip
-            if background_path.lower().endswith(
-                (".png", ".jpg", ".jpeg")
-            )
-            else VideoFileClip
-        )
-        background_clip = bg_clip_class(
-            background_path, duration=duration
-        )
-    else:
-        background_clip = ColorClip(
-            size=(1280, 720), color=(0, 0, 0), duration=duration
-        )
-    background_clip = background_clip.resized(width=1280)
-    lines = [
-        line
-        for line in lyrics_text.strip().split("\n")
-        if line.strip()
-    ]
+
+    print("🎤 Starting automatic lyric synchronization...")
+    timed_lyrics = []
+    lines = [line.strip() for line in lyrics_text.strip().split("\n") if line.strip()]
     if not lines:
-        catch("Lyrics text is empty.")
-        return None
-    line_duration = duration / len(lines)
-    lyric_clips = [
-        TextClip(
-            line,
-            fontsize=70,
-            color="white",
-            font=font_path,
-            stroke_color="black",
-            stroke_width=2,
-        )
-        .with_position(text_position)
-        .with_start(i * line_duration)
-        .with_duration(line_duration)
-        for i, line in enumerate(lines)
-    ]
-    final_clip = CompositeVideoClip(
-        [background_clip] + lyric_clips, size=background_clip.size
-    ).with_audio(audio_clip)
-    output_path = tmp(".mp4")
-    final_clip.write_videofile(
-        output_path,
-        codec="libx264",
-        fps=24,
-        audio_codec="aac",
-        logger=None,
+        print("Warning: Lyrics text is empty.")
+    else:
+        try:
+            detected_lang = language(lyrics_text)
+            print(f"🌍 Detected language: {detected_lang}")
+
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            print(f"Using device: {device}")
+            compute_type = "float16" if device == "cuda" else "int8"
+            
+            print(f"Loading alignment model for language: {detected_lang}...")
+            model_a, metadata = whisperx.load_align_model(language_code=detected_lang, device=device)
+            
+            print("Loading multilingual transcription model (whisper-large-v3)...")
+            model = whisperx.load_model("large-v3", device, compute_type=compute_type)
+            
+            print("Transcribing audio to get word timestamps...")
+            result = model.transcribe(audio_path, batch_size=4)
+            
+            print("Aligning transcription with lyrics...")
+            aligned_result = whisperx.align(result["segments"], model_a, metadata, audio_path, device)
+            
+            word_timestamps = [word for segment in aligned_result["segments"] for word in segment["words"]]
+            
+            word_idx = 0
+            for line in lines:
+                clean_line_words = re.findall(r"\b[\w'-]+\b", line.lower())
+                if not clean_line_words: continue
+                start_time, end_time = None, None
+                for i in range(word_idx, len(word_timestamps)):
+                    clean_transcript_word = re.sub(r"[^\w'-]", "", word_timestamps[i]['word'].lower())
+                    if clean_transcript_word == clean_line_words[0]:
+                        start_time = word_timestamps[i]['start']
+                        word_idx = i
+                        break
+                if start_time is not None:
+                    line_word_idx = 0
+                    for i in range(word_idx, len(word_timestamps)):
+                        clean_transcript_word = re.sub(r"[^\w'-]", "", word_timestamps[i]['word'].lower())
+                        if line_word_idx < len(clean_line_words) and clean_transcript_word == clean_line_words[line_word_idx]:
+                            end_time = word_timestamps[i]['end']
+                            line_word_idx += 1
+                        if line_word_idx == len(clean_line_words):
+                            word_idx = i + 1
+                            break
+                if start_time is not None and end_time is not None:
+                    timed_lyrics.append((start_time, end_time, line))
+
+            del model, model_a, metadata, result, aligned_result
+            gc.collect()
+            torch.cuda.empty_cache()
+
+        except Exception as e:
+            print(f"Could not automatically sync lyrics: {e}. Video will have no lyrics.")
+            timed_lyrics = []
+
+    print("✅ Synchronization complete.")
+
+    if background_path:
+        is_image = background_path.lower().endswith((".png", ".jpg", ".jpeg"))
+        if is_image:
+            background_clip = ImageClip(background_path, duration=duration)
+        else:
+            background_clip = VideoFileClip(background_path)
+            if background_clip.duration < duration:
+                background_clip = vfx.loop(background_clip, duration=duration)
+            background_clip = background_clip.set_duration(duration)
+    else:
+        background_clip = ColorClip(size=output_size, color=(0, 0, 0), duration=duration)
+    
+    background_clip = vfx.crop(
+        background_clip, width=output_size[0], height=output_size[1], 
+        x_center=background_clip.w / 2, y_center=background_clip.h / 2
     )
+
+    lyric_clips = []
+    for start, end, line in timed_lyrics:
+        clip_duration = end - start
+        if clip_duration <= 0: continue
+        
+        font = "Arial-Bold"
+        
+        text_clip = TextClip(
+            line, font=font, font_size=font_size, color=text_color,
+            stroke_color=stroke_color, stroke_width=stroke_width,
+            method='caption', size=(output_size[0] * 0.9, None)
+        )
+        safe_fade = min(fade_duration, clip_duration / 2)
+        
+        text_clip = text_clip.with_position(text_position) \
+                             .with_start(start) \
+                             .with_duration(clip_duration) \
+                             .crossfadein(safe_fade).crossfadeout(safe_fade)
+        lyric_clips.append(text_clip)
+
+    final_clip = CompositeVideoClip(
+        [background_clip] + lyric_clips, size=output_size
+    ).with_audio(audio_clip)
+
+    output_path = tmp(".mp4")
+    print(f"Writing video to temporary file: {output_path}")
+    final_clip.write_videofile(
+        output_path, codec="libx264", fps=24, audio_codec="aac",
+        threads=os.cpu_count(), logger=None,
+    )
+    print("Video rendering complete.")
     return output_path
 
 
@@ -8080,8 +8119,8 @@ def midi_to_audio(midi_path, format_choice):
 
 
 def subdivide_beats(beat_times, subdivision):
-    if subdivision <= 1:
-        return beat_times
+    if subdivision <= 1 or len(beat_times) < 2:
+        return np.array(beat_times):
 
     new_beats = []
     for i in range(len(beat_times) - 1):
@@ -8098,16 +8137,19 @@ def subdivide_beats(beat_times, subdivision):
 def find_best_beat(
     target_time, future_beats, downbeats, bias, threshold
 ):
-
-    if len(future_beats) == 0:
+    if not hasattr(future_beats, '__len__') or len(future_beats) == 0:
         return None
+
+    future_beats = np.asarray(future_beats)
+    downbeats = np.asarray(downbeats)
 
     time_diffs = np.abs(future_beats - target_time)
 
-    is_downbeat = np.isin(
-        np.round(future_beats, 4), np.round(downbeats, 4)
-    )
-    weighted_diffs = time_diffs - (bias * threshold * is_downbeat)
+    is_downbeat = np.array([
+        np.any(np.isclose(beat, downbeats)) for beat in future_beats
+    ])
+
+    weighted_diffs = time_diffs - (bias * is_downbeat)
 
     best_beat_index = np.argmin(weighted_diffs)
 
@@ -8115,6 +8157,13 @@ def find_best_beat(
         return future_beats[best_beat_index]
 
     return None
+
+
+def calculate_active_rms(y, sr):
+    non_silent_intervals = librosa.effects.split(y, top_db=40, frame_length=1024, hop_length=256)
+    active_audio = np.concatenate([y[start:end] for start, end in non_silent_intervals])
+    if len(active_audio) == 0: return 1e-6
+    return np.sqrt(np.mean(active_audio**2))
 
 
 def reformat_audio(path):
@@ -8132,358 +8181,170 @@ def autotune_vocals(
     humanize=0.5,
     quantize_grid=16,
     strong_beat_bias=0.1,
+    beats_per_bar=(4, 4)
 ):
     import librosa
     import madmom
     import pydub
+    import pydub.effects
     import soundfile as sf
 
     print("--- Initializing Autotune ---")
     separation_dir = tmp(dir=True)
-    print(f"Created temporary directory: {separation_dir}")
+    temp_files = []
 
     try:
         print("\n--- Vocal Separation ---")
-        print("Separating vocals... (This requires Demucs)")
         run(
             f'"{sys.executable}" -m demucs.separate -n htdemucs_ft --two-stems=vocals -o "{separation_dir}" "{audio_path}"'
         )
-
-        separated_dir = (
-            Path(separation_dir)
-            / "htdemucs_ft"
-            / Path(audio_path).stem
-        )
+        separated_dir = Path(separation_dir) / "htdemucs_ft" / Path(audio_path).stem
         vocals_path = separated_dir / "vocals.wav"
         instrumental_path = separated_dir / "no_vocals.wav"
-        print(f"Vocals path: {vocals_path}")
-        print(f"Instrumental path: {instrumental_path}")
-
         if not vocals_path.exists() or not instrumental_path.exists():
-            catch(
-                "Vocal separation failed. Could not find separated files."
-            )
-            return None
+            raise FileNotFoundError("Vocal separation failed.")
 
-        print("Loading separated vocal track with Librosa...")
-        y_original, sr = librosa.load(
-            str(vocals_path), sr=None, mono=True
-        )
-        print(
-            f"Vocal track loaded. Sample rate: {sr}, Duration: {len(y_original)/sr:.2f}s"
-        )
-        print(
-            f"Original samples max value: {np.max(np.abs(y_original))}"
-        )
+        print("Loading separated audio tracks...")
+        y_original, sr = librosa.load(str(vocals_path), sr=None, mono=True)
         y = np.copy(y_original)
-        print(f"Copied samples max value: {np.max(np.abs(y))}")
+        instrumental = pydub.AudioSegment.from_file(instrumental_path)
 
         print("\n--- Rhythm Correction ---")
         try:
             print("Detecting beats and downbeats in instrumental...")
             downbeat_proc = madmom.features.downbeats.DBNDownBeatTrackingProcessor(
-                beats_per_bar=[4, 4], fps=100
+                beats_per_bar=list(beats_per_bar), fps=100
             )
-            beat_act = madmom.features.beats.RNNBeatProcessor()(
-                str(instrumental_path)
-            )
+            beat_act = madmom.features.beats.RNNBeatProcessor()(str(instrumental_path))
             beat_info = downbeat_proc(beat_act)
-
             if beat_info.ndim == 2 and beat_info.shape[1] == 2:
                 beat_times = beat_info[beat_info[:, 1] > 0, 0]
                 downbeats = beat_info[beat_info[:, 1] == 1, 0]
             else:
-                print(
-                    "Warning: Madmom could not detect any beats in the instrumental."
-                )
-                beat_times = np.array([])
-                downbeats = np.array([])
-
-            print(
-                f"Found {len(beat_times)} beats and {len(downbeats)} downbeats."
-            )
-
+                beat_times, downbeats = np.array([]), np.array([])
             if quantize_grid > 0 and len(beat_times) > 1:
-                subdivision_factor = quantize_grid // 4
-                quantized_beat_times = subdivide_beats(
-                    beat_times, subdivision_factor
-                )
-                print(
-                    f"Created a quantization grid with {len(quantized_beat_times)} points ({quantize_grid}th notes)."
-                )
+                quantized_beat_times = subdivide_beats(beat_times, quantize_grid // 4)
             else:
                 quantized_beat_times = beat_times
-
-            print("Splitting vocal track into non-silent segments...")
-            onset_frames = librosa.onset.onset_detect(
-                y=y, sr=sr, hop_length=512, units="frames"
-            )
-            onset_frames = np.concatenate(
-                [onset_frames, [len(y) // 512]]
-            )
-
+            onset_frames = librosa.onset.onset_detect(y=y, sr=sr, hop_length=512, units="frames")
+            onset_frames = np.concatenate([onset_frames, [len(y) // 512]])
             vocal_intervals = []
             for i in range(len(onset_frames) - 1):
-                start_frame, end_frame = (
-                    onset_frames[i],
-                    onset_frames[i + 1],
-                )
+                start_frame, end_frame = onset_frames[i], onset_frames[i + 1]
                 if end_frame > start_frame:
-                    start_sample, end_sample = (
-                        start_frame * 512,
-                        end_frame * 512,
-                    )
-                    if (
-                        np.mean(y[start_sample:end_sample] ** 2)
-                        > 1e-6
-                    ):
-                        vocal_intervals.append(
-                            (start_frame, end_frame)
-                        )
+                    start_sample, end_sample = start_frame * 512, end_frame * 512
+                    if np.mean(y[start_sample:end_sample] ** 2) > 1e-6:
+                        vocal_intervals.append((start_sample, end_sample))
 
-            print(f"Found {len(vocal_intervals)} vocal segments.")
-
-            if (
-                len(vocal_intervals) > 0
-                and len(quantized_beat_times) > 0
-            ):
-                y_timed = np.zeros_like(y)
+            if len(vocal_intervals) > 0 and len(quantized_beat_times) > 0:
+                print("Quantizing vocal segments with crossfades (optimized)...")
+                timed_segments = []
                 last_end_sample = 0
-
-                print(
-                    "Quantizing vocal segments to the musical grid..."
-                )
-                for i, (start_frame, end_frame) in enumerate(
-                    vocal_intervals
-                ):
-                    start_sample = librosa.frames_to_samples(
-                        start_frame, hop_length=512
-                    )
-                    end_sample = librosa.frames_to_samples(
-                        end_frame, hop_length=512
-                    )
-                    segment = y[start_sample:end_sample]
-
-                    if len(segment) == 0:
-                        continue
-
-                    start_time = librosa.samples_to_time(
-                        start_sample, sr=sr
-                    )
-
-                    original_beat_duration = (
-                        np.mean(np.diff(beat_times))
-                        if len(beat_times) > 1
-                        else 0.5
-                    )
-                    threshold = original_beat_duration / 2.0
-
-                    future_beats = quantized_beat_times[
-                        quantized_beat_times
-                        >= librosa.samples_to_time(
-                            last_end_sample, sr=sr
-                        )
-                    ]
-
-                    best_quantized_time = find_best_beat(
-                        start_time,
-                        future_beats,
-                        downbeats,
-                        strong_beat_bias,
-                        threshold,
-                    )
-
-                    final_pos = (
-                        start_sample  # Default to original position
-                    )
+                max_len = len(y)
+                for start_sample, end_sample in vocal_intervals:
+                    segment = y[start_sample:end_sample].copy() # Use copy to modify
+                    if len(segment) == 0: continue
+                    start_time = librosa.samples_to_time(start_sample, sr=sr)
+                    beat_duration = np.mean(np.diff(beat_times)) if len(beat_times) > 1 else 0.5
+                    threshold = beat_duration / 2.0
+                    future_beats = quantized_beat_times[quantized_beat_times >= librosa.samples_to_time(last_end_sample, sr=sr)]
+                    best_quantized_time = find_best_beat(start_time, future_beats, downbeats, strong_beat_bias, threshold)
+                    final_pos = start_sample
                     if best_quantized_time is not None:
-                        quantized_pos = librosa.time_to_samples(
-                            best_quantized_time, sr=sr
-                        )
-
-                        is_safe = (
-                            quantized_pos >= last_end_sample
-                        ) and (
-                            quantized_pos + len(segment)
-                            <= len(y_timed)
-                        )
-
-                        if is_safe:
-                            final_pos = quantized_pos
-                            print(
-                                f"Segment {i+1}: Snapped to beat at {best_quantized_time:.2f}s."
-                            )
-                        else:
-                            print(
-                                f"Segment {i+1}: Quantization candidate rejected (overlap/bounds). Using original timing."
-                            )
-                    else:
-                        print(
-                            f"Segment {i+1}: No suitable beat found within threshold. Using original timing."
-                        )
-
+                        quantized_pos = librosa.time_to_samples(best_quantized_time, sr=sr)
+                        if quantized_pos >= last_end_sample: final_pos = quantized_pos
                     final_pos = max(final_pos, last_end_sample)
+                    timed_segments.append((final_pos, segment))
+                    last_end_sample = final_pos + len(segment)
+                    max_len = max(max_len, last_end_sample)
 
-                    if final_pos + len(segment) <= len(y_timed):
-                        y_timed[
-                            final_pos : final_pos + len(segment)
-                        ] = segment
-                        last_end_sample = final_pos + len(segment)
-
-                if np.max(np.abs(y_timed)) < 0.01:
-                    print(
-                        "Rhythm correction resulted in near-silence. Reverting to original vocal timing."
-                    )
-                    y = y_original
-                else:
-                    y = y_timed
-                    print(
-                        "Vocal rhythm correction applied successfully."
-                    )
-            else:
-                print(
-                    "Could not detect beats or vocal segments, skipping rhythm correction."
-                )
-
+                y_timed = np.zeros(max_len, dtype=np.float32)
+                fade_len = int(0.01 * sr) # 10ms fade
+                for pos, seg in timed_segments:
+                    safe_fade_len = min(fade_len, len(seg) // 2)
+                    if safe_fade_len > 0:
+                        fade_in = np.hanning(safe_fade_len * 2)[:safe_fade_len]
+                        fade_out = np.hanning(safe_fade_len * 2)[safe_fade_len:]
+                        seg[:safe_fade_len] *= fade_in
+                        seg[-safe_fade_len:] *= fade_out
+                    y_timed[pos : pos + len(seg)] += seg # Use addition for overlaps
+                y_timed = librosa.effects.trim(y_timed, top_db=60)[0]
+                y = y_timed
+                print("Vocal rhythm correction applied successfully.")
         except Exception as e:
-            print(
-                f"Could not apply rhythm correction, proceeding with pitch correction only. Error: {e}"
-            )
+            print(f"Rhythm correction failed, proceeding with original timing. Error: {e}")
             y = y_original
 
-        print("\n--- Pitch Correction ---")
-        print(
-            "Performing Short-Time Fourier Transform (STFT) on vocal track..."
-        )
-        n_fft = 2048
-        hop_length = 512
-        stft_vocals = librosa.stft(
-            y, n_fft=n_fft, hop_length=hop_length
-        )
-        magnitudes = np.abs(stft_vocals)
-        print("STFT complete.")
-
-        print("Estimating fundamental frequency (f0) with PYIN...")
+        print("\n--- Pitch Correction with Rubberband ---")
+        n_fft, hop_length = 2048, 512
         f0, voiced_flag, _ = librosa.pyin(
-            y,
-            fmin=librosa.note_to_hz("C2"),
-            fmax=librosa.note_to_hz("C7"),
-            sr=sr,
-            frame_length=n_fft,
-            hop_length=hop_length,
+            y, fmin=librosa.note_to_hz("C2"), fmax=librosa.note_to_hz("C7"),
+            sr=sr, frame_length=n_fft, hop_length=hop_length
         )
-        print("f0 estimation complete.")
         f0 = np.nan_to_num(f0)
         target_f0 = np.copy(f0)
-
-        voiced_frames = np.count_nonzero(voiced_flag)
-        print(
-            f"Found {voiced_frames} voiced frames out of {len(f0)} total frames."
-        )
-        print("Applying pitch correction to voiced frames...")
-
         for i in range(len(f0)):
             if voiced_flag[i] and f0[i] > 0:
                 current_f0 = f0[i]
                 target_midi = round(librosa.hz_to_midi(current_f0))
                 ideal_f0 = librosa.midi_to_hz(target_midi)
-
                 if humanize > 0:
-                    cents_deviation = (
-                        (np.random.rand() - 0.5) * 2 * (humanize * 15)
-                    )
-                    ratio = 2 ** (cents_deviation / 1200)
-                    ideal_f0 *= ratio
-
-                target_f0[i] = (
-                    current_f0 + (ideal_f0 - current_f0) * strength
-                )
-
-        print("Reconstructing phase and performing inverse STFT...")
-        phase = np.angle(stft_vocals)
-        new_phase = np.zeros_like(phase)
-        new_phase[:, 0] = phase[:, 0]
-        freqs = librosa.fft_frequencies(sr=sr, n_fft=n_fft)
-        expected_phase_advance = 2 * np.pi * freqs * hop_length / sr
-
-        for t in range(1, stft_vocals.shape[1]):
-            dphase = (
-                phase[:, t] - phase[:, t - 1] - expected_phase_advance
-            )
-            dphase = dphase - 2 * np.pi * np.round(
-                dphase / (2 * np.pi)
-            )
-            true_freq = expected_phase_advance + dphase
-
-            ratio = 1.0
-            if t < len(f0) and f0[t] > 0 and target_f0[t] > 0:
-                ratio = target_f0[t] / f0[t]
-
-            shifted_phase_advance = true_freq * ratio
-            new_phase[:, t] = (
-                new_phase[:, t - 1] + shifted_phase_advance
-            )
-
-        stft_tuned = magnitudes * np.exp(1j * new_phase)
-        y_tuned = librosa.istft(
-            stft_tuned, hop_length=hop_length, length=len(y)
-        )
-        print("Pitch correction complete.")
+                    cents_dev = np.random.normal(0, scale=(humanize * 5))
+                    cents_dev = np.clip(cents_dev, -15, 15)
+                    ideal_f0 *= 2 ** (cents_dev / 1200)
+                target_f0[i] = current_f0 + (ideal_f0 - current_f0) * strength
+        pitch_map_path = tmp(".txt")
+        temp_files.append(pitch_map_path)
+        with open(pitch_map_path, "w") as f:
+            for i in range(len(f0)):
+                if voiced_flag[i] and f0[i] > 0 and target_f0[i] > 0:
+                    time = librosa.frames_to_time(i, sr=sr, hop_length=hop_length)
+                    ratio = target_f0[i] / f0[i]
+                    f.write(f"{time:.6f}\t{ratio:.6f}\n")
+        if os.path.getsize(pitch_map_path) > 0:
+            print("Applying formant-preserving pitch correction...")
+            temp_vocals_in = tmp(".wav")
+            temp_vocals_out = tmp(".wav")
+            temp_files.extend([temp_vocals_in, temp_vocals_out])
+            sf.write(temp_vocals_in, y, sr)
+            command = ["rubberband", "--pitch-map", pitch_map_path, "--crispness", "6", temp_vocals_in, temp_vocals_out]
+            subprocess.run(command, check=True, capture_output=True, text=True)
+            y_tuned, _ = librosa.load(temp_vocals_out, sr=sr)
+            print("Pitch correction complete.")
+        else:
+            print("Warning: No voiced frames detected. Skipping pitch correction.")
+            y_tuned = np.copy(y)
 
         print("\n--- Final Mixdown ---")
-        print("Normalizing output volume...")
-        original_rms = np.sqrt(np.mean(y_original**2))
-        tuned_rms = np.sqrt(np.mean(y_tuned**2))
-        print(
-            f"Original vocal RMS: {original_rms:.4f}, Tuned vocal RMS: {tuned_rms:.4f}"
-        )
-
+        print("Matching loudness of active audio segments...")
+        original_rms = calculate_active_rms(y_original, sr)
+        tuned_rms = calculate_active_rms(y_tuned, sr)
         if tuned_rms > 1e-6:
-            rms_ratio = original_rms / tuned_rms
-            y_tuned *= rms_ratio
-            print(f"Applied RMS normalization ratio: {rms_ratio:.4f}")
+            y_tuned *= (original_rms / tuned_rms)
 
         temp_tuned_vocals_path = tmp(".wav")
-        print(
-            f"Writing tuned vocals to temporary file: {temp_tuned_vocals_path}"
-        )
+        temp_files.append(temp_tuned_vocals_path)
         sf.write(temp_tuned_vocals_path, y_tuned, sr)
+        tuned_vocals = pydub.AudioSegment.from_file(temp_tuned_vocals_path)
+        
+        print("Matching sample rates and track durations...")
+        tuned_vocals = tuned_vocals.set_frame_rate(instrumental.frame_rate)
+        max_duration = max(len(instrumental), len(tuned_vocals))
+        base = p_dub.AudioSegment.silent(duration=max_duration, frame_rate=instrumental.frame_rate)
+        combined = base.overlay(instrumental).overlay(tuned_vocals)
 
-        print("Loading audio segments with Pydub...")
-        instrumental = pydub.AudioSegment.from_file(instrumental_path)
-        tuned_vocals = pydub.AudioSegment.from_file(
-            temp_tuned_vocals_path
-        )
-        print("Audio segments loaded.")
+        print("Normalizing final track to prevent clipping...")
+        combined = pydub.effects.normalize(combined, headroom=1.0)
 
-        if instrumental.channels > tuned_vocals.channels:
-            print(
-                f"Upmixing vocals to {instrumental.channels} channels."
-            )
-            tuned_vocals = tuned_vocals.set_channels(
-                instrumental.channels
-            )
+        output_stem = f"{Path(audio_path).stem}_autotuned"
+        final_output_path = f"{output_stem}.{format_choice}"
+        combined.export(final_output_path, format=format_choice)
 
-        print(
-            "Adjusting final vocal volume and overlaying onto instrumental..."
-        )
-        final_vocals = tuned_vocals + 3
-        combined = instrumental.overlay(final_vocals)
-        print("Overlay complete.")
-
-        output_stem = str(
-            Path(audio_path).with_name(
-                f"{Path(audio_path).stem}_autotuned"
-            )
-        )
-        final_output_path = export_audio(
-            combined, output_stem, format_choice
-        )
         print(f"\n--- Autotune Complete ---")
         print(f"Final audio saved to: {final_output_path}")
-
-        delete(temp_tuned_vocals_path)
         return final_output_path
     finally:
-        print("Cleaning up main temporary directory.")
+        print("Cleaning up temporary files.")
+        for path in temp_files:
+            delete(path)
         delete(separation_dir)
