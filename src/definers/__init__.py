@@ -8441,7 +8441,6 @@ def autotune_vocals(
                 "rubberband",
                 "--fine",
                 "--formant",
-                "--pitch-hq",
                 "--freqmap",
                 freq_map_path,
                 temp_vocals_in,
