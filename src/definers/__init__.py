@@ -7937,22 +7937,32 @@ def stem_mixer(files, format_choice):
         print(f"Processing file {i+1}/{len(files)}: {Path(file_obj.name).name}")
         y, sr = librosa.load(file_obj.name, sr=None)
 
+        y_trimmed, _ = librosa.effects.trim(y, top_db=25)
+
+        if len(y_trimmed) > 0:
+            y = y_trimmed
+
         if target_sr is None:
             target_sr = sr
 
         if sr != target_sr:
             y = librosa.resample(y, orig_sr=sr, target_sr=target_sr)
 
+        temp_trimmed_path = tmp(".wav")
+        sf.write(temp_trimmed_path, y, target_sr)
+
         proc = madmom.features.beats.RNNBeatProcessor()
         downbeat_proc_act = madmom.features.downbeats.RNNDownBeatProcessor()
-        beat_act = proc(file_obj.name)
-        downbeat_act = downbeat_proc_act(file_obj.name)
+        beat_act = proc(temp_trimmed_path)
+        downbeat_act = downbeat_proc_act(temp_trimmed_path)
         combined_act = np.c_[beat_act, downbeat_act]
         
         downbeat_tracker = madmom.features.downbeats.DBNDownBeatTrackingProcessor(
             beats_per_bar=[4, 4], fps=100
         )
         beat_info = downbeat_tracker(combined_act)
+
+        delete(temp_trimmed_path)
 
         first_downbeat_time = float('inf')
         tempo = 120
