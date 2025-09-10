@@ -381,8 +381,6 @@ common_audio_formats = [
     "wma",
 ]
 
-punc = r'["\'!#$%&()*+,/:;<=>?@\[\\\]^_`\{\|\}~]'
-
 negative_keywords = [
     # Quality & Style
     "low quality",
@@ -3335,6 +3333,8 @@ def install_faiss():
 
 
 def simple_text(prompt):
+    punc = r'["\'!#$%&()*+,/:;<=>?@\[\\\]^_`\{\|\}~]'
+
     prompt = re.sub("[\t]", " ", prompt)
     prompt = re.sub("( ){2,}", " ", prompt)
     prompt = re.sub("(\n){2,}", "\n", prompt)
@@ -3342,9 +3342,13 @@ def simple_text(prompt):
     prompt = prompt.replace("|", " or ")
     prompt = re.sub("[ !]*\?[ !?]*", " I wonder ", prompt)
     prompt = re.sub(punc, "", prompt)
+
+    prompt = re.sub(r'(?<=\b[a-zA-Z])\.', '', prompt)
+    prompt = re.sub(r'\s*[\n\.]+\s*', ' and ', prompt)
+    
     prompt = prompt.lower().strip()
     prompt = prompt.replace(" -", "-").replace("- ", "-")
-    prompt = re.sub("( )*[\n\.]+( )*", " and ", prompt)
+
     return prompt
 
 
