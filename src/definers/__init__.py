@@ -8420,7 +8420,7 @@ def autotune_vocals(
                 )
                 
         freq_map_path = tmp(".txt")
-        temp_files.append(pitch_map_path)
+        temp_files.append(freq_map_path)
         with open(freq_map_path, "w") as f:
             for i in range(len(f0)):
                 if voiced_flag[i] and f0[i] > 0 and target_f0[i] > 0:
@@ -8428,7 +8428,7 @@ def autotune_vocals(
                     ratio = target_f0[i] / f0[i]
                     f.write(f"{sample_num}\t{ratio:.6f}\n")
                     
-        if os.path.getsize(pitch_map_path) > 0:
+        if os.path.getsize(freq_map_path) > 0:
             print("Applying formant-preserving pitch correction...")
             temp_vocals_in = tmp(".wav", keep=False)
             temp_vocals_out = tmp(".wav", keep=False)
