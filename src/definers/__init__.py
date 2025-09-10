@@ -6920,7 +6920,6 @@ def export_audio(audio_segment, output_path_stem, format_choice):
         str(output_path),
         format=file_format,
         bitrate=bitrate,
-        bitdepth=16,
         parameters=params,
     )
     return str(output_path)
