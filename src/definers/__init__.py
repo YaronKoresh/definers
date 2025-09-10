@@ -8293,92 +8293,56 @@ def autotune_vocals(
         print("\n--- Rhythm Correction ---")
         try:
             print("Detecting beats and downbeats in instrumental...")
-            downbeat_proc = madmom.features.downbeats.DBNDownBeatTrackingProcessor(
+
+            beat_proc = madmom.features.beats.RNNBeatProcessor()
+            downbeat_proc = madmom.features.downbeats.RNNDownBeatProcessor()
+            beat_act = beat_proc(str(instrumental_path))
+            downbeat_act = downbeat_proc(str(instrumental_path))
+            combined_act = np.c_[beat_act, downbeat_act]
+            final_tracker = madmom.features.downbeats.DBNDownBeatTrackingProcessor(
                 beats_per_bar=list(beats_per_bar), fps=100
             )
-            beat_act = madmom.features.beats.RNNBeatProcessor()(
-                str(instrumental_path)
-            )
-            beat_info = downbeat_proc(beat_act)
+            beat_info = final_tracker(combined_act)
+
             if beat_info.ndim == 2 and beat_info.shape[1] == 2:
                 beat_times = beat_info[beat_info[:, 1] > 0, 0]
                 downbeats = beat_info[beat_info[:, 1] == 1, 0]
             else:
+                print("Warning: Could not detect beats reliably.")
                 beat_times, downbeats = np.array([]), np.array([])
+
             if quantize_grid > 0 and len(beat_times) > 1:
-                quantized_beat_times = subdivide_beats(
-                    beat_times, quantize_grid // 4
-                )
+                quantized_beat_times = subdivide_beats(beat_times, quantize_grid // 4)
             else:
                 quantized_beat_times = beat_times
-            onset_frames = librosa.onset.onset_detect(
-                y=y, sr=sr, hop_length=512, units="frames"
-            )
-            onset_frames = np.concatenate(
-                [onset_frames, [len(y) // 512]]
-            )
+            
+            onset_frames = librosa.onset.onset_detect(y=y, sr=sr, hop_length=512, units="frames")
+            onset_frames = np.concatenate([onset_frames, [len(y) // 512]])
+
             vocal_intervals = []
             for i in range(len(onset_frames) - 1):
-                start_frame, end_frame = (
-                    onset_frames[i],
-                    onset_frames[i + 1],
-                )
+                start_frame, end_frame = onset_frames[i], onset_frames[i + 1]
                 if end_frame > start_frame:
-                    start_sample, end_sample = (
-                        start_frame * 512,
-                        end_frame * 512,
-                    )
-                    if (
-                        np.mean(y[start_sample:end_sample] ** 2)
-                        > 1e-6
-                    ):
-                        vocal_intervals.append(
-                            (start_sample, end_sample)
-                        )
+                    start_sample, end_sample = start_frame * 512, end_frame * 512
+                    if np.mean(y[start_sample:end_sample] ** 2) > 1e-6:
+                        vocal_intervals.append((start_sample, end_sample))
 
-            if (
-                len(vocal_intervals) > 0
-                and len(quantized_beat_times) > 0
-            ):
-                print(
-                    "Quantizing vocal segments with crossfades (optimized)..."
-                )
+            if len(vocal_intervals) > 0 and len(quantized_beat_times) > 0:
+                print("Quantizing vocal segments with crossfades (optimized)...")
                 timed_segments = []
                 last_end_sample = 0
                 max_len = len(y)
                 for start_sample, end_sample in vocal_intervals:
-                    segment = y[
-                        start_sample:end_sample
-                    ].copy()  # Use copy to modify
-                    if len(segment) == 0:
-                        continue
-                    start_time = librosa.samples_to_time(
-                        start_sample, sr=sr
-                    )
-                    beat_duration = (
-                        np.mean(np.diff(beat_times))
-                        if len(beat_times) > 1
-                        else 0.5
-                    )
+                    segment = y[start_sample:end_sample].copy()
+                    if len(segment) == 0: continue
+                    start_time = librosa.samples_to_time(start_sample, sr=sr)
+                    beat_duration = np.mean(np.diff(beat_times)) if len(beat_times) > 1 else 0.5
                     threshold = beat_duration / 2.0
-                    future_beats = quantized_beat_times[
-                        quantized_beat_times
-                        >= librosa.samples_to_time(
-                            last_end_sample, sr=sr
-                        )
-                    ]
-                    best_quantized_time = find_best_beat(
-                        start_time,
-                        future_beats,
-                        downbeats,
-                        strong_beat_bias,
-                        threshold,
-                    )
+                    future_beats = quantized_beat_times[quantized_beat_times >= librosa.samples_to_time(last_end_sample, sr=sr)]
+                    best_quantized_time = find_best_beat(start_time, future_beats, downbeats, strong_beat_bias, threshold)
                     final_pos = start_sample
                     if best_quantized_time is not None:
-                        quantized_pos = librosa.time_to_samples(
-                            best_quantized_time, sr=sr
-                        )
+                        quantized_pos = librosa.time_to_samples(best_quantized_time, sr=sr)
                         if quantized_pos >= last_end_sample:
                             final_pos = quantized_pos
                     final_pos = max(final_pos, last_end_sample)
@@ -8387,28 +8351,20 @@ def autotune_vocals(
                     max_len = max(max_len, last_end_sample)
 
                 y_timed = np.zeros(max_len, dtype=np.float32)
-                fade_len = int(0.01 * sr)  # 10ms fade
+                fade_len = int(0.01 * sr)
                 for pos, seg in timed_segments:
                     safe_fade_len = min(fade_len, len(seg) // 2)
                     if safe_fade_len > 0:
-                        fade_in = np.hanning(safe_fade_len * 2)[
-                            :safe_fade_len
-                        ]
-                        fade_out = np.hanning(safe_fade_len * 2)[
-                            safe_fade_len:
-                        ]
+                        fade_in = np.hanning(safe_fade_len * 2)[:safe_fade_len]
+                        fade_out = np.hanning(safe_fade_len * 2)[safe_fade_len:]
                         seg[:safe_fade_len] *= fade_in
                         seg[-safe_fade_len:] *= fade_out
-                    y_timed[
-                        pos : pos + len(seg)
-                    ] += seg  # Use addition for overlaps
+                    y_timed[pos : pos + len(seg)] += seg
                 y_timed = librosa.effects.trim(y_timed, top_db=60)[0]
                 y = y_timed
                 print("Vocal rhythm correction applied successfully.")
         except Exception as e:
-            print(
-                f"Rhythm correction failed, proceeding with original timing. Error: {e}"
-            )
+            print(f"Rhythm correction failed, proceeding with original timing. Error: {e}")
             y = y_original
 
         print("\n--- Pitch Correction with Rubberband ---")
@@ -8449,8 +8405,8 @@ def autotune_vocals(
                     f.write(f"{time:.6f}\t{ratio:.6f}\n")
         if os.path.getsize(pitch_map_path) > 0:
             print("Applying formant-preserving pitch correction...")
-            temp_vocals_in = tmp(".wav")
-            temp_vocals_out = tmp(".wav")
+            temp_vocals_in = tmp(".wav", keep=False)
+            temp_vocals_out = tmp(".wav", keep=False)
             temp_files.extend([temp_vocals_in, temp_vocals_out])
             sf.write(temp_vocals_in, y, sr)
             command = [
