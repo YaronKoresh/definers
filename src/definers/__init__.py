@@ -7280,7 +7280,7 @@ def beat_visualizer(
     return output_path
 
 
-def music_video(audio_path):
+def music_video(audio_path, preset="vortex", width=1280, height=720, fps=30):
     import librosa
     import madmom
     from moviepy import AudioFileClip, VideoFileClip
@@ -7295,43 +7295,98 @@ def music_video(audio_path):
     proc = madmom.features.beats.DBNBeatTrackingProcessor(fps=100)
     act = madmom.features.beats.RNNBeatProcessor()(audio_path)
     beat_times = proc(act)
-    beats = librosa.time_to_frames(beat_times, sr=sr)
+    beat_frames = librosa.time_to_frames(beat_times, sr=sr, hop_length=512)
     rms_norm = (rms - _np.min(rms)) / (
         _np.max(rms) - _np.min(rms) + 1e-6
     )
     centroid_norm = (
         spectral_centroid - _np.min(spectral_centroid)
     ) / (_np.max(spectral_centroid) - _np.min(spectral_centroid) + 1e-6)
-    w, h = 1280, 720
-    fps = 30
+    w, = width
+    h = height
+    center_x, center_y = w // 2, h // 2
+    rr, cc = _np.ogrid[:h, :w]
 
     def make_frame(t):
         frame = _np.zeros((h, w, 3), dtype=_np.uint8)
         frame_idx = int(t * sr / 512)
-        color_val = centroid_norm[
-            min(frame_idx, len(centroid_norm) - 1)
-        ]
-        r = int(10 + color_val * 60)
-        g = int(20 + color_val * 40)
-        b = int(40 + color_val * 90)
-        frame[:, :, :] = [r, g, b]
-        radius = int(
-            50 + rms_norm[min(frame_idx, len(rms_norm) - 1)] * 200
-        )
-        center_x, center_y = w // 2, h // 2
-        for beat_frame in beats:
-            if abs(frame_idx - beat_frame) < 2:
+
+        is_beat = any(abs(frame_idx - bf) < 3 for bf in beat_frames)
+
+        rms_val = rms_norm[min(frame_idx, len(rms_norm) - 1)]
+        color_val = centroid_norm[min(frame_idx, len(centroid_norm) - 1)]
+
+        if preset == "vortex":
+            angle = _np.arctan2(rr - center_y, cc - center_x)
+            dist = _np.sqrt((rr - center_y)**2 + (cc - center_x)**2)
+            
+            r_base = 0.5 + color_val * 0.5
+            g_base = 0.3 + color_val * 0.4
+            b_base = 0.6 + color_val * 0.4
+
+            vortex_pattern = _np.sin(dist / 20.0 - t * 5.0 + angle * 3.0)
+            
+            beat_flash = 2.0 if is_beat else 1.0
+            
+            frame[:, :, 0] = 128 * (1 + _np.sin(vortex_pattern * beat_flash * _np.pi * r_base))
+            frame[:, :, 1] = 128 * (1 + _np.sin(vortex_pattern * beat_flash * _np.pi * g_base + 2))
+            frame[:, :, 2] = 128 * (1 + _np.sin(vortex_pattern * beat_flash * _np.pi * b_base + 4))
+
+        elif preset == "glitch":
+            radius = int(50 + rms_val * 300)
+            
+            if is_beat:
+                radius = int(radius * 1.8)
+                shift_amount = _np.random.randint(-20, 20)
+                frame[:, :, 0] = _np.roll(frame[:, :, 0], shift_amount, axis=1)
+                frame[:, :, 2] = _np.roll(frame[:, :, 2], -shift_amount, axis=1)
+                if _np.random.rand() > 0.5:
+                    block_y = _np.random.randint(0, h // 2)
+                    block_h = _np.random.randint(h // 4, h // 2)
+                    shift = _np.random.randint(-w // 4, w // 4)
+                    frame[block_y:block_y+block_h, :] = _np.roll(frame[block_y:block_y+block_h, :], shift, axis=1)
+
+            y1, y2 = center_y - radius, center_y + radius
+            x1, x2 = center_x - radius, center_x + radius
+            frame[max(0, y1):min(h, y2), max(0, x1):min(w, x2)] = [
+                int(200 + color_val * 55),
+                int(100 - color_val * 50),
+                int(255 * color_val),
+            ]
+            return frame
+
+        elif preset == "israel":
+            ISRAEL_BLUE = [0, 56, 184]
+            WHITE = [255, 255, 255]
+            
+            frame[:, :] = WHITE
+
+            stripe_height = int(h * 0.22) # Proportional stripes
+            frame[:stripe_height] = ISRAEL_BLUE
+            frame[h - stripe_height:] = ISRAEL_BLUE
+
+            radius = int((h * 0.1) + rms_val * (h * 0.4))
+
+            beat_multiplier = 2.5 if is_beat else 1.0
+            flash_radius = int(radius * beat_multiplier)
+
+            circle_mask = (rr - center_y) ** 2 + (cc - center_x) ** 2 <= flash_radius**2
+            
+            if is_beat:
+                frame[circle_mask] = WHITE
+                inner_mask = (rr - center_y) ** 2 + (cc - center_x) ** 2 <= (flash_radius*0.9)**2
+                frame[inner_mask] = ISRAEL_BLUE
+            else:
+                frame[circle_mask] = ISRAEL_BLUE
+
+        else:
+            frame[:, :, :] = [int(10 + color_val * 60), int(20 + color_val * 40), int(40 + color_val * 90)]
+            radius = int(50 + rms_val * 200)
+            if is_beat:
                 radius = int(radius * 1.5)
-                break
-        rr, cc = _np.ogrid[:h, :w]
-        circle_mask = (rr - center_y) ** 2 + (
-            cc - center_x
-        ) ** 2 <= radius**2
-        frame[circle_mask] = [
-            int(200 + color_val * 55),
-            int(150 - color_val * 50),
-            int(100 + color_val * 50),
-        ]
+            circle_mask = (rr - center_y)**2 + (cc - center_x)**2 <= radius**2
+            frame[circle_mask] = [int(200 + color_val * 55), int(150 - color_val * 50), int(100 + color_val * 50)]
+
         return frame
 
     output_path = tmp(".mp4")
