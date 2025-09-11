@@ -7913,126 +7913,41 @@ def stem_mixer(files, format_choice):
         catch("Please upload at least two stem files.")
         return None
 
-    processed_stems_info = []
+    processed_stems = []
     target_sr = None
-    target_bpm = None
+    max_length = 0
 
-    print("--- Processing Stems ---")
+    print("--- Processing Stems for Simple Mixing ---")
     for i, file_obj in enumerate(files):
-        print(
-            f"Processing file {i+1}/{len(files)}: {Path(file_obj.name).name}"
-        )
-        y, sr = librosa.load(file_obj.name, sr=None)
-
-        y_trimmed, _ = librosa.effects.trim(y, top_db=25)
-
-        if len(y_trimmed) > 0:
-            y = y_trimmed
+        print(f"Processing file {i+1}/{len(files)}: {Path(file_obj.name).name}")
+        
+        try:
+            y, sr = librosa.load(file_obj.name, sr=None)
+        except Exception as e:
+            catch(f"Could not load file: {file_obj.name}. Error: {e}")
+            continue
 
         if target_sr is None:
             target_sr = sr
 
         if sr != target_sr:
+            print(f"Resampling {Path(file_obj.name).name} from {sr}Hz to {target_sr}Hz.")
             y = librosa.resample(y, orig_sr=sr, target_sr=target_sr)
 
-        temp_trimmed_path = tmp(".wav")
-        sf.write(temp_trimmed_path, y, target_sr)
+        processed_stems.append(y)
+        
+        if len(y) > max_length:
+            max_length = len(y)
 
-        proc = madmom.features.beats.RNNBeatProcessor()
-        downbeat_proc_act = (
-            madmom.features.downbeats.RNNDownBeatProcessor()
-        )
-        beat_act = proc(temp_trimmed_path)
-        downbeat_act = downbeat_proc_act(temp_trimmed_path)
-        combined_act = np.c_[beat_act, downbeat_act]
+    if not processed_stems:
+        catch("No audio files were successfully processed.")
+        return None
 
-        downbeat_tracker = (
-            madmom.features.downbeats.DBNDownBeatTrackingProcessor(
-                beats_per_bar=[4, 4], fps=100
-            )
-        )
-        beat_info = downbeat_tracker(combined_act)
+    print("\n--- Mixing Stems ---")
+    mixed_y = np.zeros(max_length, dtype=np.float32)
 
-        delete(temp_trimmed_path)
-
-        first_downbeat_time = float("inf")
-        tempo = 120
-        if (
-            beat_info.ndim == 2
-            and beat_info.shape[1] == 2
-            and len(beat_info) > 1
-        ):
-            beats = beat_info[:, 0]
-            tempo = np.median(60 / np.diff(beats))
-            downbeats = beat_info[beat_info[:, 1] == 1]
-            if len(downbeats) > 0:
-                first_downbeat_time = downbeats[0, 0]
-        else:
-            beats = madmom.features.beats.BeatDetectionProcessor(
-                fps=100
-            )(beat_act)
-            if len(beats) > 1:
-                tempo = np.median(60 / np.diff(beats))
-
-        processed_stems_info.append(
-            {
-                "audio": y,
-                "tempo": tempo,
-                "align_time": first_downbeat_time,
-                "name": Path(file_obj.name).name,
-            }
-        )
-
-    anchor_stem = min(
-        processed_stems_info, key=lambda s: s["align_time"]
-    )
-    target_bpm = anchor_stem["tempo"]
-    anchor_time = anchor_stem["align_time"]
-    print(
-        f"Anchor track identified. Target BPM: {target_bpm:.2f}, Anchor Time: {anchor_time:.2f}s"
-    )
-
-    print("\n--- Aligning and Mixing Stems (Preserving Lead-ins) ---")
-
-    stems_with_start_times = []
-    min_start_time = 0
-    for s in processed_stems_info:
-        audio_data = s["audio"]
-        if s["tempo"] != target_bpm:
-            speed_factor = target_bpm / s["tempo"]
-            print(
-                f"Stretching {s['name']} by factor: {speed_factor:.2f}"
-            )
-            audio_data = librosa.effects.time_stretch(
-                audio_data, rate=speed_factor
-            )
-
-        time_shift = anchor_time - s["align_time"]
-        stems_with_start_times.append(
-            {"audio": audio_data, "start_time": time_shift}
-        )
-        min_start_time = min(min_start_time, time_shift)
-
-    timeline_offset = abs(min_start_time)
-    if timeline_offset > 0:
-        print(
-            f"Creating a {timeline_offset:.2f}s pre-roll to preserve lead-in audio."
-        )
-
-    max_length = 0
-    for s in stems_with_start_times:
-        start_time_with_offset = s["start_time"] + timeline_offset
-        start_sample = librosa.time_to_samples(
-            start_time_with_offset, sr=target_sr
-        )
-        s["start_sample"] = start_sample
-        max_length = max(max_length, start_sample + len(s["audio"]))
-
-    mixed_y = np.zeros(max_length)
-    for s in stems_with_start_times:
-        start = s["start_sample"]
-        end = start + len(s["audio"])
-        mixed_y[start:end] += s["audio"]
+    for stem_audio in processed_stems:
+        mixed_y[:len(stem_audio)] += stem_audio
 
     print("Mixing complete. Normalizing volume...")
     peak_amplitude = np.max(np.abs(mixed_y))
@@ -8041,14 +7956,11 @@ def stem_mixer(files, format_choice):
 
     print("Exporting final mix...")
     temp_wav_path = tmp(".wav")
-    write_wav(
-        temp_wav_path, target_sr, (mixed_y * 32767).astype(np.int16)
-    )
+    
+    write_wav(temp_wav_path, target_sr, (mixed_y * 32767).astype(np.int16))
 
     sound = pydub.AudioSegment.from_file(temp_wav_path)
-    output_stem = Path(temp_wav_path).with_name(
-        f"stem_mix_{random_string()}"
-    )
+    output_stem = Path(temp_wav_path).with_name(f"stem_mix_{random_string()}")
     output_path = export_audio(sound, output_stem, format_choice)
 
     delete(temp_wav_path)
