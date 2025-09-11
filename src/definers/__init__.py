@@ -3336,14 +3336,18 @@ def simple_text(prompt):
     punc = r'["\'!#$%&()*+,/:;<=>?@\[\\\]^_`\{\|\}~]'
 
     prompt = re.sub("[\t]", " ", prompt)
-    prompt = re.sub("[\. \n]+\.[\. \n]*|[\. \n]*\.[\. \n]+", ".", prompt)
+    prompt = re.sub(
+        "[\. \n]+\.[\. \n]*|[\. \n]*\.[\. \n]+", ".", prompt
+    )
     prompt = re.sub("(\n){2,}", "\n", prompt)
     prompt = re.sub("(-){2,}", "-", prompt)
     prompt = prompt.replace("|", " or ")
     prompt = re.sub("[ !]*\?[ !?]*", " I wonder ", prompt)
     prompt = re.sub(punc, "", prompt)
-    
-    prompt = re.sub("\s*(?:[\n]|(?<!\d)(?<!\b[a-zA-Z])\.)+\s*", " and ", prompt)
+
+    prompt = re.sub(
+        "\s*(?:[\n]|(?<!\d)(?<!\b[a-zA-Z])\.)+\s*", " and ", prompt
+    )
 
     prompt = re.sub("( ){2,}", " ", prompt)
 
@@ -3376,9 +3380,7 @@ def full_path(*p):
 
 def paths(*patterns):
 
-    patterns = [
-        full_path(p) for p in patterns
-    ]
+    patterns = [full_path(p) for p in patterns]
 
     path_list = []
     for p in patterns:
@@ -7280,7 +7282,9 @@ def beat_visualizer(
     return output_path
 
 
-def music_video(audio_path, preset="vortex", width=1280, height=720, fps=30):
+def music_video(
+    audio_path, preset="vortex", width=1280, height=720, fps=30
+):
     import librosa
     import madmom
     from moviepy import AudioFileClip, VideoFileClip
@@ -7295,14 +7299,18 @@ def music_video(audio_path, preset="vortex", width=1280, height=720, fps=30):
     proc = madmom.features.beats.DBNBeatTrackingProcessor(fps=100)
     act = madmom.features.beats.RNNBeatProcessor()(audio_path)
     beat_times = proc(act)
-    beat_frames = librosa.time_to_frames(beat_times, sr=sr, hop_length=512)
+    beat_frames = librosa.time_to_frames(
+        beat_times, sr=sr, hop_length=512
+    )
     rms_norm = (rms - _np.min(rms)) / (
         _np.max(rms) - _np.min(rms) + 1e-6
     )
     centroid_norm = (
         spectral_centroid - _np.min(spectral_centroid)
-    ) / (_np.max(spectral_centroid) - _np.min(spectral_centroid) + 1e-6)
-    w, = width
+    ) / (
+        _np.max(spectral_centroid) - _np.min(spectral_centroid) + 1e-6
+    )
+    (w,) = width
     h = height
     center_x, center_y = w // 2, h // 2
     rr, cc = _np.ogrid[:h, :w]
@@ -7314,41 +7322,72 @@ def music_video(audio_path, preset="vortex", width=1280, height=720, fps=30):
         is_beat = any(abs(frame_idx - bf) < 3 for bf in beat_frames)
 
         rms_val = rms_norm[min(frame_idx, len(rms_norm) - 1)]
-        color_val = centroid_norm[min(frame_idx, len(centroid_norm) - 1)]
+        color_val = centroid_norm[
+            min(frame_idx, len(centroid_norm) - 1)
+        ]
 
         if preset == "vortex":
             angle = _np.arctan2(rr - center_y, cc - center_x)
-            dist = _np.sqrt((rr - center_y)**2 + (cc - center_x)**2)
-            
+            dist = _np.sqrt(
+                (rr - center_y) ** 2 + (cc - center_x) ** 2
+            )
+
             r_base = 0.5 + color_val * 0.5
             g_base = 0.3 + color_val * 0.4
             b_base = 0.6 + color_val * 0.4
 
-            vortex_pattern = _np.sin(dist / 20.0 - t * 5.0 + angle * 3.0)
-            
+            vortex_pattern = _np.sin(
+                dist / 20.0 - t * 5.0 + angle * 3.0
+            )
+
             beat_flash = 2.0 if is_beat else 1.0
-            
-            frame[:, :, 0] = 128 * (1 + _np.sin(vortex_pattern * beat_flash * _np.pi * r_base))
-            frame[:, :, 1] = 128 * (1 + _np.sin(vortex_pattern * beat_flash * _np.pi * g_base + 2))
-            frame[:, :, 2] = 128 * (1 + _np.sin(vortex_pattern * beat_flash * _np.pi * b_base + 4))
+
+            frame[:, :, 0] = 128 * (
+                1
+                + _np.sin(
+                    vortex_pattern * beat_flash * _np.pi * r_base
+                )
+            )
+            frame[:, :, 1] = 128 * (
+                1
+                + _np.sin(
+                    vortex_pattern * beat_flash * _np.pi * g_base + 2
+                )
+            )
+            frame[:, :, 2] = 128 * (
+                1
+                + _np.sin(
+                    vortex_pattern * beat_flash * _np.pi * b_base + 4
+                )
+            )
 
         elif preset == "glitch":
             radius = int(50 + rms_val * 300)
-            
+
             if is_beat:
                 radius = int(radius * 1.8)
                 shift_amount = _np.random.randint(-20, 20)
-                frame[:, :, 0] = _np.roll(frame[:, :, 0], shift_amount, axis=1)
-                frame[:, :, 2] = _np.roll(frame[:, :, 2], -shift_amount, axis=1)
+                frame[:, :, 0] = _np.roll(
+                    frame[:, :, 0], shift_amount, axis=1
+                )
+                frame[:, :, 2] = _np.roll(
+                    frame[:, :, 2], -shift_amount, axis=1
+                )
                 if _np.random.rand() > 0.5:
                     block_y = _np.random.randint(0, h // 2)
                     block_h = _np.random.randint(h // 4, h // 2)
                     shift = _np.random.randint(-w // 4, w // 4)
-                    frame[block_y:block_y+block_h, :] = _np.roll(frame[block_y:block_y+block_h, :], shift, axis=1)
+                    frame[block_y : block_y + block_h, :] = _np.roll(
+                        frame[block_y : block_y + block_h, :],
+                        shift,
+                        axis=1,
+                    )
 
             y1, y2 = center_y - radius, center_y + radius
             x1, x2 = center_x - radius, center_x + radius
-            frame[max(0, y1):min(h, y2), max(0, x1):min(w, x2)] = [
+            frame[
+                max(0, y1) : min(h, y2), max(0, x1) : min(w, x2)
+            ] = [
                 int(200 + color_val * 55),
                 int(100 - color_val * 50),
                 int(255 * color_val),
@@ -7358,34 +7397,48 @@ def music_video(audio_path, preset="vortex", width=1280, height=720, fps=30):
         elif preset == "israel":
             ISRAEL_BLUE = [0, 56, 184]
             WHITE = [255, 255, 255]
-            
+
             frame[:, :] = WHITE
 
-            stripe_height = int(h * 0.22) # Proportional stripes
+            stripe_height = int(h * 0.22)  # Proportional stripes
             frame[:stripe_height] = ISRAEL_BLUE
-            frame[h - stripe_height:] = ISRAEL_BLUE
+            frame[h - stripe_height :] = ISRAEL_BLUE
 
             radius = int((h * 0.1) + rms_val * (h * 0.4))
 
             beat_multiplier = 2.5 if is_beat else 1.0
             flash_radius = int(radius * beat_multiplier)
 
-            circle_mask = (rr - center_y) ** 2 + (cc - center_x) ** 2 <= flash_radius**2
-            
+            circle_mask = (rr - center_y) ** 2 + (
+                cc - center_x
+            ) ** 2 <= flash_radius**2
+
             if is_beat:
                 frame[circle_mask] = WHITE
-                inner_mask = (rr - center_y) ** 2 + (cc - center_x) ** 2 <= (flash_radius*0.9)**2
+                inner_mask = (rr - center_y) ** 2 + (
+                    cc - center_x
+                ) ** 2 <= (flash_radius * 0.9) ** 2
                 frame[inner_mask] = ISRAEL_BLUE
             else:
                 frame[circle_mask] = ISRAEL_BLUE
 
         else:
-            frame[:, :, :] = [int(10 + color_val * 60), int(20 + color_val * 40), int(40 + color_val * 90)]
+            frame[:, :, :] = [
+                int(10 + color_val * 60),
+                int(20 + color_val * 40),
+                int(40 + color_val * 90),
+            ]
             radius = int(50 + rms_val * 200)
             if is_beat:
                 radius = int(radius * 1.5)
-            circle_mask = (rr - center_y)**2 + (cc - center_x)**2 <= radius**2
-            frame[circle_mask] = [int(200 + color_val * 55), int(150 - color_val * 50), int(100 + color_val * 50)]
+            circle_mask = (rr - center_y) ** 2 + (
+                cc - center_x
+            ) ** 2 <= radius**2
+            frame[circle_mask] = [
+                int(200 + color_val * 55),
+                int(150 - color_val * 50),
+                int(100 + color_val * 50),
+            ]
 
         return frame
 
@@ -7954,8 +8007,10 @@ def stem_mixer(files, format_choice):
 
     print("--- Processing Stems for Simple Mixing ---")
     for i, file_obj in enumerate(files):
-        print(f"Processing file {i+1}/{len(files)}: {Path(file_obj.name).name}")
-        
+        print(
+            f"Processing file {i+1}/{len(files)}: {Path(file_obj.name).name}"
+        )
+
         try:
             y, sr = librosa.load(file_obj.name, sr=None)
         except Exception as e:
@@ -7966,11 +8021,13 @@ def stem_mixer(files, format_choice):
             target_sr = sr
 
         if sr != target_sr:
-            print(f"Resampling {Path(file_obj.name).name} from {sr}Hz to {target_sr}Hz.")
+            print(
+                f"Resampling {Path(file_obj.name).name} from {sr}Hz to {target_sr}Hz."
+            )
             y = librosa.resample(y, orig_sr=sr, target_sr=target_sr)
 
         processed_stems.append(y)
-        
+
         if len(y) > max_length:
             max_length = len(y)
 
@@ -7982,7 +8039,7 @@ def stem_mixer(files, format_choice):
     mixed_y = _np.zeros(max_length, dtype=_np.float32)
 
     for stem_audio in processed_stems:
-        mixed_y[:len(stem_audio)] += stem_audio
+        mixed_y[: len(stem_audio)] += stem_audio
 
     print("Mixing complete. Normalizing volume...")
     peak_amplitude = _np.max(_np.abs(mixed_y))
@@ -7991,11 +8048,15 @@ def stem_mixer(files, format_choice):
 
     print("Exporting final mix...")
     temp_wav_path = tmp(".wav")
-    
-    write_wav(temp_wav_path, target_sr, (mixed_y * 32767).astype(_np.int16))
+
+    write_wav(
+        temp_wav_path, target_sr, (mixed_y * 32767).astype(_np.int16)
+    )
 
     sound = pydub.AudioSegment.from_file(temp_wav_path)
-    output_stem = Path(temp_wav_path).with_name(f"stem_mix_{random_string()}")
+    output_stem = Path(temp_wav_path).with_name(
+        f"stem_mix_{random_string()}"
+    )
     output_path = export_audio(sound, output_stem, format_choice)
 
     delete(temp_wav_path)
@@ -8193,7 +8254,10 @@ def find_best_beat(
     time_diffs = _np.abs(future_beats - target_time)
 
     is_downbeat = _np.array(
-        [_np.any(_np.isclose(beat, downbeats)) for beat in future_beats]
+        [
+            _np.any(_np.isclose(beat, downbeats))
+            for beat in future_beats
+        ]
     )
 
     weighted_diffs = time_diffs - (bias * is_downbeat)
@@ -8279,8 +8343,12 @@ def autotune_vocals(
             / "htdemucs_ft"
             / Path(audio_path).stem
         )
-        vocals_path = Path(reformat_audio(separated_dir / "vocals.wav"))
-        instrumental_path = Path(reformat_audio(separated_dir / "no_vocals.wav"))
+        vocals_path = Path(
+            reformat_audio(separated_dir / "vocals.wav")
+        )
+        instrumental_path = Path(
+            reformat_audio(separated_dir / "no_vocals.wav")
+        )
         if not vocals_path.exists() or not instrumental_path.exists():
             raise FileNotFoundError("Vocal separation failed.")
 
