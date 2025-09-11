@@ -4895,7 +4895,7 @@ def init_pretrained_model(task: str, turbo: bool = False):
                 f"Downloading {name} ({file_id}) to {dest_path}"
             )
             try:
-                with cwd():
+                with cwd("./src"):
                     google_drive_download(id=file_id, dest=dest_path)
 
             except Exception as e:
