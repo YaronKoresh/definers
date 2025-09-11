@@ -3342,10 +3342,8 @@ def simple_text(prompt):
     prompt = prompt.replace("|", " or ")
     prompt = re.sub("[ !]*\?[ !?]*", " I wonder ", prompt)
     prompt = re.sub(punc, "", prompt)
-
-    prompt = re.sub(r"(?<=\d)\.", "", prompt)
-    prompt = re.sub(r"(?<=\b[a-zA-Z])\.", "", prompt)
-    prompt = re.sub(r"\s*[\n\.]+\s*", " and ", prompt)
+    
+    prompt = re.sub("\s*(?:[\n]|(?<!\d)(?<!\b[a-zA-Z])\.)+\s*", " and ", prompt)
 
     prompt = re.sub("( ){2,}", " ", prompt)
 
