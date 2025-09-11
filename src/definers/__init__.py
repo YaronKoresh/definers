@@ -8450,7 +8450,7 @@ def autotune_vocals(
             instrumental.frame_rate
         )
         max_duration = max(len(instrumental), len(tuned_vocals))
-        base = p_dub.AudioSegment.silent(
+        base = pydub.AudioSegment.silent(
             duration=max_duration, frame_rate=instrumental.frame_rate
         )
         combined = base.overlay(instrumental).overlay(tuned_vocals)
