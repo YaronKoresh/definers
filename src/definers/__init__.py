@@ -4895,7 +4895,7 @@ def init_pretrained_model(task: str, turbo: bool = False):
         }
         with cwd():
             for name, file_id in file_ids.items():
-                dest_path = full_path(f"./{name}.zip")
+                dest_path = full_path(f"./src/{name}.zip")
                 logger.info(
                     f"Downloading {name} ({file_id}) to {dest_path}"
                 )
