@@ -7249,28 +7249,28 @@ def beat_visualizer(
         * (scale_intensity - 1.0)
     )
 
-    def beat_resize_func(t):
+    def beat_scale_func(t):
         frame_index = min(int(t * sr / 512), len(scales) - 1)
         return scales[frame_index]
 
+    def base_animation_func(t):
+        if animation_style == "Zoom In":
+            return 1 + 0.1 * (t / duration)
+        elif animation_style == "Zoom Out":
+            return 1.1 - 0.1 * (t / duration)
+        return 1.0 # No animation
+
+    def final_scale_func(t):
+        return base_animation_func(t) * beat_scale_func(t)
+
     image_clip = ImageClip(temp_img_path, duration=duration)
-    if animation_style == "Zoom In":
-        image_clip = image_clip.resize(
-            lambda t: 1 + 0.1 * (t / duration)
-        )
-    elif animation_style == "Zoom Out":
-        image_clip = image_clip.resized(
-            lambda t: 1.1 - 0.1 * (t / duration)
-        )
+
     final_clip = (
-        image_clip.resized(
-            lambda t: image_clip.w
-            * beat_resize_func(t)
-            / image_clip.w
-        )
+        image_clip.resized(final_scale_func) # Apply the unified function once
         .with_position(("center", "center"))
         .with_audio(audio_clip)
     )
+
     final_clip.write_videofile(
         output_path,
         codec="libx264",
