@@ -3336,7 +3336,7 @@ def simple_text(prompt):
     punc = r'["\'!#$%&()*+,/:;<=>?@\[\\\]^_`\{\|\}~]'
 
     prompt = re.sub("[\t]", " ", prompt)
-    prompt = re.sub("[\. \n]*\.[\. \n]*", ".", prompt)
+    prompt = re.sub("[\. \n]+\.[\. \n]*|[\. \n]*\.[\. \n]+", ".", prompt)
     prompt = re.sub("(\n){2,}", "\n", prompt)
     prompt = re.sub("(-){2,}", "-", prompt)
     prompt = prompt.replace("|", " or ")
