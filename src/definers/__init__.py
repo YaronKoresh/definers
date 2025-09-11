@@ -8224,8 +8224,8 @@ def autotune_vocals(
             / "htdemucs_ft"
             / Path(audio_path).stem
         )
-        vocals_path = reformat_audio(separated_dir / "vocals.wav")
-        instrumental_path = reformat_audio(separated_dir / "no_vocals.wav")
+        vocals_path = Path(reformat_audio(separated_dir / "vocals.wav"))
+        instrumental_path = Path(reformat_audio(separated_dir / "no_vocals.wav"))
         if not vocals_path.exists() or not instrumental_path.exists():
             raise FileNotFoundError("Vocal separation failed.")
 
