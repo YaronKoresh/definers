@@ -3372,10 +3372,14 @@ def add_path(path):
         importlib.invalidate_caches()
 
 
+def full_path(*p):
+    return os.path.abspath(os.path.expanduser(os.path.join(*p)))
+
+
 def paths(*patterns):
 
     patterns = [
-        os.path.abspath(os.path.expanduser(p)) for p in patterns
+        full_path(p) for p in patterns
     ]
 
     path_list = []
@@ -4889,19 +4893,17 @@ def init_pretrained_model(task: str, turbo: bool = False):
             "logs": "1fNMl60ga8OMb4aUvnXzrFIExphWBbHXR",
             "tools": "1neqVUNipdXukEpImwZUU8O3aQdXR1vDg",
         }
-        for name, file_id in file_ids.items():
-            dest_path = f"./{name}.zip"
-            logger.info(
-                f"Downloading {name} ({file_id}) to {dest_path}"
-            )
-            try:
-                with cwd("./src"):
+        with cwd():
+            for name, file_id in file_ids.items():
+                dest_path = full_path(f"./{name}.zip")
+                logger.info(
+                    f"Downloading {name} ({file_id}) to {dest_path}"
+                )
+                try:
                     google_drive_download(id=file_id, dest=dest_path)
-
-            except Exception as e:
-                logger.error(f"Failed to download {name}: {e}")
-                catch(e)
-        logger.info("RVC initialization complete.")
+                except Exception as e:
+                    catch(f"Failed to download {name}: {e}")
+        log("RVC initialization", "Initialization complete.", True)
 
     elif task in ["speech-recognition"]:
 
@@ -6480,19 +6482,13 @@ def train_model_rvc(experiment: str, path: str, lvl: int = 1):
                 exp_path,
             ]
             logger.info("Execute: " + " ".join(cmd_preprocess))
-            subprocess.run(
-                cmd_preprocess,
-                shell=False,
-                check=True,
-                stdout=f_preprocess,
-                stderr=subprocess.STDOUT,
-            )
+            run(" ".join(cmd_preprocess))
 
         with open(log_file_preprocess, "r") as f_preprocess:
             log_content = f_preprocess.read()
             logger.info("Preprocessing Log:\n" + log_content)
 
-    except subprocess.CalledProcessError as e:
+    except Exception as e:
         logger.error(
             f"Preprocessing failed with return code {e.returncode}: {e}"
         )
@@ -6524,13 +6520,7 @@ def train_model_rvc(experiment: str, path: str, lvl: int = 1):
                 if f0method != "rmvpe_gpu":
                     cmd_f0 = f'"{config.python_cmd}" -m definers.infer.modules.train.extract.extract_f0_print "{exp_path}" {n_p} {f0method}'
                     logger.info("Execute: " + cmd_f0)
-                    subprocess.run(
-                        cmd_f0,
-                        shell=True,
-                        check=True,
-                        stdout=f_f0_feature,
-                        stderr=subprocess.STDOUT,
-                    )
+                    run(cmd_f0)
                 else:
                     gpus_rmvpe_split = gpus_rmvpe.split("-")
                     leng = len(gpus_rmvpe_split)
@@ -6569,10 +6559,8 @@ def train_model_rvc(experiment: str, path: str, lvl: int = 1):
             )
 
     except Exception as e:
-        logger.error(
-            f"An error occurred during F0 or feature extraction: {e}"
-        )
-        catch(e)
+        catch(f"An error occurred during F0 or feature extraction")
+        catch()
         return None
     logger.info("Feature extraction complete.")
 
