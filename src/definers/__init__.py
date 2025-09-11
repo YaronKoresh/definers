@@ -294,7 +294,7 @@ tasks = {
     "answer": "microsoft/Phi-4-multimodal-instruct",
     "summary": "t5-large",
     "music": "facebook/musicgen-small",
-    "speech-recognition": "openai/whisper-large-v2",
+    "speech-recognition": "openai/whisper-large-v3",
     "audio-classification": "MIT/ast-finetuned-audioset-10-10-0.4593",
 }
 
