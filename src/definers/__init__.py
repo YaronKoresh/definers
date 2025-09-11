@@ -6472,7 +6472,8 @@ def train_model_rvc(experiment: str, path: str, lvl: int = 1):
         with open(log_file_preprocess, "w") as f_preprocess:
             cmd_preprocess = [
                 config.python_cmd,
-                "infer/modules/train/preprocess.py",
+                "-m",
+                "definers.infer.modules.train.preprocess",
                 input_root,
                 str(sr),
                 str(n_p),
@@ -6521,7 +6522,7 @@ def train_model_rvc(experiment: str, path: str, lvl: int = 1):
             if if_f0:
                 logger.info(f"Extracting F0 using method: {f0method}")
                 if f0method != "rmvpe_gpu":
-                    cmd_f0 = f'"{config.python_cmd}" infer/modules/train/extract/extract_f0_print.py "{exp_path}" {n_p} {f0method}'
+                    cmd_f0 = f'"{config.python_cmd}" -m definers.infer.modules.train.extract.extract_f0_print "{exp_path}" {n_p} {f0method}'
                     logger.info("Execute: " + cmd_f0)
                     subprocess.run(
                         cmd_f0,
@@ -6538,7 +6539,7 @@ def train_model_rvc(experiment: str, path: str, lvl: int = 1):
                         f"Using {leng} GPUs for RMVPE extraction: {gpus_rmvpe_split}"
                     )
                     for idx, n_g in enumerate(gpus_rmvpe_split):
-                        cmd_f0_rmvpe = f'"{config.python_cmd}" infer/modules/train/extract/extract_f0_rmvpe.py {leng} {idx} {n_g} "{exp_path}" {config.is_half}'
+                        cmd_f0_rmvpe = f'"{config.python_cmd}" -m definers.infer.modules.train.extract.extract_f0_rmvpe {leng} {idx} {n_g} "{exp_path}" {config.is_half}'
                         logger.info(
                             f"Execute (GPU {n_g}): " + cmd_f0_rmvpe
                         )
@@ -6553,7 +6554,7 @@ def train_model_rvc(experiment: str, path: str, lvl: int = 1):
                 f"Using {leng} GPUs for feature extraction: {gpus.split('-')}"
             )
             for idx, n_g in enumerate(gpus.split("-")):
-                cmd_feature_print = f'"{config.python_cmd}" infer/modules/train/extract_feature_print.py {config.device} {leng} {idx} "{exp_path}" v2'
+                cmd_feature_print = f'"{config.python_cmd}" -m definers.infer.modules.train.extract_feature_print {config.device} {leng} {idx} "{exp_path}" v2'
                 logger.info(
                     f"Execute (GPU {n_g}): " + cmd_feature_print
                 )
@@ -6747,7 +6748,7 @@ def train_model_rvc(experiment: str, path: str, lvl: int = 1):
         logger.info("Executing training command...")
         with open(log_file_train, "w") as f_train:
             cmd_train = (
-                f'"{config.python_cmd}" infer/modules/train/train.py '
+                f'"{config.python_cmd}" -m definers.infer.modules.train.train '
                 f'-e "{exp_dir}" '
                 f"-sr 48k "
                 f"-f0 1 "
