@@ -7915,10 +7915,10 @@ def separate_stems(audio_path, separation_type=None, format_choice="mp3"):
         delete(output_dir)
         return final_output_path
 
-    if "acapella" in separation_type:
+    if "acapella" == separation_type:
         return _export_stem(vocals_path, "_acapella")
         
-    if "karaoke" in separation_type:
+    if "karaoke" == separation_type:
         return _export_stem(accompaniment_path, "_karaoke")
 
     return _export_stem(vocals_path, "_acapella"), _export_stem(accompaniment_path, "_karaoke")
