@@ -8262,9 +8262,9 @@ def normalize_audio_to_peak(input_path:str, target_level:float=0.99, format:str=
     from pydub.effects import normalize
 
     if format is None:
-        if path.lower().endswith(".mp3"):
+        if input_path.lower().endswith(".mp3"):
             format = "mp3"
-        elif path.lower().endswith(".flac"):
+        elif input_path.lower().endswith(".flac"):
             format = "flac"
         else:
             format = "wav"
