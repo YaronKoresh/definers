@@ -6773,7 +6773,7 @@ def path_ext(p):
         return None
 
 def convert_vocal_rvc(
-    experiment: str, path: str, semi_tones: int = 0
+    experiment: str, path: str
 ):
     logger.info(
         f"Starting vocal conversion for experiment: {experiment} with pitch shift {semi_tones}"
@@ -6781,6 +6781,8 @@ def convert_vocal_rvc(
 
     from .configs.config import Config
     from .infer.modules.vc.modules import VC
+
+    semi_tones = -12
 
     path = normalize_audio_to_peak(path)
 
