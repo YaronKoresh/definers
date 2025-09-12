@@ -3324,8 +3324,8 @@ def exist(path):
     return os.path.exists(path)
 
 
-def add_path(path):
-
+def add_path(*p):
+    path = full_path(*p)
     if path not in sys.path:
         permit(path)
         sys.path.append(path)
@@ -3334,7 +3334,7 @@ def add_path(path):
 
 
 def full_path(*p):
-    return os.path.abspath(os.path.expanduser(os.path.join(*p)))
+    return os.path.abspath(os.path.expanduser(os.path.join(*[_p.strip() for _p in p])))
 
 
 def paths(*patterns):
@@ -6421,7 +6421,7 @@ def train_model_rvc(experiment: str, path: str, lvl: int = 1):
     n_p = int(_np.ceil(config.n_cpu / 1.5))
     log_file_preprocess = os.path.join(exp_path, "preprocess.log")
 
-    f0method = "harvest"
+    f0method = "rmvpe"
     if_f0 = True
     gpus_rmvpe = f"{gpus}-{gpus}"
     log_file_f0_feature = os.path.join(
@@ -6476,6 +6476,10 @@ def train_model_rvc(experiment: str, path: str, lvl: int = 1):
         with open(log_file_f0_feature, "w") as f_f0_feature:
             if if_f0:
                 logger.info(f"Extracting F0 using method: {f0method}")
+
+                if torch.cuda.is_available() and f0method == "rmvpe":
+                    f0method = "rmvpe_gpu"
+
                 if f0method != "rmvpe_gpu":
                     cmd_f0 = f'"{config.python_cmd}" -m infer.modules.train.extract.extract_f0_print "{exp_path}" {n_p} {f0method}'
                     logger.info("Execute: " + cmd_f0)
@@ -6531,7 +6535,7 @@ def train_model_rvc(experiment: str, path: str, lvl: int = 1):
 
     if not os.path.exists(feature_dir) or not any(listdir_res):
         error_message = f"Error: Feature directory '{feature_dir}' is missing or empty! Cannot train index."
-        logger.error(error_message)
+        catch(error_message)
         return None
 
     try:
@@ -6554,8 +6558,8 @@ def train_model_rvc(experiment: str, path: str, lvl: int = 1):
         big_npy = big_npy[big_npy_idx]
 
     except Exception as e:
-        logger.error(
-            f"An error occurred while loading and concatenating features for index training: {e}"
+        catch(
+            f"An error occurred while loading and concatenating features for index training"
         )
         catch(e)
         return None
@@ -6565,7 +6569,7 @@ def train_model_rvc(experiment: str, path: str, lvl: int = 1):
 
         big_npy = (
             MiniBatchKMeans(
-                n_clusters=8000,
+                n_clusters=1000,
                 verbose=False,
                 batch_size=256 * config.n_cpu,
                 compute_labels=False,
@@ -6610,7 +6614,7 @@ def train_model_rvc(experiment: str, path: str, lvl: int = 1):
         )
 
         logger.info("Adding features to Faiss index...")
-        batch_size_add = 8192
+        batch_size_add = 1024
         for i in range(0, big_npy.shape[0], batch_size_add):
             index.add(big_npy[i : i + batch_size_add])
         logger.info("Features added to Faiss index.")
@@ -6658,8 +6662,8 @@ def train_model_rvc(experiment: str, path: str, lvl: int = 1):
         pretrained_D = "assets/pretrained_v2/f0D48k.pth"
 
         batch_size = default_batch_size
-        total_epoch = 40 * lvl
-        save_epoch = 10
+        total_epoch = 80 * lvl
+        save_epoch = 40
         if_save_latest = 1
         if_cache_gpu = 1
         if_save_every_weights = 1
