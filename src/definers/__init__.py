@@ -3317,7 +3317,7 @@ def simple_text(prompt):
 
 
 def exist(*p):
-    return Path(os.path.join(*[_p.strip() for _p in p])).exists()
+    return Path(os.path.join(*[str(_p).strip() for _p in p])).exists()
 
 
 def add_path(*p):
@@ -3330,7 +3330,7 @@ def add_path(*p):
 
 
 def full_path(*p):
-    return str(Path(os.path.join(*[_p.strip() for _p in p])).resolve())
+    return str(Path(os.path.join(*[str(_p).strip() for _p in p])).resolve())
 
 
 def paths(*patterns):
@@ -3350,12 +3350,13 @@ def paths(*patterns):
 
 def copy(src, dst):
     if (
-        os.path.isdir(src)
-        or Path(src).is_symlink()
-        and os.path.isdir(str(Path(src).resolve()))
+        is_directory(full_path(src))
     ):
         shutil.copytree(
-            src, dst, symlinks=False, ignore_dangling_symlinks=True
+            src,
+            dst,
+            symlinks=False,
+            ignore_dangling_symlinks=True
         )
     else:
         shutil.copy(src, dst)
@@ -3512,11 +3513,11 @@ def move(src, dest):
 
 
 def is_directory(*p):
-    return Path(os.path.join(*[_p.strip() for _p in p])).is_dir()
+    return Path(os.path.join(*[str(_p).strip() for _p in p])).is_dir()
 
 
 def is_symlink(*p):
-    return Path(os.path.join(*[_p.strip() for _p in p])).is_symlink()
+    return Path(os.path.join(*[str(_p).strip() for _p in p])).is_symlink()
 
 
 def delete(path):
@@ -4963,6 +4964,7 @@ def init_pretrained_model(task: str, turbo: bool = False):
                     "*.json",
                     "*.safetensors",
                 ],
+                revision="33e62acdd07cd7d6635badd529aa0a3467bb9c6a"
             )
         )
         print(f"Source files downloaded to: {snapshot_dir}")
@@ -6750,11 +6752,25 @@ def train_model_rvc(experiment: str, path: str, lvl: int = 1):
 
     logger.info("Training complete, exporting files...")
     exp_files = export_files_rvc(exp_dir)
-    tmp_exp_dir = tmp(dir=True)
+    tmps = []
     for exp_file in exp_files:
-        copy(exp_file, tmp_exp_dir)
-    return read(tmp_exp_dir)
+        ext = path_ext(exp_file)
+        tmps.append(tmp(ext))
+        copy(exp_file, tmps[-1])
+    return tmps
 
+
+def path_name(p):
+    return str(Path(p).stem)
+
+
+def path_ext(p):
+    if is_directory(p):
+        return None
+    try:
+        return "".join(Path(p).suffixes)
+    except:
+        return None
 
 def convert_vocal_rvc(
     experiment: str, path: str, semi_tones: int = 0
