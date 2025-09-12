@@ -3213,6 +3213,7 @@ def master(source_path, strength, format_choice):
                 final_sound, output_stem, format_choice
             )
             delete(processed_path)
+            output_path = normalize_audio_to_peak(output_path)
             return output_path
     except Exception as e:
         catch(e)
