@@ -8361,6 +8361,8 @@ def autotune_vocals(
     import pydub.effects
     import soundfile as sf
 
+    reformat_audio(audio_path)
+
     print("--- Analyzing Audio ---")
     detected_key, detected_mode, detected_bpm = analyze_audio_features(audio_path, False)
 
