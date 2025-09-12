@@ -7729,35 +7729,50 @@ def get_audio_feedback(audio_path):
         return None
 
 
-def analyze_audio_features(audio_path):
+def analyze_audio_features(audio_path, txt=True):
     import librosa
     import madmom
+    from scipy.stats import pearsonr
 
     try:
         proc = madmom.features.beats.DBNBeatTrackingProcessor(fps=100)
         act = madmom.features.beats.RNNBeatProcessor()(audio_path)
-        bpm = np.median(60 / np.diff(proc(act)))
+        beat_times = proc(act)
+        bpm = np.median(60 / np.diff(beat_times)) if len(beat_times) > 1 else 0
+
         y, sr = librosa.load(audio_path)
         chroma = librosa.feature.chroma_stft(y=y, sr=sr)
-        key_map = [
-            "C",
-            "C#",
-            "D",
-            "D#",
-            "E",
-            "F",
-            "F#",
-            "G",
-            "G#",
-            "A",
-            "A#",
-            "B",
-        ]
-        key = key_map[np.argmax(np.sum(chroma, axis=1))]
-        return f"{key}, {bpm:.2f} BPM"
+        
+        chroma_profile = np.mean(chroma, axis=1)
+
+        major_template = np.array([6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88])
+        minor_template = np.array([6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17])
+
+        notes = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+        best_correlation = -1
+        detected_key = None
+        detected_mode = None
+
+        for i in range(12):
+            major_corr, _ = pearsonr(chroma_profile, np.roll(major_template, i))
+            if major_corr > best_correlation:
+                best_correlation = major_corr
+                detected_key = notes[i]
+                detected_mode = 'major'
+
+            minor_corr, _ = pearsonr(chroma_profile, np.roll(minor_template, i))
+            if minor_corr > best_correlation:
+                best_correlation = minor_corr
+                detected_key = notes[i]
+                detected_mode = 'minor'
+
+        if txt:
+            return f"{key} {detected_mode}, {bpm:.2f} BPM"
+        return detected_key, detected_mode, bpm
+
     except Exception as e:
-        catch(f"Analysis failed: {e}")
-        return None
+        print(f"Analysis failed: {e}")
+        return None, None, None
 
 
 def change_audio_speed(
@@ -8314,6 +8329,23 @@ def stretch_audio(input_path, output_path, speed_factor, crispness=6):
         return None
 
 
+def get_scale_notes(key='C', scale='major', octaves=5):
+    NOTES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+    SCALES = {
+        'major': [0, 2, 4, 5, 7, 9, 11],
+        'minor': [0, 2, 3, 5, 7, 8, 10]
+    }
+    
+    start_note_midi = 12 + NOTES.index(key.upper())
+    scale_intervals = SCALES.get(scale.lower(), SCALES['major'])
+    
+    scale_notes = []
+    for i in range(octaves * 12):
+        if (i % 12) in scale_intervals:
+            scale_notes.append(start_note_midi + i)
+    return _np.array(scale_notes)
+
+
 def autotune_vocals(
     audio_path,
     strength=0.7,
@@ -8328,6 +8360,15 @@ def autotune_vocals(
     import pydub
     import pydub.effects
     import soundfile as sf
+
+    print("--- Analyzing Audio ---")
+    detected_key, detected_mode, detected_bpm = analyze_audio_features(audio_path, False)
+
+    if not detected_key:
+        print("Could not determine key. Aborting autotune.")
+        return None
+
+    print(f"Detected Key: {detected_key} {detected_mode}, BPM: {detected_bpm:.2f}")
 
     print("--- Initializing Autotune ---")
     separation_dir = tmp(dir=True)
@@ -8389,97 +8430,49 @@ def autotune_vocals(
             else:
                 quantized_beat_times = beat_times
 
-            print("Splitting vocal track into non-silent segments...")
-            onset_frames = librosa.onset.onset_detect(
-                y=y, sr=sr, hop_length=512, units="frames"
-            )
-            onset_samples = librosa.frames_to_samples(
-                onset_frames, hop_length=512
+            print("Splitting vocal track into musical phrases...")
+
+            vocal_intervals = librosa.effects.split(
+                y_original, top_db=40, frame_length=2048, hop_length=512
             )
 
-            segment_boundaries = _np.concatenate(
-                [[0], onset_samples, [len(y)]]
-            )
-            segment_boundaries = _np.unique(segment_boundaries)
+            y_timed = _np.zeros_like(y_original)
 
-            vocal_intervals = []
+            if len(vocal_intervals) > 0 and len(quantized_beat_times) > 0:
+                print("Quantizing vocal phrases...")
 
-            for i in range(len(segment_boundaries) - 1):
-                start_sample = segment_boundaries[i]
-                end_sample = segment_boundaries[i + 1]
-                end_sample = min(end_sample, len(y))
-
-                if start_sample >= end_sample:
-                    continue
-
-                if _np.mean(y[start_sample:end_sample] ** 2) > 1e-6:
-                    vocal_intervals.append((start_sample, end_sample))
-
-            if (
-                len(vocal_intervals) > 0
-                and len(quantized_beat_times) > 0
-            ):
-                print(
-                    "Quantizing vocal segments with crossfades (optimized)..."
-                )
-                timed_segments = []
-                last_end_sample = 0
-                max_len = len(y)
+                TOLERANCE_SECONDS = 0.1
+                
                 for start_sample, end_sample in vocal_intervals:
-                    segment = y[start_sample:end_sample].copy()
-                    if len(segment) == 0:
-                        continue
-                    start_time = librosa.samples_to_time(
-                        start_sample, sr=sr
-                    )
-                    beat_duration = (
-                        _np.mean(_np.diff(beat_times))
-                        if len(beat_times) > 1
-                        else 0.5
-                    )
-                    threshold = beat_duration / 2.0
-                    future_beats = quantized_beat_times[
-                        quantized_beat_times
-                        >= librosa.samples_to_time(
-                            last_end_sample, sr=sr
-                        )
-                    ]
-                    best_quantized_time = find_best_beat(
-                        start_time,
-                        future_beats,
-                        downbeats,
-                        strong_beat_bias,
-                        threshold,
-                    )
+                    segment = y_original[start_sample:end_sample]
+                    start_time = librosa.samples_to_time(start_sample, sr=sr)
+                    time_diffs = _np.abs(quantized_beat_times - start_time)
+                    best_beat_index = _np.argmin(time_diffs)
+                    
                     final_pos = start_sample
-                    if best_quantized_time is not None:
-                        quantized_pos = librosa.time_to_samples(
-                            best_quantized_time, sr=sr
-                        )
-                        if quantized_pos >= last_end_sample:
-                            final_pos = quantized_pos
-                    final_pos = max(final_pos, last_end_sample)
-                    timed_segments.append((final_pos, segment))
-                    last_end_sample = final_pos + len(segment)
-                    max_len = max(max_len, last_end_sample)
 
-                y_timed = _np.zeros(max_len, dtype=_np.float32)
-                fade_len = int(0.01 * sr)
-                for pos, seg in timed_segments:
-                    safe_fade_len = min(fade_len, len(seg) // 2)
-                    if safe_fade_len > 0:
-                        fade_in = _np.hanning(safe_fade_len * 2)[
-                            :safe_fade_len
-                        ]
-                        fade_out = _np.hanning(safe_fade_len * 2)[
-                            safe_fade_len:
-                        ]
-                        seg[:safe_fade_len] *= fade_in
-                        seg[-safe_fade_len:] *= fade_out
-                    y_timed[pos : pos + len(seg)] += seg
-                y_timed = librosa.effects.trim(y_timed, top_db=60)[0]
+                    if time_diffs[best_beat_index] < TOLERANCE_SECONDS:
+                        pass
+                    else:
+                        best_quantized_time = quantized_beat_times[best_beat_index]
+                        quantized_pos = librosa.time_to_samples(best_quantized_time, sr=sr)
+                        final_pos = quantized_pos
+
+                    if final_pos + len(segment) <= len(y_timed):
+                        fade_len = min(int(0.02 * sr), len(segment) // 2)
+                        if fade_len > 0:
+                            fade_in = _np.linspace(0., 1., fade_len)
+                            segment[:fade_len] *= fade_in
+                            segment[-fade_len:] *= fade_in[::-1]
+                        
+                        y_timed[final_pos : final_pos + len(segment)] += segment
+
                 y = y_timed
                 print("Vocal rhythm correction applied successfully.")
+
+            else:
+                y = y_original
+
         except Exception as e:
             print(
                 f"Rhythm correction failed, proceeding with original timing. Error: {e}"
@@ -8487,6 +8480,8 @@ def autotune_vocals(
             y = y_original
 
         print("\n--- Pitch Correction with Rubberband ---")
+
+        allowed_notes = get_scale_notes(key=detected_key, scale=detected_mode)
         n_fft, hop_length = 2048, 512
         f0, voiced_flag, _ = librosa.pyin(
             y,
@@ -8501,7 +8496,10 @@ def autotune_vocals(
         for i in range(len(f0)):
             if voiced_flag[i] and f0[i] > 0:
                 current_f0 = f0[i]
-                target_midi = round(librosa.hz_to_midi(current_f0))
+                current_midi = librosa.hz_to_midi(current_f0)
+                note_diffs = _np.abs(allowed_notes - current_midi)
+                closest_note_index = _np.argmin(note_diffs)
+                target_midi = allowed_notes[closest_note_index]
                 ideal_f0 = librosa.midi_to_hz(target_midi)
                 if humanize > 0:
                     cents_dev = _np.random.normal(
