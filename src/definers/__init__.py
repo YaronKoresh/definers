@@ -3330,7 +3330,9 @@ def add_path(*p):
 
 
 def full_path(*p):
-    return str(Path(os.path.join(*[str(_p).strip() for _p in p])).resolve())
+    return str(
+        Path(os.path.join(*[str(_p).strip() for _p in p])).resolve()
+    )
 
 
 def paths(*patterns):
@@ -3349,14 +3351,9 @@ def paths(*patterns):
 
 
 def copy(src, dst):
-    if (
-        is_directory(full_path(src))
-    ):
+    if is_directory(full_path(src)):
         shutil.copytree(
-            src,
-            dst,
-            symlinks=False,
-            ignore_dangling_symlinks=True
+            src, dst, symlinks=False, ignore_dangling_symlinks=True
         )
     else:
         shutil.copy(src, dst)
@@ -3517,7 +3514,9 @@ def is_directory(*p):
 
 
 def is_symlink(*p):
-    return Path(os.path.join(*[str(_p).strip() for _p in p])).is_symlink()
+    return Path(
+        os.path.join(*[str(_p).strip() for _p in p])
+    ).is_symlink()
 
 
 def delete(path):
@@ -3555,7 +3554,7 @@ def write(path, txt=""):
     return save(path, txt)
 
 
-def parent_directory(p, levels:int=1):
+def parent_directory(p, levels: int = 1):
     path = Path(str(p))
     for _ in range(levels):
         path = path.parent
@@ -3563,10 +3562,7 @@ def parent_directory(p, levels:int=1):
 
 
 def save(path, text=""):
-    os.makedirs(
-        parent_directory(path),
-        exist_ok=True
-    )
+    os.makedirs(parent_directory(path), exist_ok=True)
     with open(path, "w+", encoding="utf8") as file:
         file.write(str(text))
 
@@ -4964,7 +4960,7 @@ def init_pretrained_model(task: str, turbo: bool = False):
                     "*.json",
                     "*.safetensors",
                 ],
-                revision="33e62acdd07cd7d6635badd529aa0a3467bb9c6a"
+                revision="33e62acdd07cd7d6635badd529aa0a3467bb9c6a",
             )
         )
         print(f"Source files downloaded to: {snapshot_dir}")
@@ -6772,9 +6768,8 @@ def path_ext(p):
     except:
         return None
 
-def convert_vocal_rvc(
-    experiment: str, path: str
-):
+
+def convert_vocal_rvc(experiment: str, path: str):
     logger.info(
         f"Starting vocal conversion for experiment: {experiment} with pitch shift {semi_tones}"
     )
@@ -7731,33 +7726,84 @@ def analyze_audio_features(audio_path, txt=True):
         proc = madmom.features.beats.DBNBeatTrackingProcessor(fps=100)
         act = madmom.features.beats.RNNBeatProcessor()(audio_path)
         beat_times = proc(act)
-        bpm = np.median(60 / np.diff(beat_times)) if len(beat_times) > 1 else 0
+        bpm = (
+            np.median(60 / np.diff(beat_times))
+            if len(beat_times) > 1
+            else 0
+        )
 
         y, sr = librosa.load(audio_path)
         chroma = librosa.feature.chroma_stft(y=y, sr=sr)
-        
+
         chroma_profile = np.mean(chroma, axis=1)
 
-        major_template = np.array([6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88])
-        minor_template = np.array([6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17])
+        major_template = np.array(
+            [
+                6.35,
+                2.23,
+                3.48,
+                2.33,
+                4.38,
+                4.09,
+                2.52,
+                5.19,
+                2.39,
+                3.66,
+                2.29,
+                2.88,
+            ]
+        )
+        minor_template = np.array(
+            [
+                6.33,
+                2.68,
+                3.52,
+                5.38,
+                2.60,
+                3.53,
+                2.54,
+                4.75,
+                3.98,
+                2.69,
+                3.34,
+                3.17,
+            ]
+        )
 
-        notes = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+        notes = [
+            "C",
+            "C#",
+            "D",
+            "D#",
+            "E",
+            "F",
+            "F#",
+            "G",
+            "G#",
+            "A",
+            "A#",
+            "B",
+        ]
         best_correlation = -1
         detected_key = None
         detected_mode = None
 
         for i in range(12):
-            major_corr, _ = pearsonr(chroma_profile, np.roll(major_template, i))
+            major_corr, _ = pearsonr(
+                chroma_profile, np.roll(major_template, i)
+            )
             if major_corr > best_correlation:
                 best_correlation = major_corr
                 detected_key = notes[i]
-                detected_mode = 'major'
+                detected_mode = "major"
 
-            minor_corr, _ = pearsonr(chroma_profile, np.roll(minor_template, i))
+            minor_corr, _ = pearsonr(
+                chroma_profile, np.roll(minor_template, i)
+            )
             if minor_corr > best_correlation:
                 best_correlation = minor_corr
                 detected_key = notes[i]
-                detected_mode = 'minor'
+                detected_mode = "minor"
 
         if txt:
             return f"{key} {detected_mode}, {bpm:.2f} BPM"
@@ -8264,7 +8310,9 @@ def calculate_active_rms(y, sr):
     return _np.sqrt(_np.mean(active_audio**2))
 
 
-def normalize_audio_to_peak(input_path:str, target_level:float=0.99, format:str=None):
+def normalize_audio_to_peak(
+    input_path: str, target_level: float = 0.99, format: str = None
+):
     from pydub import AudioSegment
     from pydub.effects import normalize
 
@@ -8313,6 +8361,7 @@ def normalize_audio_to_peak(input_path:str, target_level:float=0.99, format:str=
 
     return output_path
 
+
 def stretch_audio(input_path, output_path, speed_factor, crispness=6):
     if not os.path.exists(input_path):
         return None
@@ -8335,16 +8384,29 @@ def stretch_audio(input_path, output_path, speed_factor, crispness=6):
         return None
 
 
-def get_scale_notes(key='C', scale='major', octaves=5):
-    NOTES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+def get_scale_notes(key="C", scale="major", octaves=5):
+    NOTES = [
+        "C",
+        "C#",
+        "D",
+        "D#",
+        "E",
+        "F",
+        "F#",
+        "G",
+        "G#",
+        "A",
+        "A#",
+        "B",
+    ]
     SCALES = {
-        'major': [0, 2, 4, 5, 7, 9, 11],
-        'minor': [0, 2, 3, 5, 7, 8, 10]
+        "major": [0, 2, 4, 5, 7, 9, 11],
+        "minor": [0, 2, 3, 5, 7, 8, 10],
     }
-    
+
     start_note_midi = 12 + NOTES.index(key.upper())
-    scale_intervals = SCALES.get(scale.lower(), SCALES['major'])
-    
+    scale_intervals = SCALES.get(scale.lower(), SCALES["major"])
+
     scale_notes = []
     for i in range(octaves * 12):
         if (i % 12) in scale_intervals:
@@ -8368,13 +8430,17 @@ def autotune_vocals(
     normalize_audio_to_peak(audio_path)
 
     print("--- Analyzing Audio ---")
-    detected_key, detected_mode, detected_bpm = analyze_audio_features(audio_path, False)
+    detected_key, detected_mode, detected_bpm = (
+        analyze_audio_features(audio_path, False)
+    )
 
     if not detected_key:
         print("Could not determine key. Aborting autotune.")
         return None
 
-    print(f"Detected Key: {detected_key} {detected_mode}, BPM: {detected_bpm:.2f}")
+    print(
+        f"Detected Key: {detected_key} {detected_mode}, BPM: {detected_bpm:.2f}"
+    )
 
     print("--- Initializing Autotune ---")
     separation_dir = tmp(dir=True)
@@ -8439,39 +8505,60 @@ def autotune_vocals(
             print("Splitting vocal track into musical phrases...")
 
             vocal_intervals = librosa.effects.split(
-                y_original, top_db=40, frame_length=2048, hop_length=512
+                y_original,
+                top_db=40,
+                frame_length=2048,
+                hop_length=512,
             )
 
             y_timed = _np.zeros_like(y_original)
 
-            if len(vocal_intervals) > 0 and len(quantized_beat_times) > 0:
+            if (
+                len(vocal_intervals) > 0
+                and len(quantized_beat_times) > 0
+            ):
                 print("Quantizing vocal phrases...")
 
                 TOLERANCE_SECONDS = 0.1
-                
+
                 for start_sample, end_sample in vocal_intervals:
                     segment = y_original[start_sample:end_sample]
-                    start_time = librosa.samples_to_time(start_sample, sr=sr)
-                    time_diffs = _np.abs(quantized_beat_times - start_time)
+                    start_time = librosa.samples_to_time(
+                        start_sample, sr=sr
+                    )
+                    time_diffs = _np.abs(
+                        quantized_beat_times - start_time
+                    )
                     best_beat_index = _np.argmin(time_diffs)
-                    
+
                     final_pos = start_sample
 
-                    if time_diffs[best_beat_index] < TOLERANCE_SECONDS:
+                    if (
+                        time_diffs[best_beat_index]
+                        < TOLERANCE_SECONDS
+                    ):
                         pass
                     else:
-                        best_quantized_time = quantized_beat_times[best_beat_index]
-                        quantized_pos = librosa.time_to_samples(best_quantized_time, sr=sr)
+                        best_quantized_time = quantized_beat_times[
+                            best_beat_index
+                        ]
+                        quantized_pos = librosa.time_to_samples(
+                            best_quantized_time, sr=sr
+                        )
                         final_pos = quantized_pos
 
                     if final_pos + len(segment) <= len(y_timed):
-                        fade_len = min(int(0.02 * sr), len(segment) // 2)
+                        fade_len = min(
+                            int(0.02 * sr), len(segment) // 2
+                        )
                         if fade_len > 0:
-                            fade_in = _np.linspace(0., 1., fade_len)
+                            fade_in = _np.linspace(0.0, 1.0, fade_len)
                             segment[:fade_len] *= fade_in
                             segment[-fade_len:] *= fade_in[::-1]
-                        
-                        y_timed[final_pos : final_pos + len(segment)] += segment
+
+                        y_timed[
+                            final_pos : final_pos + len(segment)
+                        ] += segment
 
                 y = y_timed
                 print("Vocal rhythm correction applied successfully.")
@@ -8487,7 +8574,9 @@ def autotune_vocals(
 
         print("\n--- Pitch Correction with Rubberband ---")
 
-        allowed_notes = get_scale_notes(key=detected_key, scale=detected_mode)
+        allowed_notes = get_scale_notes(
+            key=detected_key, scale=detected_mode
+        )
         n_fft, hop_length = 2048, 512
         f0, voiced_flag, _ = librosa.pyin(
             y,
@@ -8572,7 +8661,9 @@ def autotune_vocals(
         base = pydub.AudioSegment.silent(
             duration=max_duration, frame_rate=instrumental.frame_rate
         )
-        combined = base.overlay(instrumental).overlay(tuned_vocals - 3)
+        combined = base.overlay(instrumental).overlay(
+            tuned_vocals - 3
+        )
 
         output_stem = f"{Path(audio_path).stem}_autotuned"
         final_output_path = f"{output_stem}.{format_choice}"
