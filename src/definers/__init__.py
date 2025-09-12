@@ -8352,11 +8352,10 @@ def get_scale_notes(key='C', scale='major', octaves=5):
 
 def autotune_vocals(
     audio_path,
-    strength=0.7,
+    strength=0.5,
     format_choice="mp3",
-    humanize=0.5,
-    quantize_grid=16,
-    strong_beat_bias=0.1,
+    humanize=1.0,
+    quantize_grid=8,
     beats_per_bar=(4, 4),
 ):
     import librosa
