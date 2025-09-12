@@ -7216,7 +7216,7 @@ def beat_visualizer(
             return 1 + 0.1 * (t / duration)
         elif animation_style == "Zoom Out":
             return 1.1 - 0.1 * (t / duration)
-        return 1.0 # No animation
+        return 1.0
 
     def final_scale_func(t):
         return base_animation_func(t) * beat_scale_func(t)
@@ -7224,7 +7224,7 @@ def beat_visualizer(
     image_clip = ImageClip(temp_img_path, duration=duration)
 
     final_clip = (
-        image_clip.resized(final_scale_func) # Apply the unified function once
+        image_clip.resized(final_scale_func)
         .with_position(("center", "center"))
         .with_audio(audio_clip)
     )
@@ -8262,9 +8262,9 @@ def normalize_audio_to_peak(input_path:str, target_level:float=0.99, format:str=
     from pydub.effects import normalize
 
     if format is None:
-        if input_path.lower().endswith(".mp3"):
+        if str(input_path).lower().endswith(".mp3"):
             format = "mp3"
-        elif input_path.lower().endswith(".flac"):
+        elif str(input_path).lower().endswith(".flac"):
             format = "flac"
         else:
             format = "wav"
