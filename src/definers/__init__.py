@@ -3530,7 +3530,7 @@ def remove(path):
 
 
 def load(path):
-    path = os.path.realpath(str(path))
+    path = full_path(str(path))
     permit(path)
     if not os.path.exists(path):
         return None
@@ -6739,7 +6739,11 @@ def train_model_rvc(experiment: str, path: str, lvl: int = 1):
     logger.info("Model training complete.")
 
     logger.info("Training complete, exporting files...")
-    return export_files_rvc(exp_dir)
+    exp_files = export_files_rvc(exp_dir)
+    tmp_exp_dir = tmp(dir=True)
+    for exp_file in exp_files:
+        copy(exp_file, tmp_exp_dir)
+    return read(tmp_exp_dir)
 
 
 def convert_vocal_rvc(
@@ -6835,9 +6839,7 @@ def convert_vocal_rvc(
             f"Conversion successful, saving output audio with shape {aud.shape} at sample rate {sr}"
         )
         try:
-            temp_dir = os.path.join(now_dir, "TEMP")
-            directory(temp_dir)
-            out_path = os.path.join(temp_dir, "output.wav")
+            out_path = tmp("wav")
 
             import soundfile as sf
 
