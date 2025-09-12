@@ -6380,11 +6380,21 @@ def train_model_rvc(experiment: str, path: str, lvl: int = 1, f0method : str = "
     slow_voice_4 = pitch_shift_vocals(slow_voice_mid, 6, "wav")
     slow_voice_5 = pitch_shift_vocals(slow_voice_mid, 12, "wav")
 
-    multi_tonal_voice = pydub.AudioSegment.from_file(slow_voice_1)
-    .append(pydub.AudioSegment.from_file(slow_voice_2), crossfade=200)
-    .append(pydub.AudioSegment.from_file(slow_voice_3), crossfade=100)
-    .append(pydub.AudioSegment.from_file(slow_voice_4), crossfade=300)
-    .append(pydub.AudioSegment.from_file(slow_voice_5), crossfade=150)
+    multi_tonal_voice = pydub.AudioSegment.from_file(
+        slow_voice_1
+    ).append(
+        pydub.AudioSegment.from_file(slow_voice_2),
+        crossfade=200
+    ).append(
+        pydub.AudioSegment.from_file(slow_voice_3),
+        crossfade=100
+    ).append(
+        pydub.AudioSegment.from_file(slow_voice_4),
+        crossfade=300
+    ).append(
+        pydub.AudioSegment.from_file(slow_voice_5),
+        crossfade=150
+    )
 
     path = export_audio(multi_tonal_voice, random_string(), "wav")
     path = master(path, mastering_level, "wav")
@@ -6604,9 +6614,7 @@ def train_model_rvc(experiment: str, path: str, lvl: int = 1, f0method : str = "
                 compute_labels=False,
                 init="random",
                 n_init=3,
-            )
-            .fit(big_npy)
-            .cluster_centers_
+            ).fit(big_npy).cluster_centers_
         )
         logger.info(f"KMeans cluster centers shape: {big_npy.shape}")
 
