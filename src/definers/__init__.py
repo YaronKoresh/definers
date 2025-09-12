@@ -6357,15 +6357,37 @@ def find_latest_checkpoint(
     return latest_checkpoint
 
 
-def train_model_rvc(experiment: str, path: str, lvl: int = 1):
+def train_model_rvc(experiment: str, path: str, lvl: int = 1, f0method : str = "rmvpe"):
     logger.info(f"Starting RVC training for experiment: {experiment}")
 
     import torch
+    import pydub
 
     from .configs.config import Config
     from .i18n.i18n import I18nAuto
 
-    path = normalize_audio_to_peak(path)
+    mastering_level = 2.2
+    slower_voice = 0.85
+    faster_voice = 1 / slower_voice
+
+    voice, music = separate_stems(path)
+    
+    slow_voice_3 = tmp("wav")
+    stretch_audio(path, slow_voice, slower_voice)
+
+    slow_voice_2 = pitch_shift_vocals(slow_voice_mid, -6, "wav")
+    slow_voice_1 = pitch_shift_vocals(slow_voice_mid, -12, "wav")
+    slow_voice_4 = pitch_shift_vocals(slow_voice_mid, 6, "wav")
+    slow_voice_5 = pitch_shift_vocals(slow_voice_mid, 12, "wav")
+
+    multi_tonal_voice = pydub.AudioSegment.from_file(slow_voice_1)
+    .append(pydub.AudioSegment.from_file(slow_voice_2), crossfade=200)
+    .append(pydub.AudioSegment.from_file(slow_voice_3), crossfade=100)
+    .append(pydub.AudioSegment.from_file(slow_voice_4), crossfade=300)
+    .append(pydub.AudioSegment.from_file(slow_voice_5), crossfade=150)
+
+    path = export_audio(multi_tonal_voice, random_string(), "wav")
+    path = master(path, mastering_level, "wav")
 
     now_dir = os.getcwd()
     index_root = os.path.join(now_dir, "logs")
@@ -6429,7 +6451,6 @@ def train_model_rvc(experiment: str, path: str, lvl: int = 1):
     n_p = int(_np.ceil(config.n_cpu / 1.5))
     log_file_preprocess = os.path.join(exp_path, "preprocess.log")
 
-    f0method = "rmvpe"
     if_f0 = True
     gpus_rmvpe = f"{gpus}-{gpus}"
     log_file_f0_feature = os.path.join(
@@ -6531,7 +6552,7 @@ def train_model_rvc(experiment: str, path: str, lvl: int = 1):
 
     except Exception as e:
         catch(f"An error occurred during F0 or feature extraction")
-        catch()
+        catch(e)
         return None
     logger.info("Feature extraction complete.")
 
@@ -6577,7 +6598,7 @@ def train_model_rvc(experiment: str, path: str, lvl: int = 1):
 
         big_npy = (
             MiniBatchKMeans(
-                n_clusters=1000,
+                n_clusters=8000,
                 verbose=False,
                 batch_size=256 * config.n_cpu,
                 compute_labels=False,
@@ -6622,7 +6643,7 @@ def train_model_rvc(experiment: str, path: str, lvl: int = 1):
         )
 
         logger.info("Adding features to Faiss index...")
-        batch_size_add = 1024
+        batch_size_add = 8192
         for i in range(0, big_npy.shape[0], batch_size_add):
             index.add(big_npy[i : i + batch_size_add])
         logger.info("Features added to Faiss index.")
@@ -6670,8 +6691,8 @@ def train_model_rvc(experiment: str, path: str, lvl: int = 1):
         pretrained_D = "assets/pretrained_v2/f0D48k.pth"
 
         batch_size = default_batch_size
-        total_epoch = 80 * lvl
-        save_epoch = 40
+        total_epoch = 20000 * lvl
+        save_epoch = 20000
         if_save_latest = 1
         if_cache_gpu = 1
         if_save_every_weights = 1
@@ -6680,7 +6701,7 @@ def train_model_rvc(experiment: str, path: str, lvl: int = 1):
         config_path = "v2/48k.json"
         config_save_path = os.path.join(exp_path, "config.json")
 
-        if not pathlib.Path(config_save_path).exists():
+        if not exist(config_save_path):
             logger.info(
                 f"Saving training config to: {config_save_path}"
             )
@@ -6777,9 +6798,10 @@ def convert_vocal_rvc(experiment: str, path: str):
     from .configs.config import Config
     from .infer.modules.vc.modules import VC
 
-    semi_tones = -12
+    semi_tones = -5
 
-    path = normalize_audio_to_peak(path)
+    voice, music = separate_stems(path)
+    path = normalize_audio_to_peak(voice)
 
     now_dir = os.getcwd()
     index_root = os.path.join(now_dir, "logs")
@@ -6817,8 +6839,10 @@ def convert_vocal_rvc(experiment: str, path: str):
             f"No index file found for experiment '{experiment}' in '{exp_path}'. Conversion may be less effective."
         )
 
-    index_rate = 0.5
+    index_rate = 0.8
+    protect = 0.8
     f0_mean_pooling = 1
+    rms_mix_rate = 0.8
     try:
         vc.get_vc(
             latest_checkpoint_filename, index_rate, f0_mean_pooling
@@ -6835,14 +6859,14 @@ def convert_vocal_rvc(experiment: str, path: str):
             path,
             semi_tones,
             None,
-            "crepe",
+            "rmvpe",
             idx_path,
             None,
             index_rate,
             3,
             0,
-            0.5,
-            0.7,
+            rms_mix_rate,
+            protect,
         )
         logger.info(f"Vocal conversion message: {message}")
 
@@ -6862,11 +6886,15 @@ def convert_vocal_rvc(experiment: str, path: str):
             f"Conversion successful, saving output audio with shape {aud.shape} at sample rate {sr}"
         )
         try:
-            out_path = tmp("wav")
+            out_voice = tmp("wav")
 
+            import pydub
             import soundfile as sf
 
-            sf.write(out_path, aud, sr)
+            sf.write(out_voice, aud, sr)
+
+            out_path = stem_mixer([out_voice, music], "mp3")
+
             logger.info(f"Output audio saved to: {out_path}")
             return out_path
 
@@ -7213,10 +7241,12 @@ def beat_visualizer(
     scale_intensity,
 ):
     import librosa
-    from moviepy import AudioFileClip, ImageClip
+    from moviepy import AudioFileClip, ImageClip, CompositeVideoClip, ColorClip
     from PIL import Image, ImageFilter
 
     img = Image.open(image_path)
+    W, H = img.size
+
     effect_map = {
         "Blur": ImageFilter.BLUR,
         "Sharpen": ImageFilter.SHARPEN,
@@ -7225,20 +7255,21 @@ def beat_visualizer(
     }
     if image_effect in effect_map:
         img = img.filter(effect_map[image_effect])
-    temp_img_path = tmp(".png")
-    img.save(temp_img_path)
+
     output_path = tmp(".mp4")
     audio_clip = AudioFileClip(audio_path)
     duration = audio_clip.duration
+
     y, sr = librosa.load(audio_path, sr=None)
-    rms = librosa.feature.rms(y=y)[0]
-    scales = 1.0 + (
-        ((rms - _np.min(rms)) / (_np.max(rms) - _np.min(rms) + 1e-6))
-        * (scale_intensity - 1.0)
-    )
+    hop_length = 512
+    rms = librosa.feature.rms(y=y, hop_length=hop_length)[0]
+
+    rms_normalized = (rms - _np.min(rms)) / (_np.max(rms) - _np.min(rms) + 1e-7)
+    scales = 1.0 + (rms_normalized * (scale_intensity - 1.0))
 
     def beat_scale_func(t):
-        frame_index = min(int(t * sr / 512), len(scales) - 1)
+        frame_index = int(t * sr / hop_length)
+        frame_index = min(frame_index, len(scales) - 1)
         return scales[frame_index]
 
     def base_animation_func(t):
@@ -7251,22 +7282,23 @@ def beat_visualizer(
     def final_scale_func(t):
         return base_animation_func(t) * beat_scale_func(t)
 
-    image_clip = ImageClip(temp_img_path, duration=duration)
+    image_clip = ImageClip(_np.array(img), duration=duration)
 
-    final_clip = (
-        image_clip.resized(final_scale_func)
-        .with_position(("center", "center"))
-        .with_audio(audio_clip)
+    animated_image = image_clip.resized(final_scale_func).with_position(
+        ("center", "center")
     )
 
+    background = ColorClip(size=(W, H), color=(0, 0, 0), duration=duration)
+
+    final_clip = CompositeVideoClip([background, animated_image])
+    final_clip = final_clip.with_audio(audio_clip)
     final_clip.write_videofile(
         output_path,
         codec="libx264",
         fps=24,
-        audio_codec="aac",
-        logger=None,
+        audio_codec="aac"
     )
-    delete(temp_img_path)
+    
     return output_path
 
 
@@ -7846,7 +7878,7 @@ def change_audio_speed(
         return None
 
 
-def separate_stems(audio_path, separation_type, format_choice):
+def separate_stems(audio_path, separation_type=None, format_choice="mp3"):
     import pydub
 
     output_dir = tmp(dir=True)
@@ -7858,24 +7890,30 @@ def separate_stems(audio_path, separation_type, format_choice):
     )
     vocals_path = separated_dir / "vocals.wav"
     accompaniment_path = separated_dir / "no_vocals.wav"
+
     if not vocals_path.exists() or not accompaniment_path.exists():
         delete(output_dir)
         catch("Stem separation failed.")
         return None
-    chosen_stem_path, suffix = (
-        (vocals_path, "_acapella")
-        if "acapella" in separation_type.lower()
-        else (accompaniment_path, "_karaoke")
-    )
-    sound = pydub.AudioSegment.from_file(chosen_stem_path)
-    output_stem = str(
-        Path(audio_path).with_name(Path(audio_path).stem + suffix)
-    )
-    final_output_path = export_audio(
-        sound, output_stem, format_choice
-    )
-    delete(output_dir)
-    return final_output_path
+
+    def _export_stem(chosen_stem_path, suffix):
+        sound = pydub.AudioSegment.from_file(chosen_stem_path)
+        output_stem = str(
+            Path(audio_path).with_name(Path(audio_path).stem + suffix)
+        )
+        final_output_path = export_audio(
+            sound, output_stem, format_choice
+        )
+        delete(output_dir)
+        return final_output_path
+
+    if "acapella" in separation_type:
+        return _export_stem(vocals_path, "_acapella")
+        
+    if "karaoke" in separation_type:
+        return _export_stem(accompaniment_path, "_karaoke")
+
+    return _export_stem(vocals_path, "_acapella"), _export_stem(accompaniment_path, "_karaoke")
 
 
 def pitch_shift_vocals(audio_path, pitch_shift, format_choice):
@@ -8090,13 +8128,13 @@ def stem_mixer(files, format_choice):
         return None
 
     print("\n--- Mixing Stems ---")
-    mixed_y = _np.zeros(max_length, dtype=_np.float32)
+    mixed_y = np.zeros(max_length, dtype=np.float32)
 
     for stem_audio in processed_stems:
         mixed_y[: len(stem_audio)] += stem_audio
 
     print("Mixing complete. Normalizing volume...")
-    peak_amplitude = _np.max(_np.abs(mixed_y))
+    peak_amplitude = np.max(np.abs(mixed_y))
     if peak_amplitude > 0:
         mixed_y = mixed_y / peak_amplitude * 0.99
 
@@ -8104,7 +8142,7 @@ def stem_mixer(files, format_choice):
     temp_wav_path = tmp(".wav")
 
     write_wav(
-        temp_wav_path, target_sr, (mixed_y * 32767).astype(_np.int16)
+        temp_wav_path, target_sr, (mixed_y * 32767).astype(np.int16)
     )
 
     sound = pydub.AudioSegment.from_file(temp_wav_path)
@@ -8362,7 +8400,7 @@ def normalize_audio_to_peak(
     return output_path
 
 
-def stretch_audio(input_path, output_path, speed_factor, crispness=6):
+def stretch_audio(input_path, output_path, speed_factor):
     if not os.path.exists(input_path):
         return None
     command = [
