@@ -868,9 +868,9 @@ def answer(history: list):
 
     generate_ids = MODELS["answer"].generate(
         **inputs,
-        max_new_tokens=1000,
-        num_beams=16,
-        length_penalty=1.5,
+        max_new_tokens=500,
+        num_beams=8,
+        length_penalty=1.2,
         num_logits_to_keep=1,
     )
 
