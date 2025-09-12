@@ -3296,7 +3296,7 @@ def simple_text(prompt):
 
     prompt = re.sub("[\t]", " ", prompt)
     prompt = re.sub(
-        "[\. \n]+\.[\. \n]*|[\. \n]*\.[\. \n]+", ".", prompt
+        "[\. \n]+\.[\.\n]*|[\. \n]*\.[\.\n]+", ".", prompt
     )
     prompt = re.sub("(\n){2,}", "\n", prompt)
     prompt = re.sub("(-){2,}", "-", prompt)
