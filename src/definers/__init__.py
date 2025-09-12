@@ -3173,48 +3173,6 @@ def get_max_resolution(width, height, mega_pixels=0.25, factor=16):
     return new_w, new_h
 
 
-def normalize_audio_to_peak(input_path: str, target_level: float):
-    from pydub import AudioSegment
-    from pydub.effects import normalize
-
-    output_path = tmp("wav")
-
-    if not 0.0 <= target_level <= 1.0:
-        catch("target_level must be between 0.0 and 1.0")
-        return None
-
-    try:
-        audio = AudioSegment.from_file(input_path)
-    except FileNotFoundError:
-        catch(f"Error: Input file not found at {input_path}")
-        return None
-
-    if target_level == 0.0 or audio.max_possible_amplitude == 0:
-        silent_audio = AudioSegment.silent(duration=len(audio))
-        silent_audio.export(
-            output_path, format=output_path.split(".")[-1]
-        )
-        print(
-            f"Target level is 0 or audio is silent. Saved silent file to '{output_path}'"
-        )
-        return output_path
-
-    target_dbfs = 20 * math.log10(target_level)
-
-    normalized_audio = normalize(audio, headroom=abs(target_dbfs))
-
-    normalized_audio.export(
-        output_path, format=output_path.split(".")[-1]
-    )
-
-    print(
-        f"Successfully normalized '{input_path}' to a peak of {target_dbfs:.2f} dBFS."
-    )
-    print(f"Saved result to '{output_path}'")
-
-    return output_path
-
-
 def master(source_path, strength, format_choice):
     import matchering as mg
     import pydub
@@ -6398,7 +6356,7 @@ def train_model_rvc(experiment: str, path: str, lvl: int = 1):
     from .configs.config import Config
     from .i18n.i18n import I18nAuto
 
-    path = reformat_audio(path)
+    path = normalize_audio_to_peak(path)
 
     now_dir = os.getcwd()
     index_root = os.path.join(now_dir, "logs")
@@ -6789,7 +6747,7 @@ def convert_vocal_rvc(
     from .configs.config import Config
     from .infer.modules.vc.modules import VC
 
-    path = reformat_audio(path)
+    path = normalize_audio_to_peak(path)
 
     now_dir = os.getcwd()
     index_root = os.path.join(now_dir, "logs")
@@ -8299,13 +8257,54 @@ def calculate_active_rms(y, sr):
     return _np.sqrt(_np.mean(active_audio**2))
 
 
-def reformat_audio(path):
-    import pydub
+def normalize_audio_to_peak(input_path:str, target_level:float=0.99, format:str=None):
+    from pydub import AudioSegment
+    from pydub.effects import normalize
 
-    y = pydub.AudioSegment.from_file(path)
-    output_path = export_audio(y, random_string(), "wav")
+    if format is None:
+        if path.lower().endswith(".mp3"):
+            format = "mp3"
+        elif path.lower().endswith(".flac"):
+            format = "flac"
+        else:
+            format = "wav"
+
+    output_path = tmp(format)
+
+    if not 0.0 <= target_level <= 1.0:
+        catch("target_level must be between 0.0 and 1.0")
+        return None
+
+    try:
+        audio = AudioSegment.from_file(input_path)
+    except FileNotFoundError:
+        catch(f"Error: Input file not found at {input_path}")
+        return None
+
+    if target_level == 0.0 or audio.max_possible_amplitude == 0:
+        silent_audio = AudioSegment.silent(duration=len(audio))
+        silent_audio.export(
+            output_path, format=output_path.split(".")[-1]
+        )
+        print(
+            f"Target level is 0 or audio is silent. Saved silent file to '{output_path}'"
+        )
+        return output_path
+
+    target_dbfs = 20 * math.log10(target_level)
+
+    normalized_audio = normalize(audio, headroom=abs(target_dbfs))
+
+    normalized_audio.export(
+        output_path, format=output_path.split(".")[-1]
+    )
+
+    print(
+        f"Successfully normalized '{input_path}' to a peak of {target_dbfs:.2f} dBFS."
+    )
+    print(f"Saved result to '{output_path}'")
+
     return output_path
-
 
 def stretch_audio(input_path, output_path, speed_factor, crispness=6):
     if not os.path.exists(input_path):
@@ -8358,10 +8357,9 @@ def autotune_vocals(
     import librosa
     import madmom
     import pydub
-    import pydub.effects
     import soundfile as sf
 
-    reformat_audio(audio_path)
+    normalize_audio_to_peak(audio_path)
 
     print("--- Analyzing Audio ---")
     detected_key, detected_mode, detected_bpm = analyze_audio_features(audio_path, False)
@@ -8387,10 +8385,10 @@ def autotune_vocals(
             / Path(audio_path).stem
         )
         vocals_path = Path(
-            reformat_audio(separated_dir / "vocals.wav")
+            normalize_audio_to_peak(separated_dir / "vocals.wav")
         )
         instrumental_path = Path(
-            reformat_audio(separated_dir / "no_vocals.wav")
+            normalize_audio_to_peak(separated_dir / "no_vocals.wav")
         )
         if not vocals_path.exists() or not instrumental_path.exists():
             raise FileNotFoundError("Vocal separation failed.")
@@ -8568,14 +8566,14 @@ def autotune_vocals(
         base = pydub.AudioSegment.silent(
             duration=max_duration, frame_rate=instrumental.frame_rate
         )
-        combined = base.overlay(instrumental).overlay(tuned_vocals)
-
-        print("Normalizing final track to prevent clipping...")
-        combined = pydub.effects.normalize(combined, headroom=1.0)
+        combined = base.overlay(instrumental).overlay(tuned_vocals - 3)
 
         output_stem = f"{Path(audio_path).stem}_autotuned"
         final_output_path = f"{output_stem}.{format_choice}"
         combined.export(final_output_path, format=format_choice)
+
+        print("Normalizing final track to prevent clipping...")
+        final_output_path = normalize_audio_to_peak(final_output_path)
 
         print(f"\n--- Autotune Complete ---")
         print(f"Final audio saved to: {final_output_path}")
