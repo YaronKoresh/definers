@@ -7273,7 +7273,7 @@ def music_video(
     ) / (
         _np.max(spectral_centroid) - _np.min(spectral_centroid) + 1e-6
     )
-    (w,) = width
+    w = width
     h = height
     center_x, center_y = w // 2, h // 2
     rr, cc = _np.ogrid[:h, :w]
