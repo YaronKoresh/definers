@@ -3316,12 +3316,8 @@ def simple_text(prompt):
     return prompt
 
 
-def exist(path):
-    stripped_path = path.strip()
-    if not stripped_path:
-        return False
-    path = os.path.abspath(os.path.expanduser(stripped_path))
-    return os.path.exists(path)
+def exist(*p):
+    return Path(os.path.join(*[_p.strip() for _p in p])).exists()
 
 
 def add_path(*p):
@@ -3334,7 +3330,7 @@ def add_path(*p):
 
 
 def full_path(*p):
-    return os.path.abspath(os.path.expanduser(os.path.join(*[_p.strip() for _p in p])))
+    return str(Path(os.path.join(*[_p.strip() for _p in p])).resolve())
 
 
 def paths(*patterns):
@@ -3499,9 +3495,9 @@ def directory(dir):
 
 def move(src, dest):
     if (
-        os.path.isdir(src)
-        or Path(src).is_symlink()
-        and os.path.isdir(str(Path(src).resolve()))
+        is_directory(src)
+        or is_symlink(src)
+        and is_directory(full_path(src))
     ):
         shutil.copytree(
             src,
@@ -3515,14 +3511,21 @@ def move(src, dest):
         shutil.move(src, dest)
 
 
+def is_directory(*p):
+    return Path(os.path.join(*[_p.strip() for _p in p])).is_dir()
+
+
+def is_symlink(*p):
+    return Path(os.path.join(*[_p.strip() for _p in p])).is_symlink()
+
+
 def delete(path):
-    obj = Path(path)
     if not exist(path):
         return
-    if os.path.isdir(path) and not obj.is_symlink():
+    if is_directory(path) and not is_symlink(path):
         shutil.rmtree(path)
     else:
-        obj.unlink(missing_ok=True)
+        Path(path).unlink(missing_ok=True)
 
 
 def remove(path):
@@ -3532,17 +3535,15 @@ def remove(path):
 def load(path):
     path = full_path(str(path))
     permit(path)
-    if not os.path.exists(path):
+    if not exist(path):
         return None
-    if os.path.isdir(path):
-        return os.listdir(path)
+    if is_directory(path):
+        return [str(p) for p in Path(path).iterdir()]
     else:
         try:
-            with open(path, encoding="utf8") as file:
-                return file.read()
+            return Path(path).read_text(encoding="utf8")
         except:
-            with open(path, "rb") as file:
-                return file.read()
+            return Path(path).read_bytes()
 
 
 def read(path):
@@ -3553,9 +3554,18 @@ def write(path, txt=""):
     return save(path, txt)
 
 
+def parent_directory(p, levels:int=1):
+    path = Path(str(p))
+    for _ in range(levels):
+        path = path.parent
+    return str(path.resolve())
+
+
 def save(path, text=""):
-    path = os.path.realpath(str(path))
-    os.makedirs(str(Path(path).parent), exist_ok=True)
+    os.makedirs(
+        parent_directory(path),
+        exist_ok=True
+    )
     with open(path, "w+", encoding="utf8") as file:
         file.write(str(text))
 
