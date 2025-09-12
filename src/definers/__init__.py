@@ -8222,34 +8222,6 @@ def subdivide_beats(beat_times, subdivision):
     return _np.array(sorted(list(set(new_beats))))
 
 
-def find_best_beat(
-    target_time, future_beats, downbeats, bias, threshold
-):
-    if not hasattr(future_beats, "__len__") or len(future_beats) == 0:
-        return None
-
-    future_beats = _np.asarray(future_beats)
-    downbeats = _np.asarray(downbeats)
-
-    time_diffs = _np.abs(future_beats - target_time)
-
-    is_downbeat = _np.array(
-        [
-            _np.any(_np.isclose(beat, downbeats))
-            for beat in future_beats
-        ]
-    )
-
-    weighted_diffs = time_diffs - (bias * is_downbeat)
-
-    best_beat_index = _np.argmin(weighted_diffs)
-
-    if time_diffs[best_beat_index] < threshold:
-        return future_beats[best_beat_index]
-
-    return None
-
-
 def calculate_active_rms(y, sr):
     import librosa
 
@@ -8355,8 +8327,8 @@ def get_scale_notes(key='C', scale='major', octaves=5):
 def autotune_vocals(
     audio_path,
     format_choice="mp3",
-    strength=0.8,
-    humanize=0.3,
+    strength=0.3,
+    humanize=4.0,
     quantize_grid=8,
     beats_per_bar=(4, 4),
 ):
