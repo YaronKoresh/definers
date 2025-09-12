@@ -6771,7 +6771,7 @@ def path_ext(p):
 
 def convert_vocal_rvc(experiment: str, path: str):
     logger.info(
-        f"Starting vocal conversion for experiment: {experiment} with pitch shift {semi_tones}"
+        f"Starting vocal conversion for experiment: {experiment}"
     )
 
     from .configs.config import Config
