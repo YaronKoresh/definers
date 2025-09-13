@@ -8461,7 +8461,7 @@ def get_scale_notes(key="C", scale="major", octaves=5):
 def autotune_vocals(
     audio_path,
     format_choice="mp3",
-    strength=0.5,
+    strength=0.4,
     humanize=20.0,
     quantize_grid=16,
     beats_per_bar=(4, 4),
@@ -8706,7 +8706,7 @@ def autotune_vocals(
             duration=max_duration, frame_rate=instrumental.frame_rate
         )
         combined = base.overlay(instrumental).overlay(
-            tuned_vocals - 9
+            tuned_vocals - 15
         )
 
         output_stem = f"{Path(audio_path).stem}_autotuned"
