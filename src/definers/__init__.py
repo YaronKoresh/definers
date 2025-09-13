@@ -7903,7 +7903,7 @@ def separate_stems(
 
     output_dir = tmp(dir=True)
     run(
-        f'"{sys.executable}" -m demucs.separate -n htdemucs_ft --two-stems=vocals -o "{output_dir}" "{audio_path}"'
+        f'"{sys.executable}" -m demucs.separate -n htdemucs_ft -o "{output_dir}" "{audio_path}"'
     )
     separated_dir = (
         Path(output_dir) / "htdemucs_ft" / Path(audio_path).stem
