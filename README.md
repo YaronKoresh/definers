@@ -1,6 +1,6 @@
 # Definers: Your All-in-One Python Toolkit
 
-[![codecov](https://codecov.io/gh/YaronKoresh/definers/graph/badge.svg?token=QRZ33FO9N3)](https://codecov.io/gh/YaronKoresh/definers)
+[![codecov](https://codecov.io/gh/YaronKoresh/definers/graph/badge.svg?token=QRZ33FO9N3&cache_bust=1)](https://codecov.io/gh/YaronKoresh/definers)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 **Definers** is a powerful and versatile Python library designed to streamline a wide range of tasks, from machine learning and AI-powered media generation to everyday file and system operations. Whether you're a data scientist, a developer, or an AI enthusiast, Definers provides the tools you need to get the job done efficiently.
@@ -66,5 +66,6 @@ print(short_summary)
 Contributions are welcome! If you have a feature request, bug report, or want to contribute to the code, please feel free to open an issue or submit a pull request on our [GitHub repository](https://github.com/YaronKoresh/definers).
 
 ## License
+
 
 This project is licensed under the MIT License - see the [LICENSE](https://github.com/YaronKoresh/definers/LICENSE) file for details.
