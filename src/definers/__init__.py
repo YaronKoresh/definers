@@ -6374,12 +6374,12 @@ def train_model_rvc(
     voice, music = separate_stems(path)
 
     slow_voice_3 = tmp("wav")
-    stretch_audio(path, slow_voice, slower_voice)
+    stretch_audio(path, slow_voice_3, slower_voice)
 
-    slow_voice_2 = pitch_shift_vocals(slow_voice_mid, -6, "wav")
-    slow_voice_1 = pitch_shift_vocals(slow_voice_mid, -12, "wav")
-    slow_voice_4 = pitch_shift_vocals(slow_voice_mid, 6, "wav")
-    slow_voice_5 = pitch_shift_vocals(slow_voice_mid, 12, "wav")
+    slow_voice_2 = pitch_shift_vocals(slow_voice_3, -6, "wav")
+    slow_voice_1 = pitch_shift_vocals(slow_voice_3, -12, "wav")
+    slow_voice_4 = pitch_shift_vocals(slow_voice_3, 6, "wav")
+    slow_voice_5 = pitch_shift_vocals(slow_voice_3, 12, "wav")
 
     multi_tonal_voice = (
         pydub.AudioSegment.from_file(slow_voice_1)
