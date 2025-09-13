@@ -3173,7 +3173,7 @@ def get_max_resolution(width, height, mega_pixels=0.25, factor=16):
     return new_w, new_h
 
 
-def master(source_path, strength, format_choice):
+def master(source_path, format_choice):
     import matchering as mg
     import pydub
 
@@ -3196,15 +3196,14 @@ def master(source_path, strength, format_choice):
                     results=[mg.pcm24(str(result_wav_path))],
                     config=mg.Config(
                         max_length=15 * 60,
-                        threshold=0.9 / strength,
+                        threshold=0.85,
                         internal_sample_rate=44100,
                     ),
                 )
                 return result_wav_path
 
             processed_path = source_path
-            for _ in range(2):
-                processed_path = _master(processed_path)
+            processed_path = _master(processed_path)
             processed_path = normalize_audio_to_peak(
                 processed_path, 0.99
             )
@@ -6368,7 +6367,6 @@ def train_model_rvc(
     from .configs.config import Config
     from .i18n.i18n import I18nAuto
 
-    mastering_level = 2.2
     slower_voice = 0.85
 
     path = normalize_audio_to_peak(path)
@@ -6398,7 +6396,7 @@ def train_model_rvc(
     )
 
     path = export_audio(multi_tonal_voice, random_string(), "wav")
-    path = master(path, mastering_level, "wav")
+    path = master(path, "wav")
 
     now_dir = os.getcwd()
     index_root = os.path.join(now_dir, "logs")
