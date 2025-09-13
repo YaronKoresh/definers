@@ -8394,19 +8394,20 @@ def normalize_audio_to_peak(
     return output_path
 
 
-def stretch_audio(input_path, output_path, speed_factor):
-    if not os.path.exists(input_path):
+def stretch_audio(input_path, output_path=None, speed_factor=0.85):
+    if not exist(input_path):
         return None
+    if output_path is None:
+        output_path = tmp("wav")
     command = [
         "rubberband",
         "--fine",
         "--formant",
-        "--pitch-hq",
         "--tempo",
         str(speed_factor),
         "-q",
-        input_path,
-        output_path,
+        f'"{input_path}"',
+        f'"{output_path}"',
     ]
     try:
         run(" ".join(command))
@@ -8659,8 +8660,8 @@ def autotune_vocals(
                 "--formant",
                 "--freqmap",
                 freq_map_path,
-                temp_vocals_in,
-                temp_vocals_out,
+                f'"{temp_vocals_in}"',
+                f'"{temp_vocals_out}"',
             ]
             run(" ".join(command))
             y_tuned, _ = librosa.load(temp_vocals_out, sr=sr)
