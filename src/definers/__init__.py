@@ -6370,7 +6370,6 @@ def train_model_rvc(
 
     mastering_level = 2.2
     slower_voice = 0.85
-    faster_voice = 1 / slower_voice
 
     voice, music = separate_stems(path)
 
@@ -7864,11 +7863,9 @@ def separate_stems(
 
     output_dir = tmp(dir=True)
     run(
-        f'"{sys.executable}" -m demucs.separate -n htdemucs_ft -o "{output_dir}" "{audio_path}"'
+        f'"{sys.executable}" -m demucs.separate -n htdemucs_ft --two-stems=vocals -o "{output_dir}" "{audio_path}"'
     )
-    separated_dir = (
-        Path(output_dir) / "htdemucs_ft" / Path(audio_path).stem
-    )
+    separated_dir = Path(output_dir) / "htdemucs_ft" / Path(audio_path).stem
     vocals_path = separated_dir / "vocals.wav"
     accompaniment_path = separated_dir / "no_vocals.wav"
 
