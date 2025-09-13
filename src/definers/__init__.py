@@ -3196,7 +3196,7 @@ def master(source_path, format_choice):
                     results=[mg.pcm24(str(result_wav_path))],
                     config=mg.Config(
                         max_length=60 * 60 * 24,
-                        threshold=0.85,
+                        threshold=0.6,
                         internal_sample_rate=44100,
                     ),
                 )
@@ -3205,7 +3205,7 @@ def master(source_path, format_choice):
             processed_path = source_path
             processed_path = _master(processed_path)
             processed_path = normalize_audio_to_peak(
-                processed_path, 0.99
+                processed_path
             )
             final_sound = pydub.AudioSegment.from_file(processed_path)
             output_path = export_audio(
@@ -8363,7 +8363,7 @@ def calculate_active_rms(y, sr):
 
 
 def normalize_audio_to_peak(
-    input_path: str, target_level: float = 0.99, format: str = None
+    input_path: str, target_level: float = 0.9, format: str = None
 ):
     from pydub import AudioSegment
     from pydub.effects import normalize
@@ -8523,6 +8523,7 @@ def autotune_vocals(
             str(vocals_path), sr=None, mono=True
         )
         y = np.copy(y_original)
+        instrumental_path = normalize_audio_to_peak(instrumental_path)
         instrumental = pydub.AudioSegment.from_file(instrumental_path)
 
         print("\n--- Rhythm Correction ---")
@@ -8701,6 +8702,7 @@ def autotune_vocals(
 
         temp_tuned_vocals_path = tmp(".wav")
         temp_files.append(temp_tuned_vocals_path)
+        temp_tuned_vocals_path = normalize_audio_to_peak(temp_tuned_vocals_path)
         sf.write(temp_tuned_vocals_path, y_tuned, sr)
         tuned_vocals = pydub.AudioSegment.from_file(
             temp_tuned_vocals_path
@@ -8715,7 +8717,7 @@ def autotune_vocals(
             duration=max_duration, frame_rate=instrumental.frame_rate
         )
         combined = base.overlay(instrumental).overlay(
-            tuned_vocals - 12
+            tuned_vocals + 3
         )
 
         output_stem = f"{Path(audio_path).stem}_autotuned"
