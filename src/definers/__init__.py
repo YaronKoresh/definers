@@ -6371,11 +6371,11 @@ def train_model_rvc(
     mastering_level = 2.2
     slower_voice = 0.85
 
+    path = normalize_audio_to_peak(path)
+
     voice, music = separate_stems(path)
 
-    slow_voice_3 = tmp("wav")
-    stretch_audio(path, slow_voice_3, slower_voice)
-
+    slow_voice_3 = stretch_audio(voice, speed_factor=slower_voice)
     slow_voice_2 = pitch_shift_vocals(slow_voice_3, -6, "wav", seperated=True)
     slow_voice_1 = pitch_shift_vocals(slow_voice_3, -12, "wav", seperated=True)
     slow_voice_4 = pitch_shift_vocals(slow_voice_3, 6, "wav", seperated=True)
@@ -7896,16 +7896,18 @@ def separate_stems(
     if "acapella" == separation_type:
         voice = _export_stem(vocals_path, "_acapella")
         delete(output_dir)
-        return voice
+        return normalize_audio_to_peak(voice)
 
     if "karaoke" == separation_type:
         music = _export_stem(accompaniment_path, "_karaoke")
         delete(output_dir)
-        return music
+        return normalize_audio_to_peak(music)
 
-    voice, music = _export_stem(vocals_path, "_acapella"), _export_stem(
+    voice, music = normalize_audio_to_peak(_export_stem(
+        vocals_path, "_acapella"
+    )), normalize_audio_to_peak(_export_stem(
         accompaniment_path, "_karaoke"
-    )
+    ))
     delete(output_dir)
     return voice, music
 
@@ -8422,7 +8424,7 @@ def stretch_audio(input_path, output_path=None, speed_factor=0.85):
     ]
     try:
         run(" ".join(command))
-        return output_path
+        return normalize_audio_to_peak(output_path)
     except Exception as e:
         catch(f"Error during audio stretching with rubberband: {e}")
         return None
