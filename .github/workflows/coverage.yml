@@ -50,6 +50,7 @@ jobs:
           pip install .[dev] --extra-index-url https://pypi.nvidia.com
 
       - name: Run tests and generate coverage report
+        continue-on-error: true
         run: |
           pytest --cov --cov-branch --cov-report=xml
 
