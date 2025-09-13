@@ -6962,9 +6962,9 @@ def humanize_vocals(audio_path, amount=1.0):
     if not Path(audio_path).exists():
         catch(f"Error: Input file not found at {audio_path}")
         return None
-        
+
     temp_dir = tmp(dir=True)
-    
+
     try:
         print("--- Loading Audio ---")
         y, sr = librosa.load(audio_path, sr=None, mono=True)
@@ -6988,8 +6988,14 @@ def humanize_vocals(audio_path, amount=1.0):
             max_deviation_cents = 20.0
             for i in range(len(f0)):
                 if voiced_flag[i] and f0[i] > 0:
-                    cents_dev = np.random.normal(0, scale=deviation_scale)
-                    cents_dev = np.clip(cents_dev, -max_deviation_cents, max_deviation_cents)
+                    cents_dev = np.random.normal(
+                        0, scale=deviation_scale
+                    )
+                    cents_dev = np.clip(
+                        cents_dev,
+                        -max_deviation_cents,
+                        max_deviation_cents,
+                    )
                     target_f0[i] = f0[i] * (2 ** (cents_dev / 1200))
 
         freq_map_path = os.path.join(temp_dir, "freqmap.txt")
@@ -7004,31 +7010,36 @@ def humanize_vocals(audio_path, amount=1.0):
             print("--- Applying Pitch Variations with Rubberband ---")
             temp_input_wav = os.path.join(temp_dir, "input.wav")
             temp_output_wav = os.path.join(temp_dir, "output.wav")
-            
+
             sf.write(temp_input_wav, y, sr)
-            
+
             command = (
                 f'rubberband --fine --formant --freqmap "{freq_map_path}" '
                 f'"{temp_input_wav}" "{temp_output_wav}"'
             )
             run(command)
-            
+
             y_humanized, _ = librosa.load(temp_output_wav, sr=sr)
             print("Humanization complete.")
         else:
-            print("Warning: No voiced frames detected. Skipping processing.")
+            print(
+                "Warning: No voiced frames detected. Skipping processing."
+            )
             y_humanized = np.copy(y)
 
         input_p = Path(audio_path)
         output_path = input_p.parent / f"{input_p.stem}_humanized.wav"
         sf.write(str(output_path), y_humanized, sr)
-        
+
         print(f"\n--- Processing Complete ---")
         print(f"Humanized audio saved to: {output_path}")
         return str(output_path)
 
     except Exception as e:
-        print(f"An error occurred during processing: {e}", file=sys.stderr)
+        print(
+            f"An error occurred during processing: {e}",
+            file=sys.stderr,
+        )
         return None
     finally:
         print("Cleaning up temporary files.")
@@ -7305,9 +7316,7 @@ def music_video(
     )
     centroid_norm = (
         spectral_centroid - np.min(spectral_centroid)
-    ) / (
-        np.max(spectral_centroid) - np.min(spectral_centroid) + 1e-6
-    )
+    ) / (np.max(spectral_centroid) - np.min(spectral_centroid) + 1e-6)
     w = width
     h = height
     center_x, center_y = w // 2, h // 2
@@ -7342,9 +7351,7 @@ def music_video(
 
             frame[:, :, 0] = 128 * (
                 1
-                + np.sin(
-                    vortex_pattern * beat_flash * np.pi * r_base
-                )
+                + np.sin(vortex_pattern * beat_flash * np.pi * r_base)
             )
             frame[:, :, 1] = 128 * (
                 1
@@ -7865,7 +7872,9 @@ def separate_stems(
     run(
         f'"{sys.executable}" -m demucs.separate -n htdemucs_ft --two-stems=vocals -o "{output_dir}" "{audio_path}"'
     )
-    separated_dir = Path(output_dir) / "htdemucs_ft" / Path(audio_path).stem
+    separated_dir = (
+        Path(output_dir) / "htdemucs_ft" / Path(audio_path).stem
+    )
     vocals_path = separated_dir / "vocals.wav"
     accompaniment_path = separated_dir / "no_vocals.wav"
 
