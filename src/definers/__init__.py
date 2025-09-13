@@ -6374,10 +6374,18 @@ def train_model_rvc(
     voice, music = separate_stems(path)
 
     slow_voice_3 = stretch_audio(voice, speed_factor=slower_voice)
-    slow_voice_2 = pitch_shift_vocals(slow_voice_3, -6, "wav", seperated=True)
-    slow_voice_1 = pitch_shift_vocals(slow_voice_3, -12, "wav", seperated=True)
-    slow_voice_4 = pitch_shift_vocals(slow_voice_3, 6, "wav", seperated=True)
-    slow_voice_5 = pitch_shift_vocals(slow_voice_3, 12, "wav", seperated=True)
+    slow_voice_2 = pitch_shift_vocals(
+        slow_voice_3, -6, "wav", seperated=True
+    )
+    slow_voice_1 = pitch_shift_vocals(
+        slow_voice_3, -12, "wav", seperated=True
+    )
+    slow_voice_4 = pitch_shift_vocals(
+        slow_voice_3, 6, "wav", seperated=True
+    )
+    slow_voice_5 = pitch_shift_vocals(
+        slow_voice_3, 12, "wav", seperated=True
+    )
 
     multi_tonal_voice = (
         pydub.AudioSegment.from_file(slow_voice_1)
@@ -7901,16 +7909,18 @@ def separate_stems(
         delete(output_dir)
         return normalize_audio_to_peak(music)
 
-    voice, music = normalize_audio_to_peak(_export_stem(
-        vocals_path, "_acapella"
-    )), normalize_audio_to_peak(_export_stem(
-        accompaniment_path, "_karaoke"
-    ))
+    voice, music = normalize_audio_to_peak(
+        _export_stem(vocals_path, "_acapella")
+    ), normalize_audio_to_peak(
+        _export_stem(accompaniment_path, "_karaoke")
+    )
     delete(output_dir)
     return voice, music
 
 
-def pitch_shift_vocals(audio_path, pitch_shift, format_choice, seperated=False):
+def pitch_shift_vocals(
+    audio_path, pitch_shift, format_choice, seperated=False
+):
     import librosa
     import pydub
     import soundfile as sf
