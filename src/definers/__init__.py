@@ -6959,25 +6959,21 @@ def create_share_links(
     return f"""<div style='text-align:center; padding-top: 10px;'><p style='font-weight: bold;'>Share your creation!</p><a href='{twitter_link}' target='_blank' style='margin: 0 5px;'>X/Twitter</a> | <a href='{facebook_link}' target='_blank' style='margin: 0 5px;'>Facebook</a> | <a href='{reddit_link}' target='_blank' style='margin: 0 5px;'>Reddit</a> | <a href='{whatsapp_link}' target='_blank' style='margin: 0 5px;'>WhatsApp</a></div>"""
 
 
-def humanize_vocals(audio_path, amount=0.5):
-    import librosa
-    import soundfile as sf
-
-    output_path = tmp(os.path.splitext(audio_path)[1])
-
+def humanize_vocals(audio_path, amount=1.0):
+    if not Path(audio_path).exists():
+        catch(f"Error: Input file not found at {audio_path}")
+        return None
+        
+    temp_dir = tmp(dir=True)
+    
     try:
-        print(f"Loading audio from: {audio_path}")
-        y, sr = librosa.load(audio_path, sr=None, mono=False)
-        is_stereo = y.ndim > 1 and y.shape[0] > 1
+        print("--- Loading Audio ---")
+        y, sr = librosa.load(audio_path, sr=None, mono=True)
 
-        y_mono = librosa.to_mono(y)
-        side_signal = (y[0] - y[1]) / 2 if is_stereo else None
-
+        print("--- Analyzing Vocal Pitch ---")
         n_fft, hop_length = 2048, 512
-
-        print("Estimating fundamental frequency from mono mix...")
         f0, voiced_flag, _ = librosa.pyin(
-            y_mono,
+            y,
             fmin=librosa.note_to_hz("C2"),
             fmax=librosa.note_to_hz("C7"),
             sr=sr,
@@ -6985,94 +6981,59 @@ def humanize_vocals(audio_path, amount=0.5):
             hop_length=hop_length,
         )
         f0 = np.nan_to_num(f0)
+
+        print("--- Generating Humanized Pitch Map ---")
         target_f0 = np.copy(f0)
+        if amount > 0:
+            deviation_scale = amount * 5.0
+            max_deviation_cents = 20.0
+            for i in range(len(f0)):
+                if voiced_flag[i] and f0[i] > 0:
+                    cents_dev = np.random.normal(0, scale=deviation_scale)
+                    cents_dev = np.clip(cents_dev, -max_deviation_cents, max_deviation_cents)
+                    target_f0[i] = f0[i] * (2 ** (cents_dev / 1200))
 
-        print("Generating natural pitch modulation contour...")
-        num_frames = len(f0)
-        num_points = max(2, int(num_frames / (sr / hop_length) / 2))
-        random_points = np.random.normal(
-            0, scale=(amount * 10), size=num_points
-        )
-        x_points = np.linspace(0, num_frames, num=num_points)
-        x_range = np.arange(num_frames)
-        pitch_modulation_cents = np.interp(
-            x_range, x_points, random_points
-        )
-        pitch_modulation_cents = np.clip(
-            pitch_modulation_cents, -35, 35
-        )
+        freq_map_path = os.path.join(temp_dir, "freqmap.txt")
+        with open(freq_map_path, "w") as f:
+            for i in range(len(f0)):
+                if voiced_flag[i] and f0[i] > 0 and target_f0[i] > 0:
+                    sample_num = i * hop_length
+                    ratio = target_f0[i] / f0[i]
+                    f.write(f"{sample_num} {ratio:.6f}\n")
 
-        print("Applying humanization logic...")
-        for i in range(num_frames):
-            if voiced_flag[i] and f0[i] > 0:
-                current_f0 = f0[i]
-                cents_deviation = pitch_modulation_cents[i]
-                ratio = 2 ** (cents_deviation / 1200)
-                target_f0[i] = current_f0 * ratio
-
-        print(
-            "Resynthesizing mono audio with new pitch variations..."
-        )
-        stft_vocals = librosa.stft(
-            y_mono, n_fft=n_fft, hop_length=hop_length
-        )
-        magnitudes = np.abs(stft_vocals)
-        phase = np.angle(stft_vocals)
-        new_phase = np.zeros_like(phase)
-        new_phase[:, 0] = phase[:, 0]
-        freqs = librosa.fft_frequencies(sr=sr, n_fft=n_fft)
-        expected_phase_advance = 2 * np.pi * freqs * hop_length / sr
-
-        for t in range(1, stft_vocals.shape[1]):
-            dphase = (
-                phase[:, t] - phase[:, t - 1] - expected_phase_advance
+        if os.path.getsize(freq_map_path) > 0:
+            print("--- Applying Pitch Variations with Rubberband ---")
+            temp_input_wav = os.path.join(temp_dir, "input.wav")
+            temp_output_wav = os.path.join(temp_dir, "output.wav")
+            
+            sf.write(temp_input_wav, y, sr)
+            
+            command = (
+                f'rubberband --fine --formant --freqmap "{freq_map_path}" '
+                f'"{temp_input_wav}" "{temp_output_wav}"'
             )
-            dphase = dphase - 2 * np.pi * np.round(
-                dphase / (2 * np.pi)
-            )
-            true_freq = expected_phase_advance + dphase
-            ratio = 1.0
-            if t < len(f0) and f0[t] > 0 and target_f0[t] > 0:
-                ratio = target_f0[t] / f0[t]
-            shifted_phase_advance = true_freq * ratio
-            new_phase[:, t] = (
-                new_phase[:, t - 1] + shifted_phase_advance
-            )
-
-        stft_humanized = magnitudes * np.exp(1j * new_phase)
-        y_humanized_mono = librosa.istft(
-            stft_humanized, hop_length=hop_length, length=len(y_mono)
-        )
-
-        if is_stereo:
-            print("Reconstructing stereo image...")
-            if len(side_signal) > len(y_humanized_mono):
-                side_signal = side_signal[: len(y_humanized_mono)]
-            else:
-                side_signal = np.pad(
-                    side_signal,
-                    (0, len(y_humanized_mono) - len(side_signal)),
-                )
-            new_left = y_humanized_mono + side_signal
-            new_right = y_humanized_mono - side_signal
-            y_humanized = np.vstack([new_left, new_right])
+            run(command)
+            
+            y_humanized, _ = librosa.load(temp_output_wav, sr=sr)
+            print("Humanization complete.")
         else:
-            y_humanized = y_humanized_mono
+            print("Warning: No voiced frames detected. Skipping processing.")
+            y_humanized = np.copy(y)
 
-        print("Normalizing output volume of active audio...")
-        original_rms = calculate_active_rms(y, sr)
-        humanized_rms = calculate_active_rms(y_humanized, sr)
-
-        if humanized_rms > 1e-6:
-            y_humanized *= original_rms / humanized_rms
-
-        print(f"Saving humanized audio to: {output_path}")
-        sf.write(output_path, y_humanized.T, sr)
-        return output_path
+        input_p = Path(audio_path)
+        output_path = input_p.parent / f"{input_p.stem}_humanized.wav"
+        sf.write(str(output_path), y_humanized, sr)
+        
+        print(f"\n--- Processing Complete ---")
+        print(f"Humanized audio saved to: {output_path}")
+        return str(output_path)
 
     except Exception as e:
-        print(f"Could not humanize audio: {e}")
-        return audio_path
+        print(f"An error occurred during processing: {e}", file=sys.stderr)
+        return None
+    finally:
+        print("Cleaning up temporary files.")
+        delete(temp_dir)
 
 
 def value_to_keys(dictionary, target_value):
@@ -8479,7 +8440,7 @@ def autotune_vocals(
     format_choice="mp3",
     strength=1.0,
     humanize=20.0,
-    quantize_grid=8,
+    quantize_grid=16,
     beats_per_bar=(4, 4),
 ):
     import librosa
