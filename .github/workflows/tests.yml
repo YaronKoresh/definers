@@ -1,4 +1,4 @@
-name: Coverage
+name: Testing
 
 permissions:
   contents: write
@@ -49,14 +49,14 @@ jobs:
         run: |
           pip install .[dev] --extra-index-url https://pypi.nvidia.com
 
-      - name: Generate coverage report
+      - name: Run tests report
         continue-on-error: true
         run: |
-          pytest --cov --cov-branch --cov-report=xml
+          pytest --cov --junitxml=junit.xml -o junit_family=legacy
 
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/test-results-action@v1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./coverage.xml
           fail_ci_if_error: true
