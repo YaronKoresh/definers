@@ -6376,10 +6376,10 @@ def train_model_rvc(
     slow_voice_3 = tmp("wav")
     stretch_audio(path, slow_voice_3, slower_voice)
 
-    slow_voice_2 = pitch_shift_vocals(slow_voice_3, -6, "wav")
-    slow_voice_1 = pitch_shift_vocals(slow_voice_3, -12, "wav")
-    slow_voice_4 = pitch_shift_vocals(slow_voice_3, 6, "wav")
-    slow_voice_5 = pitch_shift_vocals(slow_voice_3, 12, "wav")
+    slow_voice_2 = pitch_shift_vocals(slow_voice_3, -6, "wav", seperated=True)
+    slow_voice_1 = pitch_shift_vocals(slow_voice_3, -12, "wav", seperated=True)
+    slow_voice_4 = pitch_shift_vocals(slow_voice_3, 6, "wav", seperated=True)
+    slow_voice_5 = pitch_shift_vocals(slow_voice_3, 12, "wav", seperated=True)
 
     multi_tonal_voice = (
         pydub.AudioSegment.from_file(slow_voice_1)
@@ -6609,7 +6609,7 @@ def train_model_rvc(
 
         big_npy = (
             MiniBatchKMeans(
-                n_clusters=8000,
+                n_clusters=10000,
                 verbose=False,
                 batch_size=256 * config.n_cpu,
                 compute_labels=False,
@@ -7910,10 +7910,20 @@ def separate_stems(
     return voice, music
 
 
-def pitch_shift_vocals(audio_path, pitch_shift, format_choice):
+def pitch_shift_vocals(audio_path, pitch_shift, format_choice, seperated=False):
     import librosa
     import pydub
     import soundfile as sf
+
+    if seperated:
+        y_vocals, sr = librosa.load(str(audio_path), sr=None)
+        y_shifted = librosa.effects.pitch_shift(
+            y=y_vocals, sr=sr, n_steps=float(pitch_shift)
+        )
+        final_output_path = export_audio(
+            y_shifted, random_string(), format_choice
+        )
+        return final_output_path
 
     separation_dir = tmp(dir=True)
     run(
