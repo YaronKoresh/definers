@@ -7916,7 +7916,8 @@ def pitch_shift_vocals(audio_path, pitch_shift, format_choice, seperated=False):
     import soundfile as sf
 
     if seperated:
-        y_vocals, sr = librosa.load(str(audio_path), sr=None)
+        _, sr = librosa.load(str(audio_path), sr=None)
+        y_vocals = pydub.AudioSegment.from_file(str(audio_path))
         y_shifted = librosa.effects.pitch_shift(
             y=y_vocals, sr=sr, n_steps=float(pitch_shift)
         )
