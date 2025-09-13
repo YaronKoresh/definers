@@ -6936,17 +6936,17 @@ def export_audio(audio_segment, output_path_stem, format_choice):
         file_format, bitrate, suffix = "flac", None, ".flac"
     else:
         raise ValueError(f"Unsupported format: {format_choice}")
-    output_path = Path(output_path_stem).with_suffix(suffix)
+    output_path = str(Path(str(output_path_stem)).with_suffix(suffix))
     params = (
         ["-acodec", "pcm_s16le"] if file_format == "wav" else None
     )
     audio_segment.export(
-        str(output_path),
+        output_path,
         format=file_format,
         bitrate=bitrate,
         parameters=params,
     )
-    return str(output_path)
+    return output_path
 
 
 def create_share_links(
@@ -8111,9 +8111,10 @@ def stem_mixer(files, format_choice):
     max_length = 0
 
     print("--- Processing Stems for Simple Mixing ---")
-    for i, file_obj in enumerate(files):
+    for i, _file in enumerate(files):
+        file_obj = Path(_file)
         print(
-            f"Processing file {i+1}/{len(files)}: {Path(file_obj.name).name}"
+            f"Processing file {i+1}/{len(files)}: {file_obj.name}"
         )
 
         try:
@@ -8127,7 +8128,7 @@ def stem_mixer(files, format_choice):
 
         if sr != target_sr:
             print(
-                f"Resampling {Path(file_obj.name).name} from {sr}Hz to {target_sr}Hz."
+                f"Resampling {file_obj.name} from {sr}Hz to {target_sr}Hz."
             )
             y = librosa.resample(y, orig_sr=sr, target_sr=target_sr)
 
@@ -8152,7 +8153,7 @@ def stem_mixer(files, format_choice):
         mixed_y = mixed_y / peak_amplitude * 0.99
 
     print("Exporting final mix...")
-    temp_wav_path = tmp(".wav")
+    temp_wav_path = tmp(".wav", keep=False)
 
     write_wav(
         temp_wav_path, target_sr, (mixed_y * 32767).astype(np.int16)
