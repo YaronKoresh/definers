@@ -6357,11 +6357,13 @@ def find_latest_checkpoint(
     return latest_checkpoint
 
 
-def train_model_rvc(experiment: str, path: str, lvl: int = 1, f0method : str = "rmvpe"):
+def train_model_rvc(
+    experiment: str, path: str, lvl: int = 1, f0method: str = "rmvpe"
+):
     logger.info(f"Starting RVC training for experiment: {experiment}")
 
-    import torch
     import pydub
+    import torch
 
     from .configs.config import Config
     from .i18n.i18n import I18nAuto
@@ -6371,7 +6373,7 @@ def train_model_rvc(experiment: str, path: str, lvl: int = 1, f0method : str = "
     faster_voice = 1 / slower_voice
 
     voice, music = separate_stems(path)
-    
+
     slow_voice_3 = tmp("wav")
     stretch_audio(path, slow_voice, slower_voice)
 
@@ -6380,20 +6382,20 @@ def train_model_rvc(experiment: str, path: str, lvl: int = 1, f0method : str = "
     slow_voice_4 = pitch_shift_vocals(slow_voice_mid, 6, "wav")
     slow_voice_5 = pitch_shift_vocals(slow_voice_mid, 12, "wav")
 
-    multi_tonal_voice = pydub.AudioSegment.from_file(
-        slow_voice_1
-    ).append(
-        pydub.AudioSegment.from_file(slow_voice_2),
-        crossfade=200
-    ).append(
-        pydub.AudioSegment.from_file(slow_voice_3),
-        crossfade=100
-    ).append(
-        pydub.AudioSegment.from_file(slow_voice_4),
-        crossfade=300
-    ).append(
-        pydub.AudioSegment.from_file(slow_voice_5),
-        crossfade=150
+    multi_tonal_voice = (
+        pydub.AudioSegment.from_file(slow_voice_1)
+        .append(
+            pydub.AudioSegment.from_file(slow_voice_2), crossfade=200
+        )
+        .append(
+            pydub.AudioSegment.from_file(slow_voice_3), crossfade=100
+        )
+        .append(
+            pydub.AudioSegment.from_file(slow_voice_4), crossfade=300
+        )
+        .append(
+            pydub.AudioSegment.from_file(slow_voice_5), crossfade=150
+        )
     )
 
     path = export_audio(multi_tonal_voice, random_string(), "wav")
@@ -6614,7 +6616,9 @@ def train_model_rvc(experiment: str, path: str, lvl: int = 1, f0method : str = "
                 compute_labels=False,
                 init="random",
                 n_init=3,
-            ).fit(big_npy).cluster_centers_
+            )
+            .fit(big_npy)
+            .cluster_centers_
         )
         logger.info(f"KMeans cluster centers shape: {big_npy.shape}")
 
@@ -7249,7 +7253,12 @@ def beat_visualizer(
     scale_intensity,
 ):
     import librosa
-    from moviepy import AudioFileClip, ImageClip, CompositeVideoClip, ColorClip
+    from moviepy import (
+        AudioFileClip,
+        ColorClip,
+        CompositeVideoClip,
+        ImageClip,
+    )
     from PIL import Image, ImageFilter
 
     img = Image.open(image_path)
@@ -7272,7 +7281,9 @@ def beat_visualizer(
     hop_length = 512
     rms = librosa.feature.rms(y=y, hop_length=hop_length)[0]
 
-    rms_normalized = (rms - _np.min(rms)) / (_np.max(rms) - _np.min(rms) + 1e-7)
+    rms_normalized = (rms - _np.min(rms)) / (
+        _np.max(rms) - _np.min(rms) + 1e-7
+    )
     scales = 1.0 + (rms_normalized * (scale_intensity - 1.0))
 
     def beat_scale_func(t):
@@ -7292,21 +7303,20 @@ def beat_visualizer(
 
     image_clip = ImageClip(_np.array(img), duration=duration)
 
-    animated_image = image_clip.resized(final_scale_func).with_position(
-        ("center", "center")
-    )
+    animated_image = image_clip.resized(
+        final_scale_func
+    ).with_position(("center", "center"))
 
-    background = ColorClip(size=(W, H), color=(0, 0, 0), duration=duration)
+    background = ColorClip(
+        size=(W, H), color=(0, 0, 0), duration=duration
+    )
 
     final_clip = CompositeVideoClip([background, animated_image])
     final_clip = final_clip.with_audio(audio_clip)
     final_clip.write_videofile(
-        output_path,
-        codec="libx264",
-        fps=24,
-        audio_codec="aac"
+        output_path, codec="libx264", fps=24, audio_codec="aac"
     )
-    
+
     return output_path
 
 
@@ -7886,7 +7896,9 @@ def change_audio_speed(
         return None
 
 
-def separate_stems(audio_path, separation_type=None, format_choice="mp3"):
+def separate_stems(
+    audio_path, separation_type=None, format_choice="mp3"
+):
     import pydub
 
     output_dir = tmp(dir=True)
@@ -7917,11 +7929,13 @@ def separate_stems(audio_path, separation_type=None, format_choice="mp3"):
 
     if "acapella" == separation_type:
         return _export_stem(vocals_path, "_acapella")
-        
+
     if "karaoke" == separation_type:
         return _export_stem(accompaniment_path, "_karaoke")
 
-    return _export_stem(vocals_path, "_acapella"), _export_stem(accompaniment_path, "_karaoke")
+    return _export_stem(vocals_path, "_acapella"), _export_stem(
+        accompaniment_path, "_karaoke"
+    )
 
 
 def pitch_shift_vocals(audio_path, pitch_shift, format_choice):
