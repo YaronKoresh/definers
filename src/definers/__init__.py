@@ -8461,7 +8461,7 @@ def get_scale_notes(key="C", scale="major", octaves=5):
 def autotune_vocals(
     audio_path,
     format_choice="mp3",
-    strength=1.0,
+    strength=0.5,
     humanize=20.0,
     quantize_grid=16,
     beats_per_bar=(4, 4),
