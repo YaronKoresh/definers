@@ -7281,8 +7281,8 @@ def beat_visualizer(
     hop_length = 512
     rms = librosa.feature.rms(y=y, hop_length=hop_length)[0]
 
-    rms_normalized = (rms - _np.min(rms)) / (
-        _np.max(rms) - _np.min(rms) + 1e-7
+    rms_normalized = (rms - np.min(rms)) / (
+        np.max(rms) - np.min(rms) + 1e-7
     )
     scales = 1.0 + (rms_normalized * (scale_intensity - 1.0))
 
@@ -7301,7 +7301,7 @@ def beat_visualizer(
     def final_scale_func(t):
         return base_animation_func(t) * beat_scale_func(t)
 
-    image_clip = ImageClip(_np.array(img), duration=duration)
+    image_clip = ImageClip(np.array(img), duration=duration)
 
     animated_image = image_clip.resized(
         final_scale_func
@@ -7340,21 +7340,21 @@ def music_video(
     beat_frames = librosa.time_to_frames(
         beat_times, sr=sr, hop_length=512
     )
-    rms_norm = (rms - _np.min(rms)) / (
-        _np.max(rms) - _np.min(rms) + 1e-6
+    rms_norm = (rms - np.min(rms)) / (
+        np.max(rms) - np.min(rms) + 1e-6
     )
     centroid_norm = (
-        spectral_centroid - _np.min(spectral_centroid)
+        spectral_centroid - np.min(spectral_centroid)
     ) / (
-        _np.max(spectral_centroid) - _np.min(spectral_centroid) + 1e-6
+        np.max(spectral_centroid) - np.min(spectral_centroid) + 1e-6
     )
     w = width
     h = height
     center_x, center_y = w // 2, h // 2
-    rr, cc = _np.ogrid[:h, :w]
+    rr, cc = np.ogrid[:h, :w]
 
     def make_frame(t):
-        frame = _np.zeros((h, w, 3), dtype=_np.uint8)
+        frame = np.zeros((h, w, 3), dtype=np.uint8)
         frame_idx = int(t * sr / 512)
 
         is_beat = any(abs(frame_idx - bf) < 3 for bf in beat_frames)
@@ -7365,8 +7365,8 @@ def music_video(
         ]
 
         if preset == "vortex":
-            angle = _np.arctan2(rr - center_y, cc - center_x)
-            dist = _np.sqrt(
+            angle = np.arctan2(rr - center_y, cc - center_x)
+            dist = np.sqrt(
                 (rr - center_y) ** 2 + (cc - center_x) ** 2
             )
 
@@ -7374,7 +7374,7 @@ def music_video(
             g_base = 0.3 + color_val * 0.4
             b_base = 0.6 + color_val * 0.4
 
-            vortex_pattern = _np.sin(
+            vortex_pattern = np.sin(
                 dist / 20.0 - t * 5.0 + angle * 3.0
             )
 
@@ -7382,20 +7382,20 @@ def music_video(
 
             frame[:, :, 0] = 128 * (
                 1
-                + _np.sin(
-                    vortex_pattern * beat_flash * _np.pi * r_base
+                + np.sin(
+                    vortex_pattern * beat_flash * np.pi * r_base
                 )
             )
             frame[:, :, 1] = 128 * (
                 1
-                + _np.sin(
-                    vortex_pattern * beat_flash * _np.pi * g_base + 2
+                + np.sin(
+                    vortex_pattern * beat_flash * np.pi * g_base + 2
                 )
             )
             frame[:, :, 2] = 128 * (
                 1
-                + _np.sin(
-                    vortex_pattern * beat_flash * _np.pi * b_base + 4
+                + np.sin(
+                    vortex_pattern * beat_flash * np.pi * b_base + 4
                 )
             )
 
@@ -7404,18 +7404,18 @@ def music_video(
 
             if is_beat:
                 radius = int(radius * 1.8)
-                shift_amount = _np.random.randint(-20, 20)
-                frame[:, :, 0] = _np.roll(
+                shift_amount = np.random.randint(-20, 20)
+                frame[:, :, 0] = np.roll(
                     frame[:, :, 0], shift_amount, axis=1
                 )
-                frame[:, :, 2] = _np.roll(
+                frame[:, :, 2] = np.roll(
                     frame[:, :, 2], -shift_amount, axis=1
                 )
-                if _np.random.rand() > 0.5:
-                    block_y = _np.random.randint(0, h // 2)
-                    block_h = _np.random.randint(h // 4, h // 2)
-                    shift = _np.random.randint(-w // 4, w // 4)
-                    frame[block_y : block_y + block_h, :] = _np.roll(
+                if np.random.rand() > 0.5:
+                    block_y = np.random.randint(0, h // 2)
+                    block_h = np.random.randint(h // 4, h // 2)
+                    shift = np.random.randint(-w // 4, w // 4)
+                    frame[block_y : block_y + block_h, :] = np.roll(
                         frame[block_y : block_y + block_h, :],
                         shift,
                         axis=1,
@@ -7710,16 +7710,16 @@ def get_audio_feedback(audio_path):
         )
         stft = librosa.stft(y_mono)
         freqs = librosa.fft_frequencies(sr=sr)
-        bass_energy = _np.mean(
-            _np.abs(stft[(freqs >= 20) & (freqs < 250)])
+        bass_energy = np.mean(
+            np.abs(stft[(freqs >= 20) & (freqs < 250)])
         )
-        high_energy = _np.mean(
-            _np.abs(stft[(freqs >= 5000) & (freqs < 20000)])
+        high_energy = np.mean(
+            np.abs(stft[(freqs >= 5000) & (freqs < 20000)])
         )
-        peak_amp = _np.max(_np.abs(y_mono))
-        mean_rms = _np.mean(rms)
+        peak_amp = np.max(np.abs(y_mono))
+        mean_rms = np.mean(rms)
         crest_factor = (
-            20 * _np.log10(peak_amp / mean_rms) if mean_rms > 0 else 0
+            20 * np.log10(peak_amp / mean_rms) if mean_rms > 0 else 0
         )
         stereo_width = 0
         if y_stereo.ndim > 1 and y_stereo.shape[0] == 2:
@@ -8285,7 +8285,7 @@ def audio_to_midi(audio_path):
 
     proc = madmom.features.beats.DBNBeatTrackingProcessor(fps=100)
     act = madmom.features.beats.RNNBeatProcessor()(audio_path)
-    bpm = _np.median(60 / _np.diff(proc(act)))
+    bpm = np.median(60 / np.diff(proc(act)))
 
     model_output, midi_data, note_events = predict(
         audio_path,
@@ -8342,7 +8342,7 @@ def midi_to_audio(midi_path, format_choice):
 
 def subdivide_beats(beat_times, subdivision):
     if subdivision <= 1 or len(beat_times) < 2:
-        return _np.array(beat_times)
+        return np.array(beat_times)
 
     new_beats = []
     for i in range(len(beat_times) - 1):
@@ -8353,7 +8353,7 @@ def subdivide_beats(beat_times, subdivision):
             new_beats.append(start_beat + j * interval)
 
     new_beats.append(beat_times[-1])
-    return _np.array(sorted(list(set(new_beats))))
+    return np.array(sorted(list(set(new_beats))))
 
 
 def calculate_active_rms(y, sr):
@@ -8362,12 +8362,12 @@ def calculate_active_rms(y, sr):
     non_silent_intervals = librosa.effects.split(
         y, top_db=40, frame_length=1024, hop_length=256
     )
-    active_audio = _np.concatenate(
+    active_audio = np.concatenate(
         [y[start:end] for start, end in non_silent_intervals]
     )
     if len(active_audio) == 0:
         return 1e-6
-    return _np.sqrt(_np.mean(active_audio**2))
+    return np.sqrt(np.mean(active_audio**2))
 
 
 def normalize_audio_to_peak(
@@ -8471,7 +8471,7 @@ def get_scale_notes(key="C", scale="major", octaves=5):
     for i in range(octaves * 12):
         if (i % 12) in scale_intervals:
             scale_notes.append(start_note_midi + i)
-    return _np.array(scale_notes)
+    return np.array(scale_notes)
 
 
 def autotune_vocals(
@@ -8529,7 +8529,7 @@ def autotune_vocals(
         y_original, sr = librosa.load(
             str(vocals_path), sr=None, mono=True
         )
-        y = _np.copy(y_original)
+        y = np.copy(y_original)
         instrumental = pydub.AudioSegment.from_file(instrumental_path)
 
         print("\n--- Rhythm Correction ---")
@@ -8542,7 +8542,7 @@ def autotune_vocals(
             )
             beat_act = beat_proc(str(instrumental_path))
             downbeat_act = downbeat_proc(str(instrumental_path))
-            combined_act = _np.c_[beat_act, downbeat_act]
+            combined_act = np.c_[beat_act, downbeat_act]
             final_tracker = madmom.features.downbeats.DBNDownBeatTrackingProcessor(
                 beats_per_bar=list(beats_per_bar), fps=100
             )
@@ -8553,7 +8553,7 @@ def autotune_vocals(
                 downbeats = beat_info[beat_info[:, 1] == 1, 0]
             else:
                 print("Warning: Could not detect beats reliably.")
-                beat_times, downbeats = _np.array([]), _np.array([])
+                beat_times, downbeats = np.array([]), np.array([])
 
             if quantize_grid > 0 and len(beat_times) > 1:
                 quantized_beat_times = subdivide_beats(
@@ -8571,7 +8571,7 @@ def autotune_vocals(
                 hop_length=512,
             )
 
-            y_timed = _np.zeros_like(y_original)
+            y_timed = np.zeros_like(y_original)
 
             if (
                 len(vocal_intervals) > 0
@@ -8586,10 +8586,10 @@ def autotune_vocals(
                     start_time = librosa.samples_to_time(
                         start_sample, sr=sr
                     )
-                    time_diffs = _np.abs(
+                    time_diffs = np.abs(
                         quantized_beat_times - start_time
                     )
-                    best_beat_index = _np.argmin(time_diffs)
+                    best_beat_index = np.argmin(time_diffs)
 
                     final_pos = start_sample
 
@@ -8612,7 +8612,7 @@ def autotune_vocals(
                             int(0.02 * sr), len(segment) // 2
                         )
                         if fade_len > 0:
-                            fade_in = _np.linspace(0.0, 1.0, fade_len)
+                            fade_in = np.linspace(0.0, 1.0, fade_len)
                             segment[:fade_len] *= fade_in
                             segment[-fade_len:] *= fade_in[::-1]
 
@@ -8646,21 +8646,21 @@ def autotune_vocals(
             frame_length=n_fft,
             hop_length=hop_length,
         )
-        f0 = _np.nan_to_num(f0)
-        target_f0 = _np.copy(f0)
+        f0 = np.nan_to_num(f0)
+        target_f0 = np.copy(f0)
         for i in range(len(f0)):
             if voiced_flag[i] and f0[i] > 0:
                 current_f0 = f0[i]
                 current_midi = librosa.hz_to_midi(current_f0)
-                note_diffs = _np.abs(allowed_notes - current_midi)
-                closest_note_index = _np.argmin(note_diffs)
+                note_diffs = np.abs(allowed_notes - current_midi)
+                closest_note_index = np.argmin(note_diffs)
                 target_midi = allowed_notes[closest_note_index]
                 ideal_f0 = librosa.midi_to_hz(target_midi)
                 if humanize > 0:
-                    cents_dev = _np.random.normal(
+                    cents_dev = np.random.normal(
                         0, scale=(humanize * 5)
                     )
-                    cents_dev = _np.clip(cents_dev, -15, 15)
+                    cents_dev = np.clip(cents_dev, -15, 15)
                     ideal_f0 *= 2 ** (cents_dev / 1200)
                 target_f0[i] = (
                     current_f0 + (ideal_f0 - current_f0) * strength
@@ -8697,7 +8697,7 @@ def autotune_vocals(
             print(
                 "Warning: No voiced frames detected. Skipping pitch correction."
             )
-            y_tuned = _np.copy(y)
+            y_tuned = np.copy(y)
 
         print("\n--- Final Mixdown ---")
         print("Matching loudness of active audio segments...")
