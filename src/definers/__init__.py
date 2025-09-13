@@ -3195,7 +3195,7 @@ def master(source_path, format_choice):
                     reference=str(reference_path),
                     results=[mg.pcm24(str(result_wav_path))],
                     config=mg.Config(
-                        max_length=15 * 60,
+                        max_length=60 * 60 * 24,
                         threshold=0.85,
                         internal_sample_rate=44100,
                     ),
@@ -3486,7 +3486,7 @@ def catch(e):
 
 
 def directory(dir):
-    dir = os.path.realpath(str(dir))
+    dir = full_path(str(dir))
     os.makedirs(dir, exist_ok=True)
 
 
@@ -3497,15 +3497,15 @@ def move(src, dest):
         and is_directory(full_path(src))
     ):
         shutil.copytree(
-            src,
-            dest,
+            str(src),
+            str(dest),
             symlinks=False,
             ignore_dangling_symlinks=True,
             copy_function=shutil.move,
         )
-        shutil.rmtree(src)
+        shutil.rmtree(str(src))
     else:
-        shutil.move(src, dest)
+        shutil.move(str(src), str(dest))
 
 
 def is_directory(*p):
