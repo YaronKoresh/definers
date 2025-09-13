@@ -8708,7 +8708,7 @@ def autotune_vocals(
             duration=max_duration, frame_rate=instrumental.frame_rate
         )
         combined = base.overlay(instrumental).overlay(
-            tuned_vocals - 15
+            tuned_vocals - 12
         )
 
         output_stem = f"{Path(audio_path).stem}_autotuned"
