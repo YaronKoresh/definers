@@ -7882,18 +7882,23 @@ def separate_stems(
         final_output_path = export_audio(
             sound, output_stem, format_choice
         )
-        delete(output_dir)
         return final_output_path
 
     if "acapella" == separation_type:
-        return _export_stem(vocals_path, "_acapella")
+        voice = _export_stem(vocals_path, "_acapella")
+        delete(output_dir)
+        return voice
 
     if "karaoke" == separation_type:
-        return _export_stem(accompaniment_path, "_karaoke")
+        music = _export_stem(accompaniment_path, "_karaoke")
+        delete(output_dir)
+        return music
 
-    return _export_stem(vocals_path, "_acapella"), _export_stem(
+    voice, music = _export_stem(vocals_path, "_acapella"), _export_stem(
         accompaniment_path, "_karaoke"
     )
+    delete(output_dir)
+    return voice, music
 
 
 def pitch_shift_vocals(audio_path, pitch_shift, format_choice):
