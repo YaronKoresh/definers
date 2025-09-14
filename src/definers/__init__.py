@@ -4858,25 +4858,9 @@ def init_pretrained_model(task: str, turbo: bool = False):
         logger.info(
             "Initializing RVC by downloading necessary files."
         )
-        file_ids = {
-            "configs": "1dIWJ9iP-nLOUw8eflcHFH3RwFWKNepVW",
-            "assets": "1THxR2rRnTx1qv21TZUuCew0G6XlJZJeY",
-            "docs": "1LSq2gJJpLMwjkjtDo0urgrIC2eJ9QVDF",
-            "i18n": "1bQ4pIZxxpnDknpG63hRwoY10b2jx_RwY",
-            "infer": "1kqMYQskvVKwKglcWQsK2Q5G3yPahnbtH",
-            "logs": "1fNMl60ga8OMb4aUvnXzrFIExphWBbHXR",
-            "tools": "1neqVUNipdXukEpImwZUU8O3aQdXR1vDg",
-        }
         with cwd():
-            for name, file_id in file_ids.items():
-                dest_path = full_path(f"./{name}.zip")
-                logger.info(
-                    f"Downloading {name} ({file_id}) to {dest_path}"
-                )
-                try:
-                    google_drive_download(id=file_id, dest=dest_path)
-                except Exception as e:
-                    catch(f"Failed to download {name}: {e}")
+            download_and_unzip("https://github.com/YaronKoresh/definers-rvc-files/archive/refs/heads/main.zip", ".")
+
         log("RVC initialization", "Initialization complete.", True)
 
     elif task in ["speech-recognition"]:
