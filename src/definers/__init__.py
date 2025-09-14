@@ -869,7 +869,7 @@ def answer(history: list):
     generate_ids = MODELS["answer"].generate(
         **inputs,
         max_new_tokens=200,
-        num_beams=8,
+        num_beams=12,
         length_penalty=1.2,
         num_logits_to_keep=1,
     )
@@ -3173,7 +3173,7 @@ def get_max_resolution(width, height, mega_pixels=0.25, factor=16):
     return new_w, new_h
 
 
-def master(source_path, format_choice):
+def master(source_path, format_choice="mp3"):
     import matchering as mg
     import pydub
 
@@ -8467,6 +8467,13 @@ def get_scale_notes(key="C", scale="major", octaves=5):
     return np.array(scale_notes)
 
 
+def enhance_audio(
+    audio_path,
+    format_choice="mp3"
+):
+    return master( autotune_vocals(audio_path, "wav"), format_choice )
+
+
 def autotune_vocals(
     audio_path,
     format_choice="mp3",
@@ -8513,7 +8520,7 @@ def autotune_vocals(
             normalize_audio_to_peak(separated_dir / "vocals.wav")
         )
         instrumental_path = Path(
-            normalize_audio_to_peak(separated_dir / "no_vocals.wav")
+            separated_dir / "no_vocals.wav"
         )
         if not vocals_path.exists() or not instrumental_path.exists():
             raise FileNotFoundError("Vocal separation failed.")
@@ -8523,7 +8530,7 @@ def autotune_vocals(
             str(vocals_path), sr=None, mono=True
         )
         y = np.copy(y_original)
-        instrumental_path = normalize_audio_to_peak(instrumental_path)
+        instrumental_path = master(instrumental_path, "wav")
         instrumental = pydub.AudioSegment.from_file(instrumental_path)
 
         print("\n--- Rhythm Correction ---")
@@ -8560,7 +8567,7 @@ def autotune_vocals(
 
             vocal_intervals = librosa.effects.split(
                 y_original,
-                top_db=40,
+                top_db=25,
                 frame_length=2048,
                 hop_length=512,
             )
@@ -8703,7 +8710,7 @@ def autotune_vocals(
         temp_tuned_vocals_path = tmp(".wav")
         temp_files.append(temp_tuned_vocals_path)
         sf.write(temp_tuned_vocals_path, y_tuned, sr)
-        temp_tuned_vocals_path = normalize_audio_to_peak(temp_tuned_vocals_path)
+        temp_tuned_vocals_path = master(temp_tuned_vocals_path, "wav")
         tuned_vocals = pydub.AudioSegment.from_file(
             temp_tuned_vocals_path
         )
@@ -8717,7 +8724,7 @@ def autotune_vocals(
             duration=max_duration, frame_rate=instrumental.frame_rate
         )
         combined = base.overlay(instrumental).overlay(
-            tuned_vocals + 3
+            tuned_vocals + 2
         )
 
         output_stem = f"{Path(audio_path).stem}_autotuned"
