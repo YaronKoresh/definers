@@ -3172,7 +3172,7 @@ def get_max_resolution(width, height, mega_pixels=0.25, factor=16):
     return new_w, new_h
 
 
-def master(source_path, format_choice="mp3", repeats=1):
+def master(source_path, format_choice="mp3", repeats=2):
     import matchering as mg
     import pydub
 
@@ -3197,7 +3197,7 @@ def master(source_path, format_choice="mp3", repeats=1):
                     results=[mg.pcm24(str(result_wav_path))],
                     config=mg.Config(
                         max_length=60 * 60 * 24,
-                        threshold=0.9,
+                        threshold=0.999,
                         internal_sample_rate=44100,
                     ),
                 )
@@ -8354,7 +8354,7 @@ def calculate_active_rms(y, sr):
 
 
 def normalize_audio_to_peak(
-    input_path: str, target_level: float = 0.9, format: str = None
+    input_path: str, target_level: float = 0.999, format: str = None
 ):
     from pydub import AudioSegment
     from pydub.effects import normalize
@@ -8519,7 +8519,7 @@ def autotune_vocals(
             str(vocals_path), sr=None, mono=True
         )
         y = np.copy(y_original)
-        instrumental_path = master(instrumental_path, "wav")
+        instrumental_path = riaa_filter(master(instrumental_path, "wav"))
         instrumental = pydub.AudioSegment.from_file(instrumental_path)
 
         print("\n--- Rhythm Correction ---")
@@ -8711,7 +8711,7 @@ def autotune_vocals(
         base = pydub.AudioSegment.silent(
             duration=max_duration, frame_rate=instrumental.frame_rate
         )
-        combined = base.overlay(instrumental).overlay(tuned_vocals)
+        combined = base.overlay(instrumental).overlay(tuned_vocals - 6)
 
         output_stem = f"{Path(audio_path).stem}_autotuned"
         final_output_path = f"{output_stem}.{format_choice}"
@@ -8728,3 +8728,57 @@ def autotune_vocals(
         for path in temp_files:
             delete(path)
         delete(separation_dir)
+
+
+def riaa_filter(
+    input_filename,
+    output_filename=None
+):
+    import librosa
+    import soundfile as sf
+    from scipy.signal import bilinear, lfilter, freqz, filtfilt
+
+    if output_filename is None:
+        output_filename = tmp("wav")
+
+    try:
+        audio_data, sample_rate = librosa.load(input_filename, sr=None, mono=False)
+        
+        if audio_data.dtype != np.float32 and audio_data.dtype != np.float64:
+            info = np.iinfo(audio_data.dtype)
+            audio_data = audio_data.astype(np.float32) / (info.max + 1)
+            
+        print(f"Read '{input_filename}' with sample rate {sample_rate} Hz.")
+        
+    except FileNotFoundError:
+        print(f"File '{input_filename}' not found. Generating white noise for demonstration.")
+        sample_rate = 44100
+        duration = 5
+        audio_data = np.random.randn(sample_rate * duration)
+        audio_data /= np.max(np.abs(audio_data))
+
+    t1 = 3180e-6
+    t2 = 318e-6
+    t3 = 75e-6
+
+    num_s = [t2, 1]
+    den_s = [t1 * t3, t1 + t3, 1]
+
+    w1k = 2 * np.pi * 1000
+    _, h = freqz_s(num_s, den_s, worN=[w1k])
+    gain_at_1k = np.abs(h[0])
+    
+    num_s = [c / gain_at_1k for c in num_s]
+    
+    b_riaa, a_riaa = bilinear(num_s, den_s, sample_rate)
+
+    print("Applying RIAA de-emphasis filter...")
+    processed_audio = filtfilt(b_riaa, a_riaa, audio_data)
+
+    processed_audio /= np.max(np.abs(processed_audio))
+    processed_audio_int16 = np.int16(processed_audio * 32767)    
+
+    sf.write(output_filename, processed_audio_int16, sample_rate)
+    print(f"Successfully applied RIAA EQ and saved to '{output_filename}'.")
+
+    return normalize_audio_to_peak(output_filename)
