@@ -289,7 +289,7 @@ SYSTEM_MESSAGE = "You are a helpful and concise AI assistant. Provide accurate a
 
 tasks = {
     "video": "tencent/HunyuanVideo",
-    "image": "black-forest-labs/FLUX.1-shnelkl",
+    "image": "black-forest-labs/FLUX.1-schnell",
     "detect": "facebook/detr-resnet-50",
     "answer": "microsoft/Phi-4-multimodal-instruct",
     "summary": "t5-large",
