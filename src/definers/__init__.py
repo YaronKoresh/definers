@@ -8445,7 +8445,7 @@ def stretch_audio(input_path, output_path=None, speed_factor=0.85):
 
 
 def get_scale_notes(
-    key="C", scale="major", start_octave=1, end_octave=9
+    key="C", scale="major", start_octave=2, end_octave=8
 ):
     NOTES = [
         "C",
@@ -8485,7 +8485,7 @@ def enhance_audio(audio_path, format_choice="mp3"):
 def autotune_vocals(
     audio_path,
     format_choice="mp3",
-    strength=0.4,
+    strength=0.5,
     humanize=20.0,
     quantize_grid=8,
     beats_per_bar=(4, 4),
@@ -8513,6 +8513,8 @@ def autotune_vocals(
     print("--- Initializing Autotune ---")
     separation_dir = tmp(dir=True)
     temp_files = []
+
+    n_fft, hop_length = 32768, 4096
 
     try:
         print("\n--- Vocal Separation ---")
@@ -8571,9 +8573,9 @@ def autotune_vocals(
 
             vocal_intervals = librosa.effects.split(
                 y_original,
-                top_db=60,
-                frame_length=8192,
-                hop_length=256,
+                top_db=40,
+                frame_length=n_fft,
+                hop_length=hop_length,
             )
 
             y_timed = np.zeros_like(y_original)
@@ -8642,11 +8644,10 @@ def autotune_vocals(
         allowed_notes = get_scale_notes(
             key=detected_key, scale=detected_mode
         )
-        n_fft, hop_length = 8192, 256
         f0, voiced_flag, _ = librosa.pyin(
             y,
-            fmin=librosa.note_to_hz("C1"),
-            fmax=librosa.note_to_hz("C9"),
+            fmin=librosa.note_to_hz("C2"),
+            fmax=librosa.note_to_hz("C8"),
             sr=sr,
             frame_length=n_fft,
             hop_length=hop_length,
