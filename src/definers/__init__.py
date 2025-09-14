@@ -3358,7 +3358,8 @@ def paths(*patterns):
 def copy(src, dst):
     if is_directory(full_path(src)):
         shutil.copytree(
-            src, dst, symlinks=False, ignore_dangling_symlinks=True
+            src, dst, symlinks=False,
+            ignore_dangling_symlinks=True
         )
     else:
         shutil.copy(src, dst)
@@ -4860,6 +4861,9 @@ def init_pretrained_model(task: str, turbo: bool = False):
                 "https://github.com/YaronKoresh/definers-rvc-files/archive/refs/heads/main.zip",
                 ".",
             )
+            subfolders = paths("./definers-rvc-files-main/*")
+            for subfolder in subfolders:
+                move(subfolder, f'./{ subfolder.strip("/").split("/")[-1] }')
 
         log("RVC initialization", "Initialization complete.", True)
 
