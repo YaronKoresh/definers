@@ -8702,8 +8702,8 @@ def autotune_vocals(
 
         temp_tuned_vocals_path = tmp(".wav")
         temp_files.append(temp_tuned_vocals_path)
-        temp_tuned_vocals_path = normalize_audio_to_peak(temp_tuned_vocals_path)
         sf.write(temp_tuned_vocals_path, y_tuned, sr)
+        temp_tuned_vocals_path = normalize_audio_to_peak(temp_tuned_vocals_path)
         tuned_vocals = pydub.AudioSegment.from_file(
             temp_tuned_vocals_path
         )
