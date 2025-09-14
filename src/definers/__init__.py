@@ -8525,9 +8525,9 @@ def autotune_vocals(
             str(vocals_path), sr=None, mono=True
         )
         y = np.copy(y_original)
-        instrumental_path = riaa_filter(
-            master(instrumental_path, "wav")
-        )
+        instrumental_path = str(instrumental_path)
+        instrumental_path = master(instrumental_path, "wav")
+        instrumental_path = riaa_filter(instrumental_path)
         instrumental = pydub.AudioSegment.from_file(instrumental_path)
 
         print("\n--- Rhythm Correction ---")
@@ -8740,13 +8740,12 @@ def autotune_vocals(
         delete(separation_dir)
 
 
-def riaa_filter(input_filename, output_filename=None):
+def riaa_filter(input_filename):
     import librosa
-    import soundfile as sf
+    from scipy.io import wavfile
     from scipy.signal import bilinear, filtfilt, freqz, lfilter
 
-    if output_filename is None:
-        output_filename = tmp("wav")
+    output_filename = tmp("wav")
 
     try:
         audio_data, sample_rate = librosa.load(
@@ -8796,9 +8795,9 @@ def riaa_filter(input_filename, output_filename=None):
     processed_audio /= np.max(np.abs(processed_audio))
     processed_audio_int16 = np.int16(processed_audio * 32767)
 
-    sf.write(output_filename, processed_audio_int16, sample_rate)
+    wavfile.write(output_filename, sample_rate, processed_audio_int16)
     print(
         f"Successfully applied RIAA EQ and saved to '{output_filename}'."
     )
 
-    return normalize_audio_to_peak(output_filename)
+    return output_filename
