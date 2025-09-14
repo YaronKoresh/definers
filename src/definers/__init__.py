@@ -3177,6 +3177,8 @@ def master(source_path, format_choice="mp3"):
     import matchering as mg
     import pydub
 
+    source_path = normalize_audio_to_peak(source_path)
+
     output_stem = Path(source_path).with_name(
         f"{Path(source_path).stem}_mastered"
     )
@@ -3196,7 +3198,7 @@ def master(source_path, format_choice="mp3"):
                     results=[mg.pcm24(str(result_wav_path))],
                     config=mg.Config(
                         max_length=60 * 60 * 24,
-                        threshold=0.6,
+                        threshold=0.999,
                         internal_sample_rate=44100,
                     ),
                 )
