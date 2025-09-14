@@ -3205,14 +3205,14 @@ def master(source_path, format_choice="mp3"):
                 return result_wav_path
 
             processed_path = source_path
-            processed_path = _master(processed_path)
-            processed_path = normalize_audio_to_peak(processed_path)
+            for _ in range(2):
+                processed_path = _master(processed_path)
+                processed_path = normalize_audio_to_peak(processed_path)
             final_sound = pydub.AudioSegment.from_file(processed_path)
             output_path = export_audio(
                 final_sound, output_stem, format_choice
             )
             delete(processed_path)
-            output_path = normalize_audio_to_peak(output_path)
             return output_path
     except Exception as e:
         catch(e)
@@ -8717,7 +8717,7 @@ def autotune_vocals(
             duration=max_duration, frame_rate=instrumental.frame_rate
         )
         combined = base.overlay(instrumental).overlay(
-            tuned_vocals + 2
+            tuned_vocals - 2
         )
 
         output_stem = f"{Path(audio_path).stem}_autotuned"
