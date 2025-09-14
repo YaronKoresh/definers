@@ -8800,7 +8800,7 @@ def riaa_filter(input_filename):
     processed_audio = filtfilt(b_riaa, a_riaa, audio_data)
 
     processed_audio /= np.max(np.abs(processed_audio))
-    processed_audio_int16 = np.int16(processed_audio * 32767)
+    processed_audio_int16 = np.int16((processed_audio * 32767).T)
 
     wavfile.write(output_filename, sample_rate, processed_audio_int16)
     print(
