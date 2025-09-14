@@ -7879,7 +7879,7 @@ def change_audio_speed(
 
 
 def separate_stems(
-    audio_path, separation_type=None, format_choice="mp3"
+    audio_path, separation_type=None, format_choice="wav"
 ):
     import pydub
 
@@ -7928,7 +7928,7 @@ def separate_stems(
 
 
 def pitch_shift_vocals(
-    audio_path, pitch_shift, format_choice, seperated=False
+    audio_path, pitch_shift, format_choice="wav", seperated=False
 ):
     import librosa
     import pydub
