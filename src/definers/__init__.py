@@ -3337,7 +3337,7 @@ def add_path(*p):
 def full_path(*p):
     return str(
         Path(os.path.join(*[str(_p).strip() for _p in p])).resolve()
-    )
+    ).rstrip("/")
 
 
 def paths(*patterns):
@@ -4830,6 +4830,23 @@ def summary(text, max_words=50):
         return _summarize(text, is_chunk=False)
 
 
+def git(user:str, repo:str, parent:str="."):
+    user = user.replace(" ", "_")
+    repo = repo.replace(" ", "-")
+    parent = full_path(parent)
+    d = tmp(dir=True)
+    run(f'git clone https://github.com/{user}/{repo}.git "{d}"')
+    ps = paths(f"{d}/*")
+    for p in ps:
+        n = p.strip("/").split("/")[-1]
+        if n.startswith(".") or not (
+            n.endswith(".py") and n != "setup.py"
+        ):
+            continue
+        move(
+            p, f'{parent}/{n}'
+        )
+
 def init_pretrained_model(task: str, turbo: bool = False):
 
     free()
@@ -4856,16 +4873,7 @@ def init_pretrained_model(task: str, turbo: bool = False):
             "Initializing RVC by downloading necessary files."
         )
         with cwd():
-            download_and_unzip(
-                "https://github.com/YaronKoresh/definers-rvc-files/archive/refs/heads/main.zip",
-                ".",
-            )
-            subfolders = paths("./definers-rvc-files-main/*")
-            for subfolder in subfolders:
-                move(
-                    subfolder,
-                    f'./{ subfolder.strip("/").split("/")[-1] }',
-                )
+            git("YaronKoresh", "definers rvc files")
 
         log("RVC initialization", "Initialization complete.", True)
 
