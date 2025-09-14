@@ -3358,8 +3358,7 @@ def paths(*patterns):
 def copy(src, dst):
     if is_directory(full_path(src)):
         shutil.copytree(
-            src, dst, symlinks=False,
-            ignore_dangling_symlinks=True
+            src, dst, symlinks=False, ignore_dangling_symlinks=True
         )
     else:
         shutil.copy(src, dst)
@@ -4863,7 +4862,10 @@ def init_pretrained_model(task: str, turbo: bool = False):
             )
             subfolders = paths("./definers-rvc-files-main/*")
             for subfolder in subfolders:
-                move(subfolder, f'./{ subfolder.strip("/").split("/")[-1] }')
+                move(
+                    subfolder,
+                    f'./{ subfolder.strip("/").split("/")[-1] }',
+                )
 
         log("RVC initialization", "Initialization complete.", True)
 
@@ -8523,7 +8525,9 @@ def autotune_vocals(
             str(vocals_path), sr=None, mono=True
         )
         y = np.copy(y_original)
-        instrumental_path = riaa_filter(master(instrumental_path, "wav"))
+        instrumental_path = riaa_filter(
+            master(instrumental_path, "wav")
+        )
         instrumental = pydub.AudioSegment.from_file(instrumental_path)
 
         print("\n--- Rhythm Correction ---")
@@ -8715,7 +8719,9 @@ def autotune_vocals(
         base = pydub.AudioSegment.silent(
             duration=max_duration, frame_rate=instrumental.frame_rate
         )
-        combined = base.overlay(instrumental).overlay(tuned_vocals - 6)
+        combined = base.overlay(instrumental).overlay(
+            tuned_vocals - 6
+        )
 
         output_stem = f"{Path(audio_path).stem}_autotuned"
         final_output_path = f"{output_stem}.{format_choice}"
@@ -8734,28 +8740,36 @@ def autotune_vocals(
         delete(separation_dir)
 
 
-def riaa_filter(
-    input_filename,
-    output_filename=None
-):
+def riaa_filter(input_filename, output_filename=None):
     import librosa
     import soundfile as sf
-    from scipy.signal import bilinear, lfilter, freqz, filtfilt
+    from scipy.signal import bilinear, filtfilt, freqz, lfilter
 
     if output_filename is None:
         output_filename = tmp("wav")
 
     try:
-        audio_data, sample_rate = librosa.load(input_filename, sr=None, mono=False)
-        
-        if audio_data.dtype != np.float32 and audio_data.dtype != np.float64:
+        audio_data, sample_rate = librosa.load(
+            input_filename, sr=None, mono=False
+        )
+
+        if (
+            audio_data.dtype != np.float32
+            and audio_data.dtype != np.float64
+        ):
             info = np.iinfo(audio_data.dtype)
-            audio_data = audio_data.astype(np.float32) / (info.max + 1)
-            
-        print(f"Read '{input_filename}' with sample rate {sample_rate} Hz.")
-        
+            audio_data = audio_data.astype(np.float32) / (
+                info.max + 1
+            )
+
+        print(
+            f"Read '{input_filename}' with sample rate {sample_rate} Hz."
+        )
+
     except FileNotFoundError:
-        print(f"File '{input_filename}' not found. Generating white noise for demonstration.")
+        print(
+            f"File '{input_filename}' not found. Generating white noise for demonstration."
+        )
         sample_rate = 44100
         duration = 5
         audio_data = np.random.randn(sample_rate * duration)
@@ -8771,18 +8785,20 @@ def riaa_filter(
     w1k = 2 * np.pi * 1000
     _, h = freqz(num_s, den_s, worN=[w1k])
     gain_at_1k = np.abs(h[0])
-    
+
     num_s = [c / gain_at_1k for c in num_s]
-    
+
     b_riaa, a_riaa = bilinear(num_s, den_s, sample_rate)
 
     print("Applying RIAA de-emphasis filter...")
     processed_audio = filtfilt(b_riaa, a_riaa, audio_data)
 
     processed_audio /= np.max(np.abs(processed_audio))
-    processed_audio_int16 = np.int16(processed_audio * 32767)    
+    processed_audio_int16 = np.int16(processed_audio * 32767)
 
     sf.write(output_filename, processed_audio_int16, sample_rate)
-    print(f"Successfully applied RIAA EQ and saved to '{output_filename}'.")
+    print(
+        f"Successfully applied RIAA EQ and saved to '{output_filename}'."
+    )
 
     return normalize_audio_to_peak(output_filename)
