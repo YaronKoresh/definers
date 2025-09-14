@@ -3198,7 +3198,7 @@ def master(source_path, format_choice="mp3", repeats=1):
                     results=[mg.pcm24(str(result_wav_path))],
                     config=mg.Config(
                         max_length=60 * 60 * 24,
-                        threshold=0.999,
+                        threshold=0.9,
                         internal_sample_rate=44100,
                     ),
                 )
@@ -8437,7 +8437,7 @@ def stretch_audio(input_path, output_path=None, speed_factor=0.85):
         return None
 
 
-def get_scale_notes(key="C", scale="major", octaves=5):
+def get_scale_notes(key="C", scale="major", start_octave=1, end_octave=9):
     NOTES = [
         "C",
         "C#",
@@ -8457,11 +8457,11 @@ def get_scale_notes(key="C", scale="major", octaves=5):
         "minor": [0, 2, 3, 5, 7, 8, 10],
     }
 
-    start_note_midi = 12 + NOTES.index(key.upper())
+    start_note_midi = ((start_octave - 1) * 12) + NOTES.index(key.upper())
     scale_intervals = SCALES.get(scale.lower(), SCALES["major"])
 
     scale_notes = []
-    for i in range(octaves * 12):
+    for i in range((end_octave - start_octave) * 12):
         if (i % 12) in scale_intervals:
             scale_notes.append(start_note_midi + i)
     return np.array(scale_notes)
@@ -8476,7 +8476,7 @@ def autotune_vocals(
     format_choice="mp3",
     strength=0.4,
     humanize=20.0,
-    quantize_grid=16,
+    quantize_grid=8,
     beats_per_bar=(4, 4),
 ):
     import librosa
@@ -8506,11 +8506,11 @@ def autotune_vocals(
     try:
         print("\n--- Vocal Separation ---")
         run(
-            f'"{sys.executable}" -m demucs.separate -n htdemucs_ft --two-stems=vocals -o "{separation_dir}" "{audio_path}"'
+            f'"{sys.executable}" -m demucs.separate -n htdemucs -j 8192 --shifts=2 --two-stems=vocals -o "{separation_dir}" "{audio_path}"'
         )
         separated_dir = (
             Path(separation_dir)
-            / "htdemucs_ft"
+            / "htdemucs"
             / Path(audio_path).stem
         )
         vocals_path = Path(
@@ -8562,9 +8562,9 @@ def autotune_vocals(
 
             vocal_intervals = librosa.effects.split(
                 y_original,
-                top_db=25,
-                frame_length=2048,
-                hop_length=512,
+                top_db=60,
+                frame_length=8192,
+                hop_length=256,
             )
 
             y_timed = np.zeros_like(y_original)
@@ -8633,11 +8633,11 @@ def autotune_vocals(
         allowed_notes = get_scale_notes(
             key=detected_key, scale=detected_mode
         )
-        n_fft, hop_length = 2048, 512
+        n_fft, hop_length = 8192, 256
         f0, voiced_flag, _ = librosa.pyin(
             y,
-            fmin=librosa.note_to_hz("C2"),
-            fmax=librosa.note_to_hz("C7"),
+            fmin=librosa.note_to_hz("C1"),
+            fmax=librosa.note_to_hz("C9"),
             sr=sr,
             frame_length=n_fft,
             hop_length=hop_length,
@@ -8656,7 +8656,7 @@ def autotune_vocals(
                     cents_dev = np.random.normal(
                         0, scale=(humanize * 5)
                     )
-                    cents_dev = np.clip(cents_dev, -15, 15)
+                    cents_dev = np.clip(cents_dev, -25, 25)
                     ideal_f0 *= 2 ** (cents_dev / 1200)
                 target_f0[i] = (
                     current_f0 + (ideal_f0 - current_f0) * strength
@@ -8718,8 +8718,10 @@ def autotune_vocals(
         base = pydub.AudioSegment.silent(
             duration=max_duration, frame_rate=instrumental.frame_rate
         )
-        combined = base.overlay(instrumental).overlay(
-            tuned_vocals - 2
+        combined = base.overlay(
+            instrumental
+        ).overlay(
+            tuned_vocals
         )
 
         output_stem = f"{Path(audio_path).stem}_autotuned"
