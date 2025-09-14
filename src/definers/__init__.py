@@ -3305,6 +3305,11 @@ def simple_text(prompt):
     prompt = re.sub("(-){2,}", "-", prompt)
     prompt = prompt.replace("|", " or ")
     prompt = re.sub("[ !]*\?[ !?]*", " I wonder ", prompt)
+
+    prompt = re.sub(
+        "(?:(?<![a-zA-Z0-9])\/(?<![a-zA-Z0-9]))", " ", prompt
+    )
+
     prompt = re.sub(punc, "", prompt)
 
     prompt = re.sub(
