@@ -7029,7 +7029,7 @@ def humanize_vocals(audio_path, amount=1.0):
             sf.write(temp_input_wav, y, sr)
 
             command = (
-                f'rubberband --fine --formant --freqmap "{freq_map_path}" '
+                f'rubberband --formant --freqmap "{freq_map_path}" '
                 f'"{temp_input_wav}" "{temp_output_wav}"'
             )
             run(command)
@@ -8428,7 +8428,6 @@ def stretch_audio(input_path, output_path=None, speed_factor=0.85):
         output_path = tmp("wav")
     command = [
         "rubberband",
-        "--fine",
         "--formant",
         "--tempo",
         str(speed_factor),
