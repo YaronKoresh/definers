@@ -3208,7 +3208,9 @@ def master(source_path, format_choice="mp3", repeats=1):
 
             for _ in range(repeats):
                 processed_path = _master(processed_path)
-                processed_path = normalize_audio_to_peak(processed_path)
+                processed_path = normalize_audio_to_peak(
+                    processed_path
+                )
 
             final_sound = pydub.AudioSegment.from_file(processed_path)
             output_path = export_audio(
@@ -8437,7 +8439,9 @@ def stretch_audio(input_path, output_path=None, speed_factor=0.85):
         return None
 
 
-def get_scale_notes(key="C", scale="major", start_octave=1, end_octave=9):
+def get_scale_notes(
+    key="C", scale="major", start_octave=1, end_octave=9
+):
     NOTES = [
         "C",
         "C#",
@@ -8457,7 +8461,9 @@ def get_scale_notes(key="C", scale="major", start_octave=1, end_octave=9):
         "minor": [0, 2, 3, 5, 7, 8, 10],
     }
 
-    start_note_midi = ((start_octave - 1) * 12) + NOTES.index(key.upper())
+    start_note_midi = ((start_octave - 1) * 12) + NOTES.index(
+        key.upper()
+    )
     scale_intervals = SCALES.get(scale.lower(), SCALES["major"])
 
     scale_notes = []
@@ -8509,9 +8515,7 @@ def autotune_vocals(
             f'"{sys.executable}" -m demucs.separate -n htdemucs -j 8192 --shifts=2 --two-stems=vocals -o "{separation_dir}" "{audio_path}"'
         )
         separated_dir = (
-            Path(separation_dir)
-            / "htdemucs"
-            / Path(audio_path).stem
+            Path(separation_dir) / "htdemucs" / Path(audio_path).stem
         )
         vocals_path = Path(
             normalize_audio_to_peak(separated_dir / "vocals.wav")
@@ -8718,11 +8722,7 @@ def autotune_vocals(
         base = pydub.AudioSegment.silent(
             duration=max_duration, frame_rate=instrumental.frame_rate
         )
-        combined = base.overlay(
-            instrumental
-        ).overlay(
-            tuned_vocals
-        )
+        combined = base.overlay(instrumental).overlay(tuned_vocals)
 
         output_stem = f"{Path(audio_path).stem}_autotuned"
         final_output_path = f"{output_stem}.{format_choice}"
