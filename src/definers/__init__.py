@@ -8769,7 +8769,7 @@ def riaa_filter(
     den_s = [t1 * t3, t1 + t3, 1]
 
     w1k = 2 * np.pi * 1000
-    _, h = freqz_s(num_s, den_s, worN=[w1k])
+    _, h = freqz(num_s, den_s, worN=[w1k])
     gain_at_1k = np.abs(h[0])
     
     num_s = [c / gain_at_1k for c in num_s]
