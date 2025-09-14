@@ -35,6 +35,7 @@ import threading
 import traceback
 import urllib.request
 import warnings
+import zipfile
 from collections import namedtuple
 from concurrent.futures import ProcessPoolExecutor
 from contextlib import contextmanager
@@ -458,8 +459,6 @@ def is_admin_windows():
 
 
 def _install_ffmpeg_windows():
-    import zipfile
-
     import requests
 
     print("[INFO] Running FFmpeg installer for Windows...")
