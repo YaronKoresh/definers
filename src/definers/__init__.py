@@ -3173,7 +3173,7 @@ def get_max_resolution(width, height, mega_pixels=0.25, factor=16):
     return new_w, new_h
 
 
-def master(source_path, format_choice="mp3"):
+def master(source_path, format_choice="mp3", repeats=1):
     import matchering as mg
     import pydub
 
@@ -3205,9 +3205,11 @@ def master(source_path, format_choice="mp3"):
                 return result_wav_path
 
             processed_path = source_path
-            for _ in range(2):
+
+            for _ in range(repeats):
                 processed_path = _master(processed_path)
                 processed_path = normalize_audio_to_peak(processed_path)
+
             final_sound = pydub.AudioSegment.from_file(processed_path)
             output_path = export_audio(
                 final_sound, output_stem, format_choice
