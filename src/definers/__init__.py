@@ -3204,9 +3204,7 @@ def master(source_path, format_choice="mp3"):
 
             processed_path = source_path
             processed_path = _master(processed_path)
-            processed_path = normalize_audio_to_peak(
-                processed_path
-            )
+            processed_path = normalize_audio_to_peak(processed_path)
             final_sound = pydub.AudioSegment.from_file(processed_path)
             output_path = export_audio(
                 final_sound, output_stem, format_choice
@@ -8113,9 +8111,7 @@ def stem_mixer(files, format_choice):
     print("--- Processing Stems for Simple Mixing ---")
     for i, _file in enumerate(files):
         file_obj = Path(_file)
-        print(
-            f"Processing file {i+1}/{len(files)}: {file_obj.name}"
-        )
+        print(f"Processing file {i+1}/{len(files)}: {file_obj.name}")
 
         try:
             y, sr = librosa.load(file_obj.name, sr=None)
@@ -8467,11 +8463,8 @@ def get_scale_notes(key="C", scale="major", octaves=5):
     return np.array(scale_notes)
 
 
-def enhance_audio(
-    audio_path,
-    format_choice="mp3"
-):
-    return master( autotune_vocals(audio_path, "wav"), format_choice )
+def enhance_audio(audio_path, format_choice="mp3"):
+    return master(autotune_vocals(audio_path, "wav"), format_choice)
 
 
 def autotune_vocals(
@@ -8519,9 +8512,7 @@ def autotune_vocals(
         vocals_path = Path(
             normalize_audio_to_peak(separated_dir / "vocals.wav")
         )
-        instrumental_path = Path(
-            separated_dir / "no_vocals.wav"
-        )
+        instrumental_path = Path(separated_dir / "no_vocals.wav")
         if not vocals_path.exists() or not instrumental_path.exists():
             raise FileNotFoundError("Vocal separation failed.")
 
