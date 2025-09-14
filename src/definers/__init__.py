@@ -4830,7 +4830,7 @@ def summary(text, max_words=50):
         return _summarize(text, is_chunk=False)
 
 
-def git(user:str, repo:str, parent:str="."):
+def git(user: str, repo: str, parent: str = "."):
     user = user.replace(" ", "_")
     repo = repo.replace(" ", "-")
     parent = full_path(parent)
@@ -4843,9 +4843,8 @@ def git(user:str, repo:str, parent:str="."):
             n.endswith(".py") and n != "setup.py"
         ):
             continue
-        move(
-            p, f'{parent}/{n}'
-        )
+        move(p, f"{parent}/{n}")
+
 
 def init_pretrained_model(task: str, turbo: bool = False):
 
