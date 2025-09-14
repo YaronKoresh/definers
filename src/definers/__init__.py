@@ -3305,9 +3305,7 @@ def simple_text(prompt):
     prompt = prompt.replace("|", " or ")
     prompt = re.sub("[ !]*\?[ !?]*", " I wonder ", prompt)
 
-    prompt = re.sub(
-        "(?<=[a-zA-Z0-9])\/(?=[a-zA-Z0-9])", " ", prompt
-    )
+    prompt = re.sub("(?<=[a-zA-Z0-9])\/(?=[a-zA-Z0-9])", " ", prompt)
 
     prompt = re.sub(punc, "", prompt)
 
@@ -4858,7 +4856,10 @@ def init_pretrained_model(task: str, turbo: bool = False):
             "Initializing RVC by downloading necessary files."
         )
         with cwd():
-            download_and_unzip("https://github.com/YaronKoresh/definers-rvc-files/archive/refs/heads/main.zip", ".")
+            download_and_unzip(
+                "https://github.com/YaronKoresh/definers-rvc-files/archive/refs/heads/main.zip",
+                ".",
+            )
 
         log("RVC initialization", "Initialization complete.", True)
 
