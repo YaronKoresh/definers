@@ -7401,12 +7401,14 @@ def beat_visualizer(
 
 
 def music_video(
-    audio_path, preset="vortex", width=1280, height=720, fps=30
+    audio_path, preset="vortex", width=1280, height=720, fps=25
 ):
     import librosa
     import madmom
     from moviepy import AudioFileClip, VideoFileClip
     from moviepy.video.VideoClip import VideoClip
+
+    hop_length = 1024
 
     y, sr = librosa.load(audio_path)
     duration = librosa.get_duration(y=y, sr=sr)
@@ -7414,11 +7416,11 @@ def music_video(
     spectral_centroid = librosa.feature.spectral_centroid(y=y, sr=sr)[
         0
     ]
-    proc = madmom.features.beats.DBNBeatTrackingProcessor(fps=100)
+    proc = madmom.features.beats.DBNBeatTrackingProcessor(fps=50)
     act = madmom.features.beats.RNNBeatProcessor()(audio_path)
     beat_times = proc(act)
     beat_frames = librosa.time_to_frames(
-        beat_times, sr=sr, hop_length=512
+        beat_times, sr=sr, hop_length=hop_length
     )
     rms_norm = (rms - np.min(rms)) / (
         np.max(rms) - np.min(rms) + 1e-6
@@ -7433,7 +7435,7 @@ def music_video(
 
     def make_frame(t):
         frame = np.zeros((h, w, 3), dtype=np.uint8)
-        frame_idx = int(t * sr / 512)
+        frame_idx = int(t * sr / hop_length)
 
         is_beat = any(abs(frame_idx - bf) < 3 for bf in beat_frames)
 
