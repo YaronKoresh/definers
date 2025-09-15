@@ -3292,10 +3292,10 @@ def install_faiss():
             ]
             subprocess.run(cmake_command, check=True)
             subprocess.run(
-                [f'{cmake}', "-C", build_dir, "-j16", "faiss"], check=True
+                [f'{cmake}', "-C", build_dir, "faiss"], check=True
             )
             subprocess.run(
-                [f'{cmake}', "-C", build_dir, "-j16", "swigfaiss"],
+                [f'{cmake}', "-C", build_dir, "swigfaiss"],
                 check=True,
             )
             subprocess.run(
