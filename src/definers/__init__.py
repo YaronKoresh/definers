@@ -4917,12 +4917,10 @@ def git(user: str, repo: str, branch: str = "main", parent: str = "."):
     ps = paths(f"{clone_dir}/*")
     for p in ps:
         n = p.strip("/").split("/")[-1]
-        if is_ai_model(p):
+        if n.startswith(".") or n == "setup.py"):
+            continue
+        if is_ai_model(p) or n.endswith(".py") or n.endswith(".txt") or n.endswith(".make") or n.endswith(".cmake") or n.endswith(".nmake"):
             move(p, f"{parent}/{n}")
-            continue
-        if n.startswith(".") or not (n.endswith(".py") or n == "setup.py"):
-            continue
-        move(p, f"{parent}/{n}")
 
 
 def init_pretrained_model(task: str, turbo: bool = False):
