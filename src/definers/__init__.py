@@ -671,10 +671,6 @@ def install_ffmpeg():
 
 def install_audio_effects():
     os_name = get_os_name()
-    install_dir = os.path.join(
-        os.path.expanduser("~"), "app_dependencies"
-    )
-    os.makedirs(install_dir, exist_ok=True)
     if os_name == "linux":
         print(
             "Detected Linux. Installing system dependencies with apt-get..."
@@ -685,11 +681,15 @@ def install_audio_effects():
             "fluid-soundfont-gm",
             "build-essential",
             "libsndfile1",
-            "libsndfile-dev ",
+            "libsndfile1-dev ",
         ]
         run("apt-get update -y")
         run(f"apt-get install -y {' '.join(dependencies_apt)}")
     elif os_name == "windows":
+        install_dir = full_path(
+            "./app_dependencies"
+        )
+        directory(install_dir, exist_ok=True)
         print(
             "Detected Windows. Automating dependency installation..."
         )
