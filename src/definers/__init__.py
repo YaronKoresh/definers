@@ -3262,7 +3262,7 @@ def install_faiss():
     if importable("faiss"):
         return False
 
-    git("facebookresearch", "faiss", parent=f"./faiss")
+    git("facebookresearch", "faiss", parent=f"./xfaiss")
 
     set_cuda_env()
 
@@ -3272,7 +3272,9 @@ def install_faiss():
     )[0]
 
     try:
-        with cwd("./faiss"):
+        with cwd("./xfaiss"):
+
+            print("faiss - stage 1")
             run( (
                 f'{cmake} '
                 f'-B build '
@@ -3289,9 +3291,15 @@ def install_faiss():
             ) )
 
             cpu_cores = os.cpu_count() or 1
-            run(f'{cmake} --build build --parallel {cpu_cores}')
 
-        with cwd("./faiss/build/faiss/python"):
+            print("faiss - stage 2")
+            run(f'{cmake} -C build -j{cpu_cores} faiss')
+
+            print("faiss - stage 3")
+            run(f'{cmake} -C build -j{cpu_cores} swigfaiss')
+
+        with cwd("./xfaiss/build/faiss/python"):
+            print("faiss - stage 4")
             run(f'{sys.executable} -m pip install .')
 
         print("Faiss installed successfully!")
