@@ -3261,48 +3261,44 @@ def is_clusters_model(model):
 def install_faiss():
     if importable("faiss"):
         return False
-    faiss_repo_url = "https://github.com/facebookresearch/faiss.git"
+
     faiss_dir = "_faiss_"
+    directory(f"./{faiss_dir}")
+    git("facebookresearch", "faiss", parent=f"./{faiss_dir}")
+
+    build_dir = full_path(".", faiss_dir, "build")
+    python_dir = full_path(build_dir, "faiss", "python")
+
+    set_cuda_env()
+
     cmake = paths(
         "/usr/local/cmake/cmake-4.1.1-linux-x86_64/bin/cmake",
         "/usr/local/cmake/bin/cmake"
     )[0]
-    build_dir = os.path.join(faiss_dir, "build")
-    python_dir = os.path.join(build_dir, "faiss", "python")
-    set_cuda_env()
+
     try:
-        subprocess.run(
-            ["git", "clone", faiss_repo_url, faiss_dir], check=True
-        )
-        with cwd(faiss_dir):
-            cmake_command = [
-                f'{cmake}',
-                "-B",
-                build_dir,
-                "-DBUILD_TESTING=OFF",
-                "-DCMAKE_BUILD_TYPE=Release",
-                "-DFAISS_ENABLE_C_API=ON",
-                "-DFAISS_ENABLE_GPU=ON",
-                "-DFAISS_ENABLE_PYTHON=ON",
-                f"-DPython_EXECUTABLE={sys.executable}",
-                f"-DPython_INCLUDE_DIR={sys.prefix}/include/python{sys.version_info.major}.{sys.version_info.minor}",
-                f"-DPython_LIBRARY={sys.prefix}/lib/libpython{sys.version_info.major}.{sys.version_info.minor}.so",
-                f"-DPython_NumPy_INCLUDE_DIRS={sys.prefix}/lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages/numpy/core/include",
-                ".",
-            ]
-            subprocess.run(cmake_command, check=True)
-            subprocess.run(
-                [f'{cmake}', "-C", build_dir, "faiss"], check=True
-            )
-            subprocess.run(
-                [f'{cmake}', "-C", build_dir, "swigfaiss"],
-                check=True,
-            )
-            subprocess.run(
-                [sys.executable, "-m", "pip", "install", "."],
-                cwd=python_dir,
-                check=True,
-            )
+        with cwd(f"./{faiss_dir}"):
+            run( (
+                f'{cmake} '
+                f'-B "{build_dir}" '
+                "-DBUILD_TESTING=OFF "
+                "-DCMAKE_BUILD_TYPE=Release "
+                "-DFAISS_ENABLE_C_API=ON "
+                "-DFAISS_ENABLE_GPU=ON "
+                "-DFAISS_ENABLE_PYTHON=ON "
+                f"-DPython_EXECUTABLE={sys.executable} "
+                f"-DPython_INCLUDE_DIR={sys.prefix}/include/python{sys.version_info.major}.{sys.version_info.minor} "
+                f"-DPython_LIBRARY={sys.prefix}/lib/libpython{sys.version_info.major}.{sys.version_info.minor}.so "
+                f"-DPython_NumPy_INCLUDE_DIRS={sys.prefix}/lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages/numpy/core/include "
+                "."
+            ) )
+
+            run(f'{cmake} -C "{build_dir}" faiss')
+            run(f'{cmake} -C "{build_dir}" swigfaiss')
+
+        with cwd(python_dir):
+            run(f'{sys.executable} -m pip install .')
+
         print("Faiss installed successfully!")
     except subprocess.CalledProcessError as e:
         print(f"Error during installation: {e}")
