@@ -4830,18 +4830,49 @@ def summary(text, max_words=50):
         return _summarize(text, is_chunk=False)
 
 
-def git(user: str, repo: str, parent: str = "."):
+def git(user: str, repo: str, branch: str = "main", parent: str = "."):
     user = user.replace(" ", "_")
     repo = repo.replace(" ", "-")
     parent = full_path(parent)
-    d = tmp(dir=True)
-    run(f'git clone https://github.com/{user}/{repo}.git "{d}"')
-    ps = paths(f"{d}/*")
+    clone_dir = tmp(dir=True)
+    
+    repo_url = f"https://github.com/{user}/{repo}.git"
+    env = os.environ.copy()
+    env['GIT_LFS_SKIP_SMUDGE'] = '1'
+    
+    subprocess.run(
+        ['git', 'clone', '--branch', branch, repo_url, clone_dir],
+        check=True,
+        env=env,
+        capture_output=True
+    )
+    
+    for root, _, files in os.walk(clone_dir):
+        for filename in files:
+            filepath = os.path.join(root, filename)
+            if os.path.getsize(filepath) < 200:
+                with open(filepath, 'r') as f:
+                    try:
+                        content = f.read()
+                    except UnicodeDecodeError:
+                        continue
+                
+                if content.startswith("version https://git-lfs.github.com/spec"):
+                    filepath_in_repo = os.path.relpath(filepath, clone_dir).replace(os.path.sep, '/')
+                    asset_url = f"https://media.githubusercontent.com/media/{user}/{repo}/{branch}/{filepath_in_repo}"
+                    try:
+                        with requests.get(asset_url, stream=True) as r:
+                            r.raise_for_status()
+                            with open(filepath, 'wb') as asset_file:
+                                for chunk in r.iter_content(chunk_size=8129):
+                                    asset_file.write(chunk)
+                    except requests.exceptions.RequestException as e:
+                        print(f"Warning: Could not download asset {filename}. Error: {e}")
+
+    ps = paths(f"{clone_dir}/*")
     for p in ps:
         n = p.strip("/").split("/")[-1]
-        if n.startswith(".") or not (
-            n.endswith(".py") and n != "setup.py"
-        ):
+        if n.startswith(".") or not (n.endswith(".py") and n != "setup.py"):
             continue
         move(p, f"{parent}/{n}")
 
