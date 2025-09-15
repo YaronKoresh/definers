@@ -8756,7 +8756,6 @@ def autotune_vocals(
             sf.write(temp_vocals_in, y, sr)
             command = [
                 "rubberband",
-                "--fine",
                 "--formant",
                 "--freqmap",
                 freq_map_path,
