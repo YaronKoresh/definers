@@ -145,6 +145,20 @@ if _find_spec("dask"):
     dask.core.to_graphviz = _visualize_wrapper
 
 
+ai_model_extensions = {
+        'safetensors', # Stable Diffusion, general use
+        'onnx',        # Open Neural Network Exchange
+        'pt',          # PyTorch
+        'pth',         # PyTorch (older convention)
+        'h5',          # Keras / TensorFlow (HDF5 format)
+        'keras',       # Keras
+        'pb',          # TensorFlow Protocol Buffer
+        'tflite',      # TensorFlow Lite
+        'gguf',        # Common format for LLMs like Llama
+        'ckpt'         # Checkpoint (general)
+}
+
+
 language_codes = {
     "af": "afrikaans",
     "sq": "albanian",
@@ -4902,7 +4916,10 @@ def git(user: str, repo: str, branch: str = "main", parent: str = "."):
     ps = paths(f"{clone_dir}/*")
     for p in ps:
         n = p.strip("/").split("/")[-1]
-        if n.startswith(".") or not (n.endswith(".py") and n != "setup.py"):
+        if is_ai_model(p):
+            move(p, f"{parent}/{n}")
+            continue
+        if n.startswith(".") or not (n.endswith(".py") or n == "setup.py"):
             continue
         move(p, f"{parent}/{n}")
 
@@ -8421,6 +8438,12 @@ def calculate_active_rms(y, sr):
 
 def get_ext(input_path):
     return os.path.splitext(input_path)[1][1:].lower()
+
+
+def is_ai_model(input_path):
+    extension = get_ext(input_path)
+    return extension in ai_model_extensions
+
 
 def normalize_audio_to_peak(
     input_path: str, target_level: float = 0.9, format: str = None
