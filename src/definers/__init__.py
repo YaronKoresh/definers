@@ -8604,7 +8604,6 @@ def autotune_vocals(
 
         instrumental_path = str(instrumental_path)
         instrumental_path = master(instrumental_path, "wav")
-        instrumental_path = riaa_filter(instrumental_path)
         instrumental = pydub.AudioSegment.from_file(instrumental_path)
 
         print("\n--- Rhythm Correction ---")
