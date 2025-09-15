@@ -8213,7 +8213,7 @@ def stem_mixer(files, format_choice):
         print(f"Processing file {i+1}/{len(files)}: {file_obj.name}")
 
         try:
-            y, sr = librosa.load(file_obj.name, sr=None)
+            y, sr = librosa.load(_file, sr=None)
         except Exception as e:
             catch(f"Could not load file: {file_obj.name}. Error: {e}")
             continue
