@@ -8604,7 +8604,7 @@ def autotune_vocals(
 
             vocal_intervals = librosa.effects.split(
                 y_original,
-                top_db=40,
+                top_db=60,
                 frame_length=n_fft,
                 hop_length=hop_length,
             )
