@@ -3352,7 +3352,12 @@ def add_path(*p):
         site.addsitedir(path)
         importlib.invalidate_caches()
     if get_os_name() == "linux" or get_os_name() == "darwin":
-        return run(f'export PATH="{path}:$PATH"')
+        cmd = f'export PATH="{path}:$PATH"'
+        if exist("~/.bashrc"):
+            write("~/.bashrc", "\n".join( read("~/.bashrc"), cmd ))
+        elif exist("~/.zshrc"):
+            write("~/.zshrc", "\n".join( read("~/.zshrc"), cmd ))
+        return run(cmd)
     if get_os_name() == "windows":
         return run(f'setx PATH "%PATH%;{path}"')
 
@@ -4117,6 +4122,8 @@ def apt_install():
         f"apt-get install -y { basic_apt } { audio_apt } { visual_apt }"
     )
     run("apt-get upgrade -y")
+
+    run("apt-get remove -y cmake")
 
     download_file("https://github.com/Kitware/CMake/releases/download/v4.1.1/cmake-4.1.1-linux-x86_64.sh", "./install_cmake.sh")
     permit("./install_cmake.sh")
