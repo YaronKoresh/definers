@@ -7068,6 +7068,9 @@ def create_share_links(
 
 
 def humanize_vocals(audio_path, amount=0.5):
+    import librosa
+    import soundfile as sf
+
     if not exist(audio_path):
         catch(f"Error: Input file not found at {audio_path}")
         return None
