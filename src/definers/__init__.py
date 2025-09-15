@@ -3249,6 +3249,10 @@ def install_faiss():
         return False
     faiss_repo_url = "https://github.com/facebookresearch/faiss.git"
     faiss_dir = "_faiss_"
+    cmake = paths(
+        "/usr/local/cmake/cmake-4.1.1-linux-x86_64/bin/cmake",
+        "/usr/local/cmake/bin/cmake"
+    )[0]
     build_dir = os.path.join(faiss_dir, "build")
     python_dir = os.path.join(build_dir, "faiss", "python")
     try:
@@ -3257,7 +3261,7 @@ def install_faiss():
         )
         with cwd(faiss_dir):
             cmake_command = [
-                "cmake",
+                f'"{cmake}"',
                 "-B",
                 build_dir,
                 "-DBUILD_TESTING=OFF",
@@ -3273,10 +3277,10 @@ def install_faiss():
             ]
             subprocess.run(cmake_command, check=True)
             subprocess.run(
-                ["make", "-C", build_dir, "-j16", "faiss"], check=True
+                [f'"{cmake}"', "-C", build_dir, "-j16", "faiss"], check=True
             )
             subprocess.run(
-                ["make", "-C", build_dir, "-j16", "swigfaiss"],
+                [f'"{cmake}"', "-C", build_dir, "-j16", "swigfaiss"],
                 check=True,
             )
             subprocess.run(
@@ -4107,7 +4111,11 @@ def apt_install():
     permit("./install_cmake.sh")
     directory("/usr/local/cmake")
     run("./install_cmake.sh --skip-license --prefix=/usr/local/cmake")
-    add_path("/usr/local/cmake")
+    cmake_path = paths(
+        "/usr/local/cmake/cmake-4.1.1-linux-x86_64/bin",
+        "/usr/local/cmake/bin"
+    )[0]
+    add_path("cmake_path")
     
     post_install()
 
