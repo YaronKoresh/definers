@@ -3332,6 +3332,10 @@ def add_path(*p):
         sys.path.append(path)
         site.addsitedir(path)
         importlib.invalidate_caches()
+    if get_os_name() = "linux" or get_os_name() = "darwin":
+        return run(f'export PATH="{path}:$PATH"')
+    if get_os_name() = "windows":
+        return run(f'setx PATH "%PATH%;{path}"')
 
 
 def full_path(*p):
@@ -3759,8 +3763,13 @@ def wait(*threads):
 
 def permit(path):
     try:
-        subprocess.run(["chmod", "-R", "a+xrw", path], check=True)
-        return True
+        if get_os_name() == "linux":
+            subprocess.run(["chmod", "-R", "a+xrw", path], check=True)
+            return True
+        if get_os_name() == "windows":
+            subprocess.run(['icacls', path, '/grant', 'Everyone:F', '/T'], check=True)
+            return True
+        return False
     except Exception as e:
         return False
 
@@ -4078,7 +4087,13 @@ def pre_install():
 
 def apt_install():
 
-    basic_apt = "build-essential gcc cmake swig gdebi git git-lfs wget curl libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev libncursesw5-dev xz-utils tk-dev libffi-dev liblzma-dev initramfs-tools libgirepository1.0-dev libdbus-1-dev libdbus-glib-1-dev libsecret-1-0 libmanette-0.2-0 libharfbuzz0b libharfbuzz-icu0 libenchant-2-2 libhyphen0 libwoff1 libgraphene-1.0-0 libxml2-dev libxmlsec1-dev"
+    download_file("https://github.com/Kitware/CMake/releases/download/v4.1.1/cmake-4.1.1-linux-x86_64.sh", "./install_cmake.sh")
+    permit("./install_cmake.sh")
+    directory("/usr/local/cmake")
+    run("./install_cmake.sh --skip-license --prefix=/usr/local/cmake")
+    add_path("/usr/local/cmake")
+
+    basic_apt = "build-essential gcc swig gdebi git git-lfs wget curl libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev libncursesw5-dev xz-utils tk-dev libffi-dev liblzma-dev initramfs-tools libgirepository1.0-dev libdbus-1-dev libdbus-glib-1-dev libsecret-1-0 libmanette-0.2-0 libharfbuzz0b libharfbuzz-icu0 libenchant-2-2 libhyphen0 libwoff1 libgraphene-1.0-0 libxml2-dev libxmlsec1-dev"
     audio_apt = "libsndfile1 libsndfile1-dev libportaudio2 libasound2-dev sox libsox-fmt-all praat ffmpeg libavcodec-extra libavif-dev"
     visual_apt = "libopenblas-dev libgflags-dev libgles2 libgtk-3-0 libgtk-4-1 libatk1.0-0 libatk-bridge2.0-0 libcups2 libxcomposite1 libxdamage1 libatspi2.0-0 libgstreamer1.0-0 gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-tools gstreamer1.0-gl"
 
