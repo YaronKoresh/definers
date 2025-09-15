@@ -7931,10 +7931,10 @@ def separate_stems(
 
     output_dir = tmp(dir=True)
     run(
-        f'"{sys.executable}" -m demucs.separate -n htdemucs -j 8192 --two-stems=vocals -o "{output_dir}" "{audio_path}"'
+        f'"{sys.executable}" -m demucs.separate -n htdemucs_ft --two-stems=vocals -o "{output_dir}" "{audio_path}"'
     )
     separated_dir = (
-        Path(output_dir) / "htdemucs" / Path(audio_path).stem
+        Path(output_dir) / "htdemucs_ft" / Path(audio_path).stem
     )
     vocals_path = separated_dir / "vocals.wav"
     accompaniment_path = separated_dir / "no_vocals.wav"
@@ -7989,15 +7989,7 @@ def pitch_shift_vocals(
         sf.write(output_path, y_shifted, sr)
         return output_path
 
-    separation_dir = tmp(dir=True)
-    run(
-        f'"{sys.executable}" -m demucs.separate -n htdemucs_ft --two-stems=vocals -o "{separation_dir}" "{audio_path}"'
-    )
-    separated_dir = (
-        Path(separation_dir) / "htdemucs_ft" / Path(audio_path).stem
-    )
-    vocals_path = separated_dir / "vocals.wav"
-    instrumental_path = separated_dir / "no_vocals.wav"
+    vocals_path, instrumental_path = separate_stems(audio_path)
     if not vocals_path.exists() or not instrumental_path.exists():
         delete(separation_dir)
         catch("Vocal separation failed.")
@@ -8032,7 +8024,7 @@ def create_spectrum_visualization(audio_path):
     try:
         y, sr = librosa.load(audio_path, sr=None)
 
-        n_fft = 131072
+        n_fft = 8192
         hop_length = 512
         stft_result = librosa.stft(
             y, n_fft=n_fft, hop_length=hop_length
@@ -8415,25 +8407,23 @@ def calculate_active_rms(y, sr):
     return np.sqrt(np.mean(active_audio**2))
 
 
+def get_ext(input_path):
+    return os.path.splitext(input_path)[1][1:].lower()
+
 def normalize_audio_to_peak(
     input_path: str, target_level: float = 0.9, format: str = None
 ):
     from pydub import AudioSegment
     from pydub.effects import normalize
 
-    if format is None:
-        if str(input_path).lower().endswith(".mp3"):
-            format = "mp3"
-        elif str(input_path).lower().endswith(".flac"):
-            format = "flac"
-        else:
-            format = "wav"
-
-    output_path = tmp(format)
-
     if not 0.0 <= target_level <= 1.0:
         catch("target_level must be between 0.0 and 1.0")
         return None
+
+    if format is None:
+        format =  get_ext(input_path) or "wav"
+
+    output_path = tmp(format)
 
     try:
         audio = AudioSegment.from_file(input_path)
@@ -8490,7 +8480,7 @@ def stretch_audio(input_path, output_path=None, speed_factor=0.85):
 
 
 def get_scale_notes(
-    key="C", scale="major", start_octave=2, end_octave=8
+    key="C", scale="major", start_octave=3, end_octave=7
 ):
     NOTES = [
         "C",
@@ -8532,7 +8522,7 @@ def autotune_vocals(
     format_choice="mp3",
     strength=0.5,
     humanize=20.0,
-    quantize_grid=8,
+    quantize_grid=16,
     beats_per_bar=(4, 4),
 ):
     import librosa
@@ -8559,20 +8549,13 @@ def autotune_vocals(
     separation_dir = tmp(dir=True)
     temp_files = []
 
-    n_fft, hop_length = 8192, 256
+    n_fft, hop_length = 4096, 512
 
     try:
         print("\n--- Vocal Separation ---")
-        run(
-            f'"{sys.executable}" -m demucs.separate -n htdemucs -j 8192 --shifts=2 --two-stems=vocals -o "{separation_dir}" "{audio_path}"'
-        )
-        separated_dir = (
-            Path(separation_dir) / "htdemucs" / Path(audio_path).stem
-        )
-        vocals_path = Path(
-            normalize_audio_to_peak(separated_dir / "vocals.wav")
-        )
-        instrumental_path = Path(separated_dir / "no_vocals.wav")
+
+        vocals_path, instrumental_path = separate_stems(audio_path)
+
         if not vocals_path.exists() or not instrumental_path.exists():
             raise FileNotFoundError("Vocal separation failed.")
 
@@ -8581,6 +8564,7 @@ def autotune_vocals(
             str(vocals_path), sr=None, mono=True
         )
         y = np.copy(y_original)
+
         instrumental_path = str(instrumental_path)
         instrumental_path = master(instrumental_path, "wav")
         instrumental_path = riaa_filter(instrumental_path)
@@ -8620,7 +8604,7 @@ def autotune_vocals(
 
             vocal_intervals = librosa.effects.split(
                 y_original,
-                top_db=60,
+                top_db=40,
                 frame_length=n_fft,
                 hop_length=hop_length,
             )
@@ -8693,8 +8677,8 @@ def autotune_vocals(
         )
         f0, voiced_flag, _ = librosa.pyin(
             y,
-            fmin=librosa.note_to_hz("C2"),
-            fmax=librosa.note_to_hz("C8"),
+            fmin=librosa.note_to_hz("C3"),
+            fmax=librosa.note_to_hz("C7"),
             sr=sr,
             frame_length=n_fft,
             hop_length=hop_length,
