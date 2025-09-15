@@ -4897,15 +4897,26 @@ def git(user: str, repo: str, branch: str = "main", parent: str = "."):
     env['GIT_LFS_SKIP_SMUDGE'] = '1'
     
     run(f'git clone --branch {branch} {repo_url} {clone_dir}', env=env)
-    
-    for p in read(clone_dir):
-        if os.path.getsize(p) < 200:
+
+    def _lfs(_dir):
+
+        later = []
+
+        for p in read(_dir):
+
+            if is_directory(p):
+                _lfs(p)
+                continue
+
+            if os.path.getsize(p) > 200:
+                continue
+
             with open(p, 'r') as f:
                 try:
                     content = f.read()
                 except UnicodeDecodeError:
                     continue
-                
+
             if content.startswith("version https://git-lfs.github.com/spec"):
                 filepath_in_repo = os.path.relpath(p, clone_dir).replace(os.path.sep, '/')
                 asset_url = f"https://media.githubusercontent.com/media/{user}/{repo}/{branch}/{filepath_in_repo}"
@@ -4918,9 +4929,13 @@ def git(user: str, repo: str, branch: str = "main", parent: str = "."):
                 except requests.exceptions.RequestException as e:
                     print(f"Warning: Could not download asset '{filepath_in_repo}'. Error: {e}")
 
+    _lfs(clone_dir)
+
     ps = paths(f"{clone_dir}/*")
     for p in ps:
         n = p.strip("/").split("/")[-1]
+        if n == ".git":
+            continue
         move(p, f"{parent}/{n}")
 
 
