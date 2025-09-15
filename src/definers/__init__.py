@@ -3291,11 +3291,13 @@ def install_faiss():
                 "."
             ) )
 
+            cores = os.cpu_count()
+
             print("faiss - stage 2")
-            run(f'{cmake} --build build --target faiss')
+            run(f'{cmake} --build build -j {cores} --target faiss')
 
             print("faiss - stage 3")
-            run(f'{cmake} --build build --target swigfaiss')
+            run(f'{cmake} --build build -j {cores} --target swigfaiss')
 
         with cwd("./xfaiss/build/faiss/python"):
             print("faiss - stage 4")
