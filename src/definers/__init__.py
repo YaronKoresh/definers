@@ -3262,11 +3262,7 @@ def install_faiss():
     if importable("faiss"):
         return False
 
-    faiss_dir = "faiss"
-    git("facebookresearch", "faiss", parent=f"./{faiss_dir}")
-
-    build_dir = full_path(".", faiss_dir, "build")
-    python_dir = full_path(".", faiss_dir, "python")
+    git("facebookresearch", "faiss", parent=f"./faiss")
 
     set_cuda_env()
 
@@ -3276,10 +3272,10 @@ def install_faiss():
     )[0]
 
     try:
-        with cwd(f"./{faiss_dir}"):
+        with cwd("./faiss"):
             run( (
                 f'{cmake} '
-                f'-B "{build_dir}" '
+                f'-B build '
                 "-DBUILD_TESTING=OFF "
                 "-DCMAKE_BUILD_TYPE=Release "
                 "-DFAISS_ENABLE_C_API=ON "
@@ -3292,10 +3288,10 @@ def install_faiss():
                 "."
             ) )
 
-            run(f'{cmake} -C "{build_dir}" faiss')
-            run(f'{cmake} -C "{build_dir}" swigfaiss')
+            cpu_cores = os.cpu_count() or 1
+            run(f'{cmake} --build build --parallel {cpu_cores}')
 
-        with cwd(python_dir):
+        with cwd("./faiss/build/faiss/python"):
             run(f'{sys.executable} -m pip install .')
 
         print("Faiss installed successfully!")
@@ -4118,8 +4114,6 @@ def apt_install():
         f"apt-get install -y { basic_apt } { audio_apt } { visual_apt }"
     )
     run("apt-get upgrade -y")
-
-    run("apt-get remove -y cmake")
 
     download_file("https://github.com/Kitware/CMake/releases/download/v4.1.1/cmake-4.1.1-linux-x86_64.sh", "./install_cmake.sh")
     permit("./install_cmake.sh")
