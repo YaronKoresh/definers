@@ -8607,7 +8607,7 @@ def autotune_vocals(
     separation_dir = tmp(dir=True)
     temp_files = []
 
-    n_fft, hop_length = 2048, 512
+    n_fft, hop_length = 2048, 1024
     try:
         print("\n--- Vocal Separation ---")
 
@@ -8703,7 +8703,7 @@ def autotune_vocals(
 
                     if final_pos + len(segment) <= len(y_timed):
                         fade_len = min(
-                            int(0.04 * sr), len(segment) // 2
+                            int(0.05 * sr), len(segment) // 2
                         )
                         if fade_len > 0:
                             fade_in = np.linspace(0.0, 1.0, fade_len)
