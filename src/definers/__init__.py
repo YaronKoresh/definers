@@ -8516,7 +8516,7 @@ def stretch_audio(input_path, output_path=None, speed_factor=0.85):
 
 
 def get_scale_notes(
-    key="C", scale="major", start_octave=1, end_octave=9
+    key="C", scale="major", start_octave=2, end_octave=7
 ):
     NOTES = [
         "C",
@@ -8636,7 +8636,7 @@ def autotune_vocals(
 
             vocal_intervals = librosa.effects.split(
                 y_original,
-                top_db=60,
+                top_db=32,
                 frame_length=n_fft,
                 hop_length=hop_length,
             )
@@ -8711,8 +8711,8 @@ def autotune_vocals(
         print("Analyzing fundamental frequency (f0)...")
         f0, voiced_flag, _ = librosa.pyin(
             y,
-            fmin=librosa.note_to_hz("C1"),
-            fmax=librosa.note_to_hz("C9"),
+            fmin=librosa.note_to_hz("C2"),
+            fmax=librosa.note_to_hz("C7"),
             sr=sr,
             frame_length=n_fft,
             hop_length=hop_length,
@@ -8808,7 +8808,7 @@ def autotune_vocals(
             duration=max_duration, frame_rate=instrumental.frame_rate
         )
         combined = base.overlay(instrumental).overlay(
-            tuned_vocals - 15
+            tuned_vocals - 6
         )
 
         output_stem = f"{Path(audio_path).stem}_autotuned"
