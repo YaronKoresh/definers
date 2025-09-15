@@ -8568,9 +8568,6 @@ def autotune_vocals(
 
         vocals_path, instrumental_path = separate_stems(audio_path)
 
-        if not vocals_path.exists() or not instrumental_path.exists():
-            raise FileNotFoundError("Vocal separation failed.")
-
         print("Loading separated audio tracks...")
         y_original, sr = librosa.load(
             str(vocals_path), sr=None, mono=True
