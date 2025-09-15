@@ -4088,7 +4088,7 @@ def apt_install():
     run(
         f"apt-get install -y --reinstall { basic_apt } { audio_apt } { visual_apt }"
     )
-    run("apt-get full-upgrade -y"
+    run("apt-get full-upgrade -y")
 
     post_install()
 
