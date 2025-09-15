@@ -4831,6 +4831,8 @@ def summary(text, max_words=50):
 
 
 def git(user: str, repo: str, branch: str = "main", parent: str = "."):
+    import requests
+    
     user = user.replace(" ", "_")
     repo = repo.replace(" ", "-")
     parent = full_path(parent)
