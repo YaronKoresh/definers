@@ -8398,7 +8398,7 @@ def calculate_active_rms(y, sr):
 
 
 def normalize_audio_to_peak(
-    input_path: str, target_level: float = 0.999, format: str = None
+    input_path: str, target_level: float = 0.9, format: str = None
 ):
     from pydub import AudioSegment
     from pydub.effects import normalize
