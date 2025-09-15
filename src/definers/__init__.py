@@ -4099,6 +4099,10 @@ def apt_install():
     )
     run("apt-get upgrade -y")
 
+    run(
+        f"apt-get uninstall -y cmake"
+    )
+
     download_file("https://github.com/Kitware/CMake/releases/download/v4.1.1/cmake-4.1.1-linux-x86_64.sh", "./install_cmake.sh")
     permit("./install_cmake.sh")
     directory("/usr/local/cmake")
