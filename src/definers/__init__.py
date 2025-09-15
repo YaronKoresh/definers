@@ -3186,7 +3186,7 @@ def get_max_resolution(width, height, mega_pixels=0.25, factor=16):
     return new_w, new_h
 
 
-def master(source_path, format_choice="mp3", repeats=2):
+def master(source_path, format_choice="mp3", repeats=1):
     import matchering as mg
     import pydub
 
@@ -3292,10 +3292,10 @@ def install_faiss():
             ) )
 
             print("faiss - stage 2")
-            run(f'{cmake} -C build faiss')
+            run(f'{cmake} --build build --target faiss')
 
             print("faiss - stage 3")
-            run(f'{cmake} -C build swigfaiss')
+            run(f'{cmake} --build build --target swigfaiss')
 
         with cwd("./xfaiss/build/faiss/python"):
             print("faiss - stage 4")
@@ -4937,6 +4937,8 @@ def git(user: str, repo: str, branch: str = "main", parent: str = "."):
         if n == ".git":
             continue
         move(p, f"{parent}/{n}")
+
+    delete(clone_dir)
 
 
 def init_pretrained_model(task: str, turbo: bool = False):
@@ -8530,7 +8532,7 @@ def stretch_audio(input_path, output_path=None, speed_factor=0.85):
 
 
 def get_scale_notes(
-    key="C", scale="major", start_octave=2, end_octave=7
+    key="C", scale="major", start_octave=1, end_octave=9
 ):
     NOTES = [
         "C",
@@ -8570,9 +8572,9 @@ def enhance_audio(audio_path, format_choice="mp3"):
 def autotune_vocals(
     audio_path,
     format_choice="mp3",
-    strength=0.4,
-    humanize=10.0,
-    quantize_grid=16,
+    strength=0.7,
+    humanize=0.5,
+    quantize_grid=8,
     beats_per_bar=(4, 4),
 ):
     import librosa
@@ -8599,21 +8601,23 @@ def autotune_vocals(
     separation_dir = tmp(dir=True)
     temp_files = []
 
-    n_fft, hop_length = 2048, 512
+    n_fft, hop_length = 1536, 768
 
     try:
         print("\n--- Vocal Separation ---")
 
         vocals_path, instrumental_path = separate_stems(audio_path)
 
+        vocals_path = str(vocals_path)
+        instrumental_path = str(instrumental_path)
+
+        vocals_path = master(vocals_path)
+
         print("Loading separated audio tracks...")
         y_original, sr = librosa.load(
             str(vocals_path), sr=None, mono=True
         )
         y = np.copy(y_original)
-
-        vocals_path = str(vocals_path)
-        instrumental_path = str(instrumental_path)
 
         instrumental = pydub.AudioSegment.from_file(instrumental_path)
 
@@ -8629,7 +8633,7 @@ def autotune_vocals(
             downbeat_act = downbeat_proc(str(instrumental_path))
             combined_act = np.c_[beat_act, downbeat_act]
             final_tracker = madmom.features.downbeats.DBNDownBeatTrackingProcessor(
-                beats_per_bar=list(beats_per_bar), fps=100
+                beats_per_bar=list(beats_per_bar), fps=30
             )
             beat_info = final_tracker(combined_act)
 
@@ -8651,7 +8655,7 @@ def autotune_vocals(
 
             vocal_intervals = librosa.effects.split(
                 y_original,
-                top_db=40,
+                top_db=25,
                 frame_length=n_fft,
                 hop_length=hop_length,
             )
@@ -8727,7 +8731,7 @@ def autotune_vocals(
         f0, voiced_flag, _ = librosa.pyin(
             y,
             fmin=librosa.note_to_hz("C2"),
-            fmax=librosa.note_to_hz("C7"),
+            fmax=librosa.note_to_hz("C6"),
             sr=sr,
             frame_length=n_fft,
             hop_length=hop_length,
@@ -8753,7 +8757,7 @@ def autotune_vocals(
             
             if humanize > 0:
                 cents_dev = np.random.normal(0, scale=(humanize * 5), size=len(ideal_f0))
-                cents_dev = np.clip(cents_dev, -10, 10)
+                cents_dev = np.clip(cents_dev, -15, 15)
                 ideal_f0 *= 2 ** (cents_dev / 1200)
 
             corrected_f0 = voiced_f0 + (ideal_f0 - voiced_f0) * strength
@@ -8800,15 +8804,12 @@ def autotune_vocals(
             y_tuned = np.copy(y)
 
         print("\n--- Final Mixdown ---")
-        print("Matching loudness of active audio segments...")
-        original_rms = calculate_active_rms(y_original, sr)
-        tuned_rms = calculate_active_rms(y_tuned, sr)
-        if tuned_rms > 1e-6:
-            y_tuned *= original_rms / tuned_rms
 
         temp_tuned_vocals_path = tmp(".wav")
         temp_files.append(temp_tuned_vocals_path)
         sf.write(temp_tuned_vocals_path, y_tuned, sr)
+
+        temp_tuned_vocals_path = master(temp_tuned_vocals_path)
 
         tuned_vocals = pydub.AudioSegment.from_file(
             temp_tuned_vocals_path
@@ -8824,7 +8825,9 @@ def autotune_vocals(
             duration=max_duration, frame_rate=instrumental.frame_rate
         )
 
-        combined = base.overlay(instrumental).overlay(tuned_vocals)
+        combined = base.overlay(instrumental).overlay(
+            tuned_vocals - 6
+        )
 
         output_stem = f"{Path(audio_path).stem}_autotuned"
         final_output_path = f"{output_stem}.{format_choice}"
@@ -8835,6 +8838,7 @@ def autotune_vocals(
         print(f"\n--- Autotune Complete ---")
         print(f"Final audio saved to: {final_output_path}")
         return final_output_path
+
     finally:
         print("Cleaning up temporary files.")
         for path in temp_files:
