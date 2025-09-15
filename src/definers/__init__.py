@@ -3578,7 +3578,7 @@ def load(path):
     if not exist(path):
         return None
     if is_directory(path):
-        return [str(p) for p in Path(path).iterdir()]
+        return [str(p.resolve()) for p in Path(path).iterdir()]
     else:
         try:
             return Path(path).read_text(encoding="utf8")
@@ -4896,42 +4896,32 @@ def git(user: str, repo: str, branch: str = "main", parent: str = "."):
     env = os.environ.copy()
     env['GIT_LFS_SKIP_SMUDGE'] = '1'
     
-    subprocess.run(
-        ['git', 'clone', '--branch', branch, repo_url, clone_dir],
-        check=True,
-        env=env,
-        capture_output=True
-    )
+    run(f'git clone --branch {branch} {repo_url} {clone_dir}', env=env)
     
-    for root, _, files in os.walk(clone_dir):
-        for filename in files:
-            filepath = os.path.join(root, filename)
-            if os.path.getsize(filepath) < 200:
-                with open(filepath, 'r') as f:
-                    try:
-                        content = f.read()
-                    except UnicodeDecodeError:
-                        continue
+    for p in read(clone_dir):
+        if os.path.getsize(p) < 200:
+            with open(p, 'r') as f:
+                try:
+                    content = f.read()
+                except UnicodeDecodeError:
+                    continue
                 
-                if content.startswith("version https://git-lfs.github.com/spec"):
-                    filepath_in_repo = os.path.relpath(filepath, clone_dir).replace(os.path.sep, '/')
-                    asset_url = f"https://media.githubusercontent.com/media/{user}/{repo}/{branch}/{filepath_in_repo}"
-                    try:
-                        with requests.get(asset_url, stream=True) as r:
-                            r.raise_for_status()
-                            with open(filepath, 'wb') as asset_file:
-                                for chunk in r.iter_content(chunk_size=8129):
-                                    asset_file.write(chunk)
-                    except requests.exceptions.RequestException as e:
-                        print(f"Warning: Could not download asset {filename}. Error: {e}")
+            if content.startswith("version https://git-lfs.github.com/spec"):
+                filepath_in_repo = os.path.relpath(p, clone_dir).replace(os.path.sep, '/')
+                asset_url = f"https://media.githubusercontent.com/media/{user}/{repo}/{branch}/{filepath_in_repo}"
+                try:
+                    with requests.get(asset_url, stream=True) as r:
+                        r.raise_for_status()
+                        with open(p, 'wb') as asset_file:
+                            for chunk in r.iter_content(chunk_size=8129):
+                                asset_file.write(chunk)
+                except requests.exceptions.RequestException as e:
+                    print(f"Warning: Could not download asset '{filepath_in_repo}'. Error: {e}")
 
     ps = paths(f"{clone_dir}/*")
     for p in ps:
         n = p.strip("/").split("/")[-1]
-        if n.startswith(".") or n == "setup.py":
-            continue
-        if is_ai_model(p) or n.endswith(".py") or n.endswith(".txt") or n.endswith(".make") or n.endswith(".cmake") or n.endswith(".nmake"):
-            move(p, f"{parent}/{n}")
+        move(p, f"{parent}/{n}")
 
 
 def init_pretrained_model(task: str, turbo: bool = False):
