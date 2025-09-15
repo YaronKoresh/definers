@@ -3263,7 +3263,7 @@ def install_faiss():
         return False
 
     with cwd():
-        git("facebookresearch", "faiss", parent=f"./xfaiss")
+        git("facebookresearch", "faiss", parent="./xfaiss")
 
     set_cuda_env()
 
@@ -3481,11 +3481,19 @@ def send_signal_to_process(pid, signal_number):
 @contextmanager
 def cwd(dir=None):
     if not dir:
-        dir = os.path.dirname(__file__)
-    owd = os.getcwd()
+        dir = "."
+
+    if not dir.startswith("/") and not dir.startswith("~"):
+        dir = full_path(os.path.dirname(__file__), dir)
+    else:
+        dir = full_path(dir)
+
+    owd = full_path(os.getcwd())
+
     try:
         os.chdir(dir)
         yield dir
+
     finally:
         os.chdir(owd)
 
