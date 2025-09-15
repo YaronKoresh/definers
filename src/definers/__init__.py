@@ -3262,12 +3262,11 @@ def install_faiss():
     if importable("faiss"):
         return False
 
-    faiss_dir = "_faiss_"
-    directory(f"./{faiss_dir}")
+    faiss_dir = "faiss"
     git("facebookresearch", "faiss", parent=f"./{faiss_dir}")
 
     build_dir = full_path(".", faiss_dir, "build")
-    python_dir = full_path(build_dir, "faiss", "python")
+    python_dir = full_path(".", faiss_dir, "python")
 
     set_cuda_env()
 
@@ -4879,6 +4878,9 @@ def git(user: str, repo: str, branch: str = "main", parent: str = "."):
     user = user.replace(" ", "_")
     repo = repo.replace(" ", "-")
     parent = full_path(parent)
+
+    directory(parent)
+
     clone_dir = tmp(dir=True)
     
     repo_url = f"https://github.com/{user}/{repo}.git"
