@@ -8589,7 +8589,7 @@ def autotune_vocals(
     separation_dir = tmp(dir=True)
     temp_files = []
 
-    n_fft, hop_length = 8192, 128
+    n_fft, hop_length = 2048, 512
 
     try:
         print("\n--- Vocal Separation ---")
@@ -8712,6 +8712,8 @@ def autotune_vocals(
         allowed_notes = get_scale_notes(
             key=detected_key, scale=detected_mode
         )
+
+        print("Analyzing fundamental frequency (f0)...")
         f0, voiced_flag, _ = librosa.pyin(
             y,
             fmin=librosa.note_to_hz("C1"),
@@ -8721,33 +8723,48 @@ def autotune_vocals(
             hop_length=hop_length,
         )
         f0 = np.nan_to_num(f0)
-        target_f0 = np.copy(f0)
-        for i in range(len(f0)):
-            if voiced_flag[i] and f0[i] > 0:
-                current_f0 = f0[i]
-                current_midi = librosa.hz_to_midi(current_f0)
-                note_diffs = np.abs(allowed_notes - current_midi)
-                closest_note_index = np.argmin(note_diffs)
-                target_midi = allowed_notes[closest_note_index]
-                ideal_f0 = librosa.midi_to_hz(target_midi)
-                if humanize > 0:
-                    cents_dev = np.random.normal(
-                        0, scale=(humanize * 5)
-                    )
-                    cents_dev = np.clip(cents_dev, -15, 15)
-                    ideal_f0 *= 2 ** (cents_dev / 1200)
-                target_f0[i] = (
-                    current_f0 + (ideal_f0 - current_f0) * strength
-                )
 
+        print("Calculating target pitches...")
+
+        voiced_mask = voiced_flag & (f0 > 0)
+
+        target_f0 = np.copy(f0)
+
+        if np.any(voiced_mask):
+            voiced_f0 = f0[voiced_mask]
+            
+            voiced_midi = librosa.hz_to_midi(voiced_f0)
+            
+            note_diffs = np.abs(allowed_notes.reshape(-1, 1) - voiced_midi)
+            closest_note_indices = np.argmin(note_diffs, axis=0)
+            target_midi = allowed_notes[closest_note_indices]
+            
+            ideal_f0 = librosa.midi_to_hz(target_midi)
+            
+            if humanize > 0:
+                cents_dev = np.random.normal(0, scale=(humanize * 5), size=len(ideal_f0))
+                cents_dev = np.clip(cents_dev, -15, 15)
+                ideal_f0 *= 2 ** (cents_dev / 1200)
+
+            corrected_f0 = voiced_f0 + (ideal_f0 - voiced_f0) * strength
+
+            target_f0[voiced_mask] = corrected_f0
+        
+        print("Generating frequency map for rubberband...")
+        
         freq_map_path = tmp(".txt")
         temp_files.append(freq_map_path)
-        with open(freq_map_path, "w") as f:
-            for i in range(len(f0)):
-                if voiced_flag[i] and f0[i] > 0 and target_f0[i] > 0:
-                    sample_num = i * hop_length
-                    ratio = target_f0[i] / f0[i]
-                    f.write(f"{sample_num} {ratio:.6f}\n")
+        
+        write_mask = voiced_flag & (f0 > 0) & (target_f0 > 0)
+
+        if np.any(write_mask):
+            frame_indices = np.where(write_mask)[0]
+            
+            sample_nums = frame_indices * hop_length
+            ratios = target_f0[write_mask] / f0[write_mask]
+            
+            data_to_write = np.c_[sample_nums, ratios]
+            np.savetxt(freq_map_path, data_to_write, fmt='%d %.6f')
 
         if os.path.getsize(freq_map_path) > 0:
             print("Applying formant-preserving pitch correction...")
