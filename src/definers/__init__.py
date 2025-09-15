@@ -8594,7 +8594,7 @@ def autotune_vocals(
     separation_dir = tmp(dir=True)
     temp_files = []
 
-    n_fft, hop_length = 2048, 1024
+    n_fft, hop_length = 2048, 512
 
     try:
         print("\n--- Vocal Separation ---")
