@@ -3332,9 +3332,9 @@ def add_path(*p):
         sys.path.append(path)
         site.addsitedir(path)
         importlib.invalidate_caches()
-    if get_os_name() = "linux" or get_os_name() = "darwin":
+    if get_os_name() == "linux" or get_os_name() == "darwin":
         return run(f'export PATH="{path}:$PATH"')
-    if get_os_name() = "windows":
+    if get_os_name() == "windows":
         return run(f'setx PATH "%PATH%;{path}"')
 
 
