@@ -3269,6 +3269,7 @@ def install_faiss():
     )[0]
     build_dir = os.path.join(faiss_dir, "build")
     python_dir = os.path.join(build_dir, "faiss", "python")
+    set_cuda_env()
     try:
         subprocess.run(
             ["git", "clone", faiss_repo_url, faiss_dir], check=True
@@ -4116,10 +4117,6 @@ def apt_install():
         f"apt-get install -y { basic_apt } { audio_apt } { visual_apt }"
     )
     run("apt-get upgrade -y")
-
-    run(
-        f"apt-get uninstall -y cmake"
-    )
 
     download_file("https://github.com/Kitware/CMake/releases/download/v4.1.1/cmake-4.1.1-linux-x86_64.sh", "./install_cmake.sh")
     permit("./install_cmake.sh")
