@@ -7067,8 +7067,8 @@ def create_share_links(
     return f"""<div style='text-align:center; padding-top: 10px;'><p style='font-weight: bold;'>Share your creation!</p><a href='{twitter_link}' target='_blank' style='margin: 0 5px;'>X/Twitter</a> | <a href='{facebook_link}' target='_blank' style='margin: 0 5px;'>Facebook</a> | <a href='{reddit_link}' target='_blank' style='margin: 0 5px;'>Reddit</a> | <a href='{whatsapp_link}' target='_blank' style='margin: 0 5px;'>WhatsApp</a></div>"""
 
 
-def humanize_vocals(audio_path, amount=1.0):
-    if not Path(audio_path).exists():
+def humanize_vocals(audio_path, amount=0.5):
+    if not exist(audio_path):
         catch(f"Error: Input file not found at {audio_path}")
         return None
 
@@ -7079,7 +7079,7 @@ def humanize_vocals(audio_path, amount=1.0):
         y, sr = librosa.load(audio_path, sr=None, mono=True)
 
         print("--- Analyzing Vocal Pitch ---")
-        n_fft, hop_length = 2048, 512
+        n_fft, hop_length = 512, 256
         f0, voiced_flag, _ = librosa.pyin(
             y,
             fmin=librosa.note_to_hz("C2"),
@@ -8574,10 +8574,9 @@ def enhance_audio(audio_path, format_choice="mp3"):
 def autotune_vocals(
     audio_path,
     format_choice="mp3",
-    strength=0.7,
-    humanize=0.5,
-    quantize_grid=8,
-    beats_per_bar=(4, 4),
+    strength=0.5,
+    quantize_grid=16,
+    beats_per_bar=(4, 4)
 ):
     import librosa
     import madmom
@@ -8603,8 +8602,7 @@ def autotune_vocals(
     separation_dir = tmp(dir=True)
     temp_files = []
 
-    n_fft, hop_length = 1536, 768
-
+    n_fft, hop_length = 2048, 512
     try:
         print("\n--- Vocal Separation ---")
 
@@ -8657,7 +8655,7 @@ def autotune_vocals(
 
             vocal_intervals = librosa.effects.split(
                 y_original,
-                top_db=25,
+                top_db=40,
                 frame_length=n_fft,
                 hop_length=hop_length,
             )
@@ -8700,7 +8698,7 @@ def autotune_vocals(
 
                     if final_pos + len(segment) <= len(y_timed):
                         fade_len = min(
-                            int(0.02 * sr), len(segment) // 2
+                            int(0.04 * sr), len(segment) // 2
                         )
                         if fade_len > 0:
                             fade_in = np.linspace(0.0, 1.0, fade_len)
@@ -8733,7 +8731,7 @@ def autotune_vocals(
         f0, voiced_flag, _ = librosa.pyin(
             y,
             fmin=librosa.note_to_hz("C2"),
-            fmax=librosa.note_to_hz("C6"),
+            fmax=librosa.note_to_hz("C7"),
             sr=sr,
             frame_length=n_fft,
             hop_length=hop_length,
@@ -8756,11 +8754,6 @@ def autotune_vocals(
             target_midi = allowed_notes[closest_note_indices]
             
             ideal_f0 = librosa.midi_to_hz(target_midi)
-            
-            if humanize > 0:
-                cents_dev = np.random.normal(0, scale=(humanize * 5), size=len(ideal_f0))
-                cents_dev = np.clip(cents_dev, -15, 15)
-                ideal_f0 *= 2 ** (cents_dev / 1200)
 
             corrected_f0 = voiced_f0 + (ideal_f0 - voiced_f0) * strength
 
@@ -8811,6 +8804,7 @@ def autotune_vocals(
         temp_files.append(temp_tuned_vocals_path)
         sf.write(temp_tuned_vocals_path, y_tuned, sr)
 
+        temp_tuned_vocals_path = humanize_vocals(temp_tuned_vocals_path)
         temp_tuned_vocals_path = master(temp_tuned_vocals_path)
 
         tuned_vocals = pydub.AudioSegment.from_file(
