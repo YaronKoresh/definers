@@ -3319,7 +3319,6 @@ def simple_text(prompt):
     prompt = re.sub(
         "[\. \n]+\.[\.\n]*|[\. \n]*\.[\.\n]+", ".", prompt
     )
-    prompt = re.sub("(\n){2,}", "\n", prompt)
     prompt = re.sub("(-){2,}", "-", prompt)
     prompt = prompt.replace("|", " or ")
     prompt = re.sub("[ !]*\?[ !?]*", " I wonder ", prompt)
@@ -3329,8 +3328,10 @@ def simple_text(prompt):
     prompt = re.sub(punc, "", prompt)
 
     prompt = re.sub(
-        "\s*(?:[\n]|(?<!\d)(?<!\b[a-zA-Z])\.)+\s*", " and ", prompt
+        "\s*(?:(?<!\d)(?<!\b[a-zA-Z])\.)+\s*", " and ", prompt
     )
+
+    prompt = re.sub("(\n){1,}", " ", prompt)
 
     prompt = re.sub("( ){2,}", " ", prompt)
 
