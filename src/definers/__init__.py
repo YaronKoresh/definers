@@ -4917,7 +4917,7 @@ def git(user: str, repo: str, branch: str = "main", parent: str = "."):
     ps = paths(f"{clone_dir}/*")
     for p in ps:
         n = p.strip("/").split("/")[-1]
-        if n.startswith(".") or n == "setup.py"):
+        if n.startswith(".") or n == "setup.py":
             continue
         if is_ai_model(p) or n.endswith(".py") or n.endswith(".txt") or n.endswith(".make") or n.endswith(".cmake") or n.endswith(".nmake"):
             move(p, f"{parent}/{n}")
