@@ -7964,7 +7964,7 @@ def separate_stems(
 
     output_dir = tmp(dir=True)
     run(
-        f'"{sys.executable}" -m demucs.separate -n htdemucs_ft --two-stems=vocals -o "{output_dir}" "{audio_path}"'
+        f'"{sys.executable}" -m demucs.separate -n htdemucs_ft --shifts=3 --two-stems=vocals -o "{output_dir}" "{audio_path}"'
     )
     separated_dir = (
         Path(output_dir) / "htdemucs_ft" / Path(audio_path).stem
@@ -8519,7 +8519,7 @@ def stretch_audio(input_path, output_path=None, speed_factor=0.85):
 
 
 def get_scale_notes(
-    key="C", scale="major", start_octave=3, end_octave=7
+    key="C", scale="major", start_octave=1, end_octave=9
 ):
     NOTES = [
         "C",
@@ -8559,7 +8559,7 @@ def enhance_audio(audio_path, format_choice="mp3"):
 def autotune_vocals(
     audio_path,
     format_choice="mp3",
-    strength=0.5,
+    strength=0.4,
     humanize=20.0,
     quantize_grid=16,
     beats_per_bar=(4, 4),
@@ -8588,7 +8588,7 @@ def autotune_vocals(
     separation_dir = tmp(dir=True)
     temp_files = []
 
-    n_fft, hop_length = 4096, 512
+    n_fft, hop_length = 8192, 128
 
     try:
         print("\n--- Vocal Separation ---")
@@ -8640,7 +8640,7 @@ def autotune_vocals(
 
             vocal_intervals = librosa.effects.split(
                 y_original,
-                top_db=40,
+                top_db=60,
                 frame_length=n_fft,
                 hop_length=hop_length,
             )
@@ -8713,8 +8713,8 @@ def autotune_vocals(
         )
         f0, voiced_flag, _ = librosa.pyin(
             y,
-            fmin=librosa.note_to_hz("C3"),
-            fmax=librosa.note_to_hz("C7"),
+            fmin=librosa.note_to_hz("C1"),
+            fmax=librosa.note_to_hz("C9"),
             sr=sr,
             frame_length=n_fft,
             hop_length=hop_length,
@@ -8733,7 +8733,7 @@ def autotune_vocals(
                     cents_dev = np.random.normal(
                         0, scale=(humanize * 5)
                     )
-                    cents_dev = np.clip(cents_dev, -25, 25)
+                    cents_dev = np.clip(cents_dev, -15, 15)
                     ideal_f0 *= 2 ** (cents_dev / 1200)
                 target_f0[i] = (
                     current_f0 + (ideal_f0 - current_f0) * strength
@@ -8795,7 +8795,7 @@ def autotune_vocals(
             duration=max_duration, frame_rate=instrumental.frame_rate
         )
         combined = base.overlay(instrumental).overlay(
-            tuned_vocals - 6
+            tuned_vocals - 15
         )
 
         output_stem = f"{Path(audio_path).stem}_autotuned"
