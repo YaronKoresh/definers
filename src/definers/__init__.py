@@ -8583,7 +8583,7 @@ def autotune_vocals(
     separation_dir = tmp(dir=True)
     temp_files = []
 
-    n_fft, hop_length = 2048, 512
+    n_fft, hop_length = 2048, 1024
 
     try:
         print("\n--- Vocal Separation ---")
@@ -8597,7 +8597,9 @@ def autotune_vocals(
         y = np.copy(y_original)
 
         instrumental_path = str(instrumental_path)
+
         instrumental_path = master(instrumental_path, "wav")
+
         instrumental = pydub.AudioSegment.from_file(instrumental_path)
 
         print("\n--- Rhythm Correction ---")
@@ -8792,29 +8794,32 @@ def autotune_vocals(
         temp_tuned_vocals_path = tmp(".wav")
         temp_files.append(temp_tuned_vocals_path)
         sf.write(temp_tuned_vocals_path, y_tuned, sr)
+
         temp_tuned_vocals_path = master(temp_tuned_vocals_path, "wav")
+
         tuned_vocals = pydub.AudioSegment.from_file(
             temp_tuned_vocals_path
         )
 
-        print("Matching sample rates and track durations...")
         tuned_vocals = tuned_vocals.set_frame_rate(
             instrumental.frame_rate
         )
+
         max_duration = max(len(instrumental), len(tuned_vocals))
+
         base = pydub.AudioSegment.silent(
             duration=max_duration, frame_rate=instrumental.frame_rate
         )
+
         combined = base.overlay(instrumental).overlay(
-            tuned_vocals - 6
+            tuned_vocals
         )
 
         output_stem = f"{Path(audio_path).stem}_autotuned"
         final_output_path = f"{output_stem}.{format_choice}"
         combined.export(final_output_path, format=format_choice)
 
-        print("Normalizing final track to prevent clipping...")
-        final_output_path = normalize_audio_to_peak(final_output_path)
+        final_output_path = master(final_output_path)
 
         print(f"\n--- Autotune Complete ---")
         print(f"Final audio saved to: {final_output_path}")
