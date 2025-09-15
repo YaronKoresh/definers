@@ -3186,7 +3186,7 @@ def get_max_resolution(width, height, mega_pixels=0.25, factor=16):
     return new_w, new_h
 
 
-def master(source_path, format_choice="mp3", repeats=1):
+def master(source_path, format_choice="mp3", repeats=2):
     import matchering as mg
     import pydub
 
@@ -8566,7 +8566,7 @@ def autotune_vocals(
     audio_path,
     format_choice="mp3",
     strength=0.4,
-    humanize=20.0,
+    humanize=10.0,
     quantize_grid=16,
     beats_per_bar=(4, 4),
 ):
@@ -8646,7 +8646,7 @@ def autotune_vocals(
 
             vocal_intervals = librosa.effects.split(
                 y_original,
-                top_db=32,
+                top_db=40,
                 frame_length=n_fft,
                 hop_length=hop_length,
             )
@@ -8748,7 +8748,7 @@ def autotune_vocals(
             
             if humanize > 0:
                 cents_dev = np.random.normal(0, scale=(humanize * 5), size=len(ideal_f0))
-                cents_dev = np.clip(cents_dev, -15, 15)
+                cents_dev = np.clip(cents_dev, -10, 10)
                 ideal_f0 *= 2 ** (cents_dev / 1200)
 
             corrected_f0 = voiced_f0 + (ideal_f0 - voiced_f0) * strength
