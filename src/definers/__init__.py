@@ -3197,7 +3197,7 @@ def master(source_path, format_choice="mp3", repeats=2):
                     results=[mg.pcm24(str(result_wav_path))],
                     config=mg.Config(
                         max_length=60 * 60 * 24,
-                        threshold=0.999,
+                        threshold=0.9,
                         internal_sample_rate=44100,
                     ),
                 )
