@@ -3275,7 +3275,7 @@ def install_faiss():
         )
         with cwd(faiss_dir):
             cmake_command = [
-                f'"{cmake}"',
+                f'{cmake}',
                 "-B",
                 build_dir,
                 "-DBUILD_TESTING=OFF",
@@ -3291,10 +3291,10 @@ def install_faiss():
             ]
             subprocess.run(cmake_command, check=True)
             subprocess.run(
-                [f'"{cmake}"', "-C", build_dir, "-j16", "faiss"], check=True
+                [f'{cmake}', "-C", build_dir, "-j16", "faiss"], check=True
             )
             subprocess.run(
-                [f'"{cmake}"', "-C", build_dir, "-j16", "swigfaiss"],
+                [f'{cmake}', "-C", build_dir, "-j16", "swigfaiss"],
                 check=True,
             )
             subprocess.run(
@@ -4129,7 +4129,7 @@ def apt_install():
         "/usr/local/cmake/cmake-4.1.1-linux-x86_64/bin",
         "/usr/local/cmake/bin"
     )[0]
-    add_path("cmake_path")
+    add_path(cmake_path)
     
     post_install()
 
