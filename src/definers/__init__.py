@@ -3186,7 +3186,7 @@ def get_max_resolution(width, height, mega_pixels=0.25, factor=16):
     return new_w, new_h
 
 
-def master(source_path, format_choice="mp3", repeats=2):
+def master(source_path, format_choice="mp3", repeats=1):
     import matchering as mg
     import pydub
 
@@ -8600,9 +8600,8 @@ def autotune_vocals(
         )
         y = np.copy(y_original)
 
+        vocals_path = str(vocals_path)
         instrumental_path = str(instrumental_path)
-
-        instrumental_path = master(instrumental_path, "wav")
 
         instrumental = pydub.AudioSegment.from_file(instrumental_path)
 
@@ -8799,8 +8798,6 @@ def autotune_vocals(
         temp_files.append(temp_tuned_vocals_path)
         sf.write(temp_tuned_vocals_path, y_tuned, sr)
 
-        temp_tuned_vocals_path = master(temp_tuned_vocals_path, "wav")
-
         tuned_vocals = pydub.AudioSegment.from_file(
             temp_tuned_vocals_path
         )
@@ -8815,9 +8812,7 @@ def autotune_vocals(
             duration=max_duration, frame_rate=instrumental.frame_rate
         )
 
-        combined = base.overlay(instrumental).overlay(
-            tuned_vocals
-        )
+        combined = base.overlay(instrumental).overlay(tuned_vocals)
 
         output_stem = f"{Path(audio_path).stem}_autotuned"
         final_output_path = f"{output_stem}.{format_choice}"
