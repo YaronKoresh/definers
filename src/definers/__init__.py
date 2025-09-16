@@ -3212,7 +3212,7 @@ def master(source_path, format_choice="mp3", repeats=1):
                     results=[mg.pcm24(str(result_wav_path))],
                     config=mg.Config(
                         max_length=60 * 60 * 24,
-                        threshold=0.9,
+                        threshold=0.99,
                         internal_sample_rate=44100,
                     ),
                 )
@@ -8420,7 +8420,7 @@ def is_ai_model(input_path):
 
 
 def normalize_audio_to_peak(
-    input_path: str, target_level: float = 0.9, format: str = None
+    input_path: str, target_level: float = 0.99, format: str = None
 ):
     from pydub import AudioSegment
     from pydub.effects import normalize
@@ -8529,7 +8529,7 @@ def enhance_audio(audio_path, format_choice="mp3"):
 def autotune_vocals(
     audio_path,
     format_choice="mp3",
-    strength=0.5,
+    strength=1.0,
     quantize_grid=16,
     beats_per_bar=(4, 4)
 ):
@@ -8651,7 +8651,7 @@ def autotune_vocals(
 
                     if final_pos + len(segment) <= len(y_timed):
                         fade_len = min(
-                            int(0.2 * sr), len(segment) // 2
+                            int(0.4 * sr), len(segment) // 2
                         )
                         if fade_len > 0:
                             fade_in = np.linspace(0.0, 1.0, fade_len)
@@ -8752,6 +8752,16 @@ def autotune_vocals(
             y_tuned = np.copy(y)
 
         print("\n--- Final Mixdown ---")
+
+        rms_original = calculate_active_rms(y_original, sr)
+        rms_tuned = calculate_active_rms(y_tuned, sr)
+
+        gain = 1.0
+        if rms_tuned > 1e-6:
+            gain = rms_original / rms_tuned
+        
+        y_tuned *= gain
+        print(f"Applied gain of {gain:.2f} to match original vocal loudness.")
 
         temp_tuned_vocals_path = tmp(".wav")
         temp_files.append(temp_tuned_vocals_path)
