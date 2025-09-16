@@ -6470,24 +6470,14 @@ def train_model_rvc(
     from .configs.config import Config
     from .i18n.i18n import I18nAuto
 
-    slower_voice = 0.7
-
     path = normalize_audio_to_peak(path)
 
     voice, music = separate_stems(path)
 
-    slow_voice = stretch_audio(voice, speed_factor=slower_voice)
-    bass_voice = riaa_filter(slow_voice)
+    path1 = export_audio(voice, random_string(), "wav")
+    path2 = master(path1, "wav")
 
-    multi_voice = (
-        pydub.AudioSegment.from_file(slow_voice)
-        .append(
-            pydub.AudioSegment.from_file(bass_voice), crossfade=200
-        )
-    )
-
-    path = export_audio(multi_voice, random_string(), "wav")
-    path = master(path, "wav")
+    path = dj_mix([path1, path2, path1])
 
     now_dir = os.getcwd()
     index_root = os.path.join(now_dir, "logs")
@@ -6791,8 +6781,8 @@ def train_model_rvc(
         pretrained_D = "assets/pretrained_v2/f0D48k.pth"
 
         batch_size = default_batch_size
-        total_epoch = 5000 * lvl
-        save_epoch = 5000
+        total_epoch = 100 * lvl
+        save_epoch = 100
         if_save_latest = 1
         if_cache_gpu = 1
         if_save_every_weights = 1
@@ -6898,10 +6888,8 @@ def convert_vocal_rvc(experiment: str, path: str):
     from .configs.config import Config
     from .infer.modules.vc.modules import VC
 
-    semi_tones = 0
-
+    path = normalize_audio_to_peak(path)
     voice, music = separate_stems(path)
-    path = normalize_audio_to_peak(voice)
 
     now_dir = os.getcwd()
     index_root = os.path.join(now_dir, "logs")
@@ -6939,10 +6927,10 @@ def convert_vocal_rvc(experiment: str, path: str):
             f"No index file found for experiment '{experiment}' in '{exp_path}'. Conversion may be less effective."
         )
 
-    index_rate = 0.5
-    protect = 0.7
-    f0_mean_pooling = 0
-    rms_mix_rate = 0.5
+    index_rate = 0
+    protect = 0.33
+    f0_mean_pooling = 1
+    rms_mix_rate = 0.25
     try:
         vc.get_vc(
             latest_checkpoint_filename, index_rate, f0_mean_pooling
@@ -6955,18 +6943,18 @@ def convert_vocal_rvc(experiment: str, path: str):
 
     try:
         message, (sr, aud) = vc.vc_single(
-            0,
-            path,
-            semi_tones,
-            None,
-            "rmvpe",
-            idx_path,
-            None,
-            index_rate,
-            3,
-            0,
-            rms_mix_rate,
-            protect,
+            sid=0,
+            input_audio_path=path,
+            f0_up_key=0,
+            f0_file=None,
+            f0_method="rmvpe",
+            file_index=idx_path,
+            file_index2=None,
+            index_rate=index_rate,
+            filter_radius=3,
+            resample_sr=0,
+            rms_mix_rate=rms_mix_rate,
+            protect=protect,
         )
         logger.info(f"Vocal conversion message: {message}")
 
@@ -7206,7 +7194,7 @@ def generate_music(prompt, duration_s, format_choice, humanize):
 
 def dj_mix(
     files,
-    mix_type,
+    mix_type=None,
     target_bpm=None,
     transition_sec=5,
     format_choice="mp3",
@@ -7257,7 +7245,7 @@ def dj_mix(
             temp_stretched_path = None
             current_path = file.name
 
-            if "beatmatched" in mix_type.lower() and target_bpm > 0:
+            if mix_type is not None and "beatmatched" in mix_type.lower() and target_bpm > 0:
                 proc = madmom.features.beats.DBNBeatTrackingProcessor(
                     fps=100
                 )
