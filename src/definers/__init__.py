@@ -6474,10 +6474,10 @@ def train_model_rvc(
 
     voice, music = separate_stems(path)
 
-    path1 = export_audio(voice, random_string(), "wav")
-    path2 = master(path1, "wav")
+    voice2 = master(voice, "wav")
+    voice3 = riaa_filter(voice)
 
-    path = dj_mix([path1, path2, path1])
+    path = dj_mix([voice, voice2, voice3, voice])
 
     now_dir = os.getcwd()
     index_root = os.path.join(now_dir, "logs")
