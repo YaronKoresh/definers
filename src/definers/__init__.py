@@ -7514,7 +7514,7 @@ def music_video(audio_path, preset="vortex", width=1280, height=720, fps=25):
 
     output_path = audio_path.rsplit('.', 1)[0] + "_video.mp4"
     animation = VideoClip(make_frame, duration=duration)
-    final_clip = animation.set_audio(AudioFileClip(audio_path))
+    final_clip = animation.with_audio(AudioFileClip(audio_path))
     final_clip.write_videofile(output_path, codec="libx264", audio_codec="aac", fps=fps)
     return output_path
 
