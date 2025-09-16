@@ -6470,43 +6470,23 @@ def train_model_rvc(
     from .configs.config import Config
     from .i18n.i18n import I18nAuto
 
-    slower_voice = 0.85
+    slower_voice = 0.7
 
     path = normalize_audio_to_peak(path)
 
     voice, music = separate_stems(path)
 
-    slow_voice_3 = stretch_audio(voice, speed_factor=slower_voice)
-    slow_voice_2 = pitch_shift_vocals(
-        slow_voice_3, -6, "wav", seperated=True
-    )
-    slow_voice_1 = pitch_shift_vocals(
-        slow_voice_3, -12, "wav", seperated=True
-    )
-    slow_voice_4 = pitch_shift_vocals(
-        slow_voice_3, 6, "wav", seperated=True
-    )
-    slow_voice_5 = pitch_shift_vocals(
-        slow_voice_3, 12, "wav", seperated=True
-    )
+    slow_voice = stretch_audio(voice, speed_factor=slower_voice)
+    bass_voice = riaa_filter(slow_voice)
 
-    multi_tonal_voice = (
-        pydub.AudioSegment.from_file(slow_voice_1)
+    multi_voice = (
+        pydub.AudioSegment.from_file(slow_voice)
         .append(
-            pydub.AudioSegment.from_file(slow_voice_2), crossfade=200
-        )
-        .append(
-            pydub.AudioSegment.from_file(slow_voice_3), crossfade=100
-        )
-        .append(
-            pydub.AudioSegment.from_file(slow_voice_4), crossfade=300
-        )
-        .append(
-            pydub.AudioSegment.from_file(slow_voice_5), crossfade=150
+            pydub.AudioSegment.from_file(bass_voice), crossfade=200
         )
     )
 
-    path = export_audio(multi_tonal_voice, random_string(), "wav")
+    path = export_audio(multi_voice, random_string(), "wav")
     path = master(path, "wav")
 
     now_dir = os.getcwd()
@@ -6718,7 +6698,7 @@ def train_model_rvc(
 
         big_npy = (
             MiniBatchKMeans(
-                n_clusters=10000,
+                n_clusters=2000,
                 verbose=False,
                 batch_size=256 * config.n_cpu,
                 compute_labels=False,
@@ -6811,8 +6791,8 @@ def train_model_rvc(
         pretrained_D = "assets/pretrained_v2/f0D48k.pth"
 
         batch_size = default_batch_size
-        total_epoch = 20000 * lvl
-        save_epoch = 20000
+        total_epoch = 5000 * lvl
+        save_epoch = 5000
         if_save_latest = 1
         if_cache_gpu = 1
         if_save_every_weights = 1
@@ -6918,7 +6898,7 @@ def convert_vocal_rvc(experiment: str, path: str):
     from .configs.config import Config
     from .infer.modules.vc.modules import VC
 
-    semi_tones = -5
+    semi_tones = 0
 
     voice, music = separate_stems(path)
     path = normalize_audio_to_peak(voice)
@@ -6959,10 +6939,10 @@ def convert_vocal_rvc(experiment: str, path: str):
             f"No index file found for experiment '{experiment}' in '{exp_path}'. Conversion may be less effective."
         )
 
-    index_rate = 0.8
-    protect = 0.8
-    f0_mean_pooling = 1
-    rms_mix_rate = 0.8
+    index_rate = 0.5
+    protect = 0.7
+    f0_mean_pooling = 0
+    rms_mix_rate = 0.5
     try:
         vc.get_vc(
             latest_checkpoint_filename, index_rate, f0_mean_pooling
@@ -7082,7 +7062,7 @@ def humanize_vocals(audio_path, amount=0.5):
         y, sr = librosa.load(audio_path, sr=None, mono=True)
 
         print("--- Analyzing Vocal Pitch ---")
-        n_fft, hop_length = 512, 256
+        n_fft, hop_length = 2048, 1024
         f0, voiced_flag, _ = librosa.pyin(
             y,
             fmin=librosa.note_to_hz("C2"),
@@ -7403,171 +7383,159 @@ def beat_visualizer(
     return output_path
 
 
-def music_video(
-    audio_path, preset="vortex", width=1280, height=720, fps=25
-):
+def draw_star_of_david(frame, center, radius, angle, color, thickness):
+    import cv2
+
+    center_x, center_y = center
+    points = []
+    for i in range(6):
+        point_angle = np.deg2rad(60 * i + 30 + angle)
+        x = center_x + radius * np.cos(point_angle)
+        y = center_y + radius * np.sin(point_angle)
+        points.append((int(x), int(y)))
+    triangle1 = np.array([points[0], points[2], points[4]], np.int32)
+    triangle2 = np.array([points[1], points[3], points[5]], np.int32)
+    cv2.polylines(frame, [triangle1], isClosed=True, color=color, thickness=thickness, lineType=cv2.LINE_AA)
+    cv2.polylines(frame, [triangle2], isClosed=True, color=color, thickness=thickness, lineType=cv2.LINE_AA)
+
+
+def music_video(audio_path, preset="vortex", width=1280, height=720, fps=25):
     import librosa
     import madmom
-    from moviepy import AudioFileClip, VideoFileClip
+    import cv2
+    from moviepy import AudioFileClip
     from moviepy.video.VideoClip import VideoClip
 
-    hop_length = 1024
-
+    hop_length = 512
     y, sr = librosa.load(audio_path)
     duration = librosa.get_duration(y=y, sr=sr)
-    rms = librosa.feature.rms(y=y)[0]
-    spectral_centroid = librosa.feature.spectral_centroid(y=y, sr=sr)[
-        0
-    ]
-    proc = madmom.features.beats.DBNBeatTrackingProcessor(fps=50)
+
+    stft = librosa.stft(y, hop_length=hop_length)
+    stft_db = librosa.amplitude_to_db(np.abs(stft), ref=np.max)
+    rms = librosa.feature.rms(y=y, hop_length=hop_length)[0]
+    spectral_centroid = librosa.feature.spectral_centroid(y=y, sr=sr, hop_length=hop_length)[0]
+    
+    proc = madmom.features.beats.DBNBeatTrackingProcessor(fps=100)
     act = madmom.features.beats.RNNBeatProcessor()(audio_path)
     beat_times = proc(act)
-    beat_frames = librosa.time_to_frames(
-        beat_times, sr=sr, hop_length=hop_length
-    )
-    rms_norm = (rms - np.min(rms)) / (
-        np.max(rms) - np.min(rms) + 1e-6
-    )
-    centroid_norm = (
-        spectral_centroid - np.min(spectral_centroid)
-    ) / (np.max(spectral_centroid) - np.min(spectral_centroid) + 1e-6)
-    w = width
-    h = height
-    center_x, center_y = w // 2, h // 2
-    rr, cc = np.ogrid[:h, :w]
+    beat_frames = librosa.time_to_frames(beat_times, sr=sr, hop_length=hop_length)
 
+    rms_norm = (rms - np.min(rms)) / (np.max(rms) - np.min(rms) + 1e-6)
+    centroid_norm = (spectral_centroid - np.min(spectral_centroid)) / (np.max(spectral_centroid) - np.min(spectral_centroid) + 1e-6)
+    stft_norm = (stft_db - np.min(stft_db)) / (np.max(stft_db) - np.min(stft_db) + 1e-6)
+
+    w, h = width, height
+    center_x, center_y = w // 2, h // 2
+    
     def make_frame(t):
         frame = np.zeros((h, w, 3), dtype=np.uint8)
         frame_idx = int(t * sr / hop_length)
-
+        safe_idx = min(frame_idx, len(rms_norm) - 1)
+        
+        rms_val = rms_norm[safe_idx]
+        centroid_val = centroid_norm[safe_idx]
         is_beat = any(abs(frame_idx - bf) < 3 for bf in beat_frames)
 
-        rms_val = rms_norm[min(frame_idx, len(rms_norm) - 1)]
-        color_val = centroid_norm[
-            min(frame_idx, len(centroid_norm) - 1)
-        ]
-
         if preset == "vortex":
+            rr, cc = np.ogrid[:h, :w]
             angle = np.arctan2(rr - center_y, cc - center_x)
-            dist = np.sqrt(
-                (rr - center_y) ** 2 + (cc - center_x) ** 2
-            )
+            dist = np.sqrt((rr - center_y)**2 + (cc - center_x)**2)
+            
+            zoom_factor = 1.0 - 0.7 * rms_val
+            dist_eff = dist * zoom_factor
+            
+            r_freq = 2.0 + centroid_val * 2.0
+            g_freq = 2.5 + centroid_val * 2.0
+            b_freq = 3.0 + centroid_val * 2.0
+            
+            vortex_pattern = np.sin(dist_eff / 25.0 - t * 8.0 + angle * (3 + 4 * rms_val))
+            beat_phase_shift = np.pi if is_beat else 0.0
 
-            r_base = 0.5 + color_val * 0.5
-            g_base = 0.3 + color_val * 0.4
-            b_base = 0.6 + color_val * 0.4
-
-            vortex_pattern = np.sin(
-                dist / 20.0 - t * 5.0 + angle * 3.0
-            )
-
-            beat_flash = 2.0 if is_beat else 1.0
-
-            frame[:, :, 0] = 128 * (
-                1
-                + np.sin(vortex_pattern * beat_flash * np.pi * r_base)
-            )
-            frame[:, :, 1] = 128 * (
-                1
-                + np.sin(
-                    vortex_pattern * beat_flash * np.pi * g_base + 2
-                )
-            )
-            frame[:, :, 2] = 128 * (
-                1
-                + np.sin(
-                    vortex_pattern * beat_flash * np.pi * b_base + 4
-                )
-            )
+            frame[:, :, 0] = 128 * (1 + np.sin(vortex_pattern * r_freq + beat_phase_shift))
+            frame[:, :, 1] = 128 * (1 + np.sin(vortex_pattern * g_freq + beat_phase_shift + np.pi * 2/3))
+            frame[:, :, 2] = 128 * (1 + np.sin(vortex_pattern * b_freq + beat_phase_shift + np.pi * 4/3))
 
         elif preset == "glitch":
-            radius = int(50 + rms_val * 300)
+            frame[:, :, 0] = 10 + centroid_val * 50
+            frame[:, :, 1] = 20 + centroid_val * 30
+            frame[:, :, 2] = 40 + centroid_val * 80
+            
+            scanline_strength = int(5 + 20 * rms_val)
+            scanlines = (np.sin(np.arange(h)[:, None] * 0.5 + t * 100) > 0.98) * scanline_strength
+            frame = np.clip(frame - scanlines[..., np.newaxis], 0, 255).astype(np.uint8)
 
             if is_beat:
-                radius = int(radius * 1.8)
-                shift_amount = np.random.randint(-20, 20)
-                frame[:, :, 0] = np.roll(
-                    frame[:, :, 0], shift_amount, axis=1
-                )
-                frame[:, :, 2] = np.roll(
-                    frame[:, :, 2], -shift_amount, axis=1
-                )
-                if np.random.rand() > 0.5:
-                    block_y = np.random.randint(0, h // 2)
-                    block_h = np.random.randint(h // 4, h // 2)
-                    shift = np.random.randint(-w // 4, w // 4)
-                    frame[block_y : block_y + block_h, :] = np.roll(
-                        frame[block_y : block_y + block_h, :],
-                        shift,
-                        axis=1,
-                    )
+                shift_amount = np.random.randint(-30, 30)
+                frame[:, :, 0] = np.roll(frame[:, :, 0], shift_amount, axis=1)
+                frame[:, :, 2] = np.roll(frame[:, :, 2], -shift_amount, axis=1)
+                
+                if np.random.rand() > 0.3:
+                    y_start = np.random.randint(0, h - h//4)
+                    y_end = y_start + np.random.randint(h//10, h//4)
+                    block_shift = np.random.randint(-w//4, w//4)
+                    frame[y_start:y_end, :] = np.roll(frame[y_start:y_end, :], block_shift, axis=1)
 
-            y1, y2 = center_y - radius, center_y + radius
-            x1, x2 = center_x - radius, center_x + radius
-            frame[
-                max(0, y1) : min(h, y2), max(0, x1) : min(w, x2)
-            ] = [
-                int(200 + color_val * 55),
-                int(100 - color_val * 50),
-                int(255 * color_val),
-            ]
-            return frame
+            noise_intensity = 60 * rms_val
+            noise = np.random.randint(-noise_intensity, noise_intensity, frame.shape, dtype=np.int16)
+            frame = np.clip(frame.astype(np.int16) + noise, 0, 255).astype(np.uint8)
 
         elif preset == "israel":
-            ISRAEL_BLUE = [0, 56, 184]
-            WHITE = [255, 255, 255]
-
+            ISRAEL_BLUE = (184, 56, 0)
+            WHITE = (255, 255, 255)
             frame[:, :] = WHITE
-
-            stripe_height = int(h * 0.22)  # Proportional stripes
-            frame[:stripe_height] = ISRAEL_BLUE
-            frame[h - stripe_height :] = ISRAEL_BLUE
-
-            radius = int((h * 0.1) + rms_val * (h * 0.4))
-
-            beat_multiplier = 2.5 if is_beat else 1.0
-            flash_radius = int(radius * beat_multiplier)
-
-            circle_mask = (rr - center_y) ** 2 + (
-                cc - center_x
-            ) ** 2 <= flash_radius**2
-
+            stripe_height = int(h * 0.18)
+            gap_height = int(h * 0.12)
+            frame[gap_height : gap_height + stripe_height] = ISRAEL_BLUE
+            frame[h - gap_height - stripe_height : h - stripe_height] = ISRAEL_BLUE
+            
+            radius = int((h * 0.15) + rms_val * (h * 0.20))
+            rotation_angle = t * 25 + centroid_val * 180
+            
             if is_beat:
-                frame[circle_mask] = WHITE
-                inner_mask = (rr - center_y) ** 2 + (
-                    cc - center_x
-                ) ** 2 <= (flash_radius * 0.9) ** 2
-                frame[inner_mask] = ISRAEL_BLUE
+                star_color, star_thickness = WHITE, 20
+                radius = int(radius * 1.6)
             else:
-                frame[circle_mask] = ISRAEL_BLUE
-
+                star_color, star_thickness = ISRAEL_BLUE, 8
+            
+            draw_star_of_david(frame, (center_x, center_y), radius, rotation_angle, star_color, star_thickness)
+        
         else:
-            frame[:, :, :] = [
-                int(10 + color_val * 60),
-                int(20 + color_val * 40),
-                int(40 + color_val * 90),
-            ]
-            radius = int(50 + rms_val * 200)
-            if is_beat:
-                radius = int(radius * 1.5)
-            circle_mask = (rr - center_y) ** 2 + (
-                cc - center_x
-            ) ** 2 <= radius**2
-            frame[circle_mask] = [
-                int(200 + color_val * 55),
-                int(150 - color_val * 50),
-                int(100 + color_val * 50),
-            ]
+            frame[:, :] = 0
+            num_bars = 96
+            spectrum = stft_norm[:, min(frame_idx, stft_norm.shape[1] - 1)]
+            freq_bins_per_bar = len(spectrum) // num_bars
+            
+            bar_values = [np.mean(spectrum[i*freq_bins_per_bar:(i+1)*freq_bins_per_bar]) for i in range(num_bars)]
+            
+            min_radius = 50 + 100 * rms_val
+            rotation = t * 15
+
+            for i in range(num_bars):
+                value = bar_values[i]
+                angle = np.deg2rad(i * (360 / num_bars) + rotation)
+                
+                bar_length = value * (h * 0.4)
+                start_x = int(center_x + min_radius * np.cos(angle))
+                start_y = int(center_y + min_radius * np.sin(angle))
+                end_x = int(center_x + (min_radius + bar_length) * np.cos(angle))
+                end_y = int(center_y + (min_radius + bar_length) * np.sin(angle))
+
+                hue = int((i / num_bars) * 180)
+                color_hsv = np.uint8([[[hue, 255, 255]]])
+                color_bgr = cv2.cvtColor(color_hsv, cv2.COLOR_HSV2BGR)[0][0].tolist()
+
+                thickness = 4 if is_beat else 2
+                if is_beat:
+                    color_bgr = [255, 255, 255]
+
+                cv2.line(frame, (start_x, start_y), (end_x, end_y), color_bgr, thickness, lineType=cv2.LINE_AA)
 
         return frame
 
-    output_path = tmp(".mp4")
+    output_path = audio_path.rsplit('.', 1)[0] + "_video.mp4"
     animation = VideoClip(make_frame, duration=duration)
-    audio_clip = AudioFileClip(audio_path)
-    final_clip = animation.with_audio(audio_clip)
-    final_clip.write_videofile(
-        output_path, codec="libx264", audio_codec="aac", fps=fps
-    )
+    final_clip = animation.set_audio(AudioFileClip(audio_path))
+    final_clip.write_videofile(output_path, codec="libx264", audio_codec="aac", fps=fps)
     return output_path
 
 
