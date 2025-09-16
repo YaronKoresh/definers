@@ -6885,6 +6885,7 @@ def convert_vocal_rvc(experiment: str, path: str):
 
     path = normalize_audio_to_peak(path)
     voice, music = separate_stems(path)
+    path = normalize_audio_to_peak(voice)
 
     now_dir = os.getcwd()
     index_root = os.path.join(now_dir, "logs")
@@ -6922,9 +6923,10 @@ def convert_vocal_rvc(experiment: str, path: str):
             f"No index file found for experiment '{experiment}' in '{exp_path}'. Conversion may be less effective."
         )
 
+    filter_radius = 7
     semitones = -5
     index_rate = 0
-    protect = 0.33
+    protect = 0.4
     f0_mean_pooling = 1
     rms_mix_rate = 0.25
     try:
@@ -6947,7 +6949,7 @@ def convert_vocal_rvc(experiment: str, path: str):
             file_index=idx_path,
             file_index2=None,
             index_rate=index_rate,
-            filter_radius=3,
+            filter_radius=filter_radius,
             resample_sr=0,
             rms_mix_rate=rms_mix_rate,
             protect=protect,
