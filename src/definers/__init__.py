@@ -7453,9 +7453,10 @@ def music_video(audio_path, preset="vortex", width=1280, height=720, fps=25):
                     block_shift = np.random.randint(-w//4, w//4)
                     frame[y_start:y_end, :] = np.roll(frame[y_start:y_end, :], block_shift, axis=1)
 
-            noise_intensity = 60 * rms_val
-            noise = np.random.randint(-noise_intensity, noise_intensity, frame.shape, dtype=np.int16)
-            frame = np.clip(frame.astype(np.int16) + noise, 0, 255).astype(np.uint8)
+            noise_intensity = int(60 * rms_val)
+            if noise_intensity > 0:
+                noise = np.random.randint(-noise_intensity, noise_intensity, frame.shape, dtype=np.int16)
+                frame = np.clip(frame.astype(np.int16) + noise, 0, 255).astype(np.uint8)
 
         elif preset == "israel":
             ISRAEL_BLUE = (0, 56, 184)
