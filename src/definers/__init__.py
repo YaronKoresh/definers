@@ -4529,8 +4529,6 @@ def duck_translate(text, lang="en"):
 def css():
     return """
 
-    @import url('https://fonts.googleapis.com/css2?family=Suez+One&display=swap');
-
     * {
         scrollbar-width: none;
         margin-inline: auto;
@@ -4539,12 +4537,6 @@ def css():
     input, textarea, input::placeholder, textarea::placeholder {
         text-align: center !important;
     }
-
-        *, *::placeholder {
-            font-family: "Suez One", serif !important;
-            font-weight: 400;
-            font-style: normal;
-        }
 
         h1,h2,h3,h4,h5,h6 {
             margin-inline: auto !important;
