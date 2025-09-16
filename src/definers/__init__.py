@@ -72,6 +72,16 @@ logger = _init_logger()
 def _init_cupy_numpy():
     import numpy as _np
 
+    def dummy_npwarn_decorator_factory():
+        def npwarn_decorator(x):
+            return x
+
+        return npwarn_decorator
+
+    _np._no_nep50_warning = getattr(
+        _np, "_no_nep50_warning", dummy_npwarn_decorator_factory
+    )
+
     try:
         import cupy as np
     except Exception as e:
@@ -143,6 +153,32 @@ if _find_spec("dask"):
 
     dask.core.visualize = _visualize_wrapper
     dask.core.to_graphviz = _visualize_wrapper
+
+
+def patch_torch_proxy_mode():
+    import torch
+    from torch.fx.experimental import proxy_tensor
+
+    def get_proxy_mode():  # -> Optional[ProxyTorchDispatchMode]
+        pre_dispatch_mode = (
+            torch._ops._get_dispatch_mode_pre_dispatch(
+                torch._C._TorchDispatchModeKey.PROXY
+            )
+        )
+        mode = torch._C._get_dispatch_mode(
+            torch._C._TorchDispatchModeKey.PROXY
+        )
+        assert (
+            pre_dispatch_mode is None or mode is None
+        ), f"pre_dispatch_mode={pre_dispatch_mode}, mode={mode}"
+        return pre_dispatch_mode or mode
+
+    proxy_tensor.get_proxy_mode = getattr(
+        proxy_tensor, "get_proxy_mode", get_proxy_mode
+    )
+
+
+patch_torch_proxy_mode()
 
 
 ai_model_extensions = {
@@ -3268,10 +3304,7 @@ def install_faiss():
 
     set_cuda_env()
 
-    cmake = paths(
-        "/usr/local/cmake/cmake-4.1.1-linux-x86_64/bin/cmake",
-        "/usr/local/cmake/bin/cmake"
-    )[0]
+    cmake = "/usr/local/cmake/bin/cmake"
 
     try:
         with cwd("./xfaiss"):
@@ -3282,6 +3315,7 @@ def install_faiss():
                 f'-B build '
                 "-DBUILD_TESTING=OFF "
                 "-DCMAKE_BUILD_TYPE=Release "
+                "-DFAISS_ENABLE_MKL=OFF "
                 "-DFAISS_ENABLE_C_API=ON "
                 "-DFAISS_ENABLE_GPU=ON "
                 "-DFAISS_ENABLE_PYTHON=ON "
@@ -4068,44 +4102,6 @@ def free():
         run(f"{mamba_path} clean --all", silent=True)
 
 
-def post_install():
-
-    free()
-
-    import torch
-    from torch.fx.experimental import proxy_tensor
-
-    def get_proxy_mode():  # -> Optional[ProxyTorchDispatchMode]
-        pre_dispatch_mode = (
-            torch._ops._get_dispatch_mode_pre_dispatch(
-                torch._C._TorchDispatchModeKey.PROXY
-            )
-        )
-        mode = torch._C._get_dispatch_mode(
-            torch._C._TorchDispatchModeKey.PROXY
-        )
-        assert (
-            pre_dispatch_mode is None or mode is None
-        ), f"pre_dispatch_mode={pre_dispatch_mode}, mode={mode}"
-        return pre_dispatch_mode or mode
-
-    proxy_tensor.get_proxy_mode = getattr(
-        proxy_tensor, "get_proxy_mode", get_proxy_mode
-    )
-
-    import numpy as np
-
-    def dummy_npwarn_decorator_factory():
-        def npwarn_decorator(x):
-            return x
-
-        return npwarn_decorator
-
-    np._no_nep50_warning = getattr(
-        np, "_no_nep50_warning", dummy_npwarn_decorator_factory
-    )
-
-
 def pre_install():
 
     os.environ["TRANSFORMERS_CACHE"] = "/opt/ml/checkpoints/"
@@ -4119,9 +4115,9 @@ def pre_install():
     os.environ["DISABLE_FLASH_ATTENTION"] = "True"
 
 
-def apt_install():
+def apt_install(upgrade=False):
 
-    basic_apt = "build-essential gcc swig gdebi git git-lfs wget curl libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev libncursesw5-dev xz-utils tk-dev libffi-dev liblzma-dev initramfs-tools libgirepository1.0-dev libdbus-1-dev libdbus-glib-1-dev libsecret-1-0 libmanette-0.2-0 libharfbuzz0b libharfbuzz-icu0 libenchant-2-2 libhyphen0 libwoff1 libgraphene-1.0-0 libxml2-dev libxmlsec1-dev"
+    basic_apt = "build-essential gcc swig git git-lfs wget curl libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev libncursesw5-dev xz-utils tk-dev libffi-dev liblzma-dev initramfs-tools libgirepository1.0-dev libdbus-1-dev libdbus-glib-1-dev libsecret-1-0 libmanette-0.2-0 libharfbuzz0b libharfbuzz-icu0 libenchant-2-2 libhyphen0 libwoff1 libgraphene-1.0-0 libxml2-dev libxmlsec1-dev"
     audio_apt = "libsndfile1 libsndfile1-dev libportaudio2 libasound2-dev sox libsox-fmt-all praat ffmpeg libavcodec-extra libavif-dev"
     visual_apt = "libopenblas-dev libgflags-dev libgles2 libgtk-3-0 libgtk-4-1 libatk1.0-0 libatk-bridge2.0-0 libcups2 libxcomposite1 libxdamage1 libatspi2.0-0 libgstreamer1.0-0 gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-tools gstreamer1.0-gl"
 
@@ -4131,19 +4127,17 @@ def apt_install():
     run(
         f"apt-get install -y { basic_apt } { audio_apt } { visual_apt }"
     )
-    run("apt-get upgrade -y")
+
+    if upgrade:
+        run("apt-get upgrade -y")
 
     download_file("https://github.com/Kitware/CMake/releases/download/v4.1.1/cmake-4.1.1-linux-x86_64.sh", "./install_cmake.sh")
     permit("./install_cmake.sh")
     directory("/usr/local/cmake")
     run("./install_cmake.sh --skip-license --prefix=/usr/local/cmake")
-    cmake_path = paths(
-        "/usr/local/cmake/cmake-4.1.1-linux-x86_64/bin",
-        "/usr/local/cmake/bin"
-    )[0]
-    add_path(cmake_path)
+    add_path("/usr/local/cmake/bin")
     
-    post_install()
+    free()
 
 
 def device():
