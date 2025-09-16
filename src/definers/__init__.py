@@ -7105,11 +7105,7 @@ def humanize_vocals(audio_path, amount=0.5):
 
             sf.write(temp_input_wav, y, sr)
 
-            command = (
-                f'rubberband --formant --freqmap "{freq_map_path}" '
-                f'"{temp_input_wav}" "{temp_output_wav}"'
-            )
-            run(command)
+            run(f'rubberband --formant --freqmap {freq_map_path} {temp_input_wav} {temp_output_wav}')
 
             y_humanized, _ = librosa.load(temp_output_wav, sr=sr)
             print("Humanization complete.")
@@ -7159,7 +7155,7 @@ def transcribe_audio(audio_path, language):
 
 
 def generate_voice(
-    text, reference_audio, format_choice, humanize=True
+    text, reference_audio, format_choice
 ):
     import pydub
     import soundfile as sf
@@ -7172,8 +7168,6 @@ def generate_voice(
             text=text, audio_prompt_path=reference_audio
         )
         sf.write(temp_wav_path, wav, 24000)
-        if humanize:
-            temp_wav_path = humanize_vocals(temp_wav_path)
         sound = pydub.AudioSegment.from_file(temp_wav_path)
         output_stem = tmp(keep=False).replace(".data", "")
         final_output_path = export_audio(
@@ -7201,8 +7195,6 @@ def generate_music(prompt, duration_s, format_choice, humanize):
     wav_output = audio_values[0, 0].cpu().numpy()
     temp_wav_path = tmp("wav", keep=False)
     write_wav(temp_wav_path, rate=sampling_rate, data=wav_output)
-    if humanize:
-        temp_wav_path = humanize_vocals(temp_wav_path)
     sound = pydub.AudioSegment.from_file(temp_wav_path)
     output_stem = Path(temp_wav_path).with_name(
         f"generated_{random_string()}"
@@ -8312,8 +8304,6 @@ def extend_audio(
         extension_wav,
         MODELS["music"].config.audio_encoder.sampling_rate,
     )
-    if humanize:
-        temp_extension_path = humanize_vocals(temp_extension_path)
     original_sound = pydub.AudioSegment.from_file(audio_path)
     extension_sound = pydub.AudioSegment.from_file(
         temp_extension_path
@@ -8777,7 +8767,6 @@ def autotune_vocals(
         temp_files.append(temp_tuned_vocals_path)
         sf.write(temp_tuned_vocals_path, y_tuned, sr)
 
-        temp_tuned_vocals_path = humanize_vocals(temp_tuned_vocals_path)
         temp_tuned_vocals_path = master(temp_tuned_vocals_path)
 
         tuned_vocals = pydub.AudioSegment.from_file(
