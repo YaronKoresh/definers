@@ -6449,7 +6449,7 @@ def find_latest_checkpoint(
 
 
 def train_model_rvc(
-    experiment: str, path: str, lvl: int = 1, f0method: str = "rmvpe"
+    experiment: str, path: str, lvl: int = 1, f0method: str = "crepe"
 ):
     logger.info(f"Starting RVC training for experiment: {experiment}")
 
@@ -6521,7 +6521,7 @@ def train_model_rvc(
         catch(e)
         return None
 
-    sr = 48000
+    sr = 96000
     n_p = int(_np.ceil(config.n_cpu / 1.5))
     log_file_preprocess = os.path.join(exp_path, "preprocess.log")
 
@@ -6672,7 +6672,7 @@ def train_model_rvc(
 
         big_npy = (
             MiniBatchKMeans(
-                n_clusters=500,
+                n_clusters=100,
                 verbose=False,
                 batch_size=256 * config.n_cpu,
                 compute_labels=False,
@@ -6765,8 +6765,8 @@ def train_model_rvc(
         pretrained_D = "assets/pretrained_v2/f0D48k.pth"
 
         batch_size = default_batch_size
-        total_epoch = 200 * lvl
-        save_epoch = 200
+        total_epoch = 250 * lvl
+        save_epoch = 250
         if_save_latest = 1
         if_cache_gpu = 1
         if_save_every_weights = 1
@@ -6804,7 +6804,7 @@ def train_model_rvc(
             cmd_train = (
                 f'"{config.python_cmd}" -m infer.modules.train.train '
                 f'-e "{exp_dir}" '
-                f"-sr 48k "
+                f"-sr 96k "
                 f"-f0 1 "
                 f"-bs {batch_size} "
                 f"-g {gpus_str} "
@@ -6911,12 +6911,12 @@ def convert_vocal_rvc(experiment: str, path: str):
             f"No index file found for experiment '{experiment}' in '{exp_path}'. Conversion may be less effective."
         )
 
-    filter_radius = 4
+    filter_radius = 7
     semitones = 0
-    index_rate = 0.8
-    protect = 0.4
-    f0_mean_pooling = 1
-    rms_mix_rate = 0.2
+    index_rate = 1.0
+    protect = 0.5
+    f0_mean_pooling = 0
+    rms_mix_rate = 0.0
     try:
         vc.get_vc(
             latest_checkpoint_filename, index_rate, f0_mean_pooling
@@ -6933,7 +6933,7 @@ def convert_vocal_rvc(experiment: str, path: str):
             input_audio_path=path,
             f0_up_key=semitones,
             f0_file=None,
-            f0_method="rmvpe",
+            f0_method="harvest",
             file_index=idx_path,
             file_index2=None,
             index_rate=index_rate,
@@ -7924,10 +7924,10 @@ def separate_stems(
 
     output_dir = tmp(dir=True)
     run(
-        f'"{sys.executable}" -m demucs.separate -n htdemucs_ft --shifts=3 --two-stems=vocals -o "{output_dir}" "{audio_path}"'
+        f'"{sys.executable}" -m demucs.separate -n hdemucs_mmi --shifts=2 --two-stems=vocals -o "{output_dir}" "{audio_path}"'
     )
     separated_dir = (
-        Path(output_dir) / "htdemucs_ft" / Path(audio_path).stem
+        Path(output_dir) / "hdemucs_mmi" / Path(audio_path).stem
     )
     vocals_path = separated_dir / "vocals.wav"
     accompaniment_path = separated_dir / "no_vocals.wav"
