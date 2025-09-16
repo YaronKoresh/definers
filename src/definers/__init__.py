@@ -4528,8 +4528,11 @@ def duck_translate(text, lang="en"):
 def css():
     return """
 
+    @import url('https://fonts.googleapis.com/css2?family=Suez+One&display=swap');
+
     * {
         scrollbar-width: none;
+        max-width: 600px !important;
     }
 
     input, textarea, input::placeholder, textarea::placeholder {
@@ -4537,7 +4540,9 @@ def css():
     }
 
         *, *::placeholder {
-            font-family: Suez One !important;
+            font-family: "Suez One", serif !important;
+            font-weight: 400;
+            font-style: normal;
         }
 
         h1,h2,h3,h4,h5,h6 {
@@ -4546,10 +4551,6 @@ def css():
         }
 
         footer {
-            display: none !important;
-        }
-
-        .dropdown-arrow {
             display: none !important;
         }
 
@@ -4568,9 +4569,8 @@ def css():
     }
 
     * > img {
-        max-width: 100% !important; /* Make sure image scales within the container */
-        height: auto !important;    /* Maintain aspect ratio */
-        display: block !important; /* Prevents a small space below the image */
+        height: auto !important;
+        display: block !important;
     }
 
     textarea {
@@ -6683,7 +6683,7 @@ def train_model_rvc(
 
         big_npy = (
             MiniBatchKMeans(
-                n_clusters=256,
+                n_clusters=512,
                 verbose=False,
                 batch_size=256 * config.n_cpu,
                 compute_labels=False,
@@ -6776,8 +6776,8 @@ def train_model_rvc(
         pretrained_D = "assets/pretrained_v2/f0D48k.pth"
 
         batch_size = default_batch_size
-        total_epoch = 100 * lvl
-        save_epoch = 100
+        total_epoch = 150 * lvl
+        save_epoch = 150
         if_save_latest = 1
         if_cache_gpu = 1
         if_save_every_weights = 1
@@ -6922,6 +6922,7 @@ def convert_vocal_rvc(experiment: str, path: str):
             f"No index file found for experiment '{experiment}' in '{exp_path}'. Conversion may be less effective."
         )
 
+    semitones = -5
     index_rate = 0
     protect = 0.33
     f0_mean_pooling = 1
@@ -6940,7 +6941,7 @@ def convert_vocal_rvc(experiment: str, path: str):
         message, (sr, aud) = vc.vc_single(
             sid=0,
             input_audio_path=path,
-            f0_up_key=0,
+            f0_up_key=semitones,
             f0_file=None,
             f0_method="rmvpe",
             file_index=idx_path,
