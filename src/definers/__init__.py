@@ -7461,22 +7461,26 @@ def music_video(audio_path, preset="vortex", width=1280, height=720, fps=25):
 
         elif preset == "israel":
             ISRAEL_BLUE = (0, 56, 184)
-            CRIMSON = (237, 20, 61)
+            RED = (255, 0, 0)
+            BLACK = (0, 0, 0)
             WHITE = (255, 255, 255)
-            frame[:, :] = WHITE
             stripe_height = int(h * 0.15)
             gap_height = int(h * 0.1)
-            frame[gap_height : gap_height + stripe_height] = ISRAEL_BLUE
-            frame[h - gap_height - stripe_height : h - stripe_height] = ISRAEL_BLUE
             
-            radius = int((h * 0.1) + rms_val * (h * 0.25))
-            rotation_angle = t * 5 + centroid_val * 45
+            radius = int((h * 0.2) + rms_val * (h * 0.5))
+            rotation_angle = t * 45 + centroid_val * 45
             
             if is_beat:
-                star_color, star_thickness = CRIMSON, 30
-                radius = int(radius * 1.8)
+                star_color, star_thickness = WHITE, 30
+                radius = int(radius * 1.2)
+                frame[:, :] = BLACK
+                frame[gap_height : gap_height + stripe_height] = RED
+                frame[h - gap_height - stripe_height : h - stripe_height] = RED
             else:
                 star_color, star_thickness = ISRAEL_BLUE, 8
+                frame[:, :] = WHITE
+                frame[gap_height : gap_height + stripe_height] = ISRAEL_BLUE
+                frame[h - gap_height - stripe_height : h - stripe_height] = ISRAEL_BLUE
             
             draw_star_of_david(frame, (center_x, center_y), radius, rotation_angle, star_color, star_thickness)
         
