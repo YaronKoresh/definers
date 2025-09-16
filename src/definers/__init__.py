@@ -7473,7 +7473,7 @@ def music_video(audio_path, preset="vortex", width=1280, height=720, fps=25):
                 radius = int(radius * 1.2)
                 frame[:, :] = BLACK
                 frame[gap_height : gap_height + stripe_height] = RED
-                frame[h - gap_height - stripe_height : h - stripe_height] = RED
+                frame[h - gap_height - stripe_height : h - gap_height] = RED
             else:
                 star_color, star_thickness = ISRAEL_BLUE, 8
                 frame[:, :] = WHITE
