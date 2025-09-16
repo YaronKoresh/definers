@@ -4529,19 +4529,11 @@ def duck_translate(text, lang="en"):
 def css():
     return """
 
-    * {
+    *, *::placeholder {
         scrollbar-width: none;
-        margin-inline: auto;
-    }
-
-    input, textarea, input::placeholder, textarea::placeholder {
+        margin-inline: auto !important;
         text-align: center !important;
     }
-
-        h1,h2,h3,h4,h5,h6 {
-            margin-inline: auto !important;
-            text-align: center;
-        }
 
         footer {
             display: none !important;
