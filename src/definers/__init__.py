@@ -6471,8 +6471,8 @@ def train_model_rvc(
     from .i18n.i18n import I18nAuto
 
     path = normalize_audio_to_peak(path)
-
     path, music = separate_stems(path)
+    path = normalize_audio_to_peak(path)
 
     now_dir = os.getcwd()
     index_root = os.path.join(now_dir, "logs")
@@ -8648,7 +8648,7 @@ def autotune_vocals(
 
                     if final_pos + len(segment) <= len(y_timed):
                         fade_len = min(
-                            int(0.05 * sr), len(segment) // 2
+                            int(0.2 * sr), len(segment) // 2
                         )
                         if fade_len > 0:
                             fade_in = np.linspace(0.0, 1.0, fade_len)
@@ -8776,7 +8776,7 @@ def autotune_vocals(
         final_output_path = f"{output_stem}.{format_choice}"
         combined.export(final_output_path, format=format_choice)
 
-        final_output_path = master(final_output_path)
+        final_output_path = normalize_audio_to_peak(final_output_path)
 
         print(f"\n--- Autotune Complete ---")
         print(f"Final audio saved to: {final_output_path}")
