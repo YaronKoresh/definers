@@ -6688,7 +6688,7 @@ def train_model_rvc(
 
         big_npy = (
             MiniBatchKMeans(
-                n_clusters=2000,
+                n_clusters=256,
                 verbose=False,
                 batch_size=256 * config.n_cpu,
                 compute_labels=False,
@@ -8553,16 +8553,14 @@ def autotune_vocals(
     separation_dir = tmp(dir=True)
     temp_files = []
 
-    n_fft, hop_length = 2048, 1024
+    n_fft, hop_length = 2048, 512
     try:
         print("\n--- Vocal Separation ---")
 
         vocals_path, instrumental_path = separate_stems(audio_path)
 
-        vocals_path = str(vocals_path)
-        instrumental_path = str(instrumental_path)
-
-        vocals_path = master(vocals_path)
+        vocals_path = normalize_audio_to_peak(str(vocals_path))
+        instrumental_path = normalize_audio_to_peak(str(instrumental_path))
 
         print("Loading separated audio tracks...")
         y_original, sr = librosa.load(
@@ -8584,7 +8582,7 @@ def autotune_vocals(
             downbeat_act = downbeat_proc(str(instrumental_path))
             combined_act = np.c_[beat_act, downbeat_act]
             final_tracker = madmom.features.downbeats.DBNDownBeatTrackingProcessor(
-                beats_per_bar=list(beats_per_bar), fps=30
+                beats_per_bar=list(beats_per_bar), fps=100
             )
             beat_info = final_tracker(combined_act)
 
@@ -8754,8 +8752,6 @@ def autotune_vocals(
         temp_tuned_vocals_path = tmp(".wav")
         temp_files.append(temp_tuned_vocals_path)
         sf.write(temp_tuned_vocals_path, y_tuned, sr)
-
-        temp_tuned_vocals_path = master(temp_tuned_vocals_path)
 
         tuned_vocals = pydub.AudioSegment.from_file(
             temp_tuned_vocals_path
