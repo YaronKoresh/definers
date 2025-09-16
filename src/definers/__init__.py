@@ -4534,6 +4534,7 @@ def css():
     * {
         scrollbar-width: none;
         max-width: 600px !important;
+        margin-inline: auto !important;
     }
 
     input, textarea, input::placeholder, textarea::placeholder {
