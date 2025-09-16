@@ -6684,7 +6684,7 @@ def train_model_rvc(
 
         big_npy = (
             MiniBatchKMeans(
-                n_clusters=512,
+                n_clusters=800,
                 verbose=False,
                 batch_size=256 * config.n_cpu,
                 compute_labels=False,
@@ -6777,8 +6777,8 @@ def train_model_rvc(
         pretrained_D = "assets/pretrained_v2/f0D48k.pth"
 
         batch_size = default_batch_size
-        total_epoch = 150 * lvl
-        save_epoch = 150
+        total_epoch = 300 * lvl
+        save_epoch = 300
         if_save_latest = 1
         if_cache_gpu = 1
         if_save_every_weights = 1
@@ -6885,8 +6885,7 @@ def convert_vocal_rvc(experiment: str, path: str):
     from .infer.modules.vc.modules import VC
 
     path = normalize_audio_to_peak(path)
-    voice, music = separate_stems(path)
-    path = normalize_audio_to_peak(voice)
+    path, music = separate_stems(path)
 
     now_dir = os.getcwd()
     index_root = os.path.join(now_dir, "logs")
@@ -6924,12 +6923,12 @@ def convert_vocal_rvc(experiment: str, path: str):
             f"No index file found for experiment '{experiment}' in '{exp_path}'. Conversion may be less effective."
         )
 
-    filter_radius = 7
+    filter_radius = 5
     semitones = -5
     index_rate = 0
-    protect = 0.4
+    protect = 0.35
     f0_mean_pooling = 1
-    rms_mix_rate = 0.25
+    rms_mix_rate = 0.75
     try:
         vc.get_vc(
             latest_checkpoint_filename, index_rate, f0_mean_pooling
