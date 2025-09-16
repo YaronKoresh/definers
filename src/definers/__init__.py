@@ -4562,6 +4562,11 @@ def css():
             align-items: center !important;
         }
 
+    tr.file > td.download {
+        min-width: unset !important;
+        width: auto !important;
+    }
+
     button {
         margin: 10px 0 !important; /* Add some vertical margin to buttons */
         border-radius: 2mm !important; /* Rounded corners for buttons */
@@ -6926,10 +6931,10 @@ def convert_vocal_rvc(experiment: str, path: str):
 
     filter_radius = 5
     semitones = -5
-    index_rate = 0
-    protect = 0.35
+    index_rate = 0.5
+    protect = 0.5
     f0_mean_pooling = 1
-    rms_mix_rate = 0.75
+    rms_mix_rate = 0.5
     try:
         vc.get_vc(
             latest_checkpoint_filename, index_rate, f0_mean_pooling
