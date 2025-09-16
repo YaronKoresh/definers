@@ -8773,7 +8773,7 @@ def autotune_vocals(
         )
 
         combined = base.overlay(instrumental).overlay(
-            tuned_vocals - 6
+            tuned_vocals
         )
 
         output_stem = f"{Path(audio_path).stem}_autotuned"
