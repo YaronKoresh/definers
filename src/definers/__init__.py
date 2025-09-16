@@ -1125,10 +1125,11 @@ def init_tokenizer(mod="google-bert/bert-base-multilingual-cased"):
     return AutoTokenizer.from_pretrained(mod)
 
 
-def init_custom_model(model_type, model_path=None):
+def init_custom_model(model_path):
     import pickle
-
     import onnx
+
+    model_type = get_ext(model_path)
 
     try:
         model = None
