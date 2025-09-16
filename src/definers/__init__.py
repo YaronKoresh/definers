@@ -4533,8 +4533,7 @@ def css():
 
     * {
         scrollbar-width: none;
-        max-width: 600px !important;
-        margin-inline: auto !important;
+        margin-inline: auto;
     }
 
     input, textarea, input::placeholder, textarea::placeholder {
@@ -4568,14 +4567,13 @@ def css():
     }
 
     button {
-        margin: 10px 0 !important; /* Add some vertical margin to buttons */
-        border-radius: 2mm !important; /* Rounded corners for buttons */
+        border-radius: 2mm !important;
         border: none !important;
         cursor: pointer !important;
-        transition: background-color 0.3s ease !important; /* Smooth hover effect */
     }
 
     * > img {
+        width: 100% !important;
         height: auto !important;
         display: block !important;
     }
@@ -8535,8 +8533,8 @@ def enhance_audio(audio_path, format_choice="mp3"):
 def autotune_vocals(
     audio_path,
     format_choice="mp3",
-    strength=1.0,
-    quantize_grid=16,
+    strength=0.7,
+    quantize_grid=8,
     beats_per_bar=(4, 4)
 ):
     import librosa
@@ -8657,7 +8655,7 @@ def autotune_vocals(
 
                     if final_pos + len(segment) <= len(y_timed):
                         fade_len = min(
-                            int(0.4 * sr), len(segment) // 2
+                            int(0.3 * sr), len(segment) // 3
                         )
                         if fade_len > 0:
                             fade_in = np.linspace(0.0, 1.0, fade_len)
