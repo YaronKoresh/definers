@@ -7460,20 +7460,21 @@ def music_video(audio_path, preset="vortex", width=1280, height=720, fps=25):
             frame = np.clip(frame.astype(np.int16) + noise, 0, 255).astype(np.uint8)
 
         elif preset == "israel":
-            ISRAEL_BLUE = (184, 56, 0)
+            ISRAEL_BLUE = (0, 56, 184)
+            CRIMSON = (237, 20, 61)
             WHITE = (255, 255, 255)
             frame[:, :] = WHITE
-            stripe_height = int(h * 0.18)
-            gap_height = int(h * 0.12)
+            stripe_height = int(h * 0.15)
+            gap_height = int(h * 0.1)
             frame[gap_height : gap_height + stripe_height] = ISRAEL_BLUE
             frame[h - gap_height - stripe_height : h - stripe_height] = ISRAEL_BLUE
             
-            radius = int((h * 0.15) + rms_val * (h * 0.20))
-            rotation_angle = t * 25 + centroid_val * 180
+            radius = int((h * 0.1) + rms_val * (h * 0.25))
+            rotation_angle = t * 5 + centroid_val * 45
             
             if is_beat:
-                star_color, star_thickness = WHITE, 20
-                radius = int(radius * 1.6)
+                star_color, star_thickness = CRIMSON, 30
+                radius = int(radius * 1.8)
             else:
                 star_color, star_thickness = ISRAEL_BLUE, 8
             
