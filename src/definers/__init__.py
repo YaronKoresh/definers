@@ -7219,13 +7219,13 @@ def dj_mix(
         )
         for file in files:
             try:
-                act = beat_processor(file.name)
+                act = beat_processor(str(file))
                 bpm = np.median(60 / np.diff(proc(act)))
                 if bpm > 0:
                     all_bpms.append(bpm)
             except Exception as e:
                 print(
-                    f"Could not analyze BPM for {Path(file.name).name}, skipping this track for BPM calculation. Error: {e}"
+                    f"Could not analyze BPM for {Path(str(file)).name}, skipping this track for BPM calculation. Error: {e}"
                 )
                 continue
 
@@ -7243,7 +7243,7 @@ def dj_mix(
     for file in files:
         try:
             temp_stretched_path = None
-            current_path = file.name
+            current_path = str(file)
 
             if mix_type is not None and "beatmatched" in mix_type.lower() and target_bpm > 0:
                 proc = madmom.features.beats.DBNBeatTrackingProcessor(
@@ -8408,7 +8408,7 @@ def calculate_active_rms(y, sr):
 
 
 def get_ext(input_path):
-    return os.path.splitext(input_path)[1][1:].lower()
+    return str(Path(str(input_path)).suffix)
 
 
 def is_ai_model(input_path):
