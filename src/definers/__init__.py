@@ -4548,6 +4548,7 @@ def duck_translate(text, lang="en"):
 
 
 def theme():
+    import gradio as gr
     return gr.themes.Base(primary_hue=gr.themes.colors.slate, secondary_hue=gr.themes.colors.indigo, font=(gr.themes.GoogleFont("Inter"), "ui-sans-serif", "system-ui", "sans-serif")).set(
         body_background_fill_dark="#111827", block_background_fill_dark="#1f2937", block_border_width="1px",
         block_title_background_fill_dark="#374151", button_primary_background_fill_dark="linear-gradient(90deg, #4f46e5, #7c3aed)",
