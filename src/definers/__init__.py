@@ -4547,13 +4547,33 @@ def duck_translate(text, lang="en"):
     return text
 
 
+def theme():
+    return gr.themes.Base(primary_hue=gr.themes.colors.slate, secondary_hue=gr.themes.colors.indigo, font=(gr.themes.GoogleFont("Inter"), "ui-sans-serif", "system-ui", "sans-serif")).set(
+        body_background_fill_dark="#111827", block_background_fill_dark="#1f2937", block_border_width="1px",
+        block_title_background_fill_dark="#374151", button_primary_background_fill_dark="linear-gradient(90deg, #4f46e5, #7c3aed)",
+        button_primary_text_color_dark="#ffffff", button_secondary_background_fill_dark="#374151",
+        button_secondary_text_color_dark="#ffffff", slider_color_dark="#6366f1"
+    )
+
 def css():
     return """
 
+    .tool-container, .block { padding: 10px !important; background: none !important; border: none !important; }
+    .tool-container .styler { background: none !important; }
+    .tool-container .row { column-gap: 1em !important; }
+    .tool-container .column { width: 100% !important; }
+    .tool-container .column:not(:has(*)), .tool-container .column:not(:has(:not(div,span))) { display: none !important; }
+
     *, *::placeholder {
-        scrollbar-width: none;
+        scrollbar-width: none !important;
         margin-inline: auto !important;
         text-align: center !important;
+        max-width: 100% !important;
+        max-height: 100% !important;
+    }
+
+    main, div:has(main) {
+        padding: 0 !important;
     }
 
         footer {
