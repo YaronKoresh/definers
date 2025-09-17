@@ -3358,7 +3358,10 @@ def build_faiss():
         with cwd():
             delete("./xfaiss")
 
-        return paths(f'{temp_dir}/faiss-*.whl')[0]
+        pat = paths(f'{temp_dir}/faiss-*.whl')[0]
+        trg = f'{temp_dir}/faiss-1.12.0-cp310-cp310-manylinux_2_17_x86_64.whl'
+        move( pat, trg )
+        return trg
 
     except subprocess.CalledProcessError as e:
         print(f"Error during installation: {e}")
