@@ -3349,7 +3349,7 @@ def build_faiss():
         with cwd():
             delete("./xfaiss")
 
-        return paths(f'{temp_dir}/*.whl')[0]
+        return paths(f'{temp_dir}/faiss-*.whl')[0]
 
     except subprocess.CalledProcessError as e:
         print(f"Error during installation: {e}")
