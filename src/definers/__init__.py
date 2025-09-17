@@ -3295,10 +3295,16 @@ def is_clusters_model(model):
     return hasattr(model, "cluster_centers_")
 
 
-def install_faiss():
-    if importable("faiss"):
-        return False
+def pip_install(pack):
+    if pack.startswith("https://") or pack.startswith("http://") and pack.endswith(".whl"):
+        temp_path = tmp("whl", keep=False)
+        download_file(pack, temp_path)
+        pack = temp_path
 
+    return run(f'{sys.executable} -m pip install --force-reinstall {pack}')
+
+
+def build_faiss():
     with cwd():
         git("facebookresearch", "faiss", parent="./xfaiss")
 
@@ -3334,11 +3340,17 @@ def install_faiss():
             print("faiss - stage 3")
             run(f'{cmake} --build build -j {cores} --target swigfaiss')
 
+        temp_dir = tmp(dir=True)
+
         with cwd("./xfaiss/build/faiss/python"):
             print("faiss - stage 4")
-            run(f'{sys.executable} -m pip install .')
+            run(f'{sys.executable} -m pip wheel -w {temp_dir}')
 
-        print("Faiss installed successfully!")
+        with cwd():
+            delete("./xfaiss")
+
+        return paths(f'{temp_dir}/*.whl')[0]
+
     except subprocess.CalledProcessError as e:
         print(f"Error during installation: {e}")
     except FileNotFoundError as e:
@@ -3384,7 +3396,7 @@ def add_path(*p):
     path = full_path(*p)
     if path not in sys.path:
         permit(path)
-        sys.path.append(path)
+        sys.path.insert(0, path)
         site.addsitedir(path)
         importlib.invalidate_caches()
     if get_os_name() == "linux" or get_os_name() == "darwin":
