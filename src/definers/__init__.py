@@ -3344,7 +3344,7 @@ def build_faiss():
 
         with cwd("./xfaiss/build/faiss/python"):
             print("faiss - stage 4")
-            run(f'{sys.executable} -m pip wheel -w {temp_dir}')
+            run(f'{sys.executable} -m pip wheel . -w {temp_dir}')
 
         with cwd():
             delete("./xfaiss")
