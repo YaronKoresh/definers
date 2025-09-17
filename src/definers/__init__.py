@@ -182,16 +182,16 @@ patch_torch_proxy_mode()
 
 
 ai_model_extensions = {
-        'safetensors', # Stable Diffusion, general use
-        'onnx',        # Open Neural Network Exchange
-        'pt',          # PyTorch
-        'pth',         # PyTorch (older convention)
-        'h5',          # Keras / TensorFlow (HDF5 format)
-        'keras',       # Keras
-        'pb',          # TensorFlow Protocol Buffer
-        'tflite',      # TensorFlow Lite
-        'gguf',        # Common format for LLMs like Llama
-        'ckpt'         # Checkpoint (general)
+    "safetensors",  # Stable Diffusion, general use
+    "onnx",  # Open Neural Network Exchange
+    "pt",  # PyTorch
+    "pth",  # PyTorch (older convention)
+    "h5",  # Keras / TensorFlow (HDF5 format)
+    "keras",  # Keras
+    "pb",  # TensorFlow Protocol Buffer
+    "tflite",  # TensorFlow Lite
+    "gguf",  # Common format for LLMs like Llama
+    "ckpt",  # Checkpoint (general)
 }
 
 
@@ -722,9 +722,7 @@ def install_audio_effects():
         run("apt-get update -y")
         run(f"apt-get install -y {' '.join(dependencies_apt)}")
     elif os_name == "windows":
-        install_dir = full_path(
-            "./app_dependencies"
-        )
+        install_dir = full_path("./app_dependencies")
         directory(install_dir, exist_ok=True)
         print(
             "Detected Windows. Automating dependency installation..."
@@ -1163,6 +1161,7 @@ def init_tokenizer(mod="google-bert/bert-base-multilingual-cased"):
 
 def init_custom_model(model_path):
     import pickle
+
     import onnx
 
     model_type = get_ext(model_path)
@@ -3296,12 +3295,18 @@ def is_clusters_model(model):
 
 
 def pip_install(pack):
-    if pack.startswith("https://") or pack.startswith("http://") and pack.endswith(".whl"):
+    if (
+        pack.startswith("https://")
+        or pack.startswith("http://")
+        and pack.endswith(".whl")
+    ):
         temp_path = tmp("whl", keep=False)
         download_file(pack, temp_path)
         pack = temp_path
 
-    return run(f'{sys.executable} -m pip install --force-reinstall {pack}')
+    return run(
+        f"{sys.executable} -m pip install --force-reinstall {pack}"
+    )
 
 
 def build_faiss():
@@ -3316,40 +3321,44 @@ def build_faiss():
         with cwd("./xfaiss"):
 
             print("faiss - stage 1")
-            run( (
-                f'{cmake} '
-                f'-B build '
-                "-DBUILD_TESTING=OFF "
-                "-DCMAKE_BUILD_TYPE=Release "
-                "-DFAISS_ENABLE_MKL=OFF "
-                "-DFAISS_ENABLE_C_API=ON "
-                "-DFAISS_ENABLE_GPU=ON "
-                "-DFAISS_ENABLE_PYTHON=ON "
-                f"-DPython_EXECUTABLE={sys.executable} "
-                f"-DPython_INCLUDE_DIR={sys.prefix}/include/python{sys.version_info.major}.{sys.version_info.minor} "
-                f"-DPython_LIBRARY={sys.prefix}/lib/libpython{sys.version_info.major}.{sys.version_info.minor}.so "
-                f"-DPython_NumPy_INCLUDE_DIRS={sys.prefix}/lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages/numpy/core/include "
-                "."
-            ) )
+            run(
+                (
+                    f"{cmake} "
+                    f"-B build "
+                    "-DBUILD_TESTING=OFF "
+                    "-DCMAKE_BUILD_TYPE=Release "
+                    "-DFAISS_ENABLE_MKL=OFF "
+                    "-DFAISS_ENABLE_C_API=ON "
+                    "-DFAISS_ENABLE_GPU=ON "
+                    "-DFAISS_ENABLE_PYTHON=ON "
+                    f"-DPython_EXECUTABLE={sys.executable} "
+                    f"-DPython_INCLUDE_DIR={sys.prefix}/include/python{sys.version_info.major}.{sys.version_info.minor} "
+                    f"-DPython_LIBRARY={sys.prefix}/lib/libpython{sys.version_info.major}.{sys.version_info.minor}.so "
+                    f"-DPython_NumPy_INCLUDE_DIRS={sys.prefix}/lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages/numpy/core/include "
+                    "."
+                )
+            )
 
             cores = os.cpu_count() * 2
 
             print("faiss - stage 2")
-            run(f'{cmake} --build build -j {cores} --target faiss')
+            run(f"{cmake} --build build -j {cores} --target faiss")
 
             print("faiss - stage 3")
-            run(f'{cmake} --build build -j {cores} --target swigfaiss')
+            run(
+                f"{cmake} --build build -j {cores} --target swigfaiss"
+            )
 
         temp_dir = tmp(dir=True)
 
         with cwd("./xfaiss/build/faiss/python"):
             print("faiss - stage 4")
-            run(f'{sys.executable} -m pip wheel . -w {temp_dir}')
+            run(f"{sys.executable} -m pip wheel . -w {temp_dir}")
 
         with cwd():
             delete("./xfaiss")
 
-        return paths(f'{temp_dir}/*.whl')[0]
+        return paths(f"{temp_dir}/*.whl")[0]
 
     except subprocess.CalledProcessError as e:
         print(f"Error during installation: {e}")
@@ -3402,9 +3411,9 @@ def add_path(*p):
     if get_os_name() == "linux" or get_os_name() == "darwin":
         cmd = f'export PATH="{path}:$PATH"'
         if exist("~/.bashrc"):
-            write("~/.bashrc", "\n".join( read("~/.bashrc"), cmd ))
+            write("~/.bashrc", "\n".join(read("~/.bashrc"), cmd))
         elif exist("~/.zshrc"):
-            write("~/.zshrc", "\n".join( read("~/.zshrc"), cmd ))
+            write("~/.zshrc", "\n".join(read("~/.zshrc"), cmd))
         return run(cmd)
     if get_os_name() == "windows":
         return run(f'setx PATH "%PATH%;{path}"')
@@ -3847,7 +3856,10 @@ def permit(path):
             subprocess.run(["chmod", "-R", "a+xrw", path], check=True)
             return True
         if get_os_name() == "windows":
-            subprocess.run(['icacls', path, '/grant', 'Everyone:F', '/T'], check=True)
+            subprocess.run(
+                ["icacls", path, "/grant", "Everyone:F", "/T"],
+                check=True,
+            )
             return True
         return False
     except Exception as e:
@@ -4143,12 +4155,15 @@ def apt_install(upgrade=False):
     if upgrade:
         run("apt-get upgrade -y")
 
-    download_file("https://github.com/Kitware/CMake/releases/download/v4.1.1/cmake-4.1.1-linux-x86_64.sh", "./install_cmake.sh")
+    download_file(
+        "https://github.com/Kitware/CMake/releases/download/v4.1.1/cmake-4.1.1-linux-x86_64.sh",
+        "./install_cmake.sh",
+    )
     permit("./install_cmake.sh")
     directory("/usr/local/cmake")
     run("./install_cmake.sh --skip-license --prefix=/usr/local/cmake")
     add_path("/usr/local/cmake/bin")
-    
+
     free()
 
 
@@ -4878,9 +4893,11 @@ def summary(text, max_words=50):
         return _summarize(text, is_chunk=False)
 
 
-def git(user: str, repo: str, branch: str = "main", parent: str = "."):
+def git(
+    user: str, repo: str, branch: str = "main", parent: str = "."
+):
     import requests
-    
+
     user = user.replace(" ", "_")
     repo = repo.replace(" ", "-")
     parent = full_path(parent)
@@ -4888,12 +4905,14 @@ def git(user: str, repo: str, branch: str = "main", parent: str = "."):
     directory(parent)
 
     clone_dir = tmp(dir=True)
-    
+
     repo_url = f"https://github.com/{user}/{repo}.git"
     env = os.environ.copy()
-    env['GIT_LFS_SKIP_SMUDGE'] = '1'
-    
-    run(f'git clone --branch {branch} {repo_url} {clone_dir}', env=env)
+    env["GIT_LFS_SKIP_SMUDGE"] = "1"
+
+    run(
+        f"git clone --branch {branch} {repo_url} {clone_dir}", env=env
+    )
 
     def _lfs(_dir):
 
@@ -4908,23 +4927,31 @@ def git(user: str, repo: str, branch: str = "main", parent: str = "."):
             if os.path.getsize(p) > 200:
                 continue
 
-            with open(p, 'r') as f:
+            with open(p, "r") as f:
                 try:
                     content = f.read()
                 except UnicodeDecodeError:
                     continue
 
-            if content.startswith("version https://git-lfs.github.com/spec"):
-                filepath_in_repo = os.path.relpath(p, clone_dir).replace(os.path.sep, '/')
+            if content.startswith(
+                "version https://git-lfs.github.com/spec"
+            ):
+                filepath_in_repo = os.path.relpath(
+                    p, clone_dir
+                ).replace(os.path.sep, "/")
                 asset_url = f"https://media.githubusercontent.com/media/{user}/{repo}/{branch}/{filepath_in_repo}"
                 try:
                     with requests.get(asset_url, stream=True) as r:
                         r.raise_for_status()
-                        with open(p, 'wb') as asset_file:
-                            for chunk in r.iter_content(chunk_size=8129):
+                        with open(p, "wb") as asset_file:
+                            for chunk in r.iter_content(
+                                chunk_size=8129
+                            ):
                                 asset_file.write(chunk)
                 except requests.exceptions.RequestException as e:
-                    print(f"Warning: Could not download asset '{filepath_in_repo}'. Error: {e}")
+                    print(
+                        f"Warning: Could not download asset '{filepath_in_repo}'. Error: {e}"
+                    )
 
     _lfs(clone_dir)
 
@@ -7085,7 +7112,9 @@ def humanize_vocals(audio_path, amount=0.5):
 
             sf.write(temp_input_wav, y, sr)
 
-            run(f'rubberband --formant --freqmap {freq_map_path} {temp_input_wav} {temp_output_wav}')
+            run(
+                f"rubberband --formant --freqmap {freq_map_path} {temp_input_wav} {temp_output_wav}"
+            )
 
             y_humanized, _ = librosa.load(temp_output_wav, sr=sr)
             print("Humanization complete.")
@@ -7134,9 +7163,7 @@ def transcribe_audio(audio_path, language):
     )["text"]
 
 
-def generate_voice(
-    text, reference_audio, format_choice
-):
+def generate_voice(text, reference_audio, format_choice):
     import pydub
     import soundfile as sf
 
@@ -7237,7 +7264,11 @@ def dj_mix(
             temp_stretched_path = None
             current_path = str(file)
 
-            if mix_type is not None and "beatmatched" in mix_type.lower() and target_bpm > 0:
+            if (
+                mix_type is not None
+                and "beatmatched" in mix_type.lower()
+                and target_bpm > 0
+            ):
                 proc = madmom.features.beats.DBNBeatTrackingProcessor(
                     fps=100
                 )
@@ -7355,7 +7386,9 @@ def beat_visualizer(
     return output_path
 
 
-def draw_star_of_david(frame, center, radius, angle, color, thickness):
+def draw_star_of_david(
+    frame, center, radius, angle, color, thickness
+):
     import cv2
 
     center_x, center_y = center
@@ -7367,14 +7400,30 @@ def draw_star_of_david(frame, center, radius, angle, color, thickness):
         points.append((int(x), int(y)))
     triangle1 = np.array([points[0], points[2], points[4]], np.int32)
     triangle2 = np.array([points[1], points[3], points[5]], np.int32)
-    cv2.polylines(frame, [triangle1], isClosed=True, color=color, thickness=thickness, lineType=cv2.LINE_AA)
-    cv2.polylines(frame, [triangle2], isClosed=True, color=color, thickness=thickness, lineType=cv2.LINE_AA)
+    cv2.polylines(
+        frame,
+        [triangle1],
+        isClosed=True,
+        color=color,
+        thickness=thickness,
+        lineType=cv2.LINE_AA,
+    )
+    cv2.polylines(
+        frame,
+        [triangle2],
+        isClosed=True,
+        color=color,
+        thickness=thickness,
+        lineType=cv2.LINE_AA,
+    )
 
 
-def music_video(audio_path, preset="vortex", width=1280, height=720, fps=25):
+def music_video(
+    audio_path, preset="vortex", width=1280, height=720, fps=25
+):
+    import cv2
     import librosa
     import madmom
-    import cv2
     from moviepy import AudioFileClip
     from moviepy.video.VideoClip import VideoClip
 
@@ -7385,25 +7434,35 @@ def music_video(audio_path, preset="vortex", width=1280, height=720, fps=25):
     stft = librosa.stft(y, hop_length=hop_length)
     stft_db = librosa.amplitude_to_db(np.abs(stft), ref=np.max)
     rms = librosa.feature.rms(y=y, hop_length=hop_length)[0]
-    spectral_centroid = librosa.feature.spectral_centroid(y=y, sr=sr, hop_length=hop_length)[0]
-    
+    spectral_centroid = librosa.feature.spectral_centroid(
+        y=y, sr=sr, hop_length=hop_length
+    )[0]
+
     proc = madmom.features.beats.DBNBeatTrackingProcessor(fps=100)
     act = madmom.features.beats.RNNBeatProcessor()(audio_path)
     beat_times = proc(act)
-    beat_frames = librosa.time_to_frames(beat_times, sr=sr, hop_length=hop_length)
+    beat_frames = librosa.time_to_frames(
+        beat_times, sr=sr, hop_length=hop_length
+    )
 
-    rms_norm = (rms - np.min(rms)) / (np.max(rms) - np.min(rms) + 1e-6)
-    centroid_norm = (spectral_centroid - np.min(spectral_centroid)) / (np.max(spectral_centroid) - np.min(spectral_centroid) + 1e-6)
-    stft_norm = (stft_db - np.min(stft_db)) / (np.max(stft_db) - np.min(stft_db) + 1e-6)
+    rms_norm = (rms - np.min(rms)) / (
+        np.max(rms) - np.min(rms) + 1e-6
+    )
+    centroid_norm = (
+        spectral_centroid - np.min(spectral_centroid)
+    ) / (np.max(spectral_centroid) - np.min(spectral_centroid) + 1e-6)
+    stft_norm = (stft_db - np.min(stft_db)) / (
+        np.max(stft_db) - np.min(stft_db) + 1e-6
+    )
 
     w, h = width, height
     center_x, center_y = w // 2, h // 2
-    
+
     def make_frame(t):
         frame = np.zeros((h, w, 3), dtype=np.uint8)
         frame_idx = int(t * sr / hop_length)
         safe_idx = min(frame_idx, len(rms_norm) - 1)
-        
+
         rms_val = rms_norm[safe_idx]
         centroid_val = centroid_norm[safe_idx]
         is_beat = any(abs(frame_idx - bf) < 3 for bf in beat_frames)
@@ -7411,46 +7470,85 @@ def music_video(audio_path, preset="vortex", width=1280, height=720, fps=25):
         if preset == "vortex":
             rr, cc = np.ogrid[:h, :w]
             angle = np.arctan2(rr - center_y, cc - center_x)
-            dist = np.sqrt((rr - center_y)**2 + (cc - center_x)**2)
-            
+            dist = np.sqrt(
+                (rr - center_y) ** 2 + (cc - center_x) ** 2
+            )
+
             zoom_factor = 1.0 - 0.7 * rms_val
             dist_eff = dist * zoom_factor
-            
+
             r_freq = 2.0 + centroid_val * 2.0
             g_freq = 2.5 + centroid_val * 2.0
             b_freq = 3.0 + centroid_val * 2.0
-            
-            vortex_pattern = np.sin(dist_eff / 25.0 - t * 8.0 + angle * (3 + 4 * rms_val))
+
+            vortex_pattern = np.sin(
+                dist_eff / 25.0 - t * 8.0 + angle * (3 + 4 * rms_val)
+            )
             beat_phase_shift = np.pi if is_beat else 0.0
 
-            frame[:, :, 0] = 128 * (1 + np.sin(vortex_pattern * r_freq + beat_phase_shift))
-            frame[:, :, 1] = 128 * (1 + np.sin(vortex_pattern * g_freq + beat_phase_shift + np.pi * 2/3))
-            frame[:, :, 2] = 128 * (1 + np.sin(vortex_pattern * b_freq + beat_phase_shift + np.pi * 4/3))
+            frame[:, :, 0] = 128 * (
+                1 + np.sin(vortex_pattern * r_freq + beat_phase_shift)
+            )
+            frame[:, :, 1] = 128 * (
+                1
+                + np.sin(
+                    vortex_pattern * g_freq
+                    + beat_phase_shift
+                    + np.pi * 2 / 3
+                )
+            )
+            frame[:, :, 2] = 128 * (
+                1
+                + np.sin(
+                    vortex_pattern * b_freq
+                    + beat_phase_shift
+                    + np.pi * 4 / 3
+                )
+            )
 
         elif preset == "glitch":
             frame[:, :, 0] = 10 + centroid_val * 50
             frame[:, :, 1] = 20 + centroid_val * 30
             frame[:, :, 2] = 40 + centroid_val * 80
-            
+
             scanline_strength = int(5 + 20 * rms_val)
-            scanlines = (np.sin(np.arange(h)[:, None] * 0.5 + t * 100) > 0.98) * scanline_strength
-            frame = np.clip(frame - scanlines[..., np.newaxis], 0, 255).astype(np.uint8)
+            scanlines = (
+                np.sin(np.arange(h)[:, None] * 0.5 + t * 100) > 0.98
+            ) * scanline_strength
+            frame = np.clip(
+                frame - scanlines[..., np.newaxis], 0, 255
+            ).astype(np.uint8)
 
             if is_beat:
                 shift_amount = np.random.randint(-30, 30)
-                frame[:, :, 0] = np.roll(frame[:, :, 0], shift_amount, axis=1)
-                frame[:, :, 2] = np.roll(frame[:, :, 2], -shift_amount, axis=1)
-                
+                frame[:, :, 0] = np.roll(
+                    frame[:, :, 0], shift_amount, axis=1
+                )
+                frame[:, :, 2] = np.roll(
+                    frame[:, :, 2], -shift_amount, axis=1
+                )
+
                 if np.random.rand() > 0.3:
-                    y_start = np.random.randint(0, h - h//4)
-                    y_end = y_start + np.random.randint(h//10, h//4)
-                    block_shift = np.random.randint(-w//4, w//4)
-                    frame[y_start:y_end, :] = np.roll(frame[y_start:y_end, :], block_shift, axis=1)
+                    y_start = np.random.randint(0, h - h // 4)
+                    y_end = y_start + np.random.randint(
+                        h // 10, h // 4
+                    )
+                    block_shift = np.random.randint(-w // 4, w // 4)
+                    frame[y_start:y_end, :] = np.roll(
+                        frame[y_start:y_end, :], block_shift, axis=1
+                    )
 
             noise_intensity = int(60 * rms_val)
             if noise_intensity > 0:
-                noise = np.random.randint(-noise_intensity, noise_intensity, frame.shape, dtype=np.int16)
-                frame = np.clip(frame.astype(np.int16) + noise, 0, 255).astype(np.uint8)
+                noise = np.random.randint(
+                    -noise_intensity,
+                    noise_intensity,
+                    frame.shape,
+                    dtype=np.int16,
+                )
+                frame = np.clip(
+                    frame.astype(np.int16) + noise, 0, 255
+                ).astype(np.uint8)
 
         elif preset == "israel":
             ISRAEL_BLUE = (0, 56, 184)
@@ -7459,61 +7557,102 @@ def music_video(audio_path, preset="vortex", width=1280, height=720, fps=25):
             WHITE = (255, 255, 255)
             stripe_height = int(h * 0.15)
             gap_height = int(h * 0.1)
-            
+
             radius = int((h * 0.2) + rms_val * (h * 0.6))
             rotation_angle = t * 90 + centroid_val * 90
-            
+
             if is_beat:
                 radius = int(radius * 1.3)
                 star_color, star_thickness = WHITE, 30
                 frame[:, :] = BLACK
                 frame[gap_height : gap_height + stripe_height] = RED
-                frame[h - gap_height - stripe_height : h - gap_height] = RED
+                frame[
+                    h - gap_height - stripe_height : h - gap_height
+                ] = RED
             else:
                 star_color, star_thickness = ISRAEL_BLUE, 8
                 frame[:, :] = WHITE
-                frame[gap_height : gap_height + stripe_height] = ISRAEL_BLUE
-                frame[h - gap_height - stripe_height : h - gap_height] = ISRAEL_BLUE
-            
-            draw_star_of_david(frame, (center_x, center_y), radius, rotation_angle, star_color, star_thickness)
-        
+                frame[gap_height : gap_height + stripe_height] = (
+                    ISRAEL_BLUE
+                )
+                frame[
+                    h - gap_height - stripe_height : h - gap_height
+                ] = ISRAEL_BLUE
+
+            draw_star_of_david(
+                frame,
+                (center_x, center_y),
+                radius,
+                rotation_angle,
+                star_color,
+                star_thickness,
+            )
+
         else:
             frame[:, :] = 0
             num_bars = 96
-            spectrum = stft_norm[:, min(frame_idx, stft_norm.shape[1] - 1)]
+            spectrum = stft_norm[
+                :, min(frame_idx, stft_norm.shape[1] - 1)
+            ]
             freq_bins_per_bar = len(spectrum) // num_bars
-            
-            bar_values = [np.mean(spectrum[i*freq_bins_per_bar:(i+1)*freq_bins_per_bar]) for i in range(num_bars)]
-            
+
+            bar_values = [
+                np.mean(
+                    spectrum[
+                        i
+                        * freq_bins_per_bar : (i + 1)
+                        * freq_bins_per_bar
+                    ]
+                )
+                for i in range(num_bars)
+            ]
+
             min_radius = 50 + 100 * rms_val
             rotation = t * 15
 
             for i in range(num_bars):
                 value = bar_values[i]
                 angle = np.deg2rad(i * (360 / num_bars) + rotation)
-                
+
                 bar_length = value * (h * 0.4)
                 start_x = int(center_x + min_radius * np.cos(angle))
                 start_y = int(center_y + min_radius * np.sin(angle))
-                end_x = int(center_x + (min_radius + bar_length) * np.cos(angle))
-                end_y = int(center_y + (min_radius + bar_length) * np.sin(angle))
+                end_x = int(
+                    center_x
+                    + (min_radius + bar_length) * np.cos(angle)
+                )
+                end_y = int(
+                    center_y
+                    + (min_radius + bar_length) * np.sin(angle)
+                )
 
                 hue = int((i / num_bars) * 180)
                 color_hsv = np.uint8([[[hue, 255, 255]]])
-                color_bgr = cv2.cvtColor(color_hsv, cv2.COLOR_HSV2BGR)[0][0].tolist()
+                color_bgr = cv2.cvtColor(
+                    color_hsv, cv2.COLOR_HSV2BGR
+                )[0][0].tolist()
 
                 thickness = 4 if is_beat else 2
                 if is_beat:
                     color_bgr = [255, 255, 255]
 
-                cv2.line(frame, (start_x, start_y), (end_x, end_y), color_bgr, thickness, lineType=cv2.LINE_AA)
+                cv2.line(
+                    frame,
+                    (start_x, start_y),
+                    (end_x, end_y),
+                    color_bgr,
+                    thickness,
+                    lineType=cv2.LINE_AA,
+                )
 
         return frame
 
-    output_path = audio_path.rsplit('.', 1)[0] + "_video.mp4"
+    output_path = audio_path.rsplit(".", 1)[0] + "_video.mp4"
     animation = VideoClip(make_frame, duration=duration)
     final_clip = animation.with_audio(AudioFileClip(audio_path))
-    final_clip.write_videofile(output_path, codec="libx264", audio_codec="aac", fps=fps)
+    final_clip.write_videofile(
+        output_path, codec="libx264", audio_codec="aac", fps=fps
+    )
     return output_path
 
 
@@ -8424,7 +8563,7 @@ def normalize_audio_to_peak(
         return None
 
     if format is None:
-        format =  get_ext(input_path) or "wav"
+        format = get_ext(input_path) or "wav"
 
     output_path = tmp(format)
 
@@ -8525,7 +8664,7 @@ def autotune_vocals(
     format_choice="mp3",
     strength=0.7,
     quantize_grid=8,
-    beats_per_bar=(4, 4)
+    beats_per_bar=(4, 4),
 ):
     import librosa
     import madmom
@@ -8558,7 +8697,9 @@ def autotune_vocals(
         vocals_path, instrumental_path = separate_stems(audio_path)
 
         vocals_path = normalize_audio_to_peak(str(vocals_path))
-        instrumental_path = normalize_audio_to_peak(str(instrumental_path))
+        instrumental_path = normalize_audio_to_peak(
+            str(instrumental_path)
+        )
 
         print("Loading separated audio tracks...")
         y_original, sr = librosa.load(
@@ -8693,34 +8834,38 @@ def autotune_vocals(
 
         if np.any(voiced_mask):
             voiced_f0 = f0[voiced_mask]
-            
+
             voiced_midi = librosa.hz_to_midi(voiced_f0)
-            
-            note_diffs = np.abs(allowed_notes.reshape(-1, 1) - voiced_midi)
+
+            note_diffs = np.abs(
+                allowed_notes.reshape(-1, 1) - voiced_midi
+            )
             closest_note_indices = np.argmin(note_diffs, axis=0)
             target_midi = allowed_notes[closest_note_indices]
-            
+
             ideal_f0 = librosa.midi_to_hz(target_midi)
 
-            corrected_f0 = voiced_f0 + (ideal_f0 - voiced_f0) * strength
+            corrected_f0 = (
+                voiced_f0 + (ideal_f0 - voiced_f0) * strength
+            )
 
             target_f0[voiced_mask] = corrected_f0
-        
+
         print("Generating frequency map for rubberband...")
-        
+
         freq_map_path = tmp(".txt")
         temp_files.append(freq_map_path)
-        
+
         write_mask = voiced_flag & (f0 > 0) & (target_f0 > 0)
 
         if np.any(write_mask):
             frame_indices = np.where(write_mask)[0]
-            
+
             sample_nums = frame_indices * hop_length
             ratios = target_f0[write_mask] / f0[write_mask]
-            
+
             data_to_write = np.c_[sample_nums, ratios]
-            np.savetxt(freq_map_path, data_to_write, fmt='%d %.6f')
+            np.savetxt(freq_map_path, data_to_write, fmt="%d %.6f")
 
         if os.path.getsize(freq_map_path) > 0:
             print("Applying formant-preserving pitch correction...")
@@ -8753,9 +8898,11 @@ def autotune_vocals(
         gain = 1.0
         if rms_tuned > 1e-6:
             gain = rms_original / rms_tuned
-        
+
         y_tuned *= gain
-        print(f"Applied gain of {gain:.2f} to match original vocal loudness.")
+        print(
+            f"Applied gain of {gain:.2f} to match original vocal loudness."
+        )
 
         temp_tuned_vocals_path = tmp(".wav")
         temp_files.append(temp_tuned_vocals_path)
@@ -8775,9 +8922,7 @@ def autotune_vocals(
             duration=max_duration, frame_rate=instrumental.frame_rate
         )
 
-        combined = base.overlay(instrumental).overlay(
-            tuned_vocals
-        )
+        combined = base.overlay(instrumental).overlay(tuned_vocals)
 
         output_stem = f"{Path(audio_path).stem}_autotuned"
         final_output_path = f"{output_stem}.{format_choice}"
