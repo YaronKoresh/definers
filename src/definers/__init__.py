@@ -4333,11 +4333,11 @@ def compact_audio(input_file: str, output_file: str):
         catch(e)
 
 
-def google_drive_download(id, dest):
+def google_drive_download(id, dest, unzip=True):
     from googledrivedownloader import download_file_from_google_drive
 
     download_file_from_google_drive(
-        file_id=id, dest_path=dest, unzip=True, showsize=False
+        file_id=id, dest_path=dest, unzip=unzip, showsize=False
     )
 
 
