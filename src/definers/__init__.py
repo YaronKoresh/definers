@@ -3358,10 +3358,14 @@ def build_faiss():
         with cwd():
             delete("./xfaiss")
 
-        pat = paths(f'{temp_dir}/faiss-*.whl')[0]
-        trg = f'{temp_dir}/faiss-1.12.0-cp310-cp310-manylinux_2_17_x86_64.whl'
-        move( pat, trg )
-        return trg
+        any_wheel_path = paths(f'{temp_dir}/faiss-*.whl')[0]
+
+        repaired_wheel_dir = tmp(dir=True)
+
+        print("faiss - stage 5: Repairing wheel")
+        run(f"{sys.executable} -m auditwheel repair {any_wheel_path} -w {repaired_wheel_dir}")
+
+        return paths(f'{repaired_wheel_dir}/faiss-*.whl')[0]
 
     except subprocess.CalledProcessError as e:
         print(f"Error during installation: {e}")
