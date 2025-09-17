@@ -3358,6 +3358,8 @@ def build_faiss():
         with cwd():
             delete("./xfaiss")
 
+        free()
+
         any_wheel_path = paths(f'{temp_dir}/faiss-*.whl')[0]
 
         repaired_wheel_dir = tmp(dir=True)
