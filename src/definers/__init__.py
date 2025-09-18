@@ -4621,6 +4621,23 @@ def theme():
 def css():
     return """
 
+main div * {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    flex-direction: row;
+    justify-content: space-between;
+}
+
+div > :not(div) {
+    padding: 4px !important;
+}
+
+span, div, label {
+    background: white !important;
+    border-width: 0 !important;
+}
+
     .tool-container, .block { padding: 10px !important; background: none !important; border: none !important; }
     .tool-container .styler { background: none !important; }
     .tool-container .row { column-gap: 1em !important; }
@@ -4629,7 +4646,7 @@ def css():
 
     *, *::placeholder {
         scrollbar-width: none !important;
-        margin-inline: auto !important;
+        margin: 0 auto !important;
         text-align: center !important;
         max-width: 100% !important;
         max-height: 100% !important;
@@ -8792,6 +8809,8 @@ def autotune_vocals(
         )
         y = np.copy(y_original)
 
+        instrumental_path = master(instrumental_path, "wav")
+
         instrumental = pydub.AudioSegment.from_file(instrumental_path)
 
         print("\n--- Rhythm Correction ---")
@@ -8871,7 +8890,7 @@ def autotune_vocals(
 
                     if final_pos + len(segment) <= len(y_timed):
                         fade_len = min(
-                            int(sr // 5), len(segment) // 5
+                            int(sr // 5), len(segment) // 2.5
                         )
                         if fade_len > 0:
                             fade_in = np.linspace(0.0, 1.0, fade_len)
@@ -8977,21 +8996,11 @@ def autotune_vocals(
 
         print("\n--- Final Mixdown ---")
 
-        rms_original = calculate_active_rms(y_original, sr)
-        rms_tuned = calculate_active_rms(y_tuned, sr)
-
-        gain = 1.0
-        if rms_tuned > 1e-6:
-            gain = rms_original / rms_tuned
-
-        y_tuned *= gain
-        print(
-            f"Applied gain of {gain:.2f} to match original vocal loudness."
-        )
-
         temp_tuned_vocals_path = tmp(".wav")
         temp_files.append(temp_tuned_vocals_path)
         sf.write(temp_tuned_vocals_path, y_tuned, sr)
+
+        temp_tuned_vocals_path = master(temp_tuned_vocals_path, "wav")
 
         tuned_vocals = pydub.AudioSegment.from_file(
             temp_tuned_vocals_path
@@ -9007,7 +9016,7 @@ def autotune_vocals(
             duration=max_duration, frame_rate=instrumental.frame_rate
         )
 
-        combined = base.overlay(instrumental).overlay(tuned_vocals)
+        combined = base.overlay(instrumental).overlay(tuned_vocals - 6)
 
         output_stem = f"{Path(audio_path).stem}_autotuned"
         final_output_path = f"{output_stem}.{format_choice}"
