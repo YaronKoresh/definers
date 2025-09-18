@@ -7910,8 +7910,7 @@ def lyric_video(
             size=output_size, color=(0, 0, 0), duration=duration
         )
 
-    background_clip = background_clip.fx(
-        vfx.crop,
+    background_clip = background_clip.crop(
         width=output_size[0],
         height=output_size[1],
         x_center=background_clip.w / 2,
@@ -7956,7 +7955,7 @@ def lyric_video(
     final_clip.write_videofile(
         output_path,
         codec="libx264",
-        fps=24,
+        fps=120,
         audio_codec="aac",
         threads=os.cpu_count(),
         logger=None,
