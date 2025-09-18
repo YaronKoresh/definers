@@ -72,24 +72,67 @@ logger = _init_logger()
 def _init_cupy_numpy():
     import numpy as _np
 
+    type_aliases = {
+        "intp": _np.int_, "float": _np.float64, "int": _np.int64,
+        "bool": _np.bool_, "complex": _np.complex128, "object": _np.object_,
+        "str": _np.str_, "string_": _np.bytes_,
+    }
+    for alias, target in type_aliases.items():
+        if not hasattr(_np, alias):
+            setattr(_np, alias, target)
+
+    func_aliases = {
+        "round_": _np.round, "product": _np.prod, "cumproduct": _np.cumprod,
+        "alltrue": _np.all, "sometrue": _np.any, "rank": _np.ndim,
+    }
+    for alias, target in func_aliases.items():
+        if not hasattr(_np, alias):
+            setattr(_np, alias, target)
+
+    if not hasattr(_np, 'asscalar'):
+        def asscalar(a):
+            return a.item()
+        _np.asscalar = asscalar
+
+    if not hasattr(_np.core, "machar"):
+        class MachAr: pass
+        _np.core.machar = MachAr
+
+    if hasattr(_np, "testing") and not hasattr(_np.testing, "Tester"):
+        class Tester:
+            def test(self, label='fast', extra_argv=None): return True
+        _np.testing.Tester = Tester
+
+    if not hasattr(_np, "distutils"):
+        class DummyDistutils:
+            class MiscUtils:
+                def get_info(self, *args, **kwargs): return {}
+        _np.distutils = DummyDistutils()
+
+    if not hasattr(_np, "set_string_function"):
+        def set_string_function(*args, **kwargs): pass
+        _np.set_string_function = set_string_function
+
+    _original_finfo = _np.finfo
+    def patched_finfo(dtype):
+        try:
+            return _original_finfo(dtype)
+        except TypeError:
+            return _np.iinfo(dtype)
+    _np.finfo = patched_finfo
+
     def dummy_npwarn_decorator_factory():
-        def npwarn_decorator(x):
-            return x
-
+        def npwarn_decorator(x): return x
         return npwarn_decorator
-
     _np._no_nep50_warning = getattr(
         _np, "_no_nep50_warning", dummy_npwarn_decorator_factory
     )
 
-    try:
+    if importable(cupy):
         import cupy as np
-    except Exception as e:
+    else:
         import numpy as np
-    if not hasattr(np, "float"):
-        np.float = np.float64
-    if not hasattr(np, "int"):
-        np.int = np.int64
+
     return np, _np
 
 
@@ -4137,7 +4180,7 @@ def free():
 
 def pre_install():
 
-    os.environ["TRANSFORMERS_CACHE"] = "/opt/ml/checkpoints/"
+    os.environ["HF_HOME"] = "/opt/ml/checkpoints/"
     os.environ["HF_DATASETS_CACHE"] = "/opt/ml/checkpoints/"
     os.environ["GRADIO_ALLOW_FLAGGING"] = "never"
     os.environ["OMP_NUM_THREADS"] = "4"
