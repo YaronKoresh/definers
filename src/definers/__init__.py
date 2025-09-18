@@ -8803,7 +8803,7 @@ def autotune_vocals(
     separation_dir = tmp(dir=True)
     temp_files = []
 
-    n_fft, hop_length = 2048, 512
+    n_fft, hop_length = 3000, 150
     try:
         print("\n--- Vocal Separation ---")
 
@@ -8813,6 +8813,8 @@ def autotune_vocals(
 
         vocals_path = str(vocals_path)
         instrumental_path = str(instrumental_path)
+
+        normalize_audio_to_peak(vocals_path)
 
         print("Loading separated audio tracks...")
         y_original, sr = librosa.load(
@@ -8858,7 +8860,7 @@ def autotune_vocals(
 
             vocal_intervals = librosa.effects.split(
                 y_original,
-                top_db=32,
+                top_db=60,
                 frame_length=n_fft,
                 hop_length=hop_length,
             )
@@ -8901,7 +8903,7 @@ def autotune_vocals(
 
                     if final_pos + len(segment) <= len(y_timed):
                         fade_len = min(
-                            int(sr * 0.7), int(len(segment) * 0.7)
+                            int(sr * 0.03), int(len(segment) * 0.3)
                         )
                         if fade_len > 0:
                             fade_in = np.linspace(0.0, 1.0, fade_len)
@@ -8934,7 +8936,7 @@ def autotune_vocals(
         f0, voiced_flag, _ = librosa.pyin(
             y,
             fmin=librosa.note_to_hz("C2"),
-            fmax=librosa.note_to_hz("C7"),
+            fmax=librosa.note_to_hz("C8"),
             sr=sr,
             frame_length=n_fft,
             hop_length=hop_length,
