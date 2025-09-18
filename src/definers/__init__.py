@@ -8897,7 +8897,7 @@ def autotune_vocals(
 
                     if final_pos + len(segment) <= len(y_timed):
                         fade_len = min(
-                            int(sr // 5), len(segment) // 2.5
+                            int(sr // 3), len(segment) // 3
                         )
                         if fade_len > 0:
                             fade_in = np.linspace(0.0, 1.0, fade_len)
@@ -9023,7 +9023,7 @@ def autotune_vocals(
             duration=max_duration, frame_rate=instrumental.frame_rate
         )
 
-        combined = base.overlay(instrumental).overlay(tuned_vocals - 6)
+        combined = base.overlay(instrumental).overlay(tuned_vocals - 3)
 
         output_stem = f"{Path(audio_path).stem}_autotuned"
         final_output_path = f"{output_stem}.{format_choice}"
