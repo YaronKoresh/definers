@@ -7503,7 +7503,7 @@ def draw_star_of_david(
 
 
 def music_video(
-    audio_path, preset="israel", width=720, height=720, fps=24
+    audio_path, preset="israel", width=720, height=720, fps=20
 ):
     import cv2
     import librosa
@@ -7511,7 +7511,7 @@ def music_video(
     from moviepy import AudioFileClip
     from moviepy.video.VideoClip import VideoClip
 
-    hop_length = 512
+    hop_length = 256
     y, sr = librosa.load(audio_path)
     duration = librosa.get_duration(y=y, sr=sr)
 
@@ -7636,30 +7636,35 @@ def music_video(
 
         elif preset == "israel":
             ISRAEL_BLUE = (0, 56, 184)
+            ORANGE = (252, 215, 38)
             WHITE = (255, 255, 255)
             stripe_height = int(h * 0.15)
             gap_height = int(h * 0.1)
 
-            radius = int((h * 0.3) + rms_val * (h * 0.3))
-            rotation_angle = t * 90 + centroid_val * 90
+            radius = int((h * 0.2) + rms_val * (h * 0.1))
+            rotation_angle = t * 120 + centroid_val * 30
+
+            star_thickness = 12
 
             if is_beat:
-                radius = int(radius * 1.6)
-                star_color, star_thickness = WHITE, 20
+                radius = int(radius * 1.2)
+                star_color = WHITE
                 frame[:, :] = ISRAEL_BLUE
-                frame[gap_height : gap_height + stripe_height] = WHITE
+                frame[
+                    gap_height : gap_height + stripe_height
+                ] = ORANGE
                 frame[
                     h - gap_height - stripe_height : h - gap_height
-                ] = WHITE
+                ] = ORANGE
             else:
-                star_color, star_thickness = ISRAEL_BLUE, 8
+                star_color = ISRAEL_BLUE
                 frame[:, :] = WHITE
-                frame[gap_height : gap_height + stripe_height] = (
-                    ISRAEL_BLUE
-                )
+                frame[
+                    gap_height : gap_height + stripe_height
+                ] = ORANGE
                 frame[
                     h - gap_height - stripe_height : h - gap_height
-                ] = ISRAEL_BLUE
+                ] = ORANGE
 
             draw_star_of_david(
                 frame,
