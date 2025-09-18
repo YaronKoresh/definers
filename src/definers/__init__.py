@@ -7883,7 +7883,7 @@ def lyric_video(
             size=output_size, color=(0, 0, 0), duration=duration
         )
 
-    background_clip = vfx.crop(
+    background_clip = vfx.Crop(
         background_clip,
         width=output_size[0],
         height=output_size[1],
