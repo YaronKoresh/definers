@@ -3395,8 +3395,18 @@ def build_faiss():
         temp_dir = tmp(dir=True)
 
         with cwd("./xfaiss/build/faiss/python"):
-            print("faiss - stage 4")
-            run(f"{sys.executable} -m pip wheel . -w {temp_dir}")
+            print("faiss - stage 4: Building wheel with numpy==1.26.4 constraint")
+
+            with tempfile.NamedTemporaryFile(mode='w', delete=False) as reqs:
+                reqs.write("numpy==1.26.4\n")
+                constraints_path = reqs.name
+
+            try:
+                run(
+                    f"{sys.executable} -m pip wheel . -w {temp_dir} -c {constraints_path}"
+                )
+            finally:
+                os.remove(constraints_path)
 
         with cwd():
             delete("./xfaiss")
