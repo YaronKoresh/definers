@@ -7257,6 +7257,7 @@ def generate_voice(text, reference_audio, format_choice):
         wav = MODELS["tts"].generate(
             text=text, audio_prompt_path=reference_audio
         )
+        wav = normalize_audio_to_peak(wav)
         sf.write(temp_wav_path, wav, 24000)
         sound = pydub.AudioSegment.from_file(temp_wav_path)
         output_stem = tmp(keep=False).replace(".data", "")
