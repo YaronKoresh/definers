@@ -4641,7 +4641,6 @@ html > body .gradio-container > main *:not(img, svg, span, :has(>svg)):is(*, *::
     scrollbar-width: none !important;
     text-align: center !important;
     max-width: 100% !important;
-    max-height: 100% !important;
 }
 
 div:not(.styler) > :is(.block:has(+.block), .block+.block) {
@@ -8804,11 +8803,11 @@ def autotune_vocals(
     separation_dir = tmp(dir=True)
     temp_files = []
 
-    n_fft, hop_length = 3000, 150
+    n_fft, hop_length = 2400, 300
     try:
         print("\n--- Vocal Separation ---")
 
-        audio_path = normalize_audio_to_peak(audio_path)
+        audio_path = master(audio_path, "wav")
 
         vocals_path, instrumental_path = separate_stems(audio_path)
 
@@ -8861,7 +8860,7 @@ def autotune_vocals(
 
             vocal_intervals = librosa.effects.split(
                 y_original,
-                top_db=60,
+                top_db=40,
                 frame_length=n_fft,
                 hop_length=hop_length,
             )
@@ -8904,7 +8903,7 @@ def autotune_vocals(
 
                     if final_pos + len(segment) <= len(y_timed):
                         fade_len = min(
-                            int(sr * 0.03), int(len(segment) * 0.3)
+                            int(sr * 0.03), int(len(segment) * 0.2)
                         )
                         if fade_len > 0:
                             fade_in = np.linspace(0.0, 1.0, fade_len)
