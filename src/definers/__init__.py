@@ -8778,7 +8778,7 @@ def autotune_vocals(
 
         audio_path = normalize_audio_to_peak(audio_path)
 
-        vocals_path, instrumental_path = separate_stems()
+        vocals_path, instrumental_path = separate_stems(audio_path)
 
         vocals_path = str(instrumental_path)
         instrumental_path = str(instrumental_path)
