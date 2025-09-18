@@ -50,11 +50,13 @@ jobs:
           pip install .[dev] --extra-index-url https://pypi.nvidia.com
 
       - name: Generate coverage report
+        id: tests
         continue-on-error: true
         run: |
-          pytest --cov --cov-branch --cov-report=xml
+          pytest --cov --cov-branch --cov-report=xml:coverage.xml
 
       - name: Upload coverage to Codecov
+        if: always()
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
