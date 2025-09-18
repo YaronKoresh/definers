@@ -4621,6 +4621,14 @@ def theme():
 def css():
     return """
 
+video {
+    border-radius: 20px;
+}
+
+div:has(>video) {
+    padding: 20px 20px 0px 20px !important;
+}
+
 main div * {
     display: flex;
     flex-wrap: wrap;
@@ -4629,12 +4637,12 @@ main div * {
     justify-content: space-between;
 }
 
-div > :not(div) {
+div > :not(div, svg) {
     padding: 4px !important;
 }
 
 span, div, label {
-    background: white !important;
+    background: transparent !important;
     border-width: 0 !important;
 }
 
@@ -7518,7 +7526,7 @@ def draw_star_of_david(
 
 
 def music_video(
-    audio_path, preset="israel", width=720, height=720, fps=20
+    audio_path, preset="israel", width=2048, height=2048, fps=120
 ):
     import cv2
     import librosa
@@ -7526,7 +7534,7 @@ def music_video(
     from moviepy import AudioFileClip
     from moviepy.video.VideoClip import VideoClip
 
-    hop_length = 256
+    hop_length = 512
     y, sr = librosa.load(audio_path)
     duration = librosa.get_duration(y=y, sr=sr)
 
@@ -7581,8 +7589,9 @@ def music_video(
             b_freq = 3.0 + centroid_val * 2.0
 
             vortex_pattern = np.sin(
-                dist_eff / 25.0 - t * 8.0 + angle * (3 + 4 * rms_val)
+                dist_eff / 25.0 + angle * (3 + 4 * rms_val) - t * 8.0
             )
+
             beat_phase_shift = np.pi if is_beat else 0.0
 
             frame[:, :, 0] = 128 * (
@@ -7619,7 +7628,7 @@ def music_video(
             ).astype(np.uint8)
 
             if is_beat:
-                shift_amount = np.random.randint(-30, 30)
+                shift_amount = np.random.randint(-80, 80)
                 frame[:, :, 0] = np.roll(
                     frame[:, :, 0], shift_amount, axis=1
                 )
@@ -7627,17 +7636,14 @@ def music_video(
                     frame[:, :, 2], -shift_amount, axis=1
                 )
 
-                if np.random.rand() > 0.3:
-                    y_start = np.random.randint(0, h - h // 4)
-                    y_end = y_start + np.random.randint(
-                        h // 10, h // 4
-                    )
-                    block_shift = np.random.randint(-w // 4, w // 4)
-                    frame[y_start:y_end, :] = np.roll(
-                        frame[y_start:y_end, :], block_shift, axis=1
-                    )
+                y_start = np.random.randint(0, h - h // 4)
+                y_end = y_start + np.random.randint(h // 10, h // 4)
+                block_shift = np.random.randint(-w // 4, w // 4)
+                frame[y_start:y_end, :] = np.roll(
+                    frame[y_start:y_end, :], block_shift, axis=1
+                )
 
-            noise_intensity = int(60 * rms_val)
+            noise_intensity = int(100 * rms_val)
             if noise_intensity > 0:
                 noise = np.random.randint(
                     -noise_intensity,
@@ -7656,13 +7662,13 @@ def music_video(
             stripe_height = int(h * 0.15)
             gap_height = int(h * 0.1)
 
-            radius = int((h * 0.2) + rms_val * (h * 0.1))
+            radius = int((h * 0.15) + rms_val * (h * 0.15))
             rotation_angle = t * 120 + centroid_val * 30
 
             star_thickness = 12
 
             if is_beat:
-                radius = int(radius * 1.2)
+                radius = int(radius * 1.3)
                 star_color = WHITE
                 frame[:, :] = ISRAEL_BLUE
                 frame[
@@ -7753,7 +7759,8 @@ def music_video(
     animation = VideoClip(make_frame, duration=duration)
     final_clip = animation.with_audio(AudioFileClip(audio_path))
     final_clip.write_videofile(
-        output_path, codec="libx264", audio_codec="aac", fps=fps
+        output_path, codec="libx264", audio_codec="aac", fps=fps,
+        ffmpeg_params=["-pix_fmt", "yuv420p"]
     )
     return output_path
 
