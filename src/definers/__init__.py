@@ -7876,7 +7876,7 @@ def lyric_video(
                 background_clip = vfx.loop(
                     background_clip, duration=duration
                 )
-            background_clip = background_clip.set_duration(duration)
+            background_clip = background_clip.with_duration(duration)
     else:
         background_clip = ColorClip(
             size=output_size, color=(0, 0, 0), duration=duration
