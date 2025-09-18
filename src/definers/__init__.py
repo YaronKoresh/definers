@@ -4660,7 +4660,7 @@ def css():
         cursor: pointer !important;
     }
 
-    * > img {
+    :not(button, .button) > img {
         width: 100% !important;
         height: auto !important;
         display: block !important;
