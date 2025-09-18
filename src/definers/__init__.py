@@ -128,9 +128,9 @@ def _init_cupy_numpy():
         _np, "_no_nep50_warning", dummy_npwarn_decorator_factory
     )
 
-    if importable(cupy):
+    try:
         import cupy as np
-    else:
+    except:
         import numpy as np
 
     return np, _np
