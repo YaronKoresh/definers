@@ -4629,49 +4629,64 @@ div:has(>video) {
     padding: 20px 20px 0px 20px !important;
 }
 
-main div * {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    flex-direction: row;
-    justify-content: space-between;
+span {
+    margin-block: 0 !important;
 }
 
-div > :not(div, svg) {
-    padding: 4px !important;
+label.container > span {
+    width: 100% !important;
 }
 
-span, div, label {
-    background: transparent !important;
-    border-width: 0 !important;
+html > body .gradio-container > main *:not(img, svg, span, :has(>svg)):is(*, *::placeholder) {
+    scrollbar-width: none !important;
+    text-align: center !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
 }
 
-    .tool-container, .block { padding: 10px !important; background: none !important; border: none !important; }
-    .tool-container .styler { background: none !important; }
-    .tool-container .row { column-gap: 1em !important; }
-    .tool-container .column { width: 100% !important; }
-    .tool-container .column:not(:has(*)), .tool-container .column:not(:has(:not(div,span))) { display: none !important; }
+div:not(.styler) > :is(.block:has(+.block), .block+.block) {
+    border: 1px dotted slategray !important;
+    margin-block: 10px !important;
+}
 
-    *, *::placeholder {
-        scrollbar-width: none !important;
-        margin: 0 auto !important;
-        text-align: center !important;
-        max-width: 100% !important;
-        max-height: 100% !important;
-    }
+.row {
+    padding-block: 20px !important;
+}
 
-    main, div:has(main) {
+label > input[type="radio"] {
+    border: 2px ridge black !important;
+    flex-grow: 0 !important;
+}
+
+label.selected > input[type="radio"] {
+    background: lime !important;
+}
+
+label:has(>input[type="radio"]) {
+    flex-grow: 0 !important;
+}
+
+div.form:has(>fieldset.block) {
+    margin-block: 10px !important;
+}
+
+div.controls {
+    width: 100% !important;
+}
+
+div.controls > * {
+    flex-grow: 1 !important;
+}
+
+    html > body .gradio-container {
         padding: 0 !important;
     }
 
-        footer {
-            display: none !important;
-        }
-
-        div:not(.hide):has(>button) {
-            display: flex !important;
-            justify-content: space-evenly !important;
-            align-items: center !important;
+        html > body footer {
+            opacity: 0 !important;
+            visibility: hidden !important;
+            width: 0px !important;
+            height: 0px !important;
         }
 
     tr.file > td.download {
@@ -4679,21 +4694,20 @@ span, div, label {
         width: auto !important;
     }
 
+html > body main {
+    padding-inline: 20px !important;
+}
+
     button {
         border-radius: 2mm !important;
         border: none !important;
         cursor: pointer !important;
     }
 
-    :not(button, .button) > img {
-        display: block !important;
-    }
-
     textarea {
         border: 1px solid #ccc !important;
         border-radius: 5px !important;
         padding: 8px !important;
-        height: auto !important;
         margin-bottom: 10px !important;
     }
 
@@ -4713,19 +4727,6 @@ span, div, label {
 
     h3{
         color: #555 !important;
-    }
-
-    .block {
-        gap: 20px !important;
-        padding: 10px !important;
-    }
-
-    .column{
-        padding: 10px !important;
-    }
-
-    .gradio-container {
-        padding: 20px !important;
     }
 
     """
