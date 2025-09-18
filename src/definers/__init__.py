@@ -4658,12 +4658,9 @@ def css():
         border-radius: 2mm !important;
         border: none !important;
         cursor: pointer !important;
-        width: auto !important;
     }
 
     :not(button, .button) > img {
-        width: 100% !important;
-        height: auto !important;
         display: block !important;
     }
 
