@@ -7635,23 +7635,21 @@ def music_video(
 
         elif preset == "israel":
             ISRAEL_BLUE = (0, 56, 184)
-            RED = (255, 0, 0)
-            BLACK = (0, 0, 0)
             WHITE = (255, 255, 255)
             stripe_height = int(h * 0.15)
             gap_height = int(h * 0.1)
 
-            radius = int((h * 0.2) + rms_val * (h * 0.6))
+            radius = int((h * 0.3) + rms_val * (h * 0.3))
             rotation_angle = t * 90 + centroid_val * 90
 
             if is_beat:
-                radius = int(radius * 1.3)
-                star_color, star_thickness = WHITE, 30
-                frame[:, :] = BLACK
-                frame[gap_height : gap_height + stripe_height] = RED
+                radius = int(radius * 1.6)
+                star_color, star_thickness = WHITE, 20
+                frame[:, :] = ISRAEL_BLUE
+                frame[gap_height : gap_height + stripe_height] = WHITE
                 frame[
                     h - gap_height - stripe_height : h - gap_height
-                ] = RED
+                ] = WHITE
             else:
                 star_color, star_thickness = ISRAEL_BLUE, 8
                 frame[:, :] = WHITE
