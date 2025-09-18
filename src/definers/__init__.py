@@ -7910,11 +7910,16 @@ def lyric_video(
             size=output_size, color=(0, 0, 0), duration=duration
         )
 
-    background_clip = background_clip.crop(
-        width=output_size[0],
-        height=output_size[1],
-        x_center=background_clip.w / 2,
-        y_center=background_clip.h / 2,
+    x1 = (background_clip.w - output_size[0]) // 2
+    x2 = x1 + output_size[0]
+    y1 = (background_clip.h - output_size[1]) // 2
+    y2 = y1 + output_size[1]
+
+    background_clip = background_clip.cropped(
+        x1=x1,
+        x2=x2,
+        y1=y1,
+        y2=y2
     )
 
     lyric_clips = []
@@ -7928,7 +7933,7 @@ def lyric_video(
         text_clip = TextClip(
             line,
             font=font,
-            fontsize=font_size,
+            font_size=font_size,
             color=text_color,
             stroke_color=stroke_color,
             stroke_width=stroke_width,
