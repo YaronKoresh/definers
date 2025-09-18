@@ -8745,8 +8745,8 @@ def enhance_audio(audio_path, format_choice="mp3"):
 def autotune_vocals(
     audio_path,
     format_choice="mp3",
-    strength=0.7,
-    quantize_grid=8,
+    strength=1.0,
+    quantize_grid=16,
     beats_per_bar=(4, 4),
 ):
     import librosa
@@ -8777,12 +8777,12 @@ def autotune_vocals(
     try:
         print("\n--- Vocal Separation ---")
 
-        vocals_path, instrumental_path = separate_stems(audio_path)
+        audio_path = normalize_audio_to_peak(audio_path)
 
-        vocals_path = normalize_audio_to_peak(str(vocals_path))
-        instrumental_path = normalize_audio_to_peak(
-            str(instrumental_path)
-        )
+        vocals_path, instrumental_path = separate_stems()
+
+        vocals_path = str(instrumental_path)
+        instrumental_path = str(instrumental_path)
 
         print("Loading separated audio tracks...")
         y_original, sr = librosa.load(
@@ -8826,7 +8826,7 @@ def autotune_vocals(
 
             vocal_intervals = librosa.effects.split(
                 y_original,
-                top_db=40,
+                top_db=32,
                 frame_length=n_fft,
                 hop_length=hop_length,
             )
@@ -8869,7 +8869,7 @@ def autotune_vocals(
 
                     if final_pos + len(segment) <= len(y_timed):
                         fade_len = min(
-                            int(0.3 * sr), len(segment) // 3
+                            int(sr // 5), len(segment) // 5
                         )
                         if fade_len > 0:
                             fade_in = np.linspace(0.0, 1.0, fade_len)
