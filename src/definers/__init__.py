@@ -7771,7 +7771,7 @@ def lyric_video(
     lyrics_text,
     text_position,
     *,
-    output_size=(1280, 720),
+    output_size=(2048, 2048),
     font_size=70,
     text_color="white",
     stroke_color="black",
@@ -7910,8 +7910,8 @@ def lyric_video(
             size=output_size, color=(0, 0, 0), duration=duration
         )
 
-    background_clip = vfx.Crop(
-        background_clip,
+    background_clip = background_clip.fx(
+        vfx.crop,
         width=output_size[0],
         height=output_size[1],
         x_center=background_clip.w / 2,
@@ -7929,7 +7929,7 @@ def lyric_video(
         text_clip = TextClip(
             line,
             font=font,
-            font_size=font_size,
+            fontsize=font_size,
             color=text_color,
             stroke_color=stroke_color,
             stroke_width=stroke_width,
