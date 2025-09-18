@@ -8783,7 +8783,7 @@ def autotune_vocals(
 
         vocals_path, instrumental_path = separate_stems(audio_path)
 
-        vocals_path = str(instrumental_path)
+        vocals_path = str(vocals_path)
         instrumental_path = str(instrumental_path)
 
         print("Loading separated audio tracks...")
