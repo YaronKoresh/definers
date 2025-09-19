@@ -56,7 +56,7 @@ dependencies = [
     "datasets==4.0.0",
     "decorator==4.4.2",
     "demucs==4.0.1",
-    "diffusers==0.29.0",
+    "diffusers==0.35.1",
     "dill==0.3.8",
     "distlib==0.4.0",
     "dora-search==0.1.12",
