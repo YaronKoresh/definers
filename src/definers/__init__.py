@@ -8773,7 +8773,7 @@ def enhance_audio(audio_path, format_choice="mp3"):
         riaa_filter(
             master(autotune_vocals(audio_path, "wav"), "wav")
         ),
-        format_choice
+        format=format_choice
     )
 
 
