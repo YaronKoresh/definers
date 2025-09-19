@@ -8657,7 +8657,7 @@ def calculate_active_rms(y, sr):
 
 
 def get_ext(input_path):
-    return str(Path(str(input_path)).suffix)
+    return str(Path(str(input_path)).suffix).strip(".")
 
 
 def is_ai_model(input_path):
