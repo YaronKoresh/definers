@@ -4652,7 +4652,7 @@ html > body .gradio-container > main *:not(img, svg, span, :has(>svg)):is(*, *::
     max-width: 100% !important;
 }
 
-div:not(.styler) > :is(.block:has(+.block), .block+.block) {
+div:not(.styler) > :is(.block:has(+ .block), .block + .block):has(:not(span, div, h1, h2, h3)) {
     border: 1px dotted slategray !important;
     margin-block: 10px !important;
 }
