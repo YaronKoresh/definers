@@ -6381,9 +6381,6 @@ def SklearnWrapper(sklearn_model, is_classification=False):
 def init_chat(title="Chatbot", fnc=answer):
     import gradio as gr
 
-    if not MODELS["answer"]:
-        init_pretrained_model("answer")
-
     chatbot = gr.Chatbot(
         elem_id="chatbot", bubble_full_width=False, type="messages"
     )
