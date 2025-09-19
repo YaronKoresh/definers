@@ -385,7 +385,7 @@ SYSTEM_MESSAGE = "You are a helpful and concise AI assistant. Provide accurate a
 
 tasks = {
     "video": "tencent/HunyuanVideo",
-    "image": "black-forest-labs/FLUX.1-schnell",
+    "image": "black-forest-labs/FLUX.1-Kontext-dev",
     "detect": "facebook/detr-resnet-50",
     "answer": "microsoft/Phi-4-multimodal-instruct",
     "summary": "t5-large",
@@ -5359,7 +5359,7 @@ py-modules = {py_modules}
 
     elif task in ["image"]:
 
-        from diffusers import FluxPipeline
+        from diffusers import FluxKontextPipeline
 
         model = FluxPipeline.from_pretrained(
             tasks[task], torch_dtype=dtype()
