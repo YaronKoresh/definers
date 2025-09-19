@@ -5311,10 +5311,10 @@ py-modules = {py_modules}
         print(
             "Loading tokenizer, processor, and model via patched loader..."
         )
-        tok = AutoTokenizer.from_pretrained(str_snapshot_dir).to(device())
+        tok = AutoTokenizer.from_pretrained(str_snapshot_dir)
         PROCESSORS["answer"] = AutoProcessor.from_pretrained(
             str_snapshot_dir, trust_remote_code=True
-        ).to(device())
+        )
         model = AutoModelForCausalLM.from_pretrained(
             str_snapshot_dir,
             torch_dtype=dtype(),
