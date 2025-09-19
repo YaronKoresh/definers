@@ -927,10 +927,17 @@ def answer(history: list):
         *history,
     ]
 
-    for h in history:
+    alt_history = []
+    add_role = None
 
+    for h in history:
         content = h["content"]
-        if isinstance(content, dict) or isinstance(content, tuple):
+        role = h["role"]
+
+        add_content = ""
+        if not isinstance(content, dict) and not isinstance(content, tuple):
+            add_content += content
+        else:
             ps = []
             if isinstance(content, dict):
                 ps = [content["path"]]
@@ -943,11 +950,21 @@ def answer(history: list):
                 if ext in common_audio_formats:
                     audio, samplerate = sf.read(p)
                     snd_list.append((audio, samplerate))
+                    add_content += f"<|audio_{ str(len(snd_list)) }|>"
                 if ext in iio_formats:
                     img_list.append(Image.open(p))
+                    add_content += f"<|image_{ str(len(img_list)) }|>"
+            if add_role != role:
+                add_role = role
+                alt_history.append({
+                    "role": add_role,
+                    "content": add_content
+                })
+                continue
+            alt_history[-1]["content"] += add_content
 
     prompt = PROCESSORS["answer"].tokenizer.apply_chat_template(
-        history, tokenize=False, add_generation_prompt=True
+        alt_history, tokenize=False, add_generation_prompt=True
     )
     inputs = PROCESSORS["answer"](
         text=prompt,
@@ -8772,7 +8789,7 @@ def enhance_audio(audio_path, format_choice="mp3"):
 def autotune_song(
     audio_path,
     output_path = None,
-    strength=1.0,
+    strength=0.7,
     correct_timing=True,
     quantize_grid_strength=8,
     tolerance_cents=30,
@@ -8842,7 +8859,7 @@ def autotune_song(
                 for onset_time in onsets:
                     closest_beat_index = np.argmin(np.abs(beat_times - onset_time))
                     target_time = beat_times[closest_beat_index]
-                    time_map_data.append(f"{onset_time:.6f}\t{target_time:.6f}")
+                    time_map_data.append(f"{onset_time:.6f} {target_time:.6f}")
                 
                 time_map_path = tmp(".txt")
                 temp_files.append(time_map_path)
