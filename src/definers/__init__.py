@@ -8683,7 +8683,7 @@ def normalize_audio_to_peak(
         catch(f"Input file not found at {input_path}")
         return None
 
-    if target_level == 0.0 or audio.max_dbfs == -float('inf'):
+    if target_level == 0.0 or audio.max_dBFS == -float('inf'):
         silent_audio = AudioSegment.silent(duration=len(audio))
         silent_audio.export(output_path, format=format)
         print(f"Target level is 0 or audio is silent. Saved silent file to '{output_path}'")
@@ -8691,7 +8691,7 @@ def normalize_audio_to_peak(
 
     target_dbfs = 20 * math.log10(target_level)
     
-    gain_to_apply = target_dbfs - audio.max_dbfs
+    gain_to_apply = target_dbfs - audio.max_dBFS
     
     normalized_audio = audio.apply_gain(gain_to_apply)
 
