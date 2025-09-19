@@ -9040,7 +9040,7 @@ def autotune_vocals(
         delete(separation_dir)
 
 
-def riaa_filter(input_filename, , mix_factor=0.5):
+def riaa_filter(input_filename, mix_factor=0.5):
     import librosa
     from scipy.io import wavfile
     from scipy.signal import bilinear, filtfilt, freqz, lfilter
