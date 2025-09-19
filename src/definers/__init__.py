@@ -1928,7 +1928,7 @@ def load_as_numpy(path, training=False):
                         x = []
                         for _f in files:
                             _x = numpy_to_cupy(
-                                extract_audio_features(f"{dir}/{_f}")
+                                extract_audio_features(_f)
                             )
                             x.append(_x)
                         delete(temp_name)
@@ -2599,7 +2599,7 @@ def write_on_image(
 ):
     from PIL import Image, ImageDraw, ImageFont
 
-    if "Alef-Bold.ttf" not in read("."):
+    if not exist("./Alef-Bold.ttf"):
         google_drive_download(
             "1C48KkYWQDYu7ypbNtSXAUJ6kuzoZ42sI", "./Alef-Bold.ttf"
         )
