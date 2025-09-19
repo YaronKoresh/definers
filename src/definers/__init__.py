@@ -69,7 +69,9 @@ def _init_logger():
 logger = _init_logger()
 
 
-def _init_cupy_numpy():
+def patch_cupy_numpy():
+    pip_install("numpy==1.26.4")
+
     import numpy as _np
 
     type_aliases = {
@@ -128,6 +130,8 @@ def _init_cupy_numpy():
         _np, "_no_nep50_warning", dummy_npwarn_decorator_factory
     )
 
+    _np.__version__ = "1.26.4"
+
     try:
         import cupy as np
     except:
@@ -136,7 +140,7 @@ def _init_cupy_numpy():
     return np, _np
 
 
-np, _np = _init_cupy_numpy()
+np, _np = patch_cupy_numpy()
 
 
 def _find_spec(mod_name):
