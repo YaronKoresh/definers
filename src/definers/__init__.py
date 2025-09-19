@@ -9092,6 +9092,7 @@ def audio_limiter(input_filename, output_filename = None, db_boost = 3.0, db_lim
     try:
         wavfile.write(output_filename, sample_rate, final_audio)
         print(f"Successfully saved processed audio to '{output_filename}'.")
+        return output_filename
     except Exception as e:
         print(f"An error occurred while writing the audio file: {e}")
 
