@@ -8769,7 +8769,12 @@ def get_scale_notes(
 
 
 def enhance_audio(audio_path, format_choice="mp3"):
-    return master(autotune_vocals(audio_path, "wav"), format_choice)
+    return normalize_audio_to_peak(
+        riaa_filter(
+            master(autotune_vocals(audio_path, "wav"), "wav")
+        ),
+        format_choice
+    )
 
 
 def autotune_vocals(
@@ -8807,8 +8812,6 @@ def autotune_vocals(
     try:
         print("\n--- Vocal Separation ---")
 
-        audio_path = master(audio_path, "wav")
-
         vocals_path, instrumental_path = separate_stems(audio_path)
 
         vocals_path = str(vocals_path)
@@ -8821,8 +8824,6 @@ def autotune_vocals(
             str(vocals_path), sr=None, mono=True
         )
         y = np.copy(y_original)
-
-        instrumental_path = master(instrumental_path, "wav")
 
         instrumental = pydub.AudioSegment.from_file(instrumental_path)
 
@@ -8938,7 +8939,7 @@ def autotune_vocals(
         f0, voiced_flag, _ = librosa.pyin(
             y,
             fmin=librosa.note_to_hz("C2"),
-            fmax=librosa.note_to_hz("C7"),
+            fmax=librosa.note_to_hz("C6"),
             sr=sr,
             frame_length=n_fft,
             hop_length=hop_length,
@@ -9014,8 +9015,6 @@ def autotune_vocals(
         temp_tuned_vocals_path = tmp(".wav")
         temp_files.append(temp_tuned_vocals_path)
         sf.write(temp_tuned_vocals_path, y_tuned, sr)
-
-        temp_tuned_vocals_path = master(temp_tuned_vocals_path, "wav")
 
         tuned_vocals = pydub.AudioSegment.from_file(
             temp_tuned_vocals_path
