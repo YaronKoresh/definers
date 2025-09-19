@@ -8669,44 +8669,35 @@ def normalize_audio_to_peak(
     input_path: str, target_level: float = 0.9, format: str = None
 ):
     from pydub import AudioSegment
-    from pydub.effects import normalize
-
     if not 0.0 <= target_level <= 1.0:
         catch("target_level must be between 0.0 and 1.0")
         return None
 
     if format is None:
         format = get_ext(input_path) or "wav"
-
     output_path = tmp(format)
 
     try:
         audio = AudioSegment.from_file(input_path)
     except FileNotFoundError:
-        catch(f"Error: Input file not found at {input_path}")
+        catch(f"Input file not found at {input_path}")
         return None
 
-    if target_level == 0.0 or audio.max_possible_amplitude == 0:
+    if target_level == 0.0 or audio.max_dbfs == -float('inf'):
         silent_audio = AudioSegment.silent(duration=len(audio))
-        silent_audio.export(
-            output_path, format=output_path.split(".")[-1]
-        )
-        print(
-            f"Target level is 0 or audio is silent. Saved silent file to '{output_path}'"
-        )
+        silent_audio.export(output_path, format=format)
+        print(f"Target level is 0 or audio is silent. Saved silent file to '{output_path}'")
         return output_path
 
     target_dbfs = 20 * math.log10(target_level)
+    
+    gain_to_apply = target_dbfs - audio.max_dbfs
+    
+    normalized_audio = audio.apply_gain(gain_to_apply)
 
-    normalized_audio = normalize(audio, headroom=abs(target_dbfs))
+    normalized_audio.export(output_path, format=format)
 
-    normalized_audio.export(
-        output_path, format=output_path.split(".")[-1]
-    )
-
-    print(
-        f"Successfully normalized '{input_path}' to a peak of {target_dbfs:.2f} dBFS."
-    )
+    print(f"Successfully normalized '{input_path}' to a peak of {target_dbfs:.2f} dBFS.")
     print(f"Saved result to '{output_path}'")
 
     return output_path
@@ -8780,7 +8771,7 @@ def enhance_audio(audio_path, format_choice="mp3"):
 def autotune_vocals(
     audio_path,
     format_choice="mp3",
-    strength=1.0,
+    strength=0.5,
     quantize_grid=16,
     beats_per_bar=(4, 4),
 ):
@@ -9049,43 +9040,35 @@ def autotune_vocals(
         delete(separation_dir)
 
 
-def riaa_filter(input_filename):
+def riaa_filter(input_filename, , mix_factor=0.5):
     import librosa
     from scipy.io import wavfile
     from scipy.signal import bilinear, filtfilt, freqz, lfilter
 
     output_filename = tmp("wav")
-
     try:
         audio_data, sample_rate = librosa.load(
             input_filename, sr=None, mono=False
         )
-
         if (
             audio_data.dtype != np.float32
             and audio_data.dtype != np.float64
         ):
             info = np.iinfo(audio_data.dtype)
-            audio_data = audio_data.astype(np.float32) / (
-                info.max + 1
-            )
-
-        print(
-            f"Read '{input_filename}' with sample rate {sample_rate} Hz."
-        )
+            audio_data = audio_data.astype(np.float32) / (info.max + 1)
+        
+        print(f"Read '{input_filename}' with sample rate {sample_rate} Hz.")
 
     except FileNotFoundError:
-        print(
-            f"File '{input_filename}' not found. Generating white noise for demonstration."
-        )
+        print(f"File '{input_filename}' not found. Generating white noise for demonstration.")
         sample_rate = 44100
         duration = 5
         audio_data = np.random.randn(sample_rate * duration)
         audio_data /= np.max(np.abs(audio_data))
 
-    t1 = 3180e-6
-    t2 = 318e-6
-    t3 = 75e-6
+    t1 = 3180e-6  # Bass boost turnover (50.05 Hz)
+    t2 = 318e-6   # Bass shelf turnover (500.5 Hz)
+    t3 = 75e-6    # Treble cut turnover (2122 Hz)
 
     num_s = [t2, 1]
     den_s = [t1 * t3, t1 + t3, 1]
@@ -9093,20 +9076,20 @@ def riaa_filter(input_filename):
     w1k = 2 * np.pi * 1000
     _, h = freqz(num_s, den_s, worN=[w1k])
     gain_at_1k = np.abs(h[0])
+    num_s_normalized = [c / gain_at_1k for c in num_s]
 
-    num_s = [c / gain_at_1k for c in num_s]
+    b_riaa, a_riaa = bilinear(num_s_normalized, den_s, fs=sample_rate)
 
-    b_riaa, a_riaa = bilinear(num_s, den_s, sample_rate)
+    print(f"Applying RIAA de-emphasis filter with a mix factor of {mix_factor}...")
+    wet_signal = filtfilt(b_riaa, a_riaa, audio_data)
 
-    print("Applying RIAA de-emphasis filter...")
-    processed_audio = filtfilt(b_riaa, a_riaa, audio_data)
+    blended_audio = (1 - mix_factor) * audio_data + mix_factor * wet_signal
 
-    processed_audio /= np.max(np.abs(processed_audio))
-    processed_audio_int16 = np.int16((processed_audio * 32767).T)
+    blended_audio /= np.max(np.abs(blended_audio))
+    
+    processed_audio_int16 = np.int16((blended_audio * 32767).T)
 
     wavfile.write(output_filename, sample_rate, processed_audio_int16)
-    print(
-        f"Successfully applied RIAA EQ and saved to '{output_filename}'."
-    )
+    print(f"Successfully applied RIAA EQ and saved to '{output_filename}'.")
 
     return output_filename
