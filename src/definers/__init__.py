@@ -8876,6 +8876,7 @@ def autotune_vocals(
                 TOLERANCE_SECONDS = 0.1
 
                 for start_sample, end_sample in vocal_intervals:
+                    start_sample = min( len(y_original) - 1, start_sample)
                     end_sample = min( len(y_original) - 1, end_sample)
                     segment = y_original[start_sample:end_sample]
                     start_time = librosa.samples_to_time(
