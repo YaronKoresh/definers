@@ -973,11 +973,13 @@ def answer(history: list):
         return_tensors="pt",
     )
 
+    inputs = inputs.to(device())
+
     generate_ids = MODELS["answer"].generate(
         **inputs,
-        max_new_tokens=1000,
-        num_beams=32,
-        length_penalty=2.0,
+        max_new_tokens=2000,
+        num_beams=64,
+        length_penalty=0.1,
         num_logits_to_keep=1,
     )
 
