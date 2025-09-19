@@ -3290,7 +3290,7 @@ def master(source_path, format_choice="mp3", repeats=1):
                     results=[mg.pcm24(str(result_wav_path))],
                     config=mg.Config(
                         max_length=60 * 60 * 24,
-                        threshold=0.99,
+                        threshold=0.9,
                         internal_sample_rate=44100,
                     ),
                 )
@@ -8666,7 +8666,7 @@ def is_ai_model(input_path):
 
 
 def normalize_audio_to_peak(
-    input_path: str, target_level: float = 0.99, format: str = None
+    input_path: str, target_level: float = 0.9, format: str = None
 ):
     from pydub import AudioSegment
     from pydub.effects import normalize
