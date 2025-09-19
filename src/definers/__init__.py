@@ -948,20 +948,20 @@ def answer(history: list):
             for p in ps:
                 ext = p.split(".")[-1]
                 if ext in common_audio_formats:
-                    audio, samplerate = sf.read(p)
+                    audio, samplerate = sf.read(normalize_audio_to_peak(p))
                     snd_list.append((audio, samplerate))
                     add_content += f"<|audio_{ str(len(snd_list)) }|>"
                 if ext in iio_formats:
                     img_list.append(Image.open(p))
                     add_content += f"<|image_{ str(len(img_list)) }|>"
-            if add_role != role:
-                add_role = role
-                alt_history.append({
-                    "role": add_role,
-                    "content": add_content
-                })
-                continue
-            alt_history[-1]["content"] += add_content
+        if add_role != role:
+            add_role = role
+            alt_history.append({
+                "role": add_role,
+                "content": add_content
+            })
+            continue
+        alt_history[-1]["content"] += add_content
 
     prompt = PROCESSORS["answer"].tokenizer.apply_chat_template(
         alt_history, tokenize=False, add_generation_prompt=True
@@ -972,8 +972,6 @@ def answer(history: list):
         audios=snd_list if snd_list else None,
         return_tensors="pt",
     )
-
-    inputs = inputs.to(device())
 
     generate_ids = MODELS["answer"].generate(
         **inputs,
