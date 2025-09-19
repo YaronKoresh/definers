@@ -70,8 +70,6 @@ logger = _init_logger()
 
 
 def patch_cupy_numpy():
-    pip_install("numpy==1.26.4")
-
     import numpy as _np
 
     type_aliases = {
@@ -8762,9 +8760,14 @@ def get_scale_notes(
 
 def enhance_audio(audio_path, format_choice="mp3"):
     return normalize_audio_to_peak(
-        riaa_filter(
-            master(autotune_vocals(audio_path, "wav"), "wav")
-        ),
+        audio_limiter(
+            riaa_filter(
+                master(autotune_vocals(audio_path, "wav"), "wav"),
+                mix_factor=0.5
+            ),
+            db_boost=3.0,
+            db_limit=0.0
+        )
         format=format_choice
     )
 
@@ -8772,7 +8775,7 @@ def enhance_audio(audio_path, format_choice="mp3"):
 def autotune_vocals(
     audio_path,
     format_choice="mp3",
-    strength=0.5,
+    strength=1.0,
     quantize_grid=16,
     beats_per_bar=(4, 4),
 ):
@@ -8897,13 +8900,10 @@ def autotune_vocals(
                         final_pos = quantized_pos
 
                     if final_pos + len(segment) <= len(y_timed):
-                        fade_len = min(
-                            int(sr * 0.7), int(len(segment) * 0.3)
-                        )
+                        fade_len = min(int(sr * 0.02), len(segment) // 2)
                         if fade_len > 0:
-                            fade_in = np.linspace(0.0, 1.0, fade_len)
-                            segment[:fade_len] *= fade_in
-                            segment[-fade_len:] *= fade_in[::-1]
+                            window = np.hanning(len(segment))
+                            segment *= window
 
                         y_timed[
                             final_pos : final_pos + len(segment)
@@ -9041,7 +9041,76 @@ def autotune_vocals(
         delete(separation_dir)
 
 
-def riaa_filter(input_filename, mix_factor=0.5):
+def audio_limiter(input_filename, output_filename = None, db_boost = 3.0, db_limit = -0.5):
+    from scipy.io import wavfile
+
+    if output_filename is None:
+        output_filename = tmp("wav", keep=False)
+
+    try:
+        sample_rate, data = wavfile.read(input_filename)
+        print(f"Successfully read '{input_filename}' with sample rate {sample_rate}.")
+    except FileNotFoundError:
+        print(f"Error: The file '{input_filename}' was not found.")
+        return
+    except Exception as e:
+        print(f"An error occurred while reading the audio file: {e}")
+        return
+
+    original_dtype = data.dtype
+    print(f"Original audio data type: {original_dtype}")
+
+    if original_dtype == np.int16:
+        max_val = 32767.0
+    elif original_dtype == np.int32:
+        max_val = 2147483647.0
+    elif original_dtype == np.uint8:
+        data = data.astype(np.float32) - 128.0
+        max_val = 128.0
+    else:
+        if np.issubdtype(original_dtype, np.floating):
+            max_val = 1.0
+        else:
+            print(f"Error: Unsupported data type '{original_dtype}'.")
+            return
+            
+    audio_float = data.astype(np.float32) / max_val
+    
+    linear_boost = 10 ** (db_boost / 20.0)
+    boosted_audio = audio_float * linear_boost
+    print(f"Applied a {db_boost} dB boost (linear multiplier: {linear_boost:.2f}).")
+
+    linear_limit = 10 ** (db_limit / 20.0)
+    
+    limited_audio = np.clip(boosted_audio, -linear_limit, linear_limit)
+    print(f"Limited audio to {db_limit} dB (linear amplitude: +/- {linear_limit:.2f}).")
+    
+    processed_audio_int = (limited_audio * max_val)
+    
+    final_audio = processed_audio_int.astype(original_dtype)
+
+    try:
+        wavfile.write(output_filename, sample_rate, final_audio)
+        print(f"Successfully saved processed audio to '{output_filename}'.")
+    except Exception as e:
+        print(f"An error occurred while writing the audio file: {e}")
+
+
+def create_sample_audio(filename="sample_audio.wav", duration=5, sample_rate=44100):
+    from scipy.io import wavfile
+
+    print("Creating a sample audio file for testing...")
+    t = np.linspace(0., duration, int(sample_rate * duration))
+    amplitude_ramp = np.linspace(0.1, 1.0, int(sample_rate * duration))
+    audio_data = amplitude_ramp * np.sin(2. * np.pi * 440. * t)
+    
+    audio_data_int = np.int16(audio_data * 32767)
+    
+    wavfile.write(filename, sample_rate, audio_data_int)
+    print(f"Sample audio saved as '{filename}'.")
+
+
+def riaa_filter(input_filename, mix_factor=1.0):
     import librosa
     from scipy.io import wavfile
     from scipy.signal import bilinear, filtfilt, freqz, lfilter
