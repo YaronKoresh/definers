@@ -3248,36 +3248,28 @@ def find_latest_rvc_checkpoint(
 def get_max_resolution(width, height, mega_pixels=0.25, factor=16):
     max_pixels = mega_pixels * 1000 * 1000
     ratio = width / height
-
     best_w, best_h = 0, 0
     max_found_pixels = 0
-
     h_estimate = int((max_pixels / ratio) ** 0.5)
     search_range = range(
         max(factor, h_estimate - factor * 4), h_estimate + factor * 4
     )
-
     for h_test in search_range:
         h_rounded = (h_test // factor) * factor
         if h_rounded == 0:
             continue
-
         w_rounded = round(h_rounded * ratio / factor) * factor
         if w_rounded == 0:
             continue
-
         current_pixels = w_rounded * h_rounded
-
         if (
             current_pixels <= max_pixels
             and current_pixels > max_found_pixels
         ):
             max_found_pixels = current_pixels
             best_w, best_h = w_rounded, h_rounded
-
     if best_w > 0 and best_h > 0:
         return best_w, best_h
-
     h = int((max_pixels / ratio) ** 0.5)
     new_h = (h // factor) * factor
     new_w = (int(new_h * ratio) // factor) * factor
@@ -5321,10 +5313,10 @@ py-modules = {py_modules}
         print(
             "Loading tokenizer, processor, and model via patched loader..."
         )
-        tok = AutoTokenizer.from_pretrained(str_snapshot_dir)
+        tok = AutoTokenizer.from_pretrained(str_snapshot_dir).to(device())
         PROCESSORS["answer"] = AutoProcessor.from_pretrained(
             str_snapshot_dir, trust_remote_code=True
-        )
+        ).to(device())
         model = AutoModelForCausalLM.from_pretrained(
             str_snapshot_dir,
             torch_dtype=dtype(),
@@ -5375,24 +5367,31 @@ py-modules = {py_modules}
             tasks[task], torch_dtype=dtype()
         ).to(device())
 
-    try:
+    if turbo is False:
         try:
             model.enable_vae_slicing()
+        except Exception as e:
+            pass
+
+        try:
             model.enable_vae_tiling()
         except Exception as e:
             pass
+
         try:
             model.enable_model_cpu_offload()
         except Exception as e:
             pass
-        if turbo is False:
-            try:
-                model.enable_sequential_cpu_offload()
-                model.enable_attention_slicing(1)
-            except Exception as e:
+
+        try:
+            model.enable_sequential_cpu_offload()
+        except Exception as e:
                 pass
-    except Exception as e:
-        pass
+
+        try:
+            model.enable_attention_slicing(1)
+        except Exception as e:
+                pass
 
     MODELS[task] = model
 
