@@ -8865,7 +8865,7 @@ def autotune_song(
                 
                 quantized_vocals_path = tmp(".wav")
                 command = [
-                    "rubberband", "--timemap", f'"{time_map_path}"', f'"{vocals_path}"', f'"{quantized_vocals_path}"'
+                    "rubberband", "--time", "1", "--timemap", f'"{time_map_path}"', f'"{vocals_path}"', f'"{quantized_vocals_path}"'
                 ]
                 run(" ".join(command))
 
