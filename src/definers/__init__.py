@@ -8767,7 +8767,7 @@ def enhance_audio(audio_path, format_choice="mp3"):
             ),
             db_boost=3.0,
             db_limit=0.0
-        )
+        ),
         format=format_choice
     )
 
