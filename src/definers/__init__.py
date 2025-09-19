@@ -5352,7 +5352,7 @@ py-modules = {py_modules}
 
     elif task in ["image"]:
 
-        from diffusers import DiffusionPipeline
+        from diffusers import FluxPipeline
 
         model = FluxPipeline.from_pretrained(
             tasks[task], torch_dtype=dtype()
