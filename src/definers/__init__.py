@@ -8782,7 +8782,7 @@ def get_scale_notes(
 def enhance_audio(audio_path, format_choice="mp3"):
     return normalize_audio_to_peak( audio_limiter(
         riaa_filter(
-            master( autotune_song(audio_path, "wav"), "wav"),
+            master( autotune_song(audio_path), "wav"),
             mix_factor=0.5
         ),
         db_boost=3.0,
@@ -8943,7 +8943,7 @@ def autotune_song(
         
         combined = instrumental_audio.overlay(tuned_vocals_audio)
         
-        output_format = Path(output_path).suffix[1:]
+        output_format = get_ext(output_path)
         combined.export(output_path, format=output_format)
         
         normalize_audio_to_peak(output_path)
