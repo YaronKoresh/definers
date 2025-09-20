@@ -6399,44 +6399,34 @@ def init_chat(title="Chatbot", fnc=answer):
     import gradio as gr
 
     chatbot = gr.Chatbot(
-        elem_id="chatbot", bubble_full_width=False, type="messages"
+        elem_id="chatbot", type="messages", show_copy_button=True, rtl=True
     )
 
     def _get_chat_response(message, history: list):
-        formatted_history = []
-    
-        for user_msg, assistant_msg in history:
-            if isinstance(user_msg, tuple):
-                text, files = user_msg
-                if text:
-                    formatted_history.append({"role": "user", "content": text})
-                for file_path in files:
-                    formatted_history.append({"role": "user", "content": {"path": file_path}})
-            else:
-                formatted_history.append({"role": "user", "content": user_msg})
-            
-            if assistant_msg:
-                formatted_history.append({"role": "assistant", "content": assistant_msg})
+        history_for_model = list(history)
 
         for file_path in message["files"]:
-            formatted_history.append({"role": "user", "content": {"path": file_path}})
+            history_for_model.append({"role": "user", "content": {"path": file_path}})
         if message["text"]:
-            formatted_history.append({"role": "user", "content": message["text"]})
-        
-        response = fnc(formatted_history)
+            history_for_model.append({"role": "user", "content": message["text"]})
     
-        return response
+        response_text = fnc(history_for_model)
+    
+        history_for_model.append({"role": "assistant", "content": response_text})
+    
+        return history_for_model
 
     return gr.ChatInterface(
         fn=_get_chat_response,
         type="messages",
         chatbot=chatbot,
         multimodal=True,
-        theme=gr.themes.Citrus(),
+        theme=theme(),
         title=title,
         css=css(),
         save_history=True,
-        show_progress="full",
+        show_progress="hidden",
+        concurrency_limit=None,
     )
 
 
