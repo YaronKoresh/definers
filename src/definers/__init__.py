@@ -388,7 +388,7 @@ tasks = {
     "image": "black-forest-labs/FLUX.1-dev",
     "detect": "facebook/detr-resnet-50",
     "answer": "microsoft/Phi-4-multimodal-instruct",
-    "summary": "t5-large",
+    "summary": "google-t5/t5-11b",
     "music": "facebook/musicgen-small",
     "speech-recognition": "openai/whisper-large-v3",
     "audio-classification": "MIT/ast-finetuned-audioset-10-10-0.4593",
