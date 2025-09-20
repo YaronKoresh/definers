@@ -8787,9 +8787,9 @@ def enhance_audio(audio_path, format_choice="mp3"):
     return audio_limiter(
         riaa_filter(
             master( autotune_song(audio_path), "wav"),
-            mix_factor=0.9
+            mix_factor=0.5
         ),
-        db_boost=6.0,
+        db_boost=5.0,
         db_limit=-1.0
     )
 
@@ -8801,7 +8801,7 @@ def autotune_song(
     correct_timing=True,
     quantize_grid_strength=8,
     tolerance_cents=10,
-    attack_smoothing_ms=8,
+    attack_smoothing_ms=4,
 ):
     import librosa
     import madmom
@@ -9029,7 +9029,7 @@ def create_sample_audio(filename="sample_audio.wav", duration=5, sample_rate=441
     print(f"Sample audio saved as '{filename}'.")
 
 
-def riaa_filter(input_filename, mix_factor=1.0):
+def riaa_filter(input_filename, bass_factor=1.0):
     import librosa
     from scipy.io import wavfile
     from scipy.signal import bilinear, filtfilt, freqz, lfilter
@@ -9055,12 +9055,15 @@ def riaa_filter(input_filename, mix_factor=1.0):
         audio_data = np.random.randn(sample_rate * duration)
         audio_data /= np.max(np.abs(audio_data))
 
-    t1 = 3180e-6  # Bass boost turnover (50.05 Hz)
-    t2 = 318e-6   # Bass shelf turnover (500.5 Hz)
-    t3 = 75e-6    # Treble cut turnover (2122 Hz)
+    t1 = 3180e-6
+    t2 = 318e-6
+    t3 = 75e-6
 
+    print(f"Applying a custom RIAA de-emphasis with a bass factor of {bass_factor}...")
+    t1_modified = (1 - bass_factor) * t2 + bass_factor * t1_original
+    
     num_s = [t2, 1]
-    den_s = [t1 * t3, t1 + t3, 1]
+    den_s = [t1_modified * t3, t1_modified + t3, 1]
 
     w1k = 2 * np.pi * 1000
     _, h = freqz(num_s, den_s, worN=[w1k])
@@ -9069,16 +9072,12 @@ def riaa_filter(input_filename, mix_factor=1.0):
 
     b_riaa, a_riaa = bilinear(num_s_normalized, den_s, fs=sample_rate)
 
-    print(f"Applying RIAA de-emphasis filter with a mix factor of {mix_factor}...")
-    wet_signal = filtfilt(b_riaa, a_riaa, audio_data)
+    processed_audio = filtfilt(b_riaa, a_riaa, audio_data)
 
-    blended_audio = (1 - mix_factor) * audio_data + mix_factor * wet_signal
-
-    blended_audio /= np.max(np.abs(blended_audio))
-    
-    processed_audio_int16 = np.int16((blended_audio * 32767).T)
+    processed_audio /= np.max(np.abs(processed_audio))
+    processed_audio_int16 = np.int16((processed_audio * 32767).T)
 
     wavfile.write(output_filename, sample_rate, processed_audio_int16)
-    print(f"Successfully applied RIAA EQ and saved to '{output_filename}'.")
+    print(f"Successfully applied custom RIAA EQ and saved to '{output_filename}'.")
 
     return output_filename
