@@ -6404,9 +6404,6 @@ def get_chat_response(message, history: list):
     response_text = answer(history_for_model)
     response_text = summary(response_text)
         
-    if orig_lang_code != "en":
-        response_text = ai_translate(response_text, orig_lang_code)
-            
     history_for_model.append({"role": "assistant", "content": response_text})
     
     return history_for_model
