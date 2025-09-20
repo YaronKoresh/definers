@@ -6417,7 +6417,7 @@ def init_chat(title="Chatbot", handler=get_chat_response):
     )
 
     return gr.ChatInterface(
-        fn=_get_chat_response,
+        fn=get_chat_response,
         type="messages",
         chatbot=chatbot,
         multimodal=True,
