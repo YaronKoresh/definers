@@ -73,57 +73,85 @@ def patch_cupy_numpy():
     import numpy as _np
 
     type_aliases = {
-        "intp": _np.int_, "float": _np.float64, "int": _np.int64,
-        "bool": _np.bool_, "complex": _np.complex128, "object": _np.object_,
-        "str": _np.str_, "string_": _np.bytes_,
+        "intp": _np.int_,
+        "float": _np.float64,
+        "int": _np.int64,
+        "bool": _np.bool_,
+        "complex": _np.complex128,
+        "object": _np.object_,
+        "str": _np.str_,
+        "string_": _np.bytes_,
     }
     for alias, target in type_aliases.items():
         if not hasattr(_np, alias):
             setattr(_np, alias, target)
 
     func_aliases = {
-        "round_": _np.round, "product": _np.prod, "cumproduct": _np.cumprod,
-        "alltrue": _np.all, "sometrue": _np.any, "rank": _np.ndim,
+        "round_": _np.round,
+        "product": _np.prod,
+        "cumproduct": _np.cumprod,
+        "alltrue": _np.all,
+        "sometrue": _np.any,
+        "rank": _np.ndim,
     }
     for alias, target in func_aliases.items():
         if not hasattr(_np, alias):
             setattr(_np, alias, target)
 
-    if not hasattr(_np, 'asscalar'):
+    if not hasattr(_np, "asscalar"):
+
         def asscalar(a):
             return a.item()
+
         _np.asscalar = asscalar
 
     if not hasattr(_np.core, "machar"):
-        class MachAr: pass
+
+        class MachAr:
+            pass
+
         _np.core.machar = MachAr
 
     if hasattr(_np, "testing") and not hasattr(_np.testing, "Tester"):
+
         class Tester:
-            def test(self, label='fast', extra_argv=None): return True
+            def test(self, label="fast", extra_argv=None):
+                return True
+
         _np.testing.Tester = Tester
 
     if not hasattr(_np, "distutils"):
+
         class DummyDistutils:
             class MiscUtils:
-                def get_info(self, *args, **kwargs): return {}
+                def get_info(self, *args, **kwargs):
+                    return {}
+
         _np.distutils = DummyDistutils()
 
     if not hasattr(_np, "set_string_function"):
-        def set_string_function(*args, **kwargs): pass
+
+        def set_string_function(*args, **kwargs):
+            pass
+
         _np.set_string_function = set_string_function
 
     _original_finfo = _np.finfo
+
     def patched_finfo(dtype):
         try:
             return _original_finfo(dtype)
         except TypeError:
             return _np.iinfo(dtype)
+
     _np.finfo = patched_finfo
 
     def dummy_npwarn_decorator_factory():
-        def npwarn_decorator(x): return x
+        def npwarn_decorator(x):
+            return x
+
         return npwarn_decorator
+
     _np._no_nep50_warning = getattr(
         _np, "_no_nep50_warning", dummy_npwarn_decorator_factory
     )
@@ -939,7 +967,9 @@ def answer(history: list):
         role = h["role"]
 
         add_content = ""
-        if not isinstance(content, dict) and not isinstance(content, tuple):
+        if not isinstance(content, dict) and not isinstance(
+            content, tuple
+        ):
             add_content += content
         else:
             ps = []
@@ -952,7 +982,9 @@ def answer(history: list):
             for p in ps:
                 ext = p.split(".")[-1]
                 if ext in common_audio_formats:
-                    audio, samplerate = sf.read(normalize_audio_to_peak(p))
+                    audio, samplerate = sf.read(
+                        normalize_audio_to_peak(p)
+                    )
                     snd_list.append((audio, samplerate))
                     add_content += f"<|audio_{ str(len(snd_list)) }|>"
                 if ext in iio_formats:
@@ -960,10 +992,9 @@ def answer(history: list):
                     add_content += f"<|image_{ str(len(img_list)) }|>"
         if add_role != role:
             add_role = role
-            alt_history.append({
-                "role": add_role,
-                "content": add_content
-            })
+            alt_history.append(
+                {"role": add_role, "content": add_content}
+            )
             continue
         alt_history[-1]["content"] += add_content
 
@@ -3410,9 +3441,13 @@ def build_faiss():
         temp_dir = tmp(dir=True)
 
         with cwd("./xfaiss/build/faiss/python"):
-            print("faiss - stage 4: Building wheel with numpy==1.26.4 constraint")
+            print(
+                "faiss - stage 4: Building wheel with numpy==1.26.4 constraint"
+            )
 
-            with tempfile.NamedTemporaryFile(mode='w', delete=False) as reqs:
+            with tempfile.NamedTemporaryFile(
+                mode="w", delete=False
+            ) as reqs:
                 reqs.write("numpy==1.26.4\n")
                 constraints_path = reqs.name
 
@@ -3428,14 +3463,16 @@ def build_faiss():
 
         free()
 
-        any_wheel_path = paths(f'{temp_dir}/faiss-*.whl')[0]
+        any_wheel_path = paths(f"{temp_dir}/faiss-*.whl")[0]
 
         repaired_wheel_dir = tmp(dir=True)
 
         print("faiss - stage 5: Repairing wheel")
-        run(f"{sys.executable} -m auditwheel repair {any_wheel_path} -w {repaired_wheel_dir}")
+        run(
+            f"{sys.executable} -m auditwheel repair {any_wheel_path} -w {repaired_wheel_dir}"
+        )
 
-        return paths(f'{repaired_wheel_dir}/faiss-*.whl')[0]
+        return paths(f"{repaired_wheel_dir}/faiss-*.whl")[0]
 
     except subprocess.CalledProcessError as e:
         print(f"Error during installation: {e}")
@@ -3453,9 +3490,7 @@ def simple_text(prompt):
     prompt = re.sub("(\n){1,}", " ", prompt)
     prompt = re.sub("( ){2,}", " ", prompt)
 
-    prompt = re.sub(
-        "[\. ]+\.[\.]*|[\. ]*\.[\.]+", ".", prompt
-    )
+    prompt = re.sub("[\. ]+\.[\.]*|[\. ]*\.[\.]+", ".", prompt)
     prompt = re.sub("(-){2,}", "-", prompt)
     prompt = prompt.replace("|", " or ")
     prompt = re.sub("([ !]){1,}\?([ !?]){1,}", " I wonder ", prompt)
@@ -4569,12 +4604,20 @@ def ai_translate(text, lang="en"):
     log("Generating translation", text, status="")
 
     if lang == "en":
-        translated_text = MODELS["translate-to-en"](text, src_lang=from_lang_code)[0]['translation_text']
+        translated_text = MODELS["translate-to-en"](
+            text, src_lang=from_lang_code
+        )[0]["translation_text"]
     elif from_lang_code == "en":
-        translated_text = MODELS["translate-from-en"](text, tgt_lang=from_lang_code)[0]['translation_text']
+        translated_text = MODELS["translate-from-en"](
+            text, tgt_lang=from_lang_code
+        )[0]["translation_text"]
     else:
-        translated_text = MODELS["translate-to-en"](text, src_lang=from_lang_code)[0]['translation_text']
-        translated_text = MODELS["translate-from-en"](translated_text, tgt_lang=from_lang_code)[0]['translation_text']
+        translated_text = MODELS["translate-to-en"](
+            text, src_lang=from_lang_code
+        )[0]["translation_text"]
+        translated_text = MODELS["translate-from-en"](
+            translated_text, tgt_lang=from_lang_code
+        )[0]["translation_text"]
 
     log("Translated text", translated_text, status="")
 
@@ -4632,12 +4675,28 @@ def duck_translate(text, lang="en"):
 
 def theme():
     import gradio as gr
-    return gr.themes.Base(primary_hue=gr.themes.colors.slate, secondary_hue=gr.themes.colors.indigo, font=(gr.themes.GoogleFont("Inter"), "ui-sans-serif", "system-ui", "sans-serif")).set(
-        body_background_fill_dark="#111827", block_background_fill_dark="#1f2937", block_border_width="1px",
-        block_title_background_fill_dark="#374151", button_primary_background_fill_dark="linear-gradient(90deg, #4f46e5, #7c3aed)",
-        button_primary_text_color_dark="#ffffff", button_secondary_background_fill_dark="#374151",
-        button_secondary_text_color_dark="#ffffff", slider_color_dark="#6366f1"
+
+    return gr.themes.Base(
+        primary_hue=gr.themes.colors.slate,
+        secondary_hue=gr.themes.colors.indigo,
+        font=(
+            gr.themes.GoogleFont("Inter"),
+            "ui-sans-serif",
+            "system-ui",
+            "sans-serif",
+        ),
+    ).set(
+        body_background_fill_dark="#111827",
+        block_background_fill_dark="#1f2937",
+        block_border_width="1px",
+        block_title_background_fill_dark="#374151",
+        button_primary_background_fill_dark="linear-gradient(90deg, #4f46e5, #7c3aed)",
+        button_primary_text_color_dark="#ffffff",
+        button_secondary_background_fill_dark="#374151",
+        button_secondary_text_color_dark="#ffffff",
+        slider_color_dark="#6366f1",
     )
+
 
 def css():
     return """
@@ -5133,12 +5192,20 @@ def init_pretrained_model(task: str, turbo: bool = False):
         )
 
     elif task in ["translate-to-en", "translate-from-en"]:
-        from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, pipeline
+        from transformers import (
+            AutoModelForSeq2SeqLM,
+            AutoTokenizer,
+            pipeline,
+        )
 
         model_name = tasks[task]
         tokenizer = AutoTokenizer.from_pretrained(model_name)
-        _model = AutoModelForSeq2SeqLM.from_pretrained(model_name).to(device())
-        model = pipeline("translation", tokenizer=tokenizer, model=_model)
+        _model = AutoModelForSeq2SeqLM.from_pretrained(model_name).to(
+            device()
+        )
+        model = pipeline(
+            "translation", tokenizer=tokenizer, model=_model
+        )
 
     elif task in ["translation"]:
         init_pretrained_model("translate-to-en", turbo)
@@ -5409,12 +5476,12 @@ py-modules = {py_modules}
         try:
             model.enable_sequential_cpu_offload()
         except Exception as e:
-                pass
+            pass
 
         try:
             model.enable_attention_slicing(1)
         except Exception as e:
-                pass
+            pass
 
     MODELS[task] = model
 
@@ -6420,7 +6487,9 @@ def get_chat_response(message, history: list):
     history_for_model = list(history)
     orig_lang_code = "en"
     for file_path in message["files"]:
-        history_for_model.append({"role": "user", "content": {"path": file_path}})
+        history_for_model.append(
+            {"role": "user", "content": {"path": file_path}}
+        )
     if message["text"]:
         txt = message["text"]
         orig_lang_code = language(txt)
@@ -6428,14 +6497,16 @@ def get_chat_response(message, history: list):
             txt = ai_translate(txt)
         txt = summary(txt)
         history_for_model.append({"role": "user", "content": txt})
-    
+
     response_text = answer(history_for_model)
     response_text = summary(response_text)
     if orig_lang_code != "en":
         response_text = ai_translate(response_text, orig_lang_code)
-        
-    history_for_model.append({"role": "assistant", "content": response_text})
-    
+
+    history_for_model.append(
+        {"role": "assistant", "content": response_text}
+    )
+
     return history_for_model
 
 
@@ -6443,7 +6514,10 @@ def init_chat(title="Chatbot", handler=get_chat_response):
     import gradio as gr
 
     chatbot = gr.Chatbot(
-        elem_id="chatbot", type="messages", show_copy_button=True, rtl=True
+        elem_id="chatbot",
+        type="messages",
+        show_copy_button=True,
+        rtl=True,
     )
 
     return gr.ChatInterface(
@@ -7721,18 +7795,18 @@ def music_video(
                 radius = int(radius * 1.3)
                 star_color = WHITE
                 frame[:, :] = ISRAEL_BLUE
-                frame[
-                    gap_height : gap_height + stripe_height
-                ] = ORANGE
+                frame[gap_height : gap_height + stripe_height] = (
+                    ORANGE
+                )
                 frame[
                     h - gap_height - stripe_height : h - gap_height
                 ] = ORANGE
             else:
                 star_color = ISRAEL_BLUE
                 frame[:, :] = WHITE
-                frame[
-                    gap_height : gap_height + stripe_height
-                ] = ORANGE
+                frame[gap_height : gap_height + stripe_height] = (
+                    ORANGE
+                )
                 frame[
                     h - gap_height - stripe_height : h - gap_height
                 ] = ORANGE
@@ -7809,8 +7883,11 @@ def music_video(
     animation = VideoClip(make_frame, duration=duration)
     final_clip = animation.with_audio(AudioFileClip(audio_path))
     final_clip.write_videofile(
-        output_path, codec="libx264", audio_codec="aac", fps=fps,
-        ffmpeg_params=["-pix_fmt", "yuv420p"]
+        output_path,
+        codec="libx264",
+        audio_codec="aac",
+        fps=fps,
+        ffmpeg_params=["-pix_fmt", "yuv420p"],
     )
     return output_path
 
@@ -7966,10 +8043,7 @@ def lyric_video(
     y2 = y1 + output_size[1]
 
     background_clip = background_clip.cropped(
-        x1=x1,
-        x2=x2,
-        y1=y1,
-        y2=y2
+        x1=x1, x2=x2, y1=y1, y2=y2
     )
 
     lyric_clips = []
@@ -8719,6 +8793,7 @@ def normalize_audio_to_peak(
     input_path: str, target_level: float = 0.9, format: str = None
 ):
     from pydub import AudioSegment
+
     if not 0.0 <= target_level <= 1.0:
         catch("target_level must be between 0.0 and 1.0")
         return None
@@ -8733,21 +8808,25 @@ def normalize_audio_to_peak(
         catch(f"Input file not found at {input_path}")
         return None
 
-    if target_level == 0.0 or audio.max_dBFS == -float('inf'):
+    if target_level == 0.0 or audio.max_dBFS == -float("inf"):
         silent_audio = AudioSegment.silent(duration=len(audio))
         silent_audio.export(output_path, format=format)
-        print(f"Target level is 0 or audio is silent. Saved silent file to '{output_path}'")
+        print(
+            f"Target level is 0 or audio is silent. Saved silent file to '{output_path}'"
+        )
         return output_path
 
     target_dbfs = 20 * math.log10(target_level)
-    
+
     gain_to_apply = target_dbfs - audio.max_dBFS
-    
+
     normalized_audio = audio.apply_gain(gain_to_apply)
 
     normalized_audio.export(output_path, format=format)
 
-    print(f"Successfully normalized '{input_path}' to a peak of {target_dbfs:.2f} dBFS.")
+    print(
+        f"Successfully normalized '{input_path}' to a peak of {target_dbfs:.2f} dBFS."
+    )
     print(f"Saved result to '{output_path}'")
 
     return output_path
@@ -8812,17 +8891,16 @@ def get_scale_notes(
 def enhance_audio(audio_path, format_choice="mp3"):
     return audio_limiter(
         riaa_filter(
-            master( autotune_song(audio_path), "wav"),
-            bass_factor=0.5
+            master(autotune_song(audio_path), "wav"), bass_factor=0.5
         ),
         db_boost=5.0,
-        db_limit=-1.0
+        db_limit=-1.0,
     )
 
 
 def autotune_song(
     audio_path,
-    output_path = None,
+    output_path=None,
     strength=0.9,
     correct_timing=True,
     quantize_grid_strength=8,
@@ -8846,7 +8924,9 @@ def autotune_song(
 
     temp_files = []
     try:
-        detected_key, detected_mode, detected_bpm = analyze_audio_features(audio_path, False)
+        detected_key, detected_mode, detected_bpm = (
+            analyze_audio_features(audio_path, False)
+        )
         if not detected_key:
             catch("Could not determine song key. Aborting.")
             return None
@@ -8855,24 +8935,28 @@ def autotune_song(
         if not vocals_path or not instrumental_path:
             catch("Vocal separation failed.")
             return None
-        
+
         temp_files.extend([vocals_path, instrumental_path])
 
         y_vocals, sr = librosa.load(vocals_path, sr=None, mono=True)
-        
+
         n_fft = 4096
         hop_length = 1024
-        
+
         processed_vocals_path = vocals_path
 
         if correct_timing:
             beat_proc = madmom.features.beats.RNNBeatProcessor()
             beat_act = beat_proc(instrumental_path)
-            beat_times = madmom.features.beats.BeatTrackingProcessor(fps=100)(beat_act)
+            beat_times = madmom.features.beats.BeatTrackingProcessor(
+                fps=100
+            )(beat_act)
 
             if quantize_grid_strength > 1 and len(beat_times) > 1:
                 beat_interval = np.mean(np.diff(beat_times))
-                subdivision_interval = beat_interval / quantize_grid_strength
+                subdivision_interval = (
+                    beat_interval / quantize_grid_strength
+                )
                 quantized_beat_times = []
                 for i in range(len(beat_times) - 1):
                     quantized_beat_times.extend(
@@ -8886,71 +8970,103 @@ def autotune_song(
                 quantized_beat_times.append(beat_times[-1])
                 beat_times = np.array(sorted(quantized_beat_times))
 
-            onsets = librosa.onset.onset_detect(y=y_vocals, sr=sr, hop_length=hop_length, units="time")
-            
+            onsets = librosa.onset.onset_detect(
+                y=y_vocals, sr=sr, hop_length=hop_length, units="time"
+            )
+
             if len(onsets) > 1 and len(beat_times) > 0:
                 time_map_data = []
                 for onset_time in onsets:
-                    closest_beat_index = np.argmin(np.abs(beat_times - onset_time))
+                    closest_beat_index = np.argmin(
+                        np.abs(beat_times - onset_time)
+                    )
                     target_time = beat_times[closest_beat_index]
-                    time_map_data.append(f"{onset_time:.6f} {target_time:.6f}")
-                
+                    time_map_data.append(
+                        f"{onset_time:.6f} {target_time:.6f}"
+                    )
+
                 time_map_path = tmp(".txt")
                 temp_files.append(time_map_path)
-                with open(time_map_path, 'w') as f:
+                with open(time_map_path, "w") as f:
                     f.write("\n".join(time_map_data))
-                
+
                 quantized_vocals_path = tmp(".wav")
                 command = [
-                    "rubberband", "--time", "1", "--timemap", f'"{time_map_path}"', f'"{vocals_path}"', f'"{quantized_vocals_path}"'
+                    "rubberband",
+                    "--time",
+                    "1",
+                    "--timemap",
+                    f'"{time_map_path}"',
+                    f'"{vocals_path}"',
+                    f'"{quantized_vocals_path}"',
                 ]
                 run(" ".join(command))
 
                 if exist(quantized_vocals_path):
-                    y_vocals, sr = librosa.load(quantized_vocals_path, sr=sr)
+                    y_vocals, sr = librosa.load(
+                        quantized_vocals_path, sr=sr
+                    )
                     processed_vocals_path = quantized_vocals_path
                     temp_files.append(quantized_vocals_path)
 
-        allowed_notes_midi = get_scale_notes(key=detected_key, scale=detected_mode)
+        allowed_notes_midi = get_scale_notes(
+            key=detected_key, scale=detected_mode
+        )
         f0, voiced_flag, _ = librosa.pyin(
-            y_vocals, fmin=librosa.note_to_hz("C2"), fmax=librosa.note_to_hz("C7"),
-            sr=sr, frame_length=n_fft, hop_length=hop_length
+            y_vocals,
+            fmin=librosa.note_to_hz("C2"),
+            fmax=librosa.note_to_hz("C7"),
+            sr=sr,
+            frame_length=n_fft,
+            hop_length=hop_length,
         )
         f0 = np.nan_to_num(f0, nan=0.0)
-        
+
         target_f0 = np.copy(f0)
         voiced_mask = voiced_flag & (f0 > 0)
-        
+
         if np.any(voiced_mask):
             voiced_f0 = f0[voiced_mask]
             voiced_midi = librosa.hz_to_midi(voiced_f0)
 
-            note_diffs = np.abs(allowed_notes_midi.reshape(-1, 1) - voiced_midi)
+            note_diffs = np.abs(
+                allowed_notes_midi.reshape(-1, 1) - voiced_midi
+            )
             closest_note_indices = np.argmin(note_diffs, axis=0)
             target_midi = allowed_notes_midi[closest_note_indices]
 
             cents_deviation = np.abs(voiced_midi - target_midi) * 100
             correction_mask = cents_deviation > tolerance_cents
 
-            ideal_f0 = librosa.midi_to_hz(target_midi[correction_mask])
+            ideal_f0 = librosa.midi_to_hz(
+                target_midi[correction_mask]
+            )
             original_f0_to_correct = voiced_f0[correction_mask]
-            corrected_f0_subset = original_f0_to_correct + (ideal_f0 - original_f0_to_correct) * strength
+            corrected_f0_subset = (
+                original_f0_to_correct
+                + (ideal_f0 - original_f0_to_correct) * strength
+            )
 
             temp_voiced_f0 = np.copy(voiced_f0)
             temp_voiced_f0[correction_mask] = corrected_f0_subset
-            
+
             if attack_smoothing_ms > 0:
-                smoothing_window_size = int(sr / hop_length * (attack_smoothing_ms / 1000.0))
+                smoothing_window_size = int(
+                    sr / hop_length * (attack_smoothing_ms / 1000.0)
+                )
                 if smoothing_window_size % 2 == 0:
                     smoothing_window_size += 1
                 if smoothing_window_size > 1:
-                     temp_voiced_f0 = medfilt(temp_voiced_f0, kernel_size=smoothing_window_size)
-            
+                    temp_voiced_f0 = medfilt(
+                        temp_voiced_f0,
+                        kernel_size=smoothing_window_size,
+                    )
+
             target_f0[voiced_mask] = temp_voiced_f0
 
         freq_map_path = tmp(".txt")
         temp_files.append(freq_map_path)
-        with open(freq_map_path, 'w') as f:
+        with open(freq_map_path, "w") as f:
             ratios = target_f0 / f0
             ratios[~voiced_flag | (f0 == 0)] = 1.0
             for i in range(len(ratios)):
@@ -8958,26 +9074,39 @@ def autotune_song(
                 f.write(f"{sample_num} {ratios[i]:.6f}\n")
 
         tuned_vocals_path = tmp(".wav")
-        command = ["rubberband", "--formant", "--freqmap", f'"{freq_map_path}"', f'"{processed_vocals_path}"', f'"{tuned_vocals_path}"']
+        command = [
+            "rubberband",
+            "--formant",
+            "--freqmap",
+            f'"{freq_map_path}"',
+            f'"{processed_vocals_path}"',
+            f'"{tuned_vocals_path}"',
+        ]
         run(" ".join(command))
-        
+
         if not exist(tuned_vocals_path):
             catch("Pitch correction with rubberband failed.")
             return None
-        
+
         temp_files.append(tuned_vocals_path)
 
-        instrumental_audio = pydub.AudioSegment.from_file(instrumental_path)
-        tuned_vocals_audio = pydub.AudioSegment.from_file(tuned_vocals_path)
-        tuned_vocals_audio = tuned_vocals_audio.set_frame_rate(instrumental_audio.frame_rate)
-        
+        instrumental_audio = pydub.AudioSegment.from_file(
+            instrumental_path
+        )
+        tuned_vocals_audio = pydub.AudioSegment.from_file(
+            tuned_vocals_path
+        )
+        tuned_vocals_audio = tuned_vocals_audio.set_frame_rate(
+            instrumental_audio.frame_rate
+        )
+
         combined = instrumental_audio.overlay(tuned_vocals_audio)
-        
+
         output_format = get_ext(output_path)
         combined.export(output_path, format=output_format)
-        
+
         normalize_audio_to_peak(output_path)
-        
+
         return output_path
 
     finally:
@@ -8985,7 +9114,9 @@ def autotune_song(
             delete(path)
 
 
-def audio_limiter(input_filename, output_filename = None, db_boost = 3.0, db_limit = -0.5):
+def audio_limiter(
+    input_filename, output_filename=None, db_boost=3.0, db_limit=-0.5
+):
     from scipy.io import wavfile
 
     if output_filename is None:
@@ -8993,7 +9124,9 @@ def audio_limiter(input_filename, output_filename = None, db_boost = 3.0, db_lim
 
     try:
         sample_rate, data = wavfile.read(input_filename)
-        print(f"Successfully read '{input_filename}' with sample rate {sample_rate}.")
+        print(
+            f"Successfully read '{input_filename}' with sample rate {sample_rate}."
+        )
     except FileNotFoundError:
         print(f"Error: The file '{input_filename}' was not found.")
         return
@@ -9017,40 +9150,52 @@ def audio_limiter(input_filename, output_filename = None, db_boost = 3.0, db_lim
         else:
             print(f"Error: Unsupported data type '{original_dtype}'.")
             return
-            
+
     audio_float = data.astype(np.float32) / max_val
-    
+
     linear_boost = 10 ** (db_boost / 20.0)
     boosted_audio = audio_float * linear_boost
-    print(f"Applied a {db_boost} dB boost (linear multiplier: {linear_boost:.2f}).")
+    print(
+        f"Applied a {db_boost} dB boost (linear multiplier: {linear_boost:.2f})."
+    )
 
     linear_limit = 10 ** (db_limit / 20.0)
-    
-    limited_audio = np.clip(boosted_audio, -linear_limit, linear_limit)
-    print(f"Limited audio to {db_limit} dB (linear amplitude: +/- {linear_limit:.2f}).")
-    
-    processed_audio_int = (limited_audio * max_val)
-    
+
+    limited_audio = np.clip(
+        boosted_audio, -linear_limit, linear_limit
+    )
+    print(
+        f"Limited audio to {db_limit} dB (linear amplitude: +/- {linear_limit:.2f})."
+    )
+
+    processed_audio_int = limited_audio * max_val
+
     final_audio = processed_audio_int.astype(original_dtype)
 
     try:
         wavfile.write(output_filename, sample_rate, final_audio)
-        print(f"Successfully saved processed audio to '{output_filename}'.")
+        print(
+            f"Successfully saved processed audio to '{output_filename}'."
+        )
         return output_filename
     except Exception as e:
         print(f"An error occurred while writing the audio file: {e}")
 
 
-def create_sample_audio(filename="sample_audio.wav", duration=5, sample_rate=44100):
+def create_sample_audio(
+    filename="sample_audio.wav", duration=5, sample_rate=44100
+):
     from scipy.io import wavfile
 
     print("Creating a sample audio file for testing...")
-    t = np.linspace(0., duration, int(sample_rate * duration))
-    amplitude_ramp = np.linspace(0.1, 1.0, int(sample_rate * duration))
-    audio_data = amplitude_ramp * np.sin(2. * np.pi * 440. * t)
-    
+    t = np.linspace(0.0, duration, int(sample_rate * duration))
+    amplitude_ramp = np.linspace(
+        0.1, 1.0, int(sample_rate * duration)
+    )
+    audio_data = amplitude_ramp * np.sin(2.0 * np.pi * 440.0 * t)
+
     audio_data_int = np.int16(audio_data * 32767)
-    
+
     wavfile.write(filename, sample_rate, audio_data_int)
     print(f"Sample audio saved as '{filename}'.")
 
@@ -9070,12 +9215,18 @@ def riaa_filter(input_filename, bass_factor=1.0):
             and audio_data.dtype != np.float64
         ):
             info = np.iinfo(audio_data.dtype)
-            audio_data = audio_data.astype(np.float32) / (info.max + 1)
-        
-        print(f"Read '{input_filename}' with sample rate {sample_rate} Hz.")
+            audio_data = audio_data.astype(np.float32) / (
+                info.max + 1
+            )
+
+        print(
+            f"Read '{input_filename}' with sample rate {sample_rate} Hz."
+        )
 
     except FileNotFoundError:
-        print(f"File '{input_filename}' not found. Generating white noise for demonstration.")
+        print(
+            f"File '{input_filename}' not found. Generating white noise for demonstration."
+        )
         sample_rate = 44100
         duration = 5
         audio_data = np.random.randn(sample_rate * duration)
@@ -9085,9 +9236,11 @@ def riaa_filter(input_filename, bass_factor=1.0):
     t2 = 318e-6
     t3 = 75e-6
 
-    print(f"Applying a custom RIAA de-emphasis with a bass factor of {bass_factor}...")
+    print(
+        f"Applying a custom RIAA de-emphasis with a bass factor of {bass_factor}..."
+    )
     t1_modified = (1 - bass_factor) * t2 + bass_factor * t1_original
-    
+
     num_s = [t2, 1]
     den_s = [t1_modified * t3, t1_modified + t3, 1]
 
@@ -9104,6 +9257,8 @@ def riaa_filter(input_filename, bass_factor=1.0):
     processed_audio_int16 = np.int16((processed_audio * 32767).T)
 
     wavfile.write(output_filename, sample_rate, processed_audio_int16)
-    print(f"Successfully applied custom RIAA EQ and saved to '{output_filename}'.")
+    print(
+        f"Successfully applied custom RIAA EQ and saved to '{output_filename}'."
+    )
 
     return output_filename
