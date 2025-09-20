@@ -977,7 +977,7 @@ def answer(history: list):
 
     generate_ids = MODELS["answer"].generate(
         **inputs,
-        max_new_tokens=2000,
+        max_new_tokens=512,
         num_beams=64,
         length_penalty=0.1,
         num_logits_to_keep=1,
@@ -6404,12 +6404,20 @@ def init_chat(title="Chatbot", fnc=answer):
     )
 
     def _get_chat_response(message, history: list):
-        for x in message["files"]:
-            history.append({"role": "user", "content": {"path": x}})
-        if message["text"] is not None:
-            txt = message["text"]
-            history.append({"role": "user", "content": txt})
-        response = fnc(history)
+        history_for_model = list(history)
+
+        for file_path in message["files"]:
+            history_for_model.append(("user", (file_path,))) # Format for files
+        if message["text"]:
+            history_for_model.append(("user", (message["text"],))) # Format for text
+
+        formatted_history = []
+        for turn in history_for_model:
+            role, content_tuple = turn
+            formatted_history.append({"role": role, "content": content_tuple[0]})
+
+        response = fnc(formatted_history)
+
         return response
 
     return gr.ChatInterface(
