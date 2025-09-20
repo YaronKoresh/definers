@@ -5418,10 +5418,7 @@ def choose_random_words(word_list, num_words=10):
 
 def optimize_prompt_realism(prompt):
     prompt = preprocess_prompt(prompt)
-    prompt = (
-        "reasonable accurate natural convincing real recorded scenario of "
-        + prompt
-    )
+    prompt = f"A photograph of a { _base_prompt_ }, { prompt }, { _base_prompt_ }, { prompt }."
     return prompt
 
 
@@ -5431,7 +5428,7 @@ def preprocess_prompt(prompt):
         lines = prompt.splitlines()
         prompt = " and ".join(lines)
         prompt = simple_text(prompt)
-
+        prompt = summary(prompt, max_words=20)
     return prompt
 
 
