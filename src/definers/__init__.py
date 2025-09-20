@@ -5363,7 +5363,7 @@ py-modules = {py_modules}
 
         from diffusers import FluxKontextPipeline
 
-        model = FluxPipeline.from_pretrained(
+        model = FluxKontextPipeline.from_pretrained(
             tasks[task], torch_dtype=dtype()
         ).to(device())
 
