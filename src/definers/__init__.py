@@ -9067,7 +9067,7 @@ def riaa_filter(input_filename, bass_factor=1.0):
         audio_data = np.random.randn(sample_rate * duration)
         audio_data /= np.max(np.abs(audio_data))
 
-    t1 = 3180e-6
+    t1_original = 3180e-6
     t2 = 318e-6
     t3 = 75e-6
 
