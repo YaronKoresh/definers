@@ -6401,20 +6401,28 @@ def init_chat(title="Chatbot", fnc=answer):
     )
 
     def _get_chat_response(message, history: list):
-        history_for_model = list(history)
+        formatted_history = []
+    
+        for user_msg, assistant_msg in history:
+            if isinstance(user_msg, tuple):
+                text, files = user_msg
+                if text:
+                    formatted_history.append({"role": "user", "content": text})
+                for file_path in files:
+                    formatted_history.append({"role": "user", "content": {"path": file_path}})
+            else:
+                formatted_history.append({"role": "user", "content": user_msg})
+            
+            if assistant_msg:
+                formatted_history.append({"role": "assistant", "content": assistant_msg})
 
         for file_path in message["files"]:
-            history_for_model.append(("user", (file_path,))) # Format for files
+            formatted_history.append({"role": "user", "content": {"path": file_path}})
         if message["text"]:
-            history_for_model.append(("user", (message["text"],))) # Format for text
-
-        formatted_history = []
-        for turn in history_for_model:
-            role, content_tuple = turn
-            formatted_history.append({"role": role, "content": content_tuple[0]})
-
-        response = fnc(formatted_history)
-
+            formatted_history.append({"role": "user", "content": message["text"]})
+        
+        response = answer(formatted_history)
+    
         return response
 
     return gr.ChatInterface(
