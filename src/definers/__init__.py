@@ -6423,7 +6423,7 @@ def init_chat(title="Chatbot", fnc=answer):
         if message["text"]:
             formatted_history.append({"role": "user", "content": message["text"]})
         
-        response = answer(formatted_history)
+        response = fnc(formatted_history)
     
         return response
 
