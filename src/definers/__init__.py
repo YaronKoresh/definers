@@ -4556,7 +4556,10 @@ def ai_translate(text, lang="en"):
 
     log("Generating translation", text, status="")
 
-    model = f"Helsinki-NLP/opus-mt-{from_lang}-{to_lang}"
+    if to_lang == "en":
+        model = f"Helsinki-NLP/opus-mt-mul-{to_lang}"
+    else:
+        model = f"Helsinki-NLP/opus-mt-{from_lang}-{to_lang}"
     pipe = pipeline("translation", model=model)
     translation = pipe(input_text)
     translated_text = translation[0]['translation_text']
