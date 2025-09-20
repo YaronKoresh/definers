@@ -8787,7 +8787,7 @@ def enhance_audio(audio_path, format_choice="mp3"):
     return audio_limiter(
         riaa_filter(
             master( autotune_song(audio_path), "wav"),
-            mix_factor=0.5
+            bass_factor=0.5
         ),
         db_boost=5.0,
         db_limit=-1.0
