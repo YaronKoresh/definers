@@ -5469,7 +5469,7 @@ def pipe(
         else:
             params2["negative_prompt"] = _negative_prompt_
             params2["max_sequence_length"] = 512
-        params2["num_inference_steps"] = 100
+        params2["num_inference_steps"] = 200
         params2["generator"] = torch.Generator(device()).manual_seed(
             random.randint(0, big_number())
         )
