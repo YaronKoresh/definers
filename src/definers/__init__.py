@@ -8920,7 +8920,7 @@ def autotune_song(
             ratios[~voiced_flag | (f0 == 0)] = 1.0
             for i in range(len(ratios)):
                 sample_num = i * hop_length
-                f.write(f"{sample_num}\t{ratios[i]:.6f}\n")
+                f.write(f"{sample_num} {ratios[i]:.6f}\n")
 
         tuned_vocals_path = tmp(".wav")
         command = ["rubberband", "--formant", "--freqmap", f'"{freq_map_path}"', f'"{processed_vocals_path}"', f'"{tuned_vocals_path}"']
