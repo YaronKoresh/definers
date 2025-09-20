@@ -385,7 +385,7 @@ SYSTEM_MESSAGE = "You are a helpful and concise AI assistant. Provide accurate a
 
 tasks = {
     "video": "tencent/HunyuanVideo",
-    "image": "black-forest-labs/FLUX.1-Kontext-dev",
+    "image": "black-forest-labs/FLUX.1-dev",
     "detect": "facebook/detr-resnet-50",
     "answer": "microsoft/Phi-4-multimodal-instruct",
     "summary": "t5-large",
@@ -3456,6 +3456,8 @@ def simple_text(prompt):
 
     prompt = re.sub(punc, "", prompt)
 
+    prompt = prompt.strip().strip(".")
+
     prompt = re.sub(
         "\s*(?:(?<!\d)(?<!\b[a-zA-Z])\.)+\s*", " and ", prompt
     )
@@ -5418,7 +5420,7 @@ def choose_random_words(word_list, num_words=10):
 
 def optimize_prompt_realism(prompt):
     prompt = preprocess_prompt(prompt)
-    prompt = f"A photograph of a { _base_prompt_ }, { prompt }, { _base_prompt_ }, { prompt }."
+    prompt = f"A photograph of a { _base_prompt_ }, { prompt }."
     return prompt
 
 
