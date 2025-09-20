@@ -389,6 +389,7 @@ tasks = {
     "detect": "facebook/detr-resnet-50",
     "answer": "microsoft/Phi-4-multimodal-instruct",
     "summary": "google-t5/t5-11b",
+    "translation": "Helsinki-NLP/opus-mt-mul-en",
     "music": "facebook/musicgen-small",
     "speech-recognition": "openai/whisper-large-v3",
     "audio-classification": "MIT/ast-finetuned-audioset-10-10-0.4593",
@@ -404,11 +405,13 @@ MODELS = {
     "music": None,
     "speech-recognition": None,
     "audio-classification": None,
+    "translation": None,
     "tts": None,
 }
 
 TOKENIZERS = {
     "summary": None,
+    "translation": None,
 }
 
 PROCESSORS = {
@@ -4558,12 +4561,14 @@ def ai_translate(text, lang="en"):
     log("Generating translation", text, status="")
 
     if lang == "en":
-        model = f"Helsinki-NLP/opus-mt-mul-{lang}"
+        inputs = TOKENIZERS["translation"](text, return_tensors="pt").to(device())
+        translated_tokens = MODELS["translation"].generate(**inputs)
+        translated_text = TOKENIZERS["translation"].batch_decode(translated_tokens, skip_special_tokens=True)[0]
     else:
         model = f"Helsinki-NLP/opus-mt-{from_lang_code}-{lang}"
-    pipe = pipeline("translation", model=model)
-    translation = pipe(input_text)
-    translated_text = translation[0]['translation_text']
+        pipe = pipeline("translation", model=model)
+        translation = pipe(input_text)
+        translated_text = translation[0]['translation_text']
 
     log("Translated text", translated_text, status="")
 
@@ -5120,6 +5125,13 @@ def init_pretrained_model(task: str, turbo: bool = False):
             model=tasks["speech-recognition"],
             device=device(),
         )
+
+    elif task in ["translation"]:
+        from transformers import MarianMTModel, MarianTokenizer
+
+        model_name = tasks["translation"]
+        TOKENIZERS[task] = MarianTokenizer.from_pretrained(model_name)
+        model = MarianMTModel.from_pretrained(model_name).to(device())
 
     elif task in ["audio-classification"]:
 
