@@ -4546,7 +4546,8 @@ def ai_translate(text, lang="en"):
     to_lang = language_codes[lang]
     to_lang = to_lang[0].upper() + to_lang[1:]
 
-    from_lang = language_codes[language(text)]
+    from_lang_code = language(text)
+    from_lang = language_codes[from_lang_code]
     from_lang = from_lang[0].upper() + from_lang[1:]
 
     text = simple_text(text)
@@ -4556,10 +4557,10 @@ def ai_translate(text, lang="en"):
 
     log("Generating translation", text, status="")
 
-    if to_lang == "en":
-        model = f"Helsinki-NLP/opus-mt-mul-{to_lang}"
+    if lang == "en":
+        model = f"Helsinki-NLP/opus-mt-mul-{lang}"
     else:
-        model = f"Helsinki-NLP/opus-mt-{from_lang}-{to_lang}"
+        model = f"Helsinki-NLP/opus-mt-{from_lang_code}-{lang}"
     pipe = pipeline("translation", model=model)
     translation = pipe(input_text)
     translated_text = translation[0]['translation_text']
