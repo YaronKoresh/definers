@@ -8793,9 +8793,9 @@ def enhance_audio(audio_path, format_choice="mp3"):
     return normalize_audio_to_peak( audio_limiter(
         riaa_filter(
             master( autotune_song(audio_path), "wav"),
-            mix_factor=0.5
+            mix_factor=1.0
         ),
-        db_boost=3.0,
+        db_boost=5.0,
         db_limit=0.0
     ), format="mp3")
 
