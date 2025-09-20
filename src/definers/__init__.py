@@ -6395,35 +6395,36 @@ def SklearnWrapper(sklearn_model, is_classification=False):
     return _SklearnWrapper(sklearn_model, is_classification)
 
 
-def init_chat(title="Chatbot", fnc=answer):
+def get_chat_response(message, history: list):
+    history_for_model = list(history)
+    orig_lang_code = "en"
+    for file_path in message["files"]:
+        history_for_model.append({"role": "user", "content": {"path": file_path}})
+    if message["text"]:
+        txt = message["text"]
+        orig_lang_code = language(txt)
+        if orig_lang_code != "en":
+            txt = ai_translate(txt)
+        txt = summary(txt)
+        history_for_model.append({"role": "user", "content": txt})
+    
+    response_text = answer(history_for_model)
+    response_text = summary(response_text)
+        
+    if orig_lang_code != "en":
+        response_text = ai_translate(response_text, orig_lang_code)
+            
+    history_for_model.append({"role": "assistant", "content": response_text})
+    
+    return history_for_model
+
+
+def init_chat(title="Chatbot", handler=get_chat_response):
     import gradio as gr
 
     chatbot = gr.Chatbot(
         elem_id="chatbot", type="messages", show_copy_button=True, rtl=True
     )
-
-    def _get_chat_response(message, history: list):
-        history_for_model = list(history)
-        orig_lang_code = "en"
-        for file_path in message["files"]:
-            history_for_model.append({"role": "user", "content": {"path": file_path}})
-        if message["text"]:
-            txt = message["text"]
-            orig_lang_code = language(txt)
-            if orig_lang_code != "en":
-                txt = ai_translate(txt)
-            txt = summary(txt)
-            history_for_model.append({"role": "user", "content": txt})
-    
-        response_text = fnc(history_for_model)
-        response_text = summary(response_text)
-        
-        if orig_lang_code != "en":
-            response_text = ai_translate(response_text, orig_lang_code)
-            
-        history_for_model.append({"role": "assistant", "content": response_text})
-    
-        return history_for_model
 
     return gr.ChatInterface(
         fn=_get_chat_response,
