@@ -4533,6 +4533,7 @@ def extract_text(url, selector):
 
 
 def ai_translate(text, lang="en"):
+    from transformers import pipeline
 
     if text == None or lang == None:
         return ""
@@ -4548,27 +4549,19 @@ def ai_translate(text, lang="en"):
     from_lang = language_codes[language(text)]
     from_lang = from_lang[0].upper() + from_lang[1:]
 
+    text = simple_text(text)
+
     if from_lang == to_lang:
-        return simple_text(text)
+        return text
 
-    text = f"translate {from_lang} to {to_lang}: {simple_text(text)}"
+    log("Generating translation", text, status="")
 
-    log("Exec T5 translation", text, status="")
+    model = f"Helsinki-NLP/opus-mt-{from_lang}-{to_lang}"
+    pipe = pipeline("translation", model=model)
+    translation = pipe(input_text)
+    translated_text = translation[0]['translation_text']
 
-    TOKENIZERS["summary"].src_lang = from_lang
-
-    encoded = TOKENIZERS["summary"](text, return_tensors="pt")
-    encoded = {
-        key: tensor.to(device()) for key, tensor in encoded.items()
-    }
-
-    generated_tokens = MODELS["summary"].generate(**encoded)
-
-    translated_text = TOKENIZERS["summary"].batch_decode(
-        generated_tokens, skip_special_tokens=True
-    )[0]
-
-    log("T5 translated text", translated_text, status="")
+    log("Translated text", translated_text, status="")
 
     return simple_text(translated_text)
 
