@@ -413,8 +413,6 @@ MODELS = {
 
 TOKENIZERS = {
     "summary": None,
-    "translate-to-en": None,
-    "translate-from-en": None,
 }
 
 PROCESSORS = {
@@ -4571,20 +4569,12 @@ def ai_translate(text, lang="en"):
     log("Generating translation", text, status="")
 
     if lang == "en":
-        inputs = TOKENIZERS["translate-to-en"]([text], return_tensors="pt").to(device())
-        translated_tokens = MODELS["translate-to-en"].generate(**inputs)
-        translated_text = TOKENIZERS["translate-to-en"].batch_decode(translated_tokens, skip_special_tokens=True)[0]
+        translated_text = MODELS["translate-to-en"](text, src_lang=from_lang_code)[0]['translation_text']
     elif from_lang_code == "en":
-        inputs = TOKENIZERS["translate-from-en"]([text], return_tensors="pt").to(device())
-        translated_tokens = MODELS["translate-from-en"].generate(**inputs)
-        translated_text = TOKENIZERS["translate-from-en"].batch_decode(translated_tokens, skip_special_tokens=True)[0]
+        translated_text = MODELS["translate-from-en"](text, tgt_lang=from_lang_code)[0]['translation_text']
     else:
-        inputs = TOKENIZERS["translate-to-en"]([text], return_tensors="pt").to(device())
-        translated_tokens = MODELS["translate-to-en"].generate(**inputs)
-        translated_text = TOKENIZERS["translate-to-en"].batch_decode(translated_tokens, skip_special_tokens=True)[0]
-        inputs = TOKENIZERS["translate-from-en"]([translated_text], return_tensors="pt").to(device())
-        translated_tokens = MODELS["translate-from-en"].generate(**inputs)
-        translated_text = TOKENIZERS["translate-from-en"].batch_decode(translated_tokens, skip_special_tokens=True)[0]
+        translated_text = MODELS["translate-to-en"](text, src_lang=from_lang_code)[0]['translation_text']
+        translated_text = MODELS["translate-from-en"](translated_text, tgt_lang=from_lang_code)[0]['translation_text']
 
     log("Translated text", translated_text, status="")
 
@@ -5143,11 +5133,12 @@ def init_pretrained_model(task: str, turbo: bool = False):
         )
 
     elif task in ["translate-to-en", "translate-from-en"]:
-        from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+        from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, pipeline
 
         model_name = tasks[task]
-        TOKENIZERS[task] = AutoTokenizer.from_pretrained(model_name)
-        model = AutoModelForSeq2SeqLM.from_pretrained(model_name).to(device())
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        _model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
+        model = pipeline("translation", tokenizer=tokenizer, model=_model).to(device())
 
     elif task in ["translation"]:
         init_pretrained_model("translate-to-en", turbo)
