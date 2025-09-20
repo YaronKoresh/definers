@@ -389,7 +389,8 @@ tasks = {
     "detect": "facebook/detr-resnet-50",
     "answer": "microsoft/Phi-4-multimodal-instruct",
     "summary": "google-t5/t5-11b",
-    "translation": "Helsinki-NLP/opus-mt-mul-en",
+    "translate-to-en": "Helsinki-NLP/opus-mt-mul-en",
+    "translate-from-en": "Helsinki-NLP/opus-mt-en-mul",
     "music": "facebook/musicgen-small",
     "speech-recognition": "openai/whisper-large-v3",
     "audio-classification": "MIT/ast-finetuned-audioset-10-10-0.4593",
@@ -405,13 +406,15 @@ MODELS = {
     "music": None,
     "speech-recognition": None,
     "audio-classification": None,
-    "translation": None,
+    "translate-to-en": None,
+    "translate-from-en": None,
     "tts": None,
 }
 
 TOKENIZERS = {
     "summary": None,
-    "translation": None,
+    "translate-to-en": None,
+    "translate-from-en": None,
 }
 
 PROCESSORS = {
@@ -4558,21 +4561,30 @@ def ai_translate(text, lang="en"):
     if from_lang == to_lang:
         return text
 
+    TOKENIZERS["translate-to-en"]["source_lang"] = from_lang_code
+    TOKENIZERS["translate-from-en"]["target_lang"] = lang
+
     log("Generating translation", text, status="")
 
     if lang == "en":
-        inputs = TOKENIZERS["translation"](text, return_tensors="pt").to(device())
-        translated_tokens = MODELS["translation"].generate(**inputs)
-        translated_text = TOKENIZERS["translation"].batch_decode(translated_tokens, skip_special_tokens=True)[0]
+        inputs = TOKENIZERS["translate-to-en"]([text], return_tensors="pt").to(device())
+        translated_tokens = MODELS["translate-to-en"].generate(**inputs)
+        translated_text = TOKENIZERS["translate-to-en"].batch_decode(translated_tokens, skip_special_tokens=True)[0]
+    elif from_lang_code == "en":
+        inputs = TOKENIZERS["translate-from-en"]([text], return_tensors="pt").to(device())
+        translated_tokens = MODELS["translate-from-en"].generate(**inputs)
+        translated_text = TOKENIZERS["translate-from-en"].batch_decode(translated_tokens, skip_special_tokens=True)[0]
     else:
-        model = f"Helsinki-NLP/opus-mt-{from_lang_code}-{lang}"
-        pipe = pipeline("translation", model=model)
-        translation = pipe(input_text)
-        translated_text = translation[0]['translation_text']
+        inputs = TOKENIZERS["translate-to-en"]([text], return_tensors="pt").to(device())
+        translated_tokens = MODELS["translate-to-en"].generate(**inputs)
+        translated_text = TOKENIZERS["translate-to-en"].batch_decode(translated_tokens, skip_special_tokens=True)[0]
+        inputs = TOKENIZERS["translate-from-en"]([translated_text], return_tensors="pt").to(device())
+        translated_tokens = MODELS["translate-from-en"].generate(**inputs)
+        translated_text = TOKENIZERS["translate-from-en"].batch_decode(translated_tokens, skip_special_tokens=True)[0]
 
     log("Translated text", translated_text, status="")
 
-    return simple_text(translated_text)
+    return translated_text
 
 
 def google_translate(text, lang="en"):
@@ -5126,12 +5138,17 @@ def init_pretrained_model(task: str, turbo: bool = False):
             device=device(),
         )
 
-    elif task in ["translation"]:
-        from transformers import MarianMTModel, MarianTokenizer
+    elif task in ["translate-to-en", "translate-from-en"]:
+        from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
-        model_name = tasks["translation"]
-        TOKENIZERS[task] = MarianTokenizer.from_pretrained(model_name)
-        model = MarianMTModel.from_pretrained(model_name).to(device())
+        model_name = tasks[task]
+        TOKENIZERS[task] = AutoTokenizer.from_pretrained(model_name)
+        model = AutoModelForSeq2SeqLM.from_pretrained(model_name).to(device())
+
+    elif task in ["translation"]:
+        init_pretrained_model("translate-to-en", turbo)
+        init_pretrained_model("translate-from-en", turbo)
+        return
 
     elif task in ["audio-classification"]:
 
@@ -6419,6 +6436,8 @@ def get_chat_response(message, history: list):
     
     response_text = answer(history_for_model)
     response_text = summary(response_text)
+    if orig_lang_code != "en":
+        response_text = ai_translate(response_text, orig_lang_code)
         
     history_for_model.append({"role": "assistant", "content": response_text})
     
