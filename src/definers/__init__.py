@@ -5137,8 +5137,8 @@ def init_pretrained_model(task: str, turbo: bool = False):
 
         model_name = tasks[task]
         tokenizer = AutoTokenizer.from_pretrained(model_name)
-        _model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
-        model = pipeline("translation", tokenizer=tokenizer, model=_model).to(device())
+        _model = AutoModelForSeq2SeqLM.from_pretrained(model_name).to(device())
+        model = pipeline("translation", tokenizer=tokenizer, model=_model)
 
     elif task in ["translation"]:
         init_pretrained_model("translate-to-en", turbo)
