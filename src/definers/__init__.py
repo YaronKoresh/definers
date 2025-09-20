@@ -3451,12 +3451,16 @@ def simple_text(prompt):
     punc = r'["\'!#$%&()*+,/:;<=>?@\[\\\]^_`\{\|\}~]'
 
     prompt = re.sub("[\t]", " ", prompt)
+
+    prompt = re.sub("(\n){1,}", " ", prompt)
+    prompt = re.sub("( ){2,}", " ", prompt)
+
     prompt = re.sub(
-        "[\. \n]+\.[\.\n]*|[\. \n]*\.[\.\n]+", ".", prompt
+        "[\. ]+\.[\.]*|[\. ]*\.[\.]+", ".", prompt
     )
     prompt = re.sub("(-){2,}", "-", prompt)
     prompt = prompt.replace("|", " or ")
-    prompt = re.sub("[ !]*\?[ !?]*", " I wonder ", prompt)
+    prompt = re.sub("([ !]){1,}\?([ !?]){1,}", " I wonder ", prompt)
 
     prompt = re.sub("(?<=[a-zA-Z0-9])\/(?=[a-zA-Z0-9])", " ", prompt)
 
