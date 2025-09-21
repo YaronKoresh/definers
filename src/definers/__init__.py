@@ -5107,7 +5107,7 @@ def init_model_repo(task: str, turbo: bool = False):
         from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, pipeline
 
         model_name = tasks[task]
-        tokenizer = AutoTokenizer.from_pretrained(model_name).to(device())
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
         _model = AutoModelForSeq2SeqLM.from_pretrained(
             model_name,
             torch_dtype=dtype(),
