@@ -10,6 +10,7 @@ import getpass
 import hashlib
 import importlib
 import io
+import inspect
 import json
 import logging
 import math
@@ -36,7 +37,7 @@ import traceback
 import urllib.request
 import warnings
 import zipfile
-from collections import namedtuple
+from collections import namedtuple, OrderedDict, Counter
 from concurrent.futures import ProcessPoolExecutor
 from contextlib import contextmanager
 from ctypes.util import find_library
@@ -385,13 +386,14 @@ SYSTEM_MESSAGE = "You are a helpful and concise AI assistant. Provide accurate a
 
 tasks = {
     "video": "tencent/HunyuanVideo",
-    "image": "black-forest-labs/FLUX.1-dev",
+    "image": "tencent/SRPO",
     "detect": "facebook/detr-resnet-50",
     "answer": "microsoft/Phi-4-multimodal-instruct",
     "summary": "google-t5/t5-11b",
     "translate-to-en": "Helsinki-NLP/opus-mt-mul-en",
     "translate-from-en": "Helsinki-NLP/opus-mt-en-mul",
     "music": "facebook/musicgen-small",
+    "song": "https://huggingface.co/tencent/SongGeneration/resolve/main/ckpt/songgeneration_base/model.pt",
     "speech-recognition": "openai/whisper-large-v3",
     "audio-classification": "MIT/ast-finetuned-audioset-10-10-0.4593",
 }
@@ -404,6 +406,7 @@ MODELS = {
     "answer": None,
     "summary": None,
     "music": None,
+    "song": None,
     "speech-recognition": None,
     "audio-classification": None,
     "translate-to-en": None,
@@ -1189,23 +1192,23 @@ def tokenize_and_pad(rows, tokenizer=None):
     for row in rows:
         if isinstance(
             row, dict
-        ):  # Check if it's a dictionary (important!)
+        ):
             features_strings = []
             for key, value in row.items():
                 if isinstance(value, (list, np.ndarray)):
                     features_strings.extend(
                         map(str, value)
-                    )  # Convert list or numpy array elements to string
+                    )
                 elif (
                     value is not None
-                ):  # Corrected condition: if value is not None
+                ):
                     features_strings.append(
                         str(value)
-                    )  # Convert other values to string
+                    )
             features_list.append(
                 " ".join(features_strings)
-            )  # Join the string values to one string for each row
-        elif isinstance(row, str):  # Handle if it is a string
+            )
+        elif isinstance(row, str):
             features_list.append(row)
         else:
             return rows
@@ -1219,48 +1222,94 @@ def tokenize_and_pad(rows, tokenizer=None):
     return two_dim_numpy(tokenized_inputs["input_ids"])
 
 
-def init_tokenizer(mod="google-bert/bert-base-multilingual-cased"):
+def init_tokenizer(tok):
     from transformers import AutoTokenizer
 
-    return AutoTokenizer.from_pretrained(mod)
+    return AutoTokenizer.from_pretrained(tok)
 
 
-def init_custom_model(model_path):
+def init_model_file(task:str, turbo:bool=False, model_type:str=None):
     import pickle
+    import onnxruntime
+    import torch
+    import joblib
+    from safetensors.torch import load_file
 
-    import onnx
+    free()
 
-    model_type = get_ext(model_path)
+    global MODELS
+
+    model_path = task
+    if task in tasks:
+        model_path = tasks[task]
+
+    if not model_type:
+        model_type = get_ext(model_path)
+    model_type = model_type.lower()
+
+    if model_path.startswith("https://") or model_path.startswith("https://"):
+        temp_model_path = tmp(model_type, keep=False)
+        model_path = download_file( model_path, temp_model_path)
 
     try:
         model = None
 
-        if model_type.lower() not in ["onnx", "pkl"]:
-            print('Model type must be one of ["onnx", "pkl"]')
+        supported_types = ["onnx", "pkl", "pt", "pth", "safetensors", "joblib"]
+
+        if model_type not in supported_types:
+            print(f'Error: Model type "{model_type}" is not supported. Must be one of {supported_types}')
             return None
 
-        if model_path and model_type.lower() == "onnx":
-            try:
-                with open(model_path, "rb") as f:
-                    model = onnx.load(f)
-            except Exception as e_onnx_load:
-                print(f"Error loading ONNX model: {e_onnx_load}")
-                return None
-        elif model_path and model_type.lower() == "pkl":
-            try:
-                with open(model_path, "rb") as f:
-                    model = pickle.load(f)
-            except Exception as e_pkl_load:
-                print(f"Error loading Pickle model: {e_pkl_load}")
-                return None
-        else:
-            model = None
+        print(f"Attempting to load a {model_type.upper()} model from: {model_path}")
 
-        return model
+        if model_type == "joblib":
+            model = joblib.load(model_path)
+        elif model_type == "onnx":
+            model = onnxruntime.InferenceSession(model_path)
+        elif model_type == "pkl":
+            with open(model_path, "rb") as f:
+                model = pickle.load(f)
+        elif model_type in ["pt", "pth", "safetensors"]:
+            if model_type in ["pt", "pth"]:
+                model = torch.load(model_path, map_location=device())
+            else:
+                model = load_file(model_path, map_location=device())
 
-    except:
-        catch("Error initializing model")
+            if hasattr(model, 'eval'):
+                model.eval()
+                print("Model set to evaluation mode.")
+
+
+        if not turbo:
+            optimizations = [
+                'enable_vae_slicing',
+                'enable_vae_tiling',
+                'enable_model_cpu_offload',
+                'enable_sequential_cpu_offload',
+                'enable_attention_slicing'
+            ]
+            for opt in optimizations:
+                try:
+                    if opt == 'enable_attention_slicing':
+                        getattr(model, opt)(1)
+                    else:
+                        getattr(model, opt)()
+                except AttributeError:
+                    pass
+                except Exception as e:
+                    print(f"Could not apply optimization {opt}: {e}")
+
+        print("✅ Model loaded successfully.")
+        MODELS[task] = model
+
+    except FileNotFoundError:
+        print(f"Error: The file was not found at '{model_path}'")
         return None
+    except Exception as e:
+        print(f"An unexpected error occurred while loading the model: {e}")
+        return None
+    finally:
+        free()
 
 
 def files_to_dataset(features_paths: list, labels_paths: list = None):
@@ -2523,94 +2572,6 @@ def features_to_text(
         return None
 
 
-def predict(prediction_file: str, model_path: str):
-
-    import imageio as iio
-    import joblib
-    from scipy.io import wavfile
-
-    vec = None
-    input_data = None
-
-    mod = joblib.load(model_path)
-    print(f"cuML model loaded from {model_path}")
-    if mod == None:
-        logging.error(f"Could not load model from {model_path}")
-        return None
-
-    if prediction_file.split(".")[-1].strip().lower() == "txt":
-        txt = read(prediction_file)
-        if isinstance(txt, tuple) or isinstance(txt, list):
-            txt = "".join(txt)
-        vec = create_vectorizer([txt])
-        input_data = numpy_to_cupy(extract_text_features(txt, vec))
-    elif (
-        prediction_file.split(".")[-1].strip().lower()
-        in common_audio_formats
-    ):
-        out = predict_audio(mod, prediction_file)
-        print(f"Prediction saved to {out}")
-        return out
-    else:
-        input_data = numpy_to_cupy(load_as_numpy(prediction_file))
-
-    if input_data == None:
-        log(
-            "Could not load input data", prediction_file, status=False
-        )
-        return None
-
-    input_data = one_dim_numpy(input_data)
-    pred = mod.predict(input_data)
-
-    if pred == None:
-        logging.error("Model prediction failed.")
-        return None
-
-    if is_clusters_model(mod):
-        pred = one_dim_numpy(get_cluster_content(mod, int(pred[0])))
-
-    pred_type = guess_numpy_type(pred)
-    output_filename = f"{random_string()}.{get_prediction_file_extension(pred_type)}"
-
-    if vec != None:
-        pred = features_to_text(cupy_to_numpy(pred))
-    elif pred_type == "text":
-        vec = create_vectorizer([""])
-        pred = features_to_text(cupy_to_numpy(pred))
-    elif pred_type == "audio":
-        pred = features_to_audio(cupy_to_numpy(pred))
-    elif pred_type == "image":
-        pred = features_to_image(cupy_to_numpy(pred))
-    elif pred_type == "video":
-        pred = features_to_video(cupy_to_numpy(pred))
-
-    handlers = {
-        "video": lambda: write_video(pred, 24),
-        "image": lambda: iio.imwrite(
-            output_filename,
-            (cupy_to_numpy(pred) * 255).astype(np.uint8),
-        ),
-        "audio": lambda: wavfile.write(
-            output_filename, 32000, cupy_to_numpy(pred)
-        ),
-        "text": lambda: open(output_filename, "w").write(pred),
-    }
-
-    if pred_type in handlers:
-        try:
-            handlers[pred_type]()
-        except Exception as e:
-            catch(e)
-            return None
-    else:
-        logging.error(f"Unsupported prediction type: {pred_type}")
-        return None
-
-    print(f"Prediction saved to {output_filename}")
-    return output_filename
-
-
 def lang_code_to_name(code):
     return language_codes[code]
 
@@ -3580,9 +3541,10 @@ def find_package_paths(package_name):
 def tmp(suffix: str = ".data", keep: bool = True, dir=False):
     if dir:
         with tempfile.TemporaryDirectory() as temp:
-            if not keep:
-                delete(temp)
-            return temp
+            temp_name = temp
+        if not keep:
+            delete(temp_name)
+        return temp_name
     if not suffix.startswith("."):
         if len(suffix.split(".")) > 1:
             suffix = suffix.split(".")
@@ -3593,9 +3555,10 @@ def tmp(suffix: str = ".data", keep: bool = True, dir=False):
     with tempfile.NamedTemporaryFile(
         suffix=suffix, delete=False
     ) as temp:
-        if not keep:
-            delete(temp.name)
-        return temp.name
+        temp_name = temp.name
+    if not keep:
+        delete(temp_name)
+    return temp_name
 
 
 def get_process_pid(process_name):
@@ -4563,9 +4526,6 @@ def ai_translate(text, lang="en"):
     if from_lang == to_lang:
         return text
 
-    TOKENIZERS["translate-to-en"]["source_lang"] = from_lang_code
-    TOKENIZERS["translate-from-en"]["target_lang"] = lang
-
     log("Generating translation", text, status="")
 
     if lang == "en":
@@ -5092,21 +5052,31 @@ def git(
     delete(clone_dir)
 
 
-def init_pretrained_model(task: str, turbo: bool = False):
 
-    free()
+    return init_pretrained_model(task, turbo)
+
+
+def init_model_repo(task: str, turbo: bool = False):
+    import torch
 
     global MODELS
     global TOKENIZERS
 
-    if task in MODELS and MODELS[task]:
-        return
-
-    import torch
+    free()
 
     model = None
 
-    if task in ["tts"]:
+    if task not in tasks:
+
+        from transformers import AutoModel
+
+        model = AutoModel.from_pretrained(
+            task,
+            torch_dtype=dtype(),
+            trust_remote_code=True,
+        ).to(device())
+
+    elif task in ["tts"]:
 
         from chatterbox.tts import ChatterboxTTS
 
@@ -5384,9 +5354,9 @@ py-modules = {py_modules}
 
     elif task in ["image"]:
 
-        from diffusers import FluxKontextPipeline
+        from diffusers import DiffusionPipeline
 
-        model = FluxKontextPipeline.from_pretrained(
+        model = DiffusionPipeline.from_pretrained(
             tasks[task], torch_dtype=dtype()
         ).to(device())
 
@@ -5419,6 +5389,22 @@ py-modules = {py_modules}
     MODELS[task] = model
 
     free()
+
+
+def is_huggingface_repo(repo_id: str) -> bool:
+    if not isinstance(repo_id, str) or not repo_id:
+        return False
+    repo_id = repo_id.strip()
+    pattern = re.compile(r"^[a-zA-Z0-9.\-_]+/[a-zA-Z0-9.\-_]+$")
+    return bool(pattern.fullmatch(repo_id))
+
+
+def init_pretrained_model(task: str, turbo: bool = False):
+    if task in MODELS and MODELS[task]:
+        return
+    if task in tasks and is_huggingface_repo(tasks[task]) or is_huggingface_repo(task):
+        return init_model_repo(task, turbo)
+    return init_model_file(task, turbo)
 
 
 def choose_random_words(word_list, num_words=10):
@@ -5490,7 +5476,7 @@ def pipe(
         else:
             params2["negative_prompt"] = _negative_prompt_
             params2["max_sequence_length"] = 512
-        params2["num_inference_steps"] = 200
+        params2["num_inference_steps"] = 100
         params2["generator"] = torch.Generator(device()).manual_seed(
             random.randint(0, big_number())
         )
@@ -5522,13 +5508,6 @@ def pipe(
             export_to_video(sample, path, fps=24)
             return path
         else:
-            # import imageio as iio
-            # if isinstance(sample[0], np.ndarray):
-            #    sample = (sample[0] * 255).astype(np.uint8)
-            # else:
-            #     sample = np.array(sample[0])
-            # path = tmp("png")
-            # iio.imwrite(path, sample)
             sample = outputs.images[0]
             return save_image(sample)
     elif task == "answer":
@@ -6471,10 +6450,10 @@ def download_file(url, destination):
             for chunk in response.iter_content(chunk_size=8192):
                 f.write(chunk)
         print("Download successful.")
-        return True
+        return destination
     except Exception as e:
         print(f"Error downloading file: {e}")
-        return False
+        return None
 
 
 def download_and_unzip(url, extract_to):
@@ -8707,7 +8686,7 @@ def calculate_active_rms(y, sr):
 
 
 def get_ext(input_path):
-    return str(Path(str(input_path)).suffix).strip(".")
+    return str(Path(str(input_path)).suffix).strip(".").lower()
 
 
 def is_ai_model(input_path):
@@ -9106,4 +9085,307 @@ def riaa_filter(input_filename, bass_factor=1.0):
     wavfile.write(output_filename, sample_rate, processed_audio_int16)
     print(f"Successfully applied custom RIAA EQ and saved to '{output_filename}'.")
 
+    return output_filename
+
+
+def get_model_instructions(task: str, model_type: str) -> str:
+    import torch
+    import torch.nn as nn
+
+    try:
+        from sklearn.pipeline import Pipeline
+        from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
+        SKLEARN_AVAILABLE = True
+    except ImportError:
+        SKLEARN_AVAILABLE = False
+
+    try:
+        import onnxruntime
+        ONNX_AVAILABLE = True
+    except ImportError:
+        ONNX_AVAILABLE = False
+    profile = {
+        "framework": "Unknown", "modalities": set(), "architecture": {"type": "Unknown", "details": []},
+        "inputs": [], "outputs": [], "example_code": "", "notes": []
+    }
+
+    def _analyze_architecture_pytorch(model_obj):
+        if not isinstance(model_obj, nn.Module): return
+        layer_counts = Counter(layer.__class__.__name__ for layer in model_obj.modules())
+        if layer_counts['TransformerEncoderLayer'] > 0 or layer_counts['MultiheadAttention'] > 0:
+            profile['architecture']['type'] = "Transformer-based"
+            if layer_counts['Conv2d'] > 2:
+                 profile['architecture']['details'].append(f"{layer_counts['TransformerEncoderLayer']} Transformer Blocks indicate a Vision Transformer (ViT) or hybrid architecture.")
+            else:
+                 profile['architecture']['details'].append(f"{layer_counts['MultiheadAttention']} Attention Layers and {layer_counts['Embedding']} Embedding Layers form the core of this NLP/sequence model.")
+        elif layer_counts['Conv2d'] > 4:
+            profile['architecture']['type'] = "Convolutional Neural Network (CNN)"
+            profile['architecture']['details'].extend([f"{layer_counts['Conv2d']} Conv2d layers", f"{layer_counts['MaxPool2d']} Max-Pooling layers", f"{layer_counts['Linear']} Fully-Connected layers"])
+        elif layer_counts['Linear'] > 0:
+            profile['architecture']['type'] = "Multi-Layer Perceptron (MLP)"
+            profile['architecture']['details'].append(f"{layer_counts['Linear']} Linear layers")
+
+    def _probe_model_pytorch(model_obj):
+        if not isinstance(model_obj, nn.Module): return
+        try:
+            sig = inspect.signature(model_obj.forward)
+            dummy_inputs_kwargs = {}
+            for param in sig.parameters.values():
+                arg_name = param.name
+                if arg_name in ['self', 'args', 'kwargs']: continue
+                
+                input_spec = next((item for item in profile['inputs'] if item["name"] == arg_name), None)
+                if not input_spec: continue
+                
+                shape = tuple(d if isinstance(d, int) else 2 for d in input_spec['shape'])
+                dtype_str = input_spec['dtype']
+                
+                if 'float' in dtype_str:
+                    dummy_inputs_kwargs[arg_name] = torch.randn(shape, dtype=getattr(torch, dtype_str))
+                elif 'long' in dtype_str or 'int' in dtype_str:
+                    vocab_size = next((l.num_embeddings for l in model_obj.modules() if isinstance(l, nn.Embedding)), 2000)
+                    dummy_inputs_kwargs[arg_name] = torch.randint(0, vocab_size, shape, dtype=torch.long)
+            
+            if not dummy_inputs_kwargs:
+                profile['notes'].append("Dynamic probe skipped: could not determine input arguments for `forward` method.")
+                return
+
+            model_obj.eval()
+            with torch.no_grad():
+                output = model_obj(**dummy_inputs_kwargs)
+
+            output_tensors = [output] if isinstance(output, torch.Tensor) else output if isinstance(output, (list, tuple)) else []
+            for i, out_tensor in enumerate(output_tensors):
+                if isinstance(out_tensor, torch.Tensor):
+                    profile['outputs'].append({"name": f"output_{i}", "shape": tuple(out_tensor.shape), "dtype": str(out_tensor.dtype).replace('torch.', '')})
+            profile['notes'].append("Dynamic probe SUCCESS: Input/Output specifications confirmed.")
+        except Exception as e:
+            profile['notes'].append(f"Dynamic probe FAILED: Model `forward` pass raised an error, which may indicate complex input requirements not automatically detectable. Error: {e}")
+
+    def _generate_report():
+        modalities_str = ", ".join(sorted([m.capitalize() for m in profile['modalities']])) if profile['modalities'] else "Undetermined"
+        report = f"## 🔬 Model Deep Dive Analysis: `{task}`\n\n"
+        report += f"**Framework**: `{profile['framework']}`\n"
+        report += f"**Detected Modality**: `{modalities_str}`\n"
+        report += f"**Detected Architecture**: `{profile['architecture']['type']}`\n"
+        if profile['architecture']['details']:
+            details = "\n".join([f"- {d}" for d in profile['architecture']['details']])
+            report += f"**Architectural Details**:\n{details}\n"
+        report += "\n---\n### 📥 Input & 📤 Output Specification\n"
+
+        if not profile['inputs']: report += "**Inputs**: Could not be determined automatically.\n"
+        for i, inp in enumerate(profile['inputs']):
+            report += f"- **INPUT `{i}` (`{inp.get('name', 'N/A')}`)**: Shape=`{inp['shape']}`, DType=`{inp['dtype']}`\n"
+
+        if not profile['outputs']: report += "**Outputs**: Not confirmed. Dynamic probe did not run or failed.\n"
+        for i, out in enumerate(profile['outputs']):
+            report += f"- **OUTPUT `{i}` (`{out.get('name', 'N/A')}`)**: Shape=`{out['shape']}`, DType=`{out['dtype']}` (Confirmed by probe)\n"
+
+        report += "\n---\n### ⚙️ Preprocessing & Usage Guide\n"
+        
+        example_imports, prep_steps, example_body = "", "", ""
+        if profile['framework'] == 'PyTorch':
+            example_imports = "import torch\n"
+            example_body = f"model = YourModelClass() # Instantiate your defined model architecture\nmodel.load_state_dict(torch.load('path/to/{task}.pt'))\nmodel.eval()\n\ndummy_inputs = {{}}\n"
+            
+            for inp in profile['inputs']:
+                shape, dtype, name = inp['shape'], inp['dtype'], inp['name']
+                if 'image' in name or 'pixel' in name:
+                    C, H, W = shape[1], shape[2], shape[3]
+                    prep_steps += f"**For Input `{name}` (Image)**:\n1. Load image (e.g., with Pillow).\n2. Resize to `{H}x{W}`.\n3. Convert to a tensor and normalize (e.g., ImageNet stats).\n4. Ensure shape is `(1, {C}, {H}, {W})`.\n"
+                    example_imports += "from PIL import Image\nimport torchvision.transforms as T\n"
+                    example_body += f"image = Image.open('path/to/image.jpg')\n"
+                    example_body += f"preprocess = T.Compose([T.Resize(({H}, {W})), T.ToTensor(), T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])\n"
+                    example_body += f"dummy_inputs['{name}'] = preprocess(image).unsqueeze(0)\n"
+                elif 'text' in name or 'ids' in name:
+                    prep_steps += f"**For Input `{name}` (Text)**:\n1. Use the specific tokenizer the model was trained with.\n2. Convert text to token IDs.\n3. Format as a `{dtype}` tensor with shape `{shape}`.\n"
+                    example_body += f"# Use the model's specific tokenizer\ndummy_inputs['{name}'] = torch.randint(0, 1000, {shape}, dtype=torch.long)\n"
+            
+            example_body += f"\nwith torch.no_grad():\n    output = model(**dummy_inputs)\n    print(f'Output: {{output}}')\n"
+            profile['example_code'] = f"```python\n{example_imports}\n# 1. Define or import your model class (YourModelClass)\n\n# 2. Load model and prepare inputs\n{example_body}```"
+
+        elif profile['framework'] == 'scikit-learn':
+            prep_steps += "1. Ensure your input data is in the correct format (NumPy array, Pandas DataFrame, or raw text for pipelines).\n2. Apply the exact same feature engineering and preprocessing steps used during training.\n"
+            example_body = f"import joblib\nmodel = joblib.load('path/to/{task}.pkl')\n"
+            if "TfidfVectorizer" in profile['architecture']['details']:
+                example_body += "input_data = ['your first sentence', 'your second sentence']\n"
+            else:
+                n_features = profile['inputs'][0]['shape'][1]
+                example_body += f"import numpy as np\n# Input must be a 2D array with shape (n_samples, {n_features})\ninput_data = np.random.rand(2, {n_features})\n"
+            example_body += "predictions = model.predict(input_data)\nprint(predictions)"
+            profile['example_code'] = f"```python\n{example_body}\n```"
+
+        report += prep_steps + "\n#### Example Usage Snippet\n" + profile['example_code']
+        if profile['notes']:
+            report += "\n---\n### 🕵️ Analyst Notes\n" + "\n".join([f"- {n}" for n in profile['notes']])
+        return report
+
+    model_object = MODELS.get(task)
+    if model_object is None:
+        log(f"Analysis Failed for '{task}'", f"Model file `{task}` could not be found or loaded.", status=False)
+        return
+    
+    if isinstance(model_object, nn.Module) or isinstance(model_object, (dict, OrderedDict)):
+        profile['framework'] = 'PyTorch'
+        if isinstance(model_object, (dict, OrderedDict)):
+            profile['architecture']['type'] = 'Raw State Dictionary'
+            profile['notes'].append("Analysis is based on a state_dict, not a full model. Instantiate the model class before loading these weights.")
+            first_key, first_tensor = next(iter(model_object.items()))
+            in_features = first_tensor.shape[1] if len(first_tensor.shape) == 2 else 'N/A'
+            profile['inputs'].append({"name": "input_0", "shape": f"(batch_size, {in_features})", "dtype": str(first_tensor.dtype)})
+            profile['modalities'].add("Tabular" if in_features != 'N/A' else "Unknown")
+        else:
+            sig = inspect.signature(model_object.forward)
+            for param in sig.parameters.values():
+                if param.name in ['self', 'args', 'kwargs']: continue
+                name = param.name
+                if 'image' in name or 'pixel' in name:
+                    profile['modalities'].add("Image")
+                    profile['inputs'].append({"name": name, "shape": (1, 3, 32, 32), "dtype": "float32"})
+                elif 'text' in name or 'ids' in name:
+                    profile['modalities'].add("Text")
+                    profile['inputs'].append({"name": name, "shape": (1, 16), "dtype": "long"})
+                else: # Generic fallback
+                    profile['modalities'].add("Tabular")
+                    profile['inputs'].append({"name": name, "shape": (1, 64), "dtype": "float32"})
+            _analyze_architecture_pytorch(model_object)
+            _probe_model_pytorch(model_object)
+
+    elif SKLEARN_AVAILABLE and hasattr(model_object, 'predict'):
+        profile['framework'] = 'scikit-learn'
+        if isinstance(model_object, Pipeline):
+            profile['architecture']['type'] = 'Scikit-learn Pipeline'
+            steps = [f"{name} ({step.__class__.__name__})" for name, step in model_object.steps]
+            profile['architecture']['details'] = steps
+            if any("TfidfVectorizer" in s for s in steps):
+                profile['modalities'].add("Text")
+                profile['inputs'].append({"name": "raw_text", "shape": "(n_samples,)", "dtype": "string"})
+        else:
+            profile['architecture']['type'] = f"Standard Model ({model_object.__class__.__name__})"
+            profile['modalities'].add("Tabular")
+            n_features = getattr(model_object, 'n_features_in_', 'N/A')
+            profile['inputs'].append({"name": "X", "shape": f"(n_samples, {n_features})", "dtype": "float"})
+
+    elif ONNX_AVAILABLE and isinstance(model_object, MockOnnxModel):
+        profile['framework'] = 'ONNX'
+        profile['architecture']['type'] = 'ONNX Graph'
+        for inp in model_object.get_inputs():
+            profile['inputs'].append({"name": inp.name, "shape": inp.shape, "dtype": inp.type})
+            if len(inp.shape) == 4 and inp.shape[1] in [1, 3]: profile['modalities'].add("Image")
+        for out in model_object.get_outputs():
+            profile['outputs'].append({"name": out.name, "shape": out.shape, "dtype": out.type})
+
+    final_report = _generate_report()
+    log(f"Deep Dive Analysis for '{task}'", final_report)
+
+
+def generate_song(arg1, arg):
+    print("songs generation is not implemented yet...")
+
+
+def infer_model_file(task: str, inference_file: str, model_type: str = None):
+    import torch
+    import imageio as iio
+    from scipy.io import wavfile
+
+    vec = None
+    input_data = None
+
+    model_path = task
+    if task in tasks:
+        model_path = tasks[task]
+
+    if not model_type:
+        model_type = get_ext(model_path)
+    model_type = model_type.lower()
+
+    if not (task in MODELS and MODELS[task]):
+        init_model_file(task)
+
+    mod = MODELS[task]
+
+    if mod is None:
+        return None
+
+    file_ext = get_ext(inference_file)
+    if file_ext == "txt":
+        txt = read(inference_file)
+        if isinstance(txt, (tuple, list)):
+            txt = "".join(txt)
+        vec = create_vectorizer([txt])
+        input_data = numpy_to_cupy(extract_text_features(txt, vec))
+    elif file_ext in common_audio_formats:
+        out = predict_audio(mod, inference_file)
+        print(f"Prediction saved to {out}")
+        return out
+    else:
+        input_data = numpy_to_cupy(load_as_numpy(inference_file))
+
+    if input_data == None:
+        log(
+            "Could not load input data", inference_file, status=False
+        )
+        return None
+
+    pred = None
+    input_numpy = cupy_to_numpy(one_dim_numpy(input_data))
+
+    try:
+        if model_type in ["joblib", "pkl"]:
+            pred = mod.predict(input_numpy)
+        
+        elif model_type in ["pt", "pth", "safetensors"]:
+            input_tensor = torch.from_numpy(input_numpy).to(device())
+            with torch.no_grad():
+                output_tensor = mod(input_tensor)
+            pred = output_tensor.cpu().numpy()
+
+        elif model_type == "onnx":
+            input_name = mod.get_inputs()[0].name
+            onnx_output = mod.run(None, {input_name: input_numpy.astype(np.float32)})
+            pred = onnx_output[0]
+
+    except Exception as e:
+        logging.error(f"Model prediction failed for type '{model_type}': {e}")
+        return None
+
+    if pred is None:
+        logging.error("Model prediction returned None.")
+        return None
+
+    if is_clusters_model(mod):
+        pred = one_dim_numpy(get_cluster_content(mod, int(pred[0])))
+
+    pred_type = guess_numpy_type(pred)
+    output_filename = f"{random_string()}.{get_prediction_file_extension(pred_type)}"
+
+    if vec is not None:
+        pred = features_to_text(pred)
+    elif pred_type == "text":
+        pred = features_to_text(pred)
+    elif pred_type == "audio":
+        pred = features_to_audio(pred)
+    elif pred_type == "image":
+        pred = features_to_image(pred)
+    elif pred_type == "video":
+        pred = features_to_video(pred)
+
+    handlers = {
+        "video": lambda: write_video(pred, 24),
+        "image": lambda: iio.imwrite(output_filename, (pred * 255).astype(np.uint8)),
+        "audio": lambda: wavfile.write(output_filename, 32000, pred),
+        "text": lambda: open(output_filename, "w").write(pred),
+    }
+
+    if pred_type in handlers:
+        try:
+            handlers[pred_type]()
+        except Exception as e:
+            catch(e)
+            return None
+    else:
+        logging.error(f"Unsupported prediction type: {pred_type}")
+        return None
+
+    print(f"Prediction saved to {output_filename}")
     return output_filename
