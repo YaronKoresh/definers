@@ -4935,10 +4935,10 @@ def _summarize(text_to_summarize, is_chunk=False):
 
     gen_kwargs = {
         "max_length": 512,
-        "repetition_penalty": 1.2,
-        "length_penalty": 2.0 if is_chunk else 1.0,
+        "repetition_penalty": 2.0,
+        "length_penalty": 1.2,
         "no_repeat_ngram_size": 3,
-        "num_beams": 8,
+        "num_beams": 32,
         "early_stopping": True,
     }
 
