@@ -8989,7 +8989,7 @@ def enhance_audio(audio_path, format_choice="mp3"):
     return audio_limiter(
         riaa_filter(
             master( autotune_song(audio_path), "wav"),
-            bass_factor=0.2
+            bass_factor=0.5
         ),
         db_boost=8.0,
         db_limit=-1.0
@@ -9003,7 +9003,7 @@ def autotune_song(
     correct_timing=True,
     quantize_grid_strength=8,
     tolerance_cents=10,
-    attack_smoothing_ms=8,
+    attack_smoothing_ms=1,
 ):
     import librosa
     import madmom
@@ -9234,7 +9234,7 @@ def create_sample_audio(filename="sample_audio.wav", duration=5, sample_rate=441
 def riaa_filter(input_filename, bass_factor=1.0):
     import librosa
     from scipy.io import wavfile
-    from scipy.signal import bilinear, filtfilt, freqz, lfilter
+    from scipy.signal import bilinear, filtfilt, freqs, lfilter
 
     output_filename = tmp("wav")
     try:
@@ -9262,21 +9262,30 @@ def riaa_filter(input_filename, bass_factor=1.0):
     t3 = 75e-6
 
     print(f"Applying a custom RIAA de-emphasis with a bass factor of {bass_factor}...")
+
     t1_modified = (1 - bass_factor) * t2 + bass_factor * t1_original
     
     num_s = [t2, 1]
     den_s = [t1_modified * t3, t1_modified + t3, 1]
 
-    w1k = 2 * np.pi * 1000
-    _, h = freqz(num_s, den_s, worN=[w1k])
+    w1k = 2 * np.pi * 1000 
+    
+    _, h = freqs(num_s, den_s, worN=[w1k])
     gain_at_1k = np.abs(h[0])
+    
     num_s_normalized = [c / gain_at_1k for c in num_s]
 
     b_riaa, a_riaa = bilinear(num_s_normalized, den_s, fs=sample_rate)
 
-    processed_audio = filtfilt(b_riaa, a_riaa, audio_data)
+    if audio_data.ndim > 1:
+        processed_audio = np.array([lfilter(b_riaa, a_riaa, channel) for channel in audio_data])
+    else:
+        processed_audio = lfilter(b_riaa, a_riaa, audio_data)
 
-    processed_audio /= np.max(np.abs(processed_audio))
+    max_abs = np.max(np.abs(processed_audio))
+    if max_abs > 0:
+        processed_audio /= max_abs
+    
     processed_audio_int16 = np.int16((processed_audio * 32767).T)
 
     wavfile.write(output_filename, sample_rate, processed_audio_int16)
