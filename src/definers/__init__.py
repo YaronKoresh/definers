@@ -386,10 +386,8 @@ SYSTEM_MESSAGE = "You are a helpful and concise AI assistant. Provide accurate a
 
 tasks = {
     "video": "tencent/HunyuanVideo",
-    "image": {
-        "pipe": "black-forest-labs/FLUX.1-Kontext-dev",
-        "spro": "tencent/SRPO",
-    },
+    "image": "black-forest-labs/FLUX.1-Kontext-dev",
+    "image-spro": "tencent/SRPO",
     "detect": "facebook/detr-resnet-50",
     "answer": "microsoft/Phi-4-multimodal-instruct",
     "summary": "google-t5/t5-large",
@@ -5364,13 +5362,13 @@ py-modules = {py_modules}
         from huggingface_hub import hf_hub_download
 
         model = FluxKontextPipeline.from_pretrained(
-            tasks[task]["pipe"],
+            tasks[task],
             torch_dtype=dtype(),
             use_safetensors=True
         ).to(device())
 
         srpo_path = hf_hub_download(
-            repo_id=tasks[task]["spro"],
+            repo_id=tasks["image-spro"],
             filename="diffusion_pytorch_model.safetensors"
         )
         state_dict = load_file(srpo_path)
