@@ -5114,11 +5114,6 @@ def init_model_repo(task: str, turbo: bool = False):
         ).to(device())
         model = pipeline("translation", tokenizer=tokenizer, model=_model)
 
-    elif task in ["translation"]:
-        init_pretrained_model("translate-to-en", turbo)
-        init_pretrained_model("translate-from-en", turbo)
-        return
-
     elif task in ["audio-classification"]:
 
         from transformers import pipeline
