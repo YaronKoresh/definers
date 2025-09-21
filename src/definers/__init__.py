@@ -44,6 +44,7 @@ from ctypes.util import find_library
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
+from functools import lru_cache
 from glob import glob
 from pathlib import Path
 from string import ascii_letters, digits, punctuation
@@ -326,7 +327,7 @@ unesco_mapping = {
     "mk": "mkd_Cyrl",
     "mg": "plt_Latn",
     "mt": "mlt_Latn",
-    "mni-Mtei": "mni_Beng",
+    "mni-mtei": "mni_Beng",
     "mn": "khk_Cyrl",
     "mi": "mri_Latn",
     "my": "mya_Mymr",
@@ -473,7 +474,7 @@ language_codes = {
     "mt": "maltese",
     "mi": "maori",
     "mr": "marathi",
-    "mni-Mtei": "meiteilon (manipuri)",
+    "mni-mtei": "meiteilon (manipuri)",
     "lus": "mizo",
     "mn": "mongolian",
     "my": "myanmar",
@@ -540,9 +541,8 @@ tasks = {
     "detect": "facebook/detr-resnet-50",
     "answer": "microsoft/Phi-4-multimodal-instruct",
     "summary": "google-t5/t5-large",
-    "translate-to-en": "Helsinki-NLP/opus-mt-mul-en",
-    "translate-from-en": "Helsinki-NLP/opus-mt-en-mul",
     "music": "facebook/musicgen-small",
+    "translate": "facebook/nllb-200-3.3B",
     "song": "https://huggingface.co/tencent/SongGeneration/resolve/main/ckpt/songgeneration_base/model.pt",
     "speech-recognition": "openai/whisper-large-v3",
     "audio-classification": "MIT/ast-finetuned-audioset-10-10-0.4593",
@@ -555,17 +555,17 @@ MODELS = {
     "detect": None,
     "answer": None,
     "summary": None,
+    "translate": None,
     "music": None,
     "song": None,
     "speech-recognition": None,
     "audio-classification": None,
-    "translate-to-en": None,
-    "translate-from-en": None,
     "tts": None,
 }
 
 TOKENIZERS = {
     "summary": None,
+    "translate": None,
 }
 
 PROCESSORS = {
@@ -4653,8 +4653,16 @@ def extract_text(url, selector):
     return elems[0]
 
 
+def camel_case(txt:str):
+    return txt[0].upper() + txt[1:].lower()
+
+
 def ai_translate(text, lang="en"):
-    from transformers import pipeline
+    import torch
+    from stopes.pipelines.monolingual.utils.sentence_split import get_split_algo
+    from sacremoses import MosesPunctNormalizer
+
+    punct_normalizer = MosesPunctNormalizer(lang="en")
 
     if text == None or lang == None:
         return ""
@@ -4662,33 +4670,59 @@ def ai_translate(text, lang="en"):
     if text.strip() == "":
         return ""
 
-    lang = simple_text(lang)
+    lang = lang.strip()
 
-    to_lang = language_codes[lang]
-    to_lang = to_lang[0].upper() + to_lang[1:]
+    tgt_code = unesco_mapping[lang]
 
     from_lang_code = language(text)
-    from_lang = language_codes[from_lang_code]
-    from_lang = from_lang[0].upper() + from_lang[1:]
+    src_code = unesco_mapping[from_lang_code]
 
-    text = simple_text(text)
-
-    if from_lang == to_lang:
+    if src_code == tgt_code:
         return text
 
-    log("Generating translation", text, status="")
+    tokenizer = TOKENIZERS["translate"]
+    tokenizer.src_lang = src_code
+    tokenizer.tgt_lang = tgt_code
 
-    if lang == "en":
-        translated_text = MODELS["translate-to-en"](text, src_lang=from_lang_code)[0]['translation_text']
-    elif from_lang_code == "en":
-        translated_text = MODELS["translate-from-en"](text, tgt_lang=from_lang_code)[0]['translation_text']
-    else:
-        translated_text = MODELS["translate-to-en"](text, src_lang=from_lang_code)[0]['translation_text']
-        translated_text = MODELS["translate-from-en"](translated_text, tgt_lang=from_lang_code)[0]['translation_text']
+    text = punct_normalizer.normalize(text)
 
-    log("Translated text", translated_text, status="")
+    paragraphs = text.split("\n")
+    translated_paragraphs = []
 
-    return translated_text
+    short_code = src_code[:3]
+    splitter = get_split_algo(short_code, "default")
+
+    for paragraph in paragraphs:
+        sentences = list(splitter(paragraph))
+        translated_sentences = []
+
+        for sentence in sentences:
+            input_tokens = (
+                tokenizer(sentence, return_tensors="pt")
+                .input_ids[0]
+                .cpu()
+                .numpy()
+                .tolist()
+            )
+            translated_chunk = model.generate(
+                input_ids=torch.tensor([input_tokens]).to(device),
+                forced_bos_token_id=tokenizer.convert_tokens_to_ids(tgt_code),
+                max_length=len(input_tokens) + 50,
+                num_return_sequences=1,
+                num_beams=8,
+                no_repeat_ngram_size=3,
+                renormalize_logits=True,
+                num_logits_to_keep=1,
+            )
+            translated_chunk = tokenizer.decode(
+                translated_chunk[0], skip_special_tokens=True
+            )
+            translated_sentences.append(translated_chunk)
+
+        translated_paragraph = " ".join(translated_sentences)
+        translated_paragraphs.append(translated_paragraph)
+
+    return "\n".join(translated_paragraphs)
 
 
 def google_translate(text, lang="en"):
@@ -5222,6 +5256,16 @@ def init_model_repo(task: str, turbo: bool = False):
             trust_remote_code=True,
         ).to(device())
 
+    elif task in ["translate"]:
+
+        import nltk
+        from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+
+        nltk.download("punkt_tab")
+
+        TOKENIZERS[task] = AutoTokenizer.from_pretrained(tasks[task])
+        model = AutoModelForSeq2SeqLM.from_pretrained(tasks[task]).to(device())
+
     elif task in ["tts"]:
 
         from chatterbox.tts import ChatterboxTTS
@@ -5245,22 +5289,6 @@ def init_model_repo(task: str, turbo: bool = False):
         model = pipeline(
             "automatic-speech-recognition",
             model=tasks["speech-recognition"],
-            device=device(),
-        )
-
-    elif task in ["translate-to-en", "translate-from-en"]:
-        from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, pipeline
-
-        model_name = tasks[task]
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
-        _model = AutoModelForSeq2SeqLM.from_pretrained(
-            model_name,
-            torch_dtype=dtype(),
-        ).to(device())
-        model = pipeline(
-            "translation",
-            tokenizer=tokenizer,
-            model=_model,
             device=device(),
         )
 
