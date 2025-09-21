@@ -5202,10 +5202,6 @@ def git(
     delete(clone_dir)
 
 
-
-    return init_pretrained_model(task, turbo)
-
-
 def init_model_repo(task: str, turbo: bool = False):
     import torch
 
