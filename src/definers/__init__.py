@@ -1431,6 +1431,16 @@ def init_model_file(task:str, turbo:bool=False, model_type:str=None):
 
 
         if not turbo:
+            try:
+                pipe.vae.enable_slicing()
+            except:
+                pass
+
+            try:
+                pipe.vae.enable_tiling()
+            except:
+                pass
+
             optimizations = [
                 'enable_vae_slicing',
                 'enable_vae_tiling',
