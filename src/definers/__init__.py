@@ -241,6 +241,155 @@ ai_model_extensions = {
 }
 
 
+unesco_mapping = {
+    "ar": [
+        "acm_Arab",
+        "acq_Arab",
+        "aeb_Arab",
+        "ajp_Arab",
+        "apc_Arab",
+        "arb_Arab",
+        "ars_Arab",
+        "ary_Arab",
+        "arz_Arab"
+    ],
+    "af": "afr_Latn",
+    "ak": [
+        "aka_Latn",
+        "twi_Latn"
+    ],
+    "am": "amh_Ethi",
+    "as": "asm_Beng",
+    "ay": "ayr_Latn",
+    "az": [
+        "azb_Arab",
+        "azj_Latn"
+    ],
+    "bm": "bam_Latn",
+    "be": "bel_Cyrl",
+    "bn": "ben_Beng",
+    "bho": "bho_Deva",
+    "bs": "bos_Latn",
+    "bg": "bul_Cyrl",
+    "ca": "cat_Latn",
+    "ceb": "ceb_Latn",
+    "cs": "ces_Latn",
+    "ckb": "ckb_Arab",
+    "cy": "cym_Latn",
+    "da": "dan_Latn",
+    "de": "deu_Latn",
+    "el": "ell_Grek",
+    "en": "eng_Latn",
+    "eo": "epo_Latn",
+    "et": "est_Latn",
+    "eu": "eus_Latn",
+    "ee": "ewe_Latn",
+    "fi": "fin_Latn",
+    "fr": "fra_Latn",
+    "gd": "gla_Latn",
+    "ga": "gle_Latn",
+    "gl": "glg_Latn",
+    "gn": "grn_Latn",
+    "gu": "guj_Gujr",
+    "ht": "hat_Latn",
+    "ha": "hau_Latn",
+    "he": "heb_Hebr",
+    "hi": "hin_Deva",
+    "hr": "hrv_Latn",
+    "hu": "hun_Latn",
+    "hy": "hye_Armn",
+    "ig": "ibo_Latn",
+    "ilo": "ilo_Latn",
+    "id": "ind_Latn",
+    "is": "isl_Latn",
+    "it": "ita_Latn",
+    "jw": "jav_Latn",
+    "ja": "jpn_Jpan",
+    "kn": "kan_Knda",
+    "ka": "kat_Geor",
+    "kk": "kaz_Cyrl",
+    "km": "khm_Khmr",
+    "rw": "kin_Latn",
+    "ky": "kir_Cyrl",
+    "ku": "kmr_Latn",
+    "ko": "kor_Hang",
+    "lo": "lao_Laoo",
+    "ln": "lin_Latn",
+    "lt": "lit_Latn",
+    "lb": "ltz_Latn",
+    "lg": "lug_Latn",
+    "lus": "lus_Latn",
+    "lv": "lvs_Latn",
+    "mai": "mai_Deva",
+    "ml": "mal_Mlym",
+    "mr": "mar_Deva",
+    "mk": "mkd_Cyrl",
+    "mg": "plt_Latn",
+    "mt": "mlt_Latn",
+    "mni-Mtei": "mni_Beng",
+    "mn": "khk_Cyrl",
+    "mi": "mri_Latn",
+    "my": "mya_Mymr",
+    "nl": "nld_Latn",
+    "no": [
+        "nno_Latn",
+        "nob_Latn"
+    ],
+    "ne": "npi_Deva",
+    "nso": "nso_Latn",
+    "ny": "nya_Latn",
+    "om": "gaz_Latn",
+    "or": "ory_Orya",
+    "pa": "pan_Guru",
+    "fa": [
+        "pes_Arab",
+        "prs_Arab"
+    ],
+    "pl": "pol_Latn",
+    "pt": "por_Latn",
+    "ps": "pbt_Arab",
+    "qu": "quy_Latn",
+    "ro": "ron_Latn",
+    "ru": "rus_Cyrl",
+    "sa": "san_Deva",
+    "si": "sin_Sinh",
+    "sk": "slk_Latn",
+    "sl": "slv_Latn",
+    "sm": "smo_Latn",
+    "sn": "sna_Latn",
+    "sd": "snd_Arab",
+    "so": "som_Latn",
+    "st": "sot_Latn",
+    "es": "spa_Latn",
+    "sq": "als_Latn",
+    "sr": "srp_Cyrl",
+    "su": "sun_Latn",
+    "sv": "swe_Latn",
+    "sw": "swh_Latn",
+    "ta": "tam_Taml",
+    "tt": "tat_Cyrl",
+    "te": "tel_Telu",
+    "tg": "tgk_Cyrl",
+    "tl": "tgl_Latn",
+    "th": "tha_Thai",
+    "ti": "tir_Ethi",
+    "ts": "tso_Latn",
+    "tr": "tur_Latn",
+    "tk": "tuk_Latn",
+    "ug": "uig_Arab",
+    "uk": "ukr_Cyrl",
+    "ur": "urd_Arab",
+    "uz": "uzn_Latn",
+    "vi": "vie_Latn",
+    "xh": "xho_Latn",
+    "yi": "ydd_Hebr",
+    "yo": "yor_Latn",
+    "zh-cn": "zho_Hans",
+    "zh-tw": "zho_Hant",
+    "ms": "zsm_Latn",
+    "zu": "zul_Latn"
+}
+
 language_codes = {
     "af": "afrikaans",
     "sq": "albanian",
@@ -260,8 +409,8 @@ language_codes = {
     "ca": "catalan",
     "ceb": "cebuano",
     "ny": "chichewa",
-    "zh-CN": "chinese (simplified)",
-    "zh-TW": "chinese (traditional)",
+    "zh-cn": "chinese (simplified)",
+    "zh-tw": "chinese (traditional)",
     "co": "corsican",
     "hr": "croatian",
     "cs": "czech",
@@ -3331,7 +3480,7 @@ def pip_install(pack):
 
 def build_faiss():
     with cwd():
-        git("facebookresearch", "faiss", parent="./xfaiss")
+        git("YaronKoresh", "faiss", parent="./xfaiss")
 
     set_cuda_env()
 
@@ -4418,7 +4567,7 @@ def dtype():
 def language(text):
     from langdetect import detect
 
-    return detect(text)
+    return detect(text).lower()
 
 
 def linked_url(url):

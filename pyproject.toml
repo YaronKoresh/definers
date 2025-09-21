@@ -18,6 +18,8 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
+    "nltk==3.9.1",
+    "sacremoses==0.1.1",
     "absl-py==2.3.1",
     "accelerate==1.10.1",
     "aiofiles==23.2.1",
@@ -242,6 +244,7 @@ dependencies = [
     "xxhash==3.5.0",
     "yarl==1.20.1",
     "zipp==3.23.0",
+    "stopes[mono] @ git+https://github.com/YaronKoresh/stopes.git",
     "chatterbox-tts @ git+https://github.com/YaronKoresh/chatterbox.git",
     "fairseq @ git+https://github.com/YaronKoresh/fairseq.git",
     "basic-pitch @ git+https://github.com/YaronKoresh/basic-pitch.git",
