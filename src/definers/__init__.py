@@ -5107,7 +5107,10 @@ def init_model_repo(task: str, turbo: bool = False):
 
         model_name = tasks[task]
         tokenizer = AutoTokenizer.from_pretrained(model_name)
-        _model = AutoModelForSeq2SeqLM.from_pretrained(model_name).to(device())
+        _model = AutoModelForSeq2SeqLM.from_pretrained(
+            model_name,
+            torch_dtype=dtype(),
+        ).to(device())
         model = pipeline("translation", tokenizer=tokenizer, model=_model)
 
     elif task in ["translation"]:
