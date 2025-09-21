@@ -386,7 +386,10 @@ SYSTEM_MESSAGE = "You are a helpful and concise AI assistant. Provide accurate a
 
 tasks = {
     "video": "tencent/HunyuanVideo",
-    "image": "tencent/SRPO",
+    "image": {
+        "pipe": "black-forest-labs/FLUX.1-Kontext-dev",
+        "spro": "tencent/SRPO",
+    },
     "detect": "facebook/detr-resnet-50",
     "answer": "microsoft/Phi-4-multimodal-instruct",
     "summary": "google-t5/t5-11b",
@@ -5356,12 +5359,22 @@ py-modules = {py_modules}
         ).to(device())
 
     elif task in ["image"]:
+        from diffusers import FluxKontextPipeline
+        from safetensors.torch import load_file
+        from huggingface_hub import hf_hub_download
 
-        from diffusers import DiffusionPipeline
-
-        model = DiffusionPipeline.from_pretrained(
-            tasks[task], torch_dtype=dtype()
+        model = FluxKontextPipeline.from_pretrained(
+            tasks[task]["pipe"],
+            torch_dtype=dtype(),
+            use_safetensors=True
         ).to(device())
+
+        srpo_path = hf_hub_download(
+            repo_id=tasks[task]["spro"],
+            filename="diffusion_pytorch_model.safetensors"
+        )
+        state_dict = load_file(srpo_path)
+        model.transformer.load_state_dict(state_dict)
 
     if turbo is False:
         try:
@@ -5477,7 +5490,7 @@ def pipe(
             params2["num_videos_per_prompt"] = 1
             params2["num_frames"] = length
         else:
-            params2["negative_prompt"] = _negative_prompt_
+            # params2["negative_prompt"] = _negative_prompt_
             params2["max_sequence_length"] = 512
         params2["num_inference_steps"] = 100
         params2["generator"] = torch.Generator(device()).manual_seed(
