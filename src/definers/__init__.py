@@ -392,7 +392,7 @@ tasks = {
     },
     "detect": "facebook/detr-resnet-50",
     "answer": "microsoft/Phi-4-multimodal-instruct",
-    "summary": "google-t5/t5-11b",
+    "summary": "google-t5/t5-large",
     "translate-to-en": "Helsinki-NLP/opus-mt-mul-en",
     "translate-from-en": "Helsinki-NLP/opus-mt-en-mul",
     "music": "facebook/musicgen-small",
