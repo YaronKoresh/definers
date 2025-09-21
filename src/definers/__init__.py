@@ -5107,12 +5107,17 @@ def init_model_repo(task: str, turbo: bool = False):
         from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, pipeline
 
         model_name = tasks[task]
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        tokenizer = AutoTokenizer.from_pretrained(model_name).to(device())
         _model = AutoModelForSeq2SeqLM.from_pretrained(
             model_name,
             torch_dtype=dtype(),
         ).to(device())
-        model = pipeline("translation", tokenizer=tokenizer, model=_model)
+        model = pipeline(
+            "translation",
+            tokenizer=tokenizer,
+            model=_model,
+            device=device(),
+        )
 
     elif task in ["audio-classification"]:
 
