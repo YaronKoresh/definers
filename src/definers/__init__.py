@@ -1119,8 +1119,8 @@ def answer(history: list):
                     w, h = Image.open(p).size
                     w, h = get_max_resolution(w, h)
                     new_img = resize_image(img, h, w)
-                    img_path = Image.fromarray(new_img)
-                    img = Image.open(img_path)
+                    new_img = (new_img * 255).astype(np.uint8)
+                    img = Image.fromarray(new_img)
                     img_list.append(img)
                     add_content += f"<|image_{ str(len(img_list)) }|>"
         if add_role != role:
