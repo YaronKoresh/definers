@@ -9491,7 +9491,7 @@ def generate_song(arg1, arg):
     print("songs generation is not implemented yet...")
 
 
-def infer_model_file(task: str, inference_file: str, model_type: str = None):
+def infer(task: str, inference_file: str, model_type: str = None):
     import torch
     import imageio as iio
     from scipy.io import wavfile
