@@ -1111,13 +1111,13 @@ def answer(history: list):
                 ext = p.split(".")[-1]
                 if ext in common_audio_formats:
                     p = normalize_audio_to_peak(p)
-                    audio, samplerate = librosa.load(p, sr=16000)
+                    audio, samplerate = librosa.load(p, sr=12000)
                     snd_list.append((audio, samplerate))
                     add_content += f"<|audio_{ str(len(snd_list)) }|>"
                 if ext in iio_formats:
                     img = iio.imread(p)
                     w, h = Image.open(p).size
-                    w, h = get_max_resolution(w, h)
+                    w, h = get_max_resolution(w, h, mega_pixels=0.1)
                     new_img = resize_image(img, h, w)
                     new_img = (new_img * 255).astype(np.uint8)
                     img = Image.fromarray(new_img)
