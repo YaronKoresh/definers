@@ -1077,7 +1077,7 @@ def set_system_message(
 
 def answer(history: list):
 
-    import soundfile as sf
+    import librosa
     from PIL import Image
 
     img_list = []
@@ -1109,11 +1109,16 @@ def answer(history: list):
             for p in ps:
                 ext = p.split(".")[-1]
                 if ext in common_audio_formats:
-                    audio, samplerate = sf.read(normalize_audio_to_peak(p))
+                    p = normalize_audio_to_peak(p)
+                    audio, samplerate = librosa.load(p, sr=16000)
                     snd_list.append((audio, samplerate))
                     add_content += f"<|audio_{ str(len(snd_list)) }|>"
                 if ext in iio_formats:
-                    img_list.append(Image.open(p))
+                    image_data = Image.open(p)
+                    w, h = image_data.size
+                    new_w, new_h = get_max_resolution(w, h)
+                    new_image_data = resize_image(image_data, new_h, new_w)
+                    img_list.append(new_image_data)
                     add_content += f"<|image_{ str(len(img_list)) }|>"
         if add_role != role:
             add_role = role
