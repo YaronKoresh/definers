@@ -3275,10 +3275,10 @@ def upscale(
     controlnet_scale: float = 0.5,
     controlnet_decay: float = 0.8,
     condition_scale: float = 8.0,
-    tile_width: int = 1024,
-    tile_height: int = 1024,
+    tile_width: int = 512,
+    tile_height: int = 512,
     denoise_strength: float = 0.2,
-    num_inference_steps: int = 25,
+    num_inference_steps: int = 80,
     solver: str = "DDIM",
 ):
     from PIL import Image
@@ -3311,7 +3311,7 @@ def upscale(
         tile_size=(tile_height, tile_width),
         denoise_strength=denoise_strength,
         num_inference_steps=num_inference_steps,
-        loras_scale={"more_details": 0.3, "sdxl_render": 1.0},
+        loras_scale={"more_details": 1.0, "sdxl_render": 1.0},
         solver_type=solver_type,
     )
 
@@ -5667,14 +5667,14 @@ def pipe(
         params2["prompt"] = prompt
         params2["height"] = height
         params2["width"] = width
-        params2["guidance_scale"] = 4.5
+        params2["guidance_scale"] = 7.0
         if task == "video":
             params2["num_videos_per_prompt"] = 1
             params2["num_frames"] = length
         else:
             # params2["negative_prompt"] = _negative_prompt_
             params2["max_sequence_length"] = 512
-        params2["num_inference_steps"] = 100
+        params2["num_inference_steps"] = 60
         params2["generator"] = torch.Generator(device()).manual_seed(
             random.randint(0, big_number())
         )
@@ -6603,9 +6603,11 @@ def get_chat_response(message, history: list):
         orig_lang_code = language(txt)
         if orig_lang_code != "en":
             txt = ai_translate(txt)
+        txt = summary(txt, max_words=20)
         history_for_model.append({"role": "user", "content": txt})
     
     response_text = answer(history_for_model)
+    response_text = summary(response_text, max_words=20)
     if orig_lang_code != "en":
         response_text = ai_translate(response_text, orig_lang_code)
         
