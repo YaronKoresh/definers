@@ -1111,7 +1111,7 @@ def answer(history: list):
                 ext = p.split(".")[-1]
                 if ext in common_audio_formats:
                     p = normalize_audio_to_peak(p)
-                    audio, samplerate = librosa.load(p, sr=16000)
+                    audio, samplerate = librosa.load(p, sr=12000)
                     snd_list.append((audio, samplerate))
                     add_content += f"<|audio_{ str(len(snd_list)) }|>"
                 if ext in iio_formats:
@@ -1147,7 +1147,7 @@ def answer(history: list):
     generate_ids = MODELS["answer"].generate(
         **inputs,
         max_new_tokens=512,
-        num_beams=6,
+        num_beams=8,
         length_penalty=0.1,
         num_logits_to_keep=1,
     )
@@ -9018,7 +9018,7 @@ def enhance_audio(audio_path, format_choice="mp3"):
             master( autotune_song(audio_path), "wav"),
             bass_factor=0.5
         ),
-        db_boost=15.0,
+        db_boost=8.0,
         db_limit=-0.1
     )
 
@@ -9026,11 +9026,11 @@ def enhance_audio(audio_path, format_choice="mp3"):
 def autotune_song(
     audio_path,
     output_path = None,
-    strength=1.0,
+    strength=0.7,
     correct_timing=True,
     quantize_grid_strength=8,
-    tolerance_cents=1,
-    attack_smoothing_ms=20,
+    tolerance_cents=10,
+    attack_smoothing_ms=2,
 ):
     import librosa
     import madmom
