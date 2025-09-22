@@ -5561,7 +5561,7 @@ py-modules = {py_modules}
             tasks[task],
             transformer=transformer,
             revision="refs/pr/18",
-            torch_dtype=dtype(32),
+            torch_dtype=dtype(),
         ).to(device())
 
     elif task in ["image"]:
@@ -5572,7 +5572,7 @@ py-modules = {py_modules}
 
         model = FluxPipeline.from_pretrained(
             tasks[task],
-            torch_dtype=dtype(32),
+            torch_dtype=dtype(),
             use_safetensors=True
         ).to(device())
 
