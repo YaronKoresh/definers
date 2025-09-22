@@ -8990,9 +8990,9 @@ def enhance_audio(audio_path, format_choice="mp3"):
     return audio_limiter(
         riaa_filter(
             master( autotune_song(audio_path), "wav"),
-            bass_factor=0.5
+            bass_factor=0.3
         ),
-        db_boost=12.0,
+        db_boost=8.0,
         db_limit=-0.1
     )
 
@@ -9004,7 +9004,7 @@ def autotune_song(
     correct_timing=True,
     quantize_grid_strength=16,
     tolerance_cents=20,
-    attack_smoothing_ms=5,
+    attack_smoothing_ms=8,
 ):
     import librosa
     import madmom
