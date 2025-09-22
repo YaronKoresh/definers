@@ -4582,9 +4582,20 @@ def dtype(size=16, is_float=True):
     if size == 16 and is_float and torch.cuda.is_bf16_supported():
         return torch.bfloat16
 
-    t = "float" if is_float else "int"
-    t += str(size)
-    return torch[t]
+    if size == 16 and is_float:
+        return torch.float16
+
+    if size == 32 and is_float:
+        return torch.float32
+
+    if size == 32 and not is_float:
+        return torch.int
+
+    if size == 16 and not is_float:
+        return torch.int16
+
+    if size == 8 and not is_float:
+        return torch.int8
 
 
 def language(text):
