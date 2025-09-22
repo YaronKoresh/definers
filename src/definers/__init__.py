@@ -4717,7 +4717,7 @@ def ai_translate(text, lang="en"):
                 .tolist()
             )
             translated_chunk = model.generate(
-                input_ids=torch.tensor([input_tokens]).to(device),
+                input_ids=torch.tensor([input_tokens]).to(device()),
                 forced_bos_token_id=tokenizer.convert_tokens_to_ids(tgt_code),
                 max_length=len(input_tokens) + 50,
                 num_return_sequences=1,
