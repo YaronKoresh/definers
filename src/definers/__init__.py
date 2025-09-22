@@ -9018,7 +9018,7 @@ def enhance_audio(audio_path, format_choice="mp3"):
             master( autotune_song(audio_path), "wav"),
             bass_factor=0.5
         ),
-        db_boost=18.0,
+        db_boost=15.0,
         db_limit=-0.1
     )
 
@@ -9063,8 +9063,8 @@ def autotune_song(
 
         y_vocals, sr = librosa.load(vocals_path, sr=None, mono=True)
         
-        n_fft = 4096
-        hop_length = 512
+        n_fft = 8192
+        hop_length = 128
         
         processed_vocals_path = vocals_path
 
