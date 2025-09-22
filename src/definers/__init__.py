@@ -6622,7 +6622,7 @@ def init_chat(title="Chatbot", handler=get_chat_response):
     )
 
     return gr.ChatInterface(
-        fn=get_chat_response,
+        fn=handler,
         type="messages",
         chatbot=chatbot,
         multimodal=True,
