@@ -6604,11 +6604,9 @@ def get_chat_response(message, history: list):
         orig_lang_code = language(txt)
         if orig_lang_code != "en":
             txt = ai_translate(txt)
-        txt = summary(txt)
         history_for_model.append({"role": "user", "content": txt})
     
     response_text = answer(history_for_model)
-    response_text = summary(response_text)
     if orig_lang_code != "en":
         response_text = ai_translate(response_text, orig_lang_code)
         
