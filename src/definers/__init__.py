@@ -4690,6 +4690,8 @@ def ai_translate(text, lang="en"):
     if src_code == tgt_code:
         return text
 
+    model = MODELS["translate"]
+
     tokenizer = TOKENIZERS["translate"]
     tokenizer.src_lang = src_code
     tokenizer.tgt_lang = tgt_code
