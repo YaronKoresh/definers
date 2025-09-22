@@ -9197,7 +9197,6 @@ def audio_limiter(
     oversampling=2,
     soft_clip_db=-2.0
 ):
-
     from scipy.io import wavfile
     from scipy import signal
     import numba
@@ -9309,15 +9308,19 @@ def audio_limiter(
     # --- 5. Lookahead ---
     lookahead_samples = int(lookahead_ms * effective_rate / 1000.0)
     if lookahead_samples > 0:
-        delayed_audio = np.pad(boosted_audio, ((lookahead_samples, 0),) * boosted_audio.ndim, 'constant')
-        delayed_audio = delayed_audio[:boosted_audio.shape[0]]
+        pad_width = [(lookahead_samples, 0)] + [(0, 0)] * (boosted_audio.ndim - 1)
+        delayed_audio = np.pad(boosted_audio, pad_width, 'constant')
     else:
         delayed_audio = boosted_audio
 
     # --- 6. Compute Gain Envelope ---
     threshold = 10 ** (db_limit / 20.0)
     print("Computing gain envelope...")
-    gain = _compute_gain_envelope(sidechain, effective_rate, threshold, attack_ms, release_ms)
+    if lookahead_samples > 0:
+        sidechain_padded = np.pad(sidechain, (0, lookahead_samples), 'constant')
+    else:
+        sidechain_padded = sidechain
+    gain = _compute_gain_envelope(sidechain_padded, effective_rate, threshold, attack_ms, release_ms)
     
     if boosted_audio.ndim > 1:
         gain = gain.reshape(-1, 1) # Reshape for stereo multiplication
@@ -9332,7 +9335,17 @@ def audio_limiter(
         limited_audio = signal.resample_poly(limited_audio, 1, oversampling, axis=0)
 
     # --- 9. Convert Back to Original Format ---
-    processed_audio_int = (limited_audio * max_val)
+    current_length = limited_audio.shape[0]
+    if current_length > original_length:
+        final_processed_audio = limited_audio[:original_length]
+    elif current_length < original_length:
+        pad_amount = original_length - current_length
+        pad_width = [(0, pad_amount)] + [(0, 0)] * (limited_audio.ndim - 1)
+        final_processed_audio = np.pad(limited_audio, pad_width, 'constant')
+    else:
+        final_processed_audio = limited_audio
+
+    processed_audio_int = (final_processed_audio * max_val)
     np.clip(processed_audio_int, -max_val, max_val, out=processed_audio_int) 
     final_audio = processed_audio_int.astype(original_dtype)
 
