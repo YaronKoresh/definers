@@ -4724,7 +4724,6 @@ def ai_translate(text, lang="en"):
                 num_beams=8,
                 no_repeat_ngram_size=3,
                 renormalize_logits=True,
-                num_logits_to_keep=1,
             )
             translated_chunk = tokenizer.decode(
                 translated_chunk[0], skip_special_tokens=True
