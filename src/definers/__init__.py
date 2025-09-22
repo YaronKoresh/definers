@@ -1119,9 +1119,7 @@ def answer(history: list):
                     w, h = Image.open(p).size
                     w, h = get_max_resolution(w, h)
                     new_img = resize_image(img, h, w)
-                    resized_img_path = save_image(new_img)
-                    img = Image.open(resized_img_path)
-                    img_list.append(img)
+                    img_list.append(new_img)
                     add_content += f"<|image_{ str(len(img_list)) }|>"
         if add_role != role:
             add_role = role
