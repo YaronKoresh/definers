@@ -9018,7 +9018,7 @@ def enhance_audio(audio_path, format_choice="mp3"):
             master( autotune_song(audio_path), "wav"),
             bass_factor=0.5
         ),
-        db_boost=15.0,
+        db_boost=18.0,
         db_limit=-0.1
     )
 
@@ -9028,7 +9028,7 @@ def autotune_song(
     output_path = None,
     strength=1.0,
     correct_timing=True,
-    quantize_grid_strength=16,
+    quantize_grid_strength=8,
     tolerance_cents=1,
     attack_smoothing_ms=20,
 ):
@@ -9336,7 +9336,7 @@ def audio_limiter(
         print(f"Downsampling back to {sample_rate} Hz...")
         limited_audio = signal.resample_poly(limited_audio, 1, oversampling, axis=0)
 
-    # --- 9. Convert Back to Original Format ---
+    # --- 9. Final Clip, Length Adjustment, and Conversion ---
     current_length = limited_audio.shape[0]
     if current_length > original_length:
         final_processed_audio = limited_audio[:original_length]
@@ -9347,8 +9347,10 @@ def audio_limiter(
     else:
         final_processed_audio = limited_audio
 
+    print(f"Applying final brickwall clip at {db_limit} dB.")
+    np.clip(final_processed_audio, -threshold, threshold, out=final_processed_audio)
+
     processed_audio_int = (final_processed_audio * max_val)
-    np.clip(processed_audio_int, -max_val, max_val, out=processed_audio_int) 
     final_audio = processed_audio_int.astype(original_dtype)
 
     try:
