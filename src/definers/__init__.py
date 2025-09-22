@@ -8993,8 +8993,8 @@ def enhance_audio(audio_path, format_choice="mp3"):
             master( autotune_song(audio_path), "wav"),
             bass_factor=0.5
         ),
-        db_boost=10.0,
-        db_limit=-2.0
+        db_boost=12.0,
+        db_limit=-0.1
     )
 
 
@@ -9003,9 +9003,9 @@ def autotune_song(
     output_path = None,
     strength=0.4,
     correct_timing=True,
-    quantize_grid_strength=8,
-    tolerance_cents=5,
-    attack_smoothing_ms=1,
+    quantize_grid_strength=16,
+    tolerance_cents=20,
+    attack_smoothing_ms=5,
 ):
     import librosa
     import madmom
