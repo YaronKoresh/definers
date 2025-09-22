@@ -655,6 +655,10 @@ negative_keywords = [
     "horrific",
     "scary",
     "creepy",
+    "polished",
+    "fake",
+    "anime",
+    "movie",
     # Anatomy & Body
     "malformed",
     "disfigured",
@@ -696,7 +700,7 @@ negative_keywords = [
 random.shuffle(negative_keywords)
 _negative_prompt_ = ", ".join(negative_keywords)
 
-_base_prompt_ = "cinematic masterpiece, ultra realistic, 8k, best quality, sharp focus, professional color grading"
+_base_prompt_ = "photorealistic, 8k, best quality, sharp focus, professional color grading, natural, reasonable"
 
 
 def get_os_name():
