@@ -536,7 +536,7 @@ SYSTEM_MESSAGE = "You are a helpful and concise AI assistant. Provide accurate a
 
 tasks = {
     "video": "tencent/HunyuanVideo",
-    "image": "black-forest-labs/FLUX.1-Kontext-dev",
+    "image": "black-forest-labs/FLUX.1-dev",
     "image-spro": "tencent/SRPO",
     "detect": "facebook/detr-resnet-50",
     "answer": "microsoft/Phi-4-multimodal-instruct",
@@ -4573,14 +4573,15 @@ def tensor_length(tensor):
     return ret
 
 
-def dtype():
+def dtype(size=16, is_float=True):
     import torch
 
-    return (
-        torch.bfloat16
-        if torch.cuda.is_bf16_supported()
-        else torch.float16
-    )
+    if size == 16 and is_float and torch.cuda.is_bf16_supported():
+        return torch.bfloat16
+
+    t = "float" if is_float else "int"
+    t += str(size)
+    return torch[t]
 
 
 def language(text):
@@ -5546,17 +5547,18 @@ py-modules = {py_modules}
             tasks[task],
             transformer=transformer,
             revision="refs/pr/18",
-            torch_dtype=dtype(),
+            torch_dtype=dtype(32),
         ).to(device())
 
     elif task in ["image"]:
-        from diffusers import FluxKontextPipeline
+        import torch
+        from diffusers import FluxPipeline
         from safetensors.torch import load_file
         from huggingface_hub import hf_hub_download
 
-        model = FluxKontextPipeline.from_pretrained(
+        model = FluxPipeline.from_pretrained(
             tasks[task],
-            torch_dtype=dtype(),
+            torch_dtype=dtype(32),
             use_safetensors=True
         ).to(device())
 
@@ -8999,9 +9001,9 @@ def enhance_audio(audio_path, format_choice="mp3"):
     return audio_limiter(
         riaa_filter(
             master( autotune_song(audio_path), "wav"),
-            bass_factor=0.3
+            bass_factor=0.5
         ),
-        db_boost=8.0,
+        db_boost=15.0,
         db_limit=-0.1
     )
 
@@ -9009,10 +9011,10 @@ def enhance_audio(audio_path, format_choice="mp3"):
 def autotune_song(
     audio_path,
     output_path = None,
-    strength=0.4,
+    strength=1.0,
     correct_timing=True,
     quantize_grid_strength=16,
-    tolerance_cents=20,
+    tolerance_cents=1,
     attack_smoothing_ms=8,
 ):
     import librosa
@@ -9170,62 +9172,163 @@ def autotune_song(
         for path in temp_files:
             delete(path)
 
+def audio_limiter(
+    input_filename,
+    output_filename=None,
+    db_boost=12.0,
+    db_limit=-0.1,
+    attack_ms=1.0,
+    release_ms=100.0,
+    lookahead_ms=5.0,
+    oversampling=2,
+    soft_clip_db=-2.0
+):
 
-def audio_limiter(input_filename, output_filename = None, db_boost = 3.0, db_limit = -0.5):
     from scipy.io import wavfile
+    from scipy import signal
+    import numba
+
+    # JIT-compiled helper for the saturation stage (for performance)
+    @numba.njit
+    def _apply_soft_clip(data, threshold):
+        """Applies a tanh soft clipper to samples exceeding the threshold."""
+        clipped_data = np.copy(data)
+        # The range above the threshold that will be compressed
+        headroom = 1.0 - threshold
+        if headroom <= 0:
+            return clipped_data # Cannot clip if threshold is 1.0 or higher
+            
+        # Indices of samples that are over the threshold
+        over_indices = np.where(np.abs(data) > threshold)
+        
+        for i in over_indices[0]:
+            # Handle stereo/mono by iterating through potential second dimension
+            if data.ndim == 1:
+                sample = data[i]
+                sign = np.sign(sample)
+                # The amount the sample is over the threshold
+                overage = np.abs(sample) - threshold
+                # Apply the tanh curve to the overage, scaled to the headroom
+                transformed_overage = headroom * np.tanh(overage / headroom)
+                clipped_data[i] = sign * (threshold + transformed_overage)
+            else:
+                for j in range(data.shape[1]):
+                    sample = data[i, j]
+                    sign = np.sign(sample)
+                    overage = np.abs(sample) - threshold
+                    transformed_overage = headroom * np.tanh(overage / headroom)
+                    clipped_data[i, j] = sign * (threshold + transformed_overage)
+
+        return clipped_data
+
+    # JIT-compiled helper for the core limiter logic (unchanged from before)
+    @numba.njit
+    def _compute_gain_envelope(data, sample_rate, threshold, attack_ms, release_ms):
+        """Calculates the dynamic gain envelope."""
+        # Coefficients are calculated based on the formula: exp(-1 / (time_in_seconds * sample_rate))
+        attack_coeff = np.exp(-1.0 / (attack_ms * sample_rate / 1000.0))
+        release_coeff = np.exp(-1.0 / (release_ms * sample_rate / 1000.0))
+        
+        num_samples = len(data)
+        gain_envelope = np.ones(num_samples, dtype=np.float32)
+        current_gain = 1.0
+
+        for i in range(num_samples):
+            abs_sample = np.abs(data[i])
+            
+            if abs_sample > threshold:
+                target_gain = threshold / abs_sample
+                current_gain = (1 - attack_coeff) * target_gain + attack_coeff * current_gain
+            else:
+                target_gain = 1.0
+                current_gain = (1 - release_coeff) * target_gain + release_coeff * current_gain
+            
+            gain_envelope[i] = current_gain
+                
+        return gain_envelope
 
     if output_filename is None:
         output_filename = tmp("wav", keep=False)
 
     try:
         sample_rate, data = wavfile.read(input_filename)
-        print(f"Successfully read '{input_filename}' with sample rate {sample_rate}.")
-    except FileNotFoundError:
-        print(f"Error: The file '{input_filename}' was not found.")
-        return
+        print(f"Read '{input_filename}' (Sample Rate: {sample_rate}, Dtype: {data.dtype})")
     except Exception as e:
-        print(f"An error occurred while reading the audio file: {e}")
+        print(f"Error reading audio file: {e}")
         return
 
     original_dtype = data.dtype
-    print(f"Original audio data type: {original_dtype}")
-
-    if original_dtype == np.int16:
-        max_val = 32767.0
-    elif original_dtype == np.int32:
-        max_val = 2147483647.0
-    elif original_dtype == np.uint8:
-        data = data.astype(np.float32) - 128.0
-        max_val = 128.0
-    else:
-        if np.issubdtype(original_dtype, np.floating):
-            max_val = 1.0
-        else:
-            print(f"Error: Unsupported data type '{original_dtype}'.")
-            return
-            
+    
+    # --- 1. Normalize Audio to Float ---
+    if original_dtype == np.int16: max_val = 32767.0
+    elif original_dtype == np.int32: max_val = 2147483647.0
+    elif original_dtype == np.uint8: data, max_val = data.astype(np.float32) - 128.0, 128.0
+    elif np.issubdtype(original_dtype, np.floating): max_val = 1.0
+    else: print(f"Error: Unsupported data type '{original_dtype}'."); return
+        
     audio_float = data.astype(np.float32) / max_val
     
+    # --- 2. Oversample ---
+    effective_rate = sample_rate
+    if oversampling > 1 and isinstance(oversampling, int):
+        print(f"Upsampling by {oversampling}x...")
+        effective_rate = sample_rate * oversampling
+        audio_float = signal.resample_poly(audio_float, oversampling, 1, axis=0)
+    
+    # --- 3. Optional Soft Clipping / Saturation ---
+    if soft_clip_db < 0:
+        clip_threshold = 10 ** (soft_clip_db / 20.0)
+        print(f"Applying soft clipping above {soft_clip_db} dB...")
+        audio_float = _apply_soft_clip(audio_float, clip_threshold)
+
+    # --- 4. Apply Gain Boost ---
     linear_boost = 10 ** (db_boost / 20.0)
     boosted_audio = audio_float * linear_boost
-    print(f"Applied a {db_boost} dB boost (linear multiplier: {linear_boost:.2f}).")
+    print(f"Applied {db_boost} dB boost.")
 
-    linear_limit = 10 ** (db_limit / 20.0)
+    # Determine sidechain for gain calculation (max peak of all channels)
+    if boosted_audio.ndim > 1:
+        sidechain = np.max(np.abs(boosted_audio), axis=1)
+    else:
+        sidechain = boosted_audio
+
+    # --- 5. Lookahead ---
+    lookahead_samples = int(lookahead_ms * effective_rate / 1000.0)
+    if lookahead_samples > 0:
+        delayed_audio = np.pad(boosted_audio, ((lookahead_samples, 0),) * boosted_audio.ndim, 'constant')
+        delayed_audio = delayed_audio[:boosted_audio.shape[0]]
+    else:
+        delayed_audio = boosted_audio
+
+    # --- 6. Compute Gain Envelope ---
+    threshold = 10 ** (db_limit / 20.0)
+    print("Computing gain envelope...")
+    gain = _compute_gain_envelope(sidechain, effective_rate, threshold, attack_ms, release_ms)
     
-    limited_audio = np.clip(boosted_audio, -linear_limit, linear_limit)
-    print(f"Limited audio to {db_limit} dB (linear amplitude: +/- {linear_limit:.2f}).")
+    if boosted_audio.ndim > 1:
+        gain = gain.reshape(-1, 1) # Reshape for stereo multiplication
+
+    # --- 7. Apply Limiter ---
+    limited_audio = delayed_audio * gain
+    print(f"Applied limiting with a ceiling of {db_limit} dB.")
     
+    # --- 8. Downsample ---
+    if oversampling > 1 and isinstance(oversampling, int):
+        print(f"Downsampling back to {sample_rate} Hz...")
+        limited_audio = signal.resample_poly(limited_audio, 1, oversampling, axis=0)
+
+    # --- 9. Convert Back to Original Format ---
     processed_audio_int = (limited_audio * max_val)
-    
+    np.clip(processed_audio_int, -max_val, max_val, out=processed_audio_int) 
     final_audio = processed_audio_int.astype(original_dtype)
 
     try:
         wavfile.write(output_filename, sample_rate, final_audio)
-        print(f"Successfully saved processed audio to '{output_filename}'.")
+        print(f"✅ Successfully saved processed audio to '{output_filename}'.")
         return output_filename
     except Exception as e:
-        print(f"An error occurred while writing the audio file: {e}")
-
+        print(f"Error writing audio file: {e}")
+        
 
 def create_sample_audio(filename="sample_audio.wav", duration=5, sample_rate=44100):
     from scipy.io import wavfile
