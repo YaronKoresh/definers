@@ -3287,11 +3287,11 @@ def upscale(
     controlnet_scale: float = 0.5,
     controlnet_decay: float = 0.8,
     condition_scale: float = 8.0,
-    tile_width: int = 512,
-    tile_height: int = 512,
+    tile_width: int = 768,
+    tile_height: int = 768,
     denoise_strength: float = 0.2,
-    num_inference_steps: int = 80,
-    solver: str = "DDIM",
+    num_inference_steps: int = 40,
+    solver: str = "DPMSolver",
 ):
     from PIL import Image
     from refiners.fluxion.utils import manual_seed
@@ -3304,7 +3304,7 @@ def upscale(
         return
 
     if not seed:
-        seed = random.randint(0, big_number())
+        seed = random.randint(0, 2**32 - 1)
 
     manual_seed(seed)
 
@@ -5573,7 +5573,7 @@ py-modules = {py_modules}
 
         model = FluxPipeline.from_pretrained(
             tasks[task],
-            torch_dtype=dtype(),
+            torch_dtype=dtype(32),
             use_safetensors=True
         ).to(device())
 
@@ -5693,14 +5693,14 @@ def pipe(
         params2["prompt"] = prompt
         params2["height"] = height
         params2["width"] = width
-        params2["guidance_scale"] = 7.0
+        params2["guidance_scale"] = 4.5
         if task == "video":
             params2["num_videos_per_prompt"] = 1
             params2["num_frames"] = length
         else:
             # params2["negative_prompt"] = _negative_prompt_
             params2["max_sequence_length"] = 512
-        params2["num_inference_steps"] = 60
+        params2["num_inference_steps"] = 40
         params2["generator"] = torch.Generator(device()).manual_seed(
             random.randint(0, big_number())
         )
