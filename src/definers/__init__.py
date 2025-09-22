@@ -9271,6 +9271,7 @@ def audio_limiter(
         return
 
     original_dtype = data.dtype
+    original_length = data.shape[0]
     
     # --- 1. Normalize Audio to Float ---
     if original_dtype == np.int16: max_val = 32767.0
