@@ -689,7 +689,7 @@ positive_keywords = [
 
     # ─── PHOTOGRAPHY STYLE & COMPOSITION ───────────────────────────────────────
     "professional photography", "award-winning photography", "world-class photography",
-    "photograph", "shot in the style of a professional photographer",
+    "photograph", "shot in the style of a professional photographer", "national geographic",
 
     # ─── CAMERA & LENS SIMULATION ─────────────────────────────────────────────
     "sharp focus", "tack sharp", "crisp details",
@@ -5665,7 +5665,7 @@ def choose_random_words(word_list, num_words=10):
 
 def optimize_prompt_realism(prompt):
     prompt = preprocess_prompt(prompt)
-    prompt = f'{prompt}, { ", ".join(choose_random_words(positive_keywords, num_words=6)) }.'
+    prompt = f'{prompt}, { ", ".join(choose_random_words(positive_keywords, num_words=16)) }'
     return prompt
 
 
