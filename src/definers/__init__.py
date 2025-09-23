@@ -5279,17 +5279,7 @@ def init_model_repo(task: str, turbo: bool = False):
 
     model = None
 
-    if task not in tasks:
-
-        from transformers import AutoModel
-
-        model = AutoModel.from_pretrained(
-            task,
-            torch_dtype=dtype(),
-            trust_remote_code=True,
-        ).to(device())
-
-    elif task in ["translate"]:
+    if task in ["translate"]:
 
         import nltk
         from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
@@ -5580,6 +5570,15 @@ py-modules = {py_modules}
         )
         state_dict = load_file(srpo_path)
         model.transformer.load_state_dict(state_dict)
+
+    elif task not in tasks:
+        from transformers import AutoModel
+
+        model = AutoModel.from_pretrained(
+            task,
+            torch_dtype=dtype(),
+            trust_remote_code=True,
+        ).to(device())
 
     if turbo is False:
         try:
