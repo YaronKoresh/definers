@@ -8110,7 +8110,7 @@ def lyric_video(
     if not lines:
         print("Warning: Lyrics text is empty.")
     else:
-        lyrics_text = ". ".join(lines)
+        lyrics_text = "\n".join(lines)
         try:
             model = MODELS["stable-whisper"]
 
@@ -8229,7 +8229,6 @@ def lyric_video(
 
         text_clip = TextClip(
             line,
-            font=font,
             font_size=font_size,
             color=text_color,
             stroke_color=stroke_color,
