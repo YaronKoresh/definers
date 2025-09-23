@@ -8090,6 +8090,7 @@ def lyric_video(
                 language=detected_lang,
                 no_speech_threshold=None,
                 denoiser="demucs",
+                denoiser_options={"device": "cpu"},
                 word_timestamps=True,
             )
 
