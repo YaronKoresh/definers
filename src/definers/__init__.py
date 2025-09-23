@@ -7718,17 +7718,27 @@ def beat_visualizer(
 
     y, sr = librosa.load(audio_path, sr=None)
     hop_length = 512
+
+    effect_strength = scale_intensity - 1.0
+    
     rms = librosa.feature.rms(y=y, hop_length=hop_length)[0]
+    rms_normalized = (rms - np.min(rms)) / (np.max(rms) - np.min(rms) + 1e-7)
+    rms_scales = 1.0 + (rms_normalized * effect_strength * 0.25) 
 
-    rms_normalized = (rms - np.min(rms)) / (
-        np.max(rms) - np.min(rms) + 1e-7
-    )
-    scales = 1.0 + (rms_normalized * (scale_intensity - 1.0))
-
-    def beat_scale_func(t):
-        frame_index = int(t * sr / hop_length)
-        frame_index = min(frame_index, len(scales) - 1)
-        return scales[frame_index]
+    tempo, beat_frames = librosa.beat.beat_track(y=y, sr=sr, hop_length=hop_length)
+    
+    beat_impulses = np.zeros_like(rms_normalized)
+    decay_rate = 0.88 
+    
+    for beat_frame in beat_frames:
+        frame = beat_frame
+        impulse = 1.0
+        while frame < len(beat_impulses) and impulse > 0.01:
+            beat_impulses[frame] = max(beat_impulses[frame], impulse)
+            impulse *= decay_rate
+            frame += 1
+            
+    beat_scales = 1.0 + (beat_impulses * effect_strength)
 
     def base_animation_func(t):
         if animation_style == "Zoom In":
@@ -7738,23 +7748,22 @@ def beat_visualizer(
         return 1.0
 
     def final_scale_func(t):
-        return base_animation_func(t) * beat_scale_func(t)
+        frame_index = int(t * sr / hop_length)
+        frame_index = min(frame_index, len(rms_scales) - 1)
+        
+        return base_animation_func(t) * rms_scales[frame_index] * beat_scales[frame_index]
 
     image_clip = ImageClip(np.array(img), duration=duration)
 
-    animated_image = image_clip.resized(
-        final_scale_func
-    ).with_position(("center", "center"))
+    animated_image = image_clip.set_position(("center", "center")).resize(final_scale_func)
 
-    background = ColorClip(
-        size=(W, H), color=(0, 0, 0), duration=duration
-    )
+    background = ColorClip(size=(W, H), color=(0, 0, 0), duration=duration)
 
     final_clip = CompositeVideoClip([background, animated_image])
-    final_clip = final_clip.with_audio(audio_clip)
+    final_clip = final_clip.set_audio(audio_clip)
     final_clip.write_videofile(
         output_path,
-        fps=20,
+        fps=24,
         codec="libx264",
         audio_codec="aac",
         preset="ultrafast",
