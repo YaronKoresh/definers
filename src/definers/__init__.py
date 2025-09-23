@@ -7518,10 +7518,11 @@ def value_to_keys(dictionary, target_value):
 def transcribe_audio(audio_path, language):
     if MODELS["speech-recognition"] is None:
         init_pretrained_model("speech-recognition")
+    vocal, _ = separate_stems(audio_limiter(master(audio_path, "mp3"), db_boost=15.0, db_limit=-0.1))
     lang_code = value_to_keys(language_codes, language)[0]
     lang_code = lang_code.replace("iw", "he")
     return MODELS["speech-recognition"](
-        audio_path,
+        vocal,
         generate_kwargs={"language": lang_code},
         return_timestamps=True,
     )["text"]
@@ -8041,6 +8042,7 @@ def lyric_video(
     lyrics_text,
     text_position,
     *,
+    max_dim = 1024,
     font_size=70,
     text_color="white",
     stroke_color="black",
@@ -8076,14 +8078,11 @@ def lyric_video(
             detected_lang = language(lyrics_text)
             print(f"🌍 Detected language: {detected_lang}")
 
-            device = "cuda" if torch.cuda.is_available() else "cpu"
-            print(f"Using device: {device}")
-
             print(
                 "Loading multilingual transcription model (stable-ts)..."
             )
             model = stable_whisper.load_model(
-                "large-v2", device=device
+                "large-v3", device="cpu"
             )
 
             print(
@@ -8149,13 +8148,12 @@ def lyric_video(
 
             del model, result
             gc.collect()
-            torch.cuda.empty_cache()
 
         except Exception as e:
-            print(
+            catch(
                 f"Could not automatically sync lyrics: {e}. Video will have no lyrics."
             )
-            timed_lyrics = []
+            return None
 
     print("✅ Synchronization complete.")
 
@@ -8177,8 +8175,22 @@ def lyric_video(
                 )
             background_clip = background_clip.with_duration(duration)
 
+        w, h = background_clip.size
+
+        if w > max_dim or h > max_dim:
+            if w > h:
+                new_w = max_dim
+                new_h = int(h * (max_dim / w))
+            else:
+                new_h = max_dim
+                new_w = int(w * (max_dim / h))
+            
+            background_clip = background_clip.resized(width=new_w, height=new_h)
+            print(f"Background detected. Downscaling to: {new_w}x{new_h} pixels.")
+        else:
+            print(f"Background detected. Using original size: {output_size[0]}x{output_size[1]} pixels.")
+
         output_size = background_clip.size
-        print(f"Background detected. Setting output size to: {output_size[0]}x{output_size[1]} pixels.")
 
     else:
         background_clip = ColorClip(
@@ -9027,9 +9039,9 @@ def enhance_audio(audio_path, format_choice="mp3"):
     return audio_limiter(
         riaa_filter(
             master( autotune_song(audio_path), "wav"),
-            bass_factor=0.5
+            bass_factor=0.3
         ),
-        db_boost=8.0,
+        db_boost=15.0,
         db_limit=-0.1
     )
 
@@ -9037,11 +9049,11 @@ def enhance_audio(audio_path, format_choice="mp3"):
 def autotune_song(
     audio_path,
     output_path = None,
-    strength=0.7,
+    strength=0.5,
     correct_timing=True,
     quantize_grid_strength=8,
-    tolerance_cents=10,
-    attack_smoothing_ms=2,
+    tolerance_cents=15,
+    attack_smoothing_ms=20,
 ):
     import librosa
     import madmom
@@ -9201,13 +9213,13 @@ def autotune_song(
 def audio_limiter(
     input_filename,
     output_filename=None,
-    db_boost=12.0,
+    db_boost=15.0,
     db_limit=-0.1,
     attack_ms=1.0,
     release_ms=100.0,
     lookahead_ms=5.0,
-    oversampling=2,
-    soft_clip_db=-2.0
+    oversampling=4,
+    soft_clip_db=-3.0
 ):
     from scipy.io import wavfile
     from scipy import signal
