@@ -7937,30 +7937,22 @@ def music_video(
             stripe_height = int(h * 0.15)
             gap_height = int(h * 0.1)
 
-            radius = int((h * 0.15) + rms_val * (h * 0.15))
-            rotation_angle = t * 120 + centroid_val * 30
+            radius = int((h * 0.15) + rms_val * (h * 0.3))
+            rotation_angle = t * 90 + centroid_val * 15
+
+            frame[:, :] = WHITE
+            frame[
+                gap_height : gap_height + stripe_height
+            ] = ORANGE
+            frame[
+                h - gap_height - stripe_height : h - gap_height
+            ] = ORANGE
 
             star_thickness = 12
+            star_color = ISRAEL_BLUE
 
             if is_beat:
-                radius = int(radius * 1.3)
-                star_color = WHITE
-                frame[:, :] = ISRAEL_BLUE
-                frame[
-                    gap_height : gap_height + stripe_height
-                ] = ORANGE
-                frame[
-                    h - gap_height - stripe_height : h - gap_height
-                ] = ORANGE
-            else:
-                star_color = ISRAEL_BLUE
-                frame[:, :] = WHITE
-                frame[
-                    gap_height : gap_height + stripe_height
-                ] = ORANGE
-                frame[
-                    h - gap_height - stripe_height : h - gap_height
-                ] = ORANGE
+                radius = int(radius * 1.6)
 
             draw_star_of_david(
                 frame,
