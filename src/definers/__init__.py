@@ -5246,13 +5246,11 @@ def git(
                 _lfs(p)
                 continue
 
-            if os.path.getsize(p) > 200:
-                continue
-
             with open(p, "r") as f:
                 try:
                     content = f.read()
-                except UnicodeDecodeError:
+                except UnicodeDecodeError as e:
+                    catch(e)
                     continue
 
             if content.startswith(
