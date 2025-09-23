@@ -5667,7 +5667,7 @@ def choose_random_words(word_list, num_words=20):
 
 def optimize_prompt_realism(prompt):
     prompt = preprocess_prompt(prompt)
-    prompt = f"{prompt}, { ", ".join(choose_random_words(positive_keywords)) }."
+    prompt = f'{prompt}, { ", ".join(choose_random_words(positive_keywords)) }.'
     return prompt
 
 
