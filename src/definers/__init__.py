@@ -9040,7 +9040,7 @@ def get_scale_notes(
     return np.array(scale_notes)
 
 
-def enhance_audio(audio_path, format_choice="mp3"):
+def enhance_audio(audio_path):
     return audio_limiter(
         riaa_filter(
             master( autotune_song(audio_path), "wav"),
