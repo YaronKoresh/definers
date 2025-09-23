@@ -1082,21 +1082,30 @@ def answer(history: list):
     img_list = []
     snd_list = []
 
-    history = [
+    alt_history = [
         {"role": "system", "content": SYSTEM_MESSAGE},
-        *history,
     ]
-
-    alt_history = []
     add_role = None
 
-    for h in history:
+    required_lang = "en"
+    history_len = len(history)
+
+    for history_index in range(history_len):
+        h = history[history_index]
+
         content = h["content"]
         role = h["role"]
 
+        is_text = bool(not isinstance(content, dict) and not isinstance(content, tuple))
+
         add_content = ""
-        if not isinstance(content, dict) and not isinstance(content, tuple):
+
+        if is_text:
+            content_lang = language(content)
+            if content_lang != required_lang:
+                content = ai_translate(content, lang=required_lang)
             add_content += content
+
         else:
             ps = []
             if isinstance(content, dict):
@@ -6617,26 +6626,10 @@ def SklearnWrapper(sklearn_model, is_classification=False):
 
 
 def get_chat_response(message, history: list):
-    history_for_model = list(history)
-    orig_lang_code = "en"
-    for file_path in message["files"]:
-        history_for_model.append({"role": "user", "content": {"path": file_path}})
-    if message["text"]:
-        txt = message["text"]
-        orig_lang_code = language(txt)
-        if orig_lang_code != "en":
-            txt = ai_translate(txt)
-        txt = summary(txt, max_words=20)
-        history_for_model.append({"role": "user", "content": txt})
-    
-    response_text = answer(history_for_model)
-    response_text = summary(response_text, max_words=20)
-    if orig_lang_code != "en":
-        response_text = ai_translate(response_text, orig_lang_code)
-        
-    history_for_model.append({"role": "assistant", "content": response_text})
-    
-    return history_for_model
+    history = list(history)
+    response_text = answer(history)
+    history.append({"role": "assistant", "content": response_text})
+    return history
 
 
 def init_chat(title="Chatbot", handler=get_chat_response):
