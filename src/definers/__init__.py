@@ -8042,6 +8042,12 @@ def music_video(
     return output_path
 
 
+def strip_nikud(text: str) -> str:
+    return "".join(
+        char for char in text if not "\u0591" <= char <= "\u05C7"
+    )
+
+
 def lyric_video(
     audio_path,
     background_path,
@@ -8070,6 +8076,10 @@ def lyric_video(
     audio_clip = AudioFileClip(audio_path)
     duration = audio_clip.duration
 
+    lyrics_text = strip_nikud(lyrics_text)
+    detected_lang = language(lyrics_text)
+    print(f"🌍 Detected language: {detected_lang}")
+
     print("🎤 Starting automatic lyric synchronization...")
     timed_lyrics = []
     lines = [
@@ -8080,10 +8090,8 @@ def lyric_video(
     if not lines:
         print("Warning: Lyrics text is empty.")
     else:
+        lyrics_text = ". ".join(lines)
         try:
-            detected_lang = language(lyrics_text)
-            print(f"🌍 Detected language: {detected_lang}")
-
             print(
                 "Loading multilingual transcription model (stable-ts)..."
             )
@@ -8162,6 +8170,7 @@ def lyric_video(
             )
             return None
 
+    log(timed_lyrics)
     print("✅ Synchronization complete.")
 
     output_size = (1920, 1080)
@@ -8207,14 +8216,16 @@ def lyric_video(
 
     lyric_clips = []
 
-    font = "./Alef-Bold.ttf"
-    if not exist("./Alef-Bold.ttf"):
+    font = "Alef-Bold.ttf"
+    if not exist(font):
+        log(f'Downloading "{font}"')
         google_drive_download(
-            "1C48KkYWQDYu7ypbNtSXAUJ6kuzoZ42sI", "./Alef-Bold.ttf"
+            "1C48KkYWQDYu7ypbNtSXAUJ6kuzoZ42sI", font
         )
 
     for start, end, line in timed_lyrics:
         clip_duration = end - start
+        log(f'Clip duration: {clip_duration}')
         if clip_duration <= 0:
             continue
 
@@ -8239,11 +8250,13 @@ def lyric_video(
         )
         lyric_clips.append(text_clip)
 
+    log(f'Lyric clips: {len(lyric_clips)}')
+
     final_clip = CompositeVideoClip(
         [background_clip] + lyric_clips, size=output_size
     ).with_audio(audio_clip)
 
-    output_path = tmp(".mp4")
+    output_path = tmp("mp4", keep=False)
     print(f"Writing video to temporary file: {output_path}")
     final_clip.write_videofile(
         output_path,
