@@ -1126,7 +1126,7 @@ def answer(history: list):
             for p in ps:
                 ext = p.split(".")[-1]
                 if ext in common_audio_formats:
-                    audio, samplerate = librosa.load(p, sr=12000)
+                    audio, samplerate = librosa.load(p, sr=8000)
                     snd_list.append((audio, samplerate))
                     add_content += f"<|audio_{ str(len(snd_list)) }|>"
                 if ext in iio_formats:
