@@ -6634,14 +6634,21 @@ def SklearnWrapper(sklearn_model, is_classification=False):
 def get_chat_response(message, history: list):
     history = list(history)
 
+    orig_lang = None
+
     if message["files"]:
         for file_path in message["files"]:
             history.append({"role": "user", "content": {"path": file_path}})
 
     if message["text"]:
+        orig_lang = language(message["text"])
         history.append({"role": "user", "content": message["text"]})
 
     response = answer(history)
+
+    if orig_lang and orig_lang != language(response):
+        response = ai_translate(response, lang=orig_lang)
+
     return response
 
 
