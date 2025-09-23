@@ -5560,7 +5560,7 @@ py-modules = {py_modules}
 
         model = FluxPipeline.from_pretrained(
             tasks[task],
-            torch_dtype=dtype(32),
+            torch_dtype=dtype(),
             use_safetensors=True
         ).to(device())
 
