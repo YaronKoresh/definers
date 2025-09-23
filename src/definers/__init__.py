@@ -561,6 +561,7 @@ MODELS = {
     "speech-recognition": None,
     "audio-classification": None,
     "tts": None,
+    "stable-whisper": None,
 }
 
 TOKENIZERS = {
@@ -8048,6 +8049,20 @@ def strip_nikud(text: str) -> str:
     )
 
 
+init_stable_whisper():
+    import stable_whisper
+
+    global MODELS
+
+    print(
+        "Loading multilingual transcription model (stable-ts)..."
+    )
+
+    MODELS["stable-whisper"] = stable_whisper.load_model(
+        "base", device="cpu"
+    )
+
+
 def lyric_video(
     audio_path,
     background_path,
@@ -8061,7 +8076,6 @@ def lyric_video(
     stroke_width=2,
     fade_duration=0.5,
 ):
-    import stable_whisper
     import torch
     from moviepy import (
         AudioFileClip,
@@ -8072,6 +8086,9 @@ def lyric_video(
         VideoFileClip,
     )
     from moviepy.video import fx as vfx
+
+    def clean_word(text):
+        return "".join(filter(str.isalnum, text.lower()))
 
     audio_clip = AudioFileClip(audio_path)
     duration = audio_clip.duration
@@ -8092,12 +8109,7 @@ def lyric_video(
     else:
         lyrics_text = ". ".join(lines)
         try:
-            print(
-                "Loading multilingual transcription model (stable-ts)..."
-            )
-            model = stable_whisper.load_model(
-                "large-v3", device="cpu"
-            )
+            model = MODELS["stable-whisper"]
 
             print(
                 "Transcribing audio with music-optimized settings..."
@@ -8112,54 +8124,37 @@ def lyric_video(
             )
 
             word_timestamps = []
-            for segment in result.segments:
-                for word in segment.words:
-                    word_timestamps.append(
-                        {
-                            "word": word.word,
-                            "start": word.start,
-                            "end": word.end,
-                        }
-                    )
+            processed_timestamps = [
+                {"word": clean_word(w["word"]), "start": w["start"], "end": w["end"]}
+                for segment in result.segments for w in segment.words
+            ]
+
+            processed_lines = [
+                (line, [clean_word(w) for w in re.findall(r"\b[\w'-]+\b", line)])
+                for line in lines
+            ]
 
             word_idx = 0
-            for line in lines:
-                clean_line_words = re.findall(
-                    r"\b[\w'-]+\b", line.lower()
-                )
+            for original_line, clean_line_words in processed_lines:
                 if not clean_line_words:
                     continue
+    
                 start_time, end_time = None, None
-                for i in range(word_idx, len(word_timestamps)):
-                    clean_transcript_word = re.sub(
-                        r"[^\w'-]",
-                        "",
-                        word_timestamps[i]["word"].lower(),
-                    )
-                    if clean_transcript_word == clean_line_words[0]:
-                        start_time = word_timestamps[i]["start"]
-                        word_idx = i
-                        break
-                if start_time is not None:
-                    line_word_idx = 0
-                    for i in range(word_idx, len(word_timestamps)):
-                        clean_transcript_word = re.sub(
-                            r"[^\w'-]",
-                            "",
-                            word_timestamps[i]["word"].lower(),
-                        )
-                        if (
-                            line_word_idx < len(clean_line_words)
-                            and clean_transcript_word
-                            == clean_line_words[line_word_idx]
-                        ):
-                            end_time = word_timestamps[i]["end"]
-                            line_word_idx += 1
-                        if line_word_idx == len(clean_line_words):
-                            word_idx = i + 1
-                            break
+    
+                for i in range(word_idx, len(processed_timestamps)):
+                    if processed_timestamps[i]["word"] == clean_line_words[0]:
+                        start_time = processed_timestamps[i]["start"]
+            
+                        line_len = len(clean_line_words)
+                        if i + line_len <= len(processed_timestamps):
+                            transcript_slice = [p["word"] for p in processed_timestamps[i : i + line_len]]
+                            if transcript_slice == clean_line_words:
+                                end_time = processed_timestamps[i + line_len - 1]["end"]
+                                word_idx = i + line_len
+                                break
+    
                 if start_time is not None and end_time is not None:
-                    timed_lyrics.append((start_time, end_time, line))
+                    timed_lyrics.append((start_time, end_time, original_line))
 
             del model, result
             gc.collect()
@@ -8173,7 +8168,7 @@ def lyric_video(
     log("timed_lyrics", timed_lyrics)
     print("✅ Synchronization complete.")
 
-    output_size = (1920, 1080)
+    output_size = (max_dim, max_dim)
 
     if background_path:
         is_image = background_path.lower().endswith(
