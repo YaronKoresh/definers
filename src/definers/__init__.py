@@ -6641,7 +6641,7 @@ def get_chat_response(message, history: list):
             history.append({"role": "user", "content": {"path": file_path}})
 
     if message["text"]:
-        history.append({"role": "user", "content": txt})
+        history.append({"role": "user", "content": message["text"]})
 
     history = answer(history)
     return history
