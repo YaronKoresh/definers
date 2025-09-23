@@ -5645,7 +5645,7 @@ def init_pretrained_model(task: str, turbo: bool = False):
     return init_model_file(task, turbo)
 
 
-def choose_random_words(word_list, num_words=20):
+def choose_random_words(word_list, num_words=10):
     if not word_list:
         return []
 
@@ -5665,7 +5665,7 @@ def choose_random_words(word_list, num_words=20):
 
 def optimize_prompt_realism(prompt):
     prompt = preprocess_prompt(prompt)
-    prompt = f'{prompt}, { ", ".join(choose_random_words(positive_keywords)) }.'
+    prompt = f'{prompt}, { ", ".join(choose_random_words(positive_keywords, num_words=6)) }.'
     return prompt
 
 
@@ -5673,7 +5673,7 @@ def preprocess_prompt(prompt):
 
     if len(prompt) > 0:
         prompt = ai_translate(prompt)
-        prompt = summary(prompt, max_words=20)
+        prompt = summary(prompt, max_words=12)
     return prompt
 
 
@@ -5712,7 +5712,7 @@ def pipe(
         else:
             # params2["negative_prompt"] = _negative_prompt_
             params2["max_sequence_length"] = 512
-        params2["num_inference_steps"] = 200
+        params2["num_inference_steps"] = 100
         params2["generator"] = torch.Generator(device()).manual_seed(
             random.randint(0, big_number())
         )
