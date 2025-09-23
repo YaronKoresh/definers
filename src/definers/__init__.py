@@ -8039,7 +8039,7 @@ def lyric_video(
     lyrics_text,
     text_position,
     *,
-    max_dim = 1024,
+    max_dim=1024,
     font_size=70,
     text_color="white",
     stroke_color="black",
@@ -8186,7 +8186,7 @@ def lyric_video(
             background_clip = background_clip.resized(width=new_w, height=new_h)
             print(f"Background detected. Downscaling to: {new_w}x{new_h} pixels.")
         else:
-            print(f"Background detected. Using original size: {output_size[0]}x{output_size[1]} pixels.")
+            print(f"Background detected. Using original size: {w}x{h} pixels.")
 
         output_size = background_clip.size
 
@@ -8197,12 +8197,17 @@ def lyric_video(
         print(f"No background provided. Using default size: {output_size[0]}x{output_size[1]} pixels.")
 
     lyric_clips = []
+
+    font = "./Alef-Bold.ttf"
+    if not exist("./Alef-Bold.ttf"):
+        google_drive_download(
+            "1C48KkYWQDYu7ypbNtSXAUJ6kuzoZ42sI", "./Alef-Bold.ttf"
+        )
+
     for start, end, line in timed_lyrics:
         clip_duration = end - start
         if clip_duration <= 0:
             continue
-
-        font = "Arial-Bold"
 
         text_clip = TextClip(
             line,
