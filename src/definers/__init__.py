@@ -7756,12 +7756,12 @@ def beat_visualizer(
 
     image_clip = ImageClip(np.array(img), duration=duration)
 
-    animated_image = image_clip.set_position(("center", "center")).resize(final_scale_func)
+    animated_image = image_clip.with_position(("center", "center")).resized(final_scale_func)
 
     background = ColorClip(size=(W, H), color=(0, 0, 0), duration=duration)
 
     final_clip = CompositeVideoClip([background, animated_image])
-    final_clip = final_clip.set_audio(audio_clip)
+    final_clip = final_clip.with_audio(audio_clip)
     final_clip.write_videofile(
         output_path,
         fps=24,
