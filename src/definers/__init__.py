@@ -5215,6 +5215,10 @@ def summary(text, max_words=50):
         return _summarize(text, is_chunk=False)
 
 
+def path_end(p: str):
+    return p.replace(os.path.sep, "/").strip("/").split("/")[-1]
+
+
 def git(
     user: str, repo: str, branch: str = "main", parent: str = "."
 ):
@@ -5242,36 +5246,37 @@ def git(
 
         for p in read(_dir):
 
+            if is_directory(p) and path_end(p) == ".git":
+                continue
+
             if is_directory(p):
                 _lfs(p)
                 continue
 
-            with open(p, "r") as f:
-                try:
-                    content = f.read()
-                except UnicodeDecodeError as e:
-                    catch(e)
-                    continue
+            content = None
 
-            if content.startswith(
-                "version https://git-lfs.github.com/spec"
-            ):
-                filepath_in_repo = os.path.relpath(
-                    p, clone_dir
-                ).replace(os.path.sep, "/")
-                asset_url = f"https://media.githubusercontent.com/media/{user}/{repo}/{branch}/{filepath_in_repo}"
-                try:
-                    with requests.get(asset_url, stream=True) as r:
-                        r.raise_for_status()
-                        with open(p, "wb") as asset_file:
-                            for chunk in r.iter_content(
-                                chunk_size=8129
-                            ):
-                                asset_file.write(chunk)
-                except requests.exceptions.RequestException as e:
-                    print(
-                        f"Warning: Could not download asset '{filepath_in_repo}'. Error: {e}"
-                    )
+            try:
+                content = read(p)
+            except Exception as e:
+                catch(e)
+                continue
+            try:
+                if content.startswith(
+                    "version https://git-lfs.github.com/spec"
+                ):
+                    filepath_in_repo = os.path.relpath(
+                        p, clone_dir
+                    ).replace(os.path.sep, "/")
+                    asset_url = f"https://media.githubusercontent.com/media/{user}/{repo}/{branch}/{filepath_in_repo}"
+                    try:
+                        download_file(asset_url, p)
+                    except Exception as e3:
+                        print(
+                            f"Warning: Could not download asset '{filepath_in_repo}'. Error: {e3}"
+                        )
+            except Exception as e2:
+                catch(e2)
+                continue
 
     _lfs(clone_dir)
 
