@@ -3536,14 +3536,12 @@ def build_faiss():
                 )
             )
 
-            cores = os.cpu_count() * 2
-
             print("faiss - stage 2")
-            run(f"{cmake} --build build -j {cores} --target faiss")
+            run(f"{cmake} --build build -j {cores()} --target faiss")
 
             print("faiss - stage 3")
             run(
-                f"{cmake} --build build -j {cores} --target swigfaiss"
+                f"{cmake} --build build -j {cores()} --target swigfaiss"
             )
 
         temp_dir = tmp(dir=True)
@@ -8026,7 +8024,6 @@ def lyric_video(
     lyrics_text,
     text_position,
     *,
-    output_size=(1024, 1024),
     font_size=70,
     text_color="white",
     stroke_color="black",
@@ -8145,6 +8142,8 @@ def lyric_video(
 
     print("✅ Synchronization complete.")
 
+    output_size = (1920, 1080)
+
     if background_path:
         is_image = background_path.lower().endswith(
             (".png", ".jpg", ".jpeg")
@@ -8160,22 +8159,15 @@ def lyric_video(
                     background_clip, duration=duration
                 )
             background_clip = background_clip.with_duration(duration)
+
+        output_size = background_clip.size
+        print(f"Background detected. Setting output size to: {output_size[0]}x{output_size[1]} pixels.")
+
     else:
         background_clip = ColorClip(
             size=output_size, color=(0, 0, 0), duration=duration
         )
-
-    x1 = (background_clip.w - output_size[0]) // 2
-    x2 = x1 + output_size[0]
-    y1 = (background_clip.h - output_size[1]) // 2
-    y2 = y1 + output_size[1]
-
-    background_clip = background_clip.cropped(
-        x1=x1,
-        x2=x2,
-        y1=y1,
-        y2=y2
-    )
+        print(f"No background provided. Using default size: {output_size[0]}x{output_size[1]} pixels.")
 
     lyric_clips = []
     for start, end, line in timed_lyrics:
