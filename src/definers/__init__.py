@@ -697,9 +697,7 @@ negative_keywords = [
     "collage",
     "split screen",
 ]
-random.shuffle(negative_keywords)
 _negative_prompt_ = ", ".join(negative_keywords)
-
 _base_prompt_ = "photorealistic, 8k, best quality, sharp focus, professional color grading, natural, reasonable"
 
 
@@ -3290,7 +3288,7 @@ def upscale(
     tile_width: int = 768,
     tile_height: int = 768,
     denoise_strength: float = 0.2,
-    num_inference_steps: int = 40,
+    num_inference_steps: int = 80,
     solver: str = "DPMSolver",
 ):
     from PIL import Image
@@ -5701,7 +5699,7 @@ def pipe(
         else:
             # params2["negative_prompt"] = _negative_prompt_
             params2["max_sequence_length"] = 512
-        params2["num_inference_steps"] = 40
+        params2["num_inference_steps"] = 80
         params2["generator"] = torch.Generator(device()).manual_seed(
             random.randint(0, big_number())
         )
