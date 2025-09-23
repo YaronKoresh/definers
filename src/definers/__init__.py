@@ -5624,9 +5624,10 @@ def is_huggingface_repo(repo_id: str) -> bool:
 
 
 def init_pretrained_model(task: str, turbo: bool = False):
+    repo_tasks_override = ["rvc", "tts"]
     if task in MODELS and MODELS[task]:
         return
-    if task in tasks and is_huggingface_repo(tasks[task]) or is_huggingface_repo(task):
+    if task in repo_tasks_override or task in tasks and is_huggingface_repo(tasks[task]) or is_huggingface_repo(task):
         return init_model_repo(task, turbo)
     return init_model_file(task, turbo)
 
@@ -7688,6 +7689,8 @@ def beat_visualizer(
     from PIL import Image, ImageFilter
 
     img = Image.open(image_path)
+    w, h = get_max_resolution(*img.size)
+    img = img.resize((w, h), Image.Resampling.LANCZOS)
     W, H = img.size
 
     effect_map = {
@@ -7740,10 +7743,19 @@ def beat_visualizer(
     final_clip = CompositeVideoClip([background, animated_image])
     final_clip = final_clip.with_audio(audio_clip)
     final_clip.write_videofile(
-        output_path, codec="libx264", fps=24, audio_codec="aac"
+        output_path,
+        fps=20,
+        codec="libx264",
+        audio_codec="aac",
+        preset="ultrafast",
+        threads=cores(),
     )
 
     return output_path
+
+
+def cores():
+    return os.cpu_count()
 
 
 def draw_star_of_david(
@@ -7779,7 +7791,7 @@ def draw_star_of_david(
 
 
 def music_video(
-    audio_path, preset="israel", width=2048, height=2048, fps=120
+    audio_path, preset="israel", width=1024, height=1024, fps=24
 ):
     import cv2
     import librosa
@@ -8013,7 +8025,8 @@ def music_video(
     final_clip = animation.with_audio(AudioFileClip(audio_path))
     final_clip.write_videofile(
         output_path, codec="libx264", audio_codec="aac", fps=fps,
-        ffmpeg_params=["-pix_fmt", "yuv420p"]
+        ffmpeg_params=["-pix_fmt", "yuv420p"],
+        preset="ultrafast", threads=cores(),
     )
     return output_path
 
@@ -8024,7 +8037,7 @@ def lyric_video(
     lyrics_text,
     text_position,
     *,
-    output_size=(2048, 2048),
+    output_size=(1024, 1024),
     font_size=70,
     text_color="white",
     stroke_color="black",
@@ -8213,10 +8226,10 @@ def lyric_video(
     final_clip.write_videofile(
         output_path,
         codec="libx264",
-        fps=120,
+        fps=24,
         audio_codec="aac",
-        threads=os.cpu_count(),
-        logger=None,
+        preset="ultrafast",
+        threads=cores(),
     )
     print("Video rendering complete.")
     return output_path
