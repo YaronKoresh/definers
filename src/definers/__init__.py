@@ -8125,7 +8125,7 @@ def lyric_video(
 
             word_timestamps = []
             processed_timestamps = [
-                {"word": clean_word(w["word"]), "start": w["start"], "end": w["end"]}
+                {"word": clean_word(w.word), "start": w.start, "end": w.end}
                 for segment in result.segments for w in segment.words
             ]
 
@@ -8142,14 +8142,14 @@ def lyric_video(
                 start_time, end_time = None, None
     
                 for i in range(word_idx, len(processed_timestamps)):
-                    if processed_timestamps[i]["word"] == clean_line_words[0]:
-                        start_time = processed_timestamps[i]["start"]
+                    if processed_timestamps[i].word == clean_line_words[0]:
+                        start_time = processed_timestamps[i].start
             
                         line_len = len(clean_line_words)
                         if i + line_len <= len(processed_timestamps):
-                            transcript_slice = [p["word"] for p in processed_timestamps[i : i + line_len]]
+                            transcript_slice = [p.word for p in processed_timestamps[i : i + line_len]]
                             if transcript_slice == clean_line_words:
-                                end_time = processed_timestamps[i + line_len - 1]["end"]
+                                end_time = processed_timestamps[i + line_len - 1].end
                                 word_idx = i + line_len
                                 break
     
