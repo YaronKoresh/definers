@@ -1074,7 +1074,6 @@ def set_system_message(
 
 
 def answer(history: list):
-
     import librosa
     import imageio as iio
     from PIL import Image
@@ -1141,6 +1140,7 @@ def answer(history: list):
     prompt = PROCESSORS["answer"].tokenizer.apply_chat_template(
         alt_history, tokenize=False, add_generation_prompt=True
     )
+
     inputs = PROCESSORS["answer"](
         text=prompt,
         images=img_list if img_list else None,
@@ -1165,7 +1165,9 @@ def answer(history: list):
         clean_up_tokenization_spaces=False,
     )[0]
 
-    return response
+    history.append({"role": "assistant", "content": response})
+
+    return history
 
 
 def linear_regression(X, y, learning_rate=0.01, epochs=50):
@@ -6625,8 +6627,15 @@ def SklearnWrapper(sklearn_model, is_classification=False):
 
 def get_chat_response(message, history: list):
     history = list(history)
-    response_text = answer(history)
-    history.append({"role": "assistant", "content": response_text})
+
+    if message["files"]:
+        for file_path in message["files"]:
+            history.append({"role": "user", "content": {"path": file_path}})
+
+    if message["text"]:
+        history.append({"role": "user", "content": txt})
+
+    history = answer(history)
     return history
 
 
