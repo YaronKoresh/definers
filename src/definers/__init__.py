@@ -1108,8 +1108,7 @@ def answer(history: list):
             for p in ps:
                 ext = p.split(".")[-1]
                 if ext in common_audio_formats:
-                    p = normalize_audio_to_peak(p)
-                    audio, samplerate = librosa.load(p, sr=12000)
+                    audio, samplerate = librosa.load(p, sr=8000)
                     snd_list.append((audio, samplerate))
                     add_content += f"<|audio_{ str(len(snd_list)) }|>"
                 if ext in iio_formats:
@@ -1144,9 +1143,9 @@ def answer(history: list):
 
     generate_ids = MODELS["answer"].generate(
         **inputs,
-        max_new_tokens=512,
+        max_new_tokens=1024,
         num_beams=6,
-        length_penalty=0.1,
+        length_penalty=0.7,
         num_logits_to_keep=1,
     )
 
