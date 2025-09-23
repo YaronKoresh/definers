@@ -8049,7 +8049,7 @@ def strip_nikud(text: str) -> str:
     )
 
 
-init_stable_whisper():
+def init_stable_whisper():
     import stable_whisper
 
     global MODELS
