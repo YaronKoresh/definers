@@ -635,70 +635,80 @@ common_audio_formats = [
 ]
 
 negative_keywords = [
-    # Quality & Style
-    "low quality",
-    "worst quality",
-    "lowres",
-    "jpeg artifacts",
-    "blurry",
-    "noisy",
-    "pixelated",
-    "watermark",
-    "signature",
-    "username",
-    "text",
-    "error",
-    "out of frame",
-    "cropped",
-    "ugly",
-    "disgusting",
-    "horrific",
-    "scary",
-    "creepy",
-    "polished",
-    "fake",
-    "anime",
-    "movie",
-    # Anatomy & Body
-    "malformed",
-    "disfigured",
-    "deformed",
-    "mutated",
-    "mutation",
-    "extra limbs",
-    "missing limbs",
-    "extra fingers",
-    "missing fingers",
-    "fewer digits",
-    "bad anatomy",
-    "poorly drawn hands",
-    "poorly drawn face",
-    "mangled",
-    "cloned face",
-    "bad proportions",
-    "fused fingers",
-    # Composition & Scene
-    "static position",
-    "same frames",
-    "boring",
-    "uninteresting",
-    "illogical",
-    "unreasonable scenario",
-    "weird scenario",
-    "disconnected",
-    "disjointed",
-    "tiling",
-    "asymmetrical",
-    # Duplication & Repetition
-    "duplicate",
-    "cloned",
-    "multiple views",
-    "grid",
-    "collage",
-    "split screen",
+    # ─── QUALITY & ARTIFACTS ──────────────────────────────────────────────────
+    "low quality", "worst quality", "normal quality", "poor quality", "bad quality",
+    "lowres", "low resolution", "bad resolution",
+    "blurry", "hazy", "unclear", "out of focus", "soft focus", "motion blur",
+    "jpeg artifacts", "compression artifacts", "pixelated", "aliasing", "banding",
+    "noisy", "grainy", "over-exposed", "under-exposed", "burnt",
+    "bad lighting", "harsh lighting", "bad shadows", "no shadows", "unnatural lighting",
+    "chromatic aberration", "color bleeding", "glitch", "error",
+
+    # ─── ANATOMY & DEFORMITIES ────────────────────────────────────────────────
+    "ugly", "disfigured", "deformed", "malformed", "mutated", "mutilated", "mangled",
+    "grotesque", "monstrous", "body horror", "disturbing",
+    "bad anatomy", "bad proportions", "unnatural body", "inhuman",
+    "long neck", "long body", "elongated",
+    "asymmetrical face", "asymmetrical eyes", "crossed eyes", "weird eyes",
+    "cloned face", "multiple heads", "poorly drawn face", "unnatural face", "weird face",
+    "extra limbs", "missing limbs", "extra arms", "missing arms", "extra legs", "missing legs",
+    "extra fingers", "missing fingers", "fewer digits", "fused fingers", "too many fingers",
+    "malformed hands", "mutated hands", "poorly drawn hands", "weird hands",
+    "conjoined", "amputee",
+
+    # ─── COMPOSITION & FRAMING ────────────────────────────────────────────────
+    "bad composition", "poorly composed", "chaotic", "cluttered",
+    "out of frame", "cropped", "cut off", "bad framing", "tilted frame", "tilted horizon",
+    "close-up", "extreme close-up", "vignette",
+    "boring", "uninteresting", "static pose", "awkward pose", "empty background", "lacks detail",
+
+    # ─── DUPLICATION & REPETITION ─────────────────────────────────────────────
+    "tiling", "grid", "collage", "split screen", "multiple views",
+    "duplicate", "cloned", "multiple people", "multiple bodies", "repetition",
+
+    # ─── STYLE & MEDIUM ───────────────────────────────────────────────────────
+    "painting", "drawing", "sketch", "doodle", "illustration",
+    "cartoon", "comic", "anime", "manga", "cel-shaded", "vector art",
+    "3d", "render", "cgi", "vfx", "game asset", "unrealistic", "photoshop", "airbrushed",
+
+    # ─── TEXT, UI & OVERLAYS ──────────────────────────────────────────────────
+    "text", "font", "writing", "letters", "digits", "numbers", "caption", "subtitle",
+    "watermark", "signature", "username", "logo", "branding", "stamp",
+    "UI", "user interface", "menu", "button", "onscreen display",
+
+    # ─── GENERAL AESTHETICS & MOOD ────────────────────────────────────────────
+    "disgusting", "horrific", "scary", "creepy", "morbid", "unappealing", "kitsch", "gaudy",
+    "nsfw", "lewd", "explicit",
 ]
 _negative_prompt_ = ", ".join(negative_keywords)
-_base_prompt_ = "photorealistic, 8k, best quality, sharp focus, professional color grading, natural, reasonable"
+
+positive_keywords = [
+    # ─── CORE QUALITY & RESOLUTION ─────────────────────────────────────────────
+    "masterpiece", "best quality", "high quality", "ultra high resolution",
+    "photorealistic", "hyperrealistic", "realistic", "8k uhd",
+
+    # ─── PHOTOGRAPHY STYLE & COMPOSITION ───────────────────────────────────────
+    "professional photography", "award-winning photography", "world-class photography",
+    "photograph", "shot in the style of a professional photographer",
+
+    # ─── CAMERA & LENS SIMULATION ─────────────────────────────────────────────
+    "sharp focus", "tack sharp", "crisp details",
+    "depth of field (DOF)", "bokeh", "subtle lens flare",
+    "(film grain:0.7)", "shot on Fujifilm XT4", "50mm f/1.8 lens",
+
+    # ─── LIGHTING ─────────────────────────────────────────────────────────────
+    "natural lighting", "soft light", "volumetric lighting", "cinematic lighting",
+    "golden hour lighting", "god rays", "dramatic lighting", "hard shadows",
+
+    # ─── COLOR & POST-PROCESSING ──────────────────────────────────────────────
+    "professional color grading", "cinematic color", "vibrant colors", "realistic colors",
+    "high contrast", "perfect saturation",
+
+    # ─── DETAIL & TEXTURE ─────────────────────────────────────────────────────
+    "hyperdetailed", "insanely detailed", "intricate details", "every detail visible",
+    "realistic textures", "realistic skin texture", "skin pores",
+]
+_base_prompt_ = ", ".join(positive_keywords)
 
 
 def get_os_name():
@@ -5149,7 +5159,7 @@ class Database:
 def _summarize(text_to_summarize, is_chunk=False):
     prefix = "summarize: "
     encoded = TOKENIZERS["summary"](
-        prefix + text_to_summarize,
+        prefix + simple_text(text_to_summarize),
         return_tensors="pt",
         truncation=True,
         max_length=512,
@@ -5637,7 +5647,7 @@ def init_pretrained_model(task: str, turbo: bool = False):
     return init_model_file(task, turbo)
 
 
-def choose_random_words(word_list, num_words=10):
+def choose_random_words(word_list, num_words=20):
     if not word_list:
         return []
 
@@ -5657,16 +5667,14 @@ def choose_random_words(word_list, num_words=10):
 
 def optimize_prompt_realism(prompt):
     prompt = preprocess_prompt(prompt)
-    prompt = f"A photograph of a { _base_prompt_ }, { prompt }."
+    prompt = f"{prompt}, { ", ".join(choose_random_words(positive_keywords)) }."
     return prompt
 
 
 def preprocess_prompt(prompt):
 
     if len(prompt) > 0:
-        lines = prompt.splitlines()
-        prompt = " and ".join(lines)
-        prompt = simple_text(prompt)
+        prompt = ai_translate(prompt)
         prompt = summary(prompt, max_words=20)
     return prompt
 
