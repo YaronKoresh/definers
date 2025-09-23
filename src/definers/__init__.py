@@ -1175,9 +1175,7 @@ def answer(history: list):
         clean_up_tokenization_spaces=False,
     )[0]
 
-    history.append({"role": "assistant", "content": response})
-
-    return history
+    return response
 
 
 def linear_regression(X, y, learning_rate=0.01, epochs=50):
@@ -6643,8 +6641,8 @@ def get_chat_response(message, history: list):
     if message["text"]:
         history.append({"role": "user", "content": message["text"]})
 
-    history = answer(history)
-    return history
+    response = answer(history)
+    return response
 
 
 def init_chat(title="Chatbot", handler=get_chat_response):
