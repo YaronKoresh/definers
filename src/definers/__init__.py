@@ -3653,7 +3653,7 @@ def add_path(*p):
 def full_path(*p):
     return str(
         Path(os.path.join(*[str(_p).strip() for _p in p])).resolve()
-    ).rstrip("/")
+    ).rstrip("/").replace(os.path.sep, "/")
 
 
 def paths(*patterns):
@@ -5216,7 +5216,7 @@ def summary(text, max_words=50):
 
 
 def path_end(p: str):
-    return p.replace(os.path.sep, "/").strip("/").split("/")[-1]
+    return full_path(p).strip("/").split("/")[-1]
 
 
 def git(
