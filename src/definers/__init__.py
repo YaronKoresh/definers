@@ -9062,7 +9062,7 @@ def enhance_audio(audio_path):
     return audio_limiter(
         riaa_filter(
             master( autotune_song(audio_path), "wav"),
-            bass_factor=0.5
+            bass_factor=0.4
         )
     )
 
@@ -9237,8 +9237,8 @@ def audio_limiter(
     db_boost=15.0,
     db_limit=-0.1,
     attack_ms=1.0,
-    release_ms=200.0,
-    lookahead_ms=10.0,
+    release_ms=100.0,
+    lookahead_ms=5.0,
     oversampling=8,
     soft_clip_db=-2.0
 ):
