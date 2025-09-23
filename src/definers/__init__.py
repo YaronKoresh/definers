@@ -5637,7 +5637,7 @@ def is_huggingface_repo(repo_id: str) -> bool:
 
 
 def init_pretrained_model(task: str, turbo: bool = False):
-    repo_tasks_override = ["rvc", "tts"]
+    repo_tasks_override = ["svc", "tts"]
     if task in MODELS and MODELS[task]:
         return
     if task in repo_tasks_override or task in tasks and is_huggingface_repo(tasks[task]) or is_huggingface_repo(task):
