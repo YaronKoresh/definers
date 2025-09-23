@@ -8170,7 +8170,7 @@ def lyric_video(
             )
             return None
 
-    log(timed_lyrics)
+    log("timed_lyrics", timed_lyrics)
     print("✅ Synchronization complete.")
 
     output_size = (1920, 1080)
@@ -8218,14 +8218,14 @@ def lyric_video(
 
     font = "Alef-Bold.ttf"
     if not exist(font):
-        log(f'Downloading "{font}"')
+        print(f'Downloading "{font}"')
         google_drive_download(
             "1C48KkYWQDYu7ypbNtSXAUJ6kuzoZ42sI", font
         )
 
     for start, end, line in timed_lyrics:
         clip_duration = end - start
-        log(f'Clip duration: {clip_duration}')
+        log('Clip duration', clip_duration)
         if clip_duration <= 0:
             continue
 
@@ -8250,7 +8250,7 @@ def lyric_video(
         )
         lyric_clips.append(text_clip)
 
-    log(f'Lyric clips: {len(lyric_clips)}')
+    log('Lyric clips', len(lyric_clips) )
 
     final_clip = CompositeVideoClip(
         [background_clip] + lyric_clips, size=output_size
