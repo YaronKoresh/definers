@@ -7724,12 +7724,12 @@ def beat_visualizer(
     
     rms = librosa.feature.rms(y=y, hop_length=hop_length)[0]
     rms_normalized = (rms - np.min(rms)) / (np.max(rms) - np.min(rms) + 1e-7)
-    rms_scales = 1.0 + (rms_normalized * effect_strength * 0.25) 
+    rms_scales = 1.0 + (rms_normalized * effect_strength * 0.5) 
 
     tempo, beat_frames = librosa.beat.beat_track(y=y, sr=sr, hop_length=hop_length)
     
     beat_impulses = np.zeros_like(rms_normalized)
-    decay_rate = 0.88 
+    decay_rate = 0.75 
     
     for beat_frame in beat_frames:
         frame = beat_frame
