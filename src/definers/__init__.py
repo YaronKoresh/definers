@@ -9064,10 +9064,10 @@ def enhance_audio(audio_path):
     return audio_limiter(
         riaa_filter(
             master( autotune_song(audio_path), "wav"),
-            bass_factor=0.3
+            bass_factor=0.5
         ),
-        db_boost=15.0,
-        db_limit=-0.1
+        db_boost=18.0,
+        db_limit=-1.5
     )
 
 
@@ -9078,7 +9078,7 @@ def autotune_song(
     correct_timing=True,
     quantize_grid_strength=8,
     tolerance_cents=15,
-    attack_smoothing_ms=20,
+    attack_smoothing_ms=1,
 ):
     import librosa
     import madmom
@@ -9243,8 +9243,8 @@ def audio_limiter(
     attack_ms=1.0,
     release_ms=100.0,
     lookahead_ms=5.0,
-    oversampling=4,
-    soft_clip_db=-3.0
+    oversampling=8,
+    soft_clip_db=-2.0
 ):
     from scipy.io import wavfile
     from scipy import signal
