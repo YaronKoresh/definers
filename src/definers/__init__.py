@@ -6571,7 +6571,9 @@ def get_chat_response(message, history: list):
         orig_lang = language(message["text"])
         history.append({"role": "user", "content": message["text"]})
 
-    log("Chat", f'Got a message in {language_codes[orig_lang]}.\n\nThe message including the following types of data:\n{ "\n".join(including) }')
+    nl = "\n"
+    including = "\n".join(including)
+    log("Chat", f'Got a message in {language_codes[orig_lang]}.{nl}{nl}The message including the following types of data:{nl}{including}')
 
     response = answer(history)
 
