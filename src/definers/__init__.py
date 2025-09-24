@@ -3296,7 +3296,7 @@ def upscale(
         tile_size=(tile_height, tile_width),
         denoise_strength=denoise_strength,
         num_inference_steps=num_inference_steps,
-        loras_scale={"more_details": 1.0, "sdxl_render": 1.0},
+        loras_scale={"more_details": 0.0, "sdxl_render": 1.0},
         solver_type=solver_type,
     )
 
