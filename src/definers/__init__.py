@@ -5597,7 +5597,7 @@ def preprocess_prompt(prompt):
 
     if len(prompt) > 0:
         prompt = ai_translate(prompt)
-        prompt = summary(prompt, max_words=12)
+        prompt = summary(prompt, max_words=20)
     return prompt
 
 
