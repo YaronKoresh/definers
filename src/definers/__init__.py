@@ -4838,6 +4838,7 @@ html > body main {
         border: none !important;
         cursor: pointer !important;
         margin-inline: 8px !important;
+        width: auto !important;
     }
 
     textarea {
