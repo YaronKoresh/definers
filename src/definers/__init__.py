@@ -4680,8 +4680,8 @@ def ai_translate(text, lang="en"):
                 forced_bos_token_id=tokenizer.convert_tokens_to_ids(tgt_code),
                 max_length=len(input_tokens) + 50,
                 num_return_sequences=1,
-                num_beams=32,
-                length_penalty=0.1,
+                num_beams=64,
+                length_penalty=2.0,
                 no_repeat_ngram_size=3,
                 renormalize_logits=True,
             )
@@ -5091,7 +5091,7 @@ def _summarize(text_to_summarize, is_chunk=False):
     gen_kwargs = {
         "max_length": 512,
         "repetition_penalty": 2.0,
-        "length_penalty": 0.1,
+        "length_penalty": 2.0,
         "no_repeat_ngram_size": 3,
         "num_beams": 32,
         "early_stopping": True,
@@ -5595,10 +5595,8 @@ def optimize_prompt_realism(prompt):
 
 
 def preprocess_prompt(prompt):
-
-    if len(prompt) > 0:
-        prompt = ai_translate(prompt)
-        prompt = summary(prompt, max_words=20)
+    prompt = ai_translate(prompt)
+    prompt = summary(prompt, max_words=20)
     return prompt
 
 
