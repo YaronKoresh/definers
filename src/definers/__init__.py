@@ -4681,7 +4681,7 @@ def ai_translate(text, lang="en"):
                 max_length=len(input_tokens) + 50,
                 num_return_sequences=1,
                 num_beams=64,
-                length_penalty=2.0,
+                length_penalty=0.1,
                 no_repeat_ngram_size=3,
                 renormalize_logits=True,
             )
@@ -6579,6 +6579,7 @@ def get_chat_response(message, history: list):
 
     if orig_lang and orig_lang != language(response):
         response = ai_translate(response, lang=orig_lang)
+        response = summary(response)
 
     return response
 
