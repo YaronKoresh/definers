@@ -1011,7 +1011,7 @@ def set_system_message(
     log("System Message Updated", SYSTEM_MESSAGE)
 
 
-def split_audio_by_duration(file_path, duration=5, resample=None):
+def split_audio_by_duration(file_path, duration=5, count=None, resample=None):
     import librosa
     import soundfile as sf
 
@@ -1034,6 +1034,11 @@ def split_audio_by_duration(file_path, duration=5, resample=None):
         print(f"Exported {output_path}")
 
         res_paths.append(output_path)
+
+        if count is not None:
+            count = int(count) - 1
+            if count <= 0:
+                break
 
     return res_paths
 
@@ -1081,11 +1086,10 @@ def answer(history: list):
             for p in ps:
                 ext = p.split(".")[-1]
                 if ext in common_audio_formats:
-                    auds = split_audio_by_duration(p, duration=30, resample=8000)
-                    for aud in auds:
-                        audio, samplerate = librosa.load(aud, sr=None, mono=True)
-                        snd_list.append((audio, samplerate))
-                        add_content += f" <|audio_{ str(len(snd_list)) }|>"
+                    aud = split_audio_by_duration(p, duration=30, count=1, resample=8000)[0]
+                    audio, samplerate = librosa.load(aud, sr=None, mono=True)
+                    snd_list.append((audio, samplerate))
+                    add_content += f" <|audio_{ str(len(snd_list)) }|>"
                 if ext in iio_formats:
                     img = iio.imread(p)
                     w, h = Image.open(p).size
@@ -1120,7 +1124,7 @@ def answer(history: list):
     generate_ids = MODELS["answer"].generate(
         **inputs,
         max_new_tokens=512,
-        num_beams=6,
+        num_beams=12,
         length_penalty=0.1,
         num_logits_to_keep=1,
     )
