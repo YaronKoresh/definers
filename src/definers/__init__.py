@@ -635,8 +635,8 @@ common_audio_formats = [
     "wma",
 ]
 
-_negative_prompt_ = "worst quality, blurry, bad anatomy, mutated body, painting, 3d, text, labels, trademarks, watermark, duplicate, cropped"
-_base_prompt_ = "hyperrealistic, hyperdetailed, natural lighting, film grain, national geographic, true reasonable scenario"
+_negative_prompt_ = "worst quality, blurry, bad anatomy, mutated body, painting, 3d, text, watermark, duplicate, cropped"
+_base_prompt_ = "highly realistic, highly detailed, natural lighting, film grain, national geographic, reasonable scenario"
 
 
 def get_os_name():
