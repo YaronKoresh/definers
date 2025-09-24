@@ -1092,7 +1092,7 @@ def answer(history: list):
         **inputs,
         max_new_tokens=512,
         num_beams=6,
-        length_penalty=0.1,
+        length_penalty=1.0,
         num_logits_to_keep=1,
     )
 
@@ -4681,7 +4681,7 @@ def ai_translate(text, lang="en"):
                 max_length=len(input_tokens) + 50,
                 num_return_sequences=1,
                 num_beams=32,
-                length_penalty=0.1,
+                length_penalty=1.0,
                 no_repeat_ngram_size=3,
                 renormalize_logits=True,
             )
@@ -5091,7 +5091,7 @@ def _summarize(text_to_summarize, is_chunk=False):
     gen_kwargs = {
         "max_length": 512,
         "repetition_penalty": 2.0,
-        "length_penalty": 0.1,
+        "length_penalty": 1.0,
         "no_repeat_ngram_size": 3,
         "num_beams": 32,
         "early_stopping": True,
