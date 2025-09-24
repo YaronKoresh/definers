@@ -5127,7 +5127,7 @@ def map_reduce_summary(text, max_words=50):
     return final_summary
 
 
-def summary(text, max_words=50):
+def summary(text, max_words=20):
     word_count = len(text.split())
 
     if word_count > 350:
