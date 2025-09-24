@@ -635,81 +635,8 @@ common_audio_formats = [
     "wma",
 ]
 
-negative_keywords = [
-    # ─── QUALITY & ARTIFACTS ──────────────────────────────────────────────────
-    "low quality", "worst quality", "normal quality", "poor quality", "bad quality",
-    "lowres", "low resolution", "bad resolution",
-    "blurry", "hazy", "unclear", "out of focus", "soft focus", "motion blur",
-    "jpeg artifacts", "compression artifacts", "pixelated", "aliasing", "banding",
-    "noisy", "grainy", "over-exposed", "under-exposed", "burnt",
-    "bad lighting", "harsh lighting", "bad shadows", "no shadows", "unnatural lighting",
-    "chromatic aberration", "color bleeding", "glitch", "error",
-
-    # ─── ANATOMY & DEFORMITIES ────────────────────────────────────────────────
-    "ugly", "disfigured", "deformed", "malformed", "mutated", "mutilated", "mangled",
-    "grotesque", "monstrous", "body horror", "disturbing",
-    "bad anatomy", "bad proportions", "unnatural body", "inhuman",
-    "long neck", "long body", "elongated",
-    "asymmetrical face", "asymmetrical eyes", "crossed eyes", "weird eyes",
-    "cloned face", "multiple heads", "poorly drawn face", "unnatural face", "weird face",
-    "extra limbs", "missing limbs", "extra arms", "missing arms", "extra legs", "missing legs",
-    "extra fingers", "missing fingers", "fewer digits", "fused fingers", "too many fingers",
-    "malformed hands", "mutated hands", "poorly drawn hands", "weird hands",
-    "conjoined", "amputee",
-
-    # ─── COMPOSITION & FRAMING ────────────────────────────────────────────────
-    "bad composition", "poorly composed", "chaotic", "cluttered",
-    "out of frame", "cropped", "cut off", "bad framing", "tilted frame", "tilted horizon",
-    "close-up", "extreme close-up", "vignette",
-    "boring", "uninteresting", "static pose", "awkward pose", "empty background", "lacks detail",
-
-    # ─── DUPLICATION & REPETITION ─────────────────────────────────────────────
-    "tiling", "grid", "collage", "split screen", "multiple views",
-    "duplicate", "cloned", "multiple people", "multiple bodies", "repetition",
-
-    # ─── STYLE & MEDIUM ───────────────────────────────────────────────────────
-    "painting", "drawing", "sketch", "doodle", "illustration",
-    "cartoon", "comic", "anime", "manga", "cel-shaded", "vector art",
-    "3d", "render", "cgi", "vfx", "game asset", "unrealistic", "photoshop", "airbrushed",
-
-    # ─── TEXT, UI & OVERLAYS ──────────────────────────────────────────────────
-    "text", "font", "writing", "letters", "digits", "numbers", "caption", "subtitle",
-    "watermark", "signature", "username", "logo", "branding", "stamp",
-    "UI", "user interface", "menu", "button", "onscreen display",
-
-    # ─── GENERAL AESTHETICS & MOOD ────────────────────────────────────────────
-    "disgusting", "horrific", "scary", "creepy", "morbid", "unappealing", "kitsch", "gaudy",
-    "nsfw", "lewd", "explicit",
-]
-_negative_prompt_ = ", ".join(negative_keywords)
-
-positive_keywords = [
-    # ─── CORE QUALITY & RESOLUTION ─────────────────────────────────────────────
-    "masterpiece", "best quality", "high quality", "ultra high resolution",
-    "photorealistic", "hyperrealistic", "realistic", "8k uhd",
-
-    # ─── PHOTOGRAPHY STYLE & COMPOSITION ───────────────────────────────────────
-    "professional photography", "award-winning photography", "world-class photography",
-    "photograph", "shot in the style of a professional photographer", "national geographic",
-
-    # ─── CAMERA & LENS SIMULATION ─────────────────────────────────────────────
-    "sharp focus", "tack sharp", "crisp details",
-    "depth of field (DOF)", "bokeh", "subtle lens flare",
-    "(film grain:0.7)", "shot on Fujifilm XT4", "50mm f/1.8 lens",
-
-    # ─── LIGHTING ─────────────────────────────────────────────────────────────
-    "natural lighting", "soft light", "volumetric lighting", "cinematic lighting",
-    "golden hour lighting", "god rays", "dramatic lighting", "hard shadows",
-
-    # ─── COLOR & POST-PROCESSING ──────────────────────────────────────────────
-    "professional color grading", "cinematic color", "vibrant colors", "realistic colors",
-    "high contrast", "perfect saturation",
-
-    # ─── DETAIL & TEXTURE ─────────────────────────────────────────────────────
-    "hyperdetailed", "insanely detailed", "intricate details", "every detail visible",
-    "realistic textures", "realistic skin texture", "skin pores",
-]
-_base_prompt_ = ", ".join(positive_keywords)
+_negative_prompt_ = "worst quality, blurry, bad anatomy, mutated body, painting, 3d, text, watermark, duplicate, cropped"
+_base_prompt_ = "hyperrealistic, masterpiece, tack sharp, hyperdetailed, cinematic lighting, film grain"
 
 
 def get_os_name():
@@ -3307,7 +3234,7 @@ def upscale(
     tile_width: int = 768,
     tile_height: int = 768,
     denoise_strength: float = 0.2,
-    num_inference_steps: int = 80,
+    num_inference_steps: int = 60,
     solver: str = "DPMSolver",
 ):
     from PIL import Image
@@ -5661,7 +5588,7 @@ def choose_random_words(word_list, num_words=10):
 
 def optimize_prompt_realism(prompt):
     prompt = preprocess_prompt(prompt)
-    prompt = f'{prompt}, { ", ".join(choose_random_words(positive_keywords, num_words=16)) }'
+    prompt = f'{prompt}, { _base_prompt_ }'
     return prompt
 
 
