@@ -1041,7 +1041,7 @@ def answer(history: list):
             content_lang = language(content)
             if content_lang != required_lang:
                 content = ai_translate(content, lang=required_lang)
-            add_content += content
+            add_content += " "+content
 
         else:
             ps = []
@@ -1070,7 +1070,7 @@ def answer(history: list):
             add_role = role
             alt_history.append({
                 "role": add_role,
-                "content": add_content
+                "content": add_content.strip()
             })
             continue
         alt_history[-1]["content"] += add_content
@@ -6561,16 +6561,18 @@ def get_chat_response(message, history: list):
 
     including = []
 
+    if message["text"]:
+        including.append("text")
+        orig_lang = language(message["text"])
+        if message["files"]:
+            history.append({"role": "user", "content": "Please carefully examine the attachments in the current chat, and deeply examine the attachments in this message carefully!"})
+        history.append({"role": "user", "content": message["text"]})
+
     if message["files"]:
         including.append("files")
         for file_path in message["files"]:
             history.append({"role": "user", "content": {"path": file_path}})
-
-    if message["text"]:
-        including.append("text")
-        orig_lang = language(message["text"])
-        history.append({"role": "user", "content": message["text"]})
-
+            
     nl = "\n"
     including = "\n".join(including)
     log("Chat", f'Got a message in {language_codes[orig_lang]}.{nl}{nl}The message including the following types of data:{nl}{including}')
