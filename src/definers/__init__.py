@@ -1011,6 +1011,30 @@ def set_system_message(
     log("System Message Updated", SYSTEM_MESSAGE)
 
 
+def split_audio_by_duration(file_path, duration=5, resample=None):
+    y, sr = librosa.load(file_path, sr=resample)
+
+    chunk_samples = duration * sr
+
+    output_dir = tmp(dir=True)
+
+    res_paths = []
+
+    for i, start in enumerate(range(0, len(y), chunk_samples)):
+        end = start + chunk_samples
+        chunk = y[start:end]
+            
+        chunk_name = f"chunk_{i+1}.mp3"
+        output_path = full_path(output_dir, chunk_name)
+
+        sf.write(output_path, chunk, sr)
+        print(f"Exported {output_path}")
+
+        res_paths.append(output_path)
+
+    return res_paths
+
+
 def answer(history: list):
     import librosa
     import imageio as iio
@@ -1054,9 +1078,11 @@ def answer(history: list):
             for p in ps:
                 ext = p.split(".")[-1]
                 if ext in common_audio_formats:
-                    audio, samplerate = librosa.load(p, sr=8000)
-                    snd_list.append((audio, samplerate))
-                    add_content += f"<|audio_{ str(len(snd_list)) }|>"
+                    auds = split_audio_by_duration(p, duration=30, resample=8000)
+                    for aud in auds:
+                        audio, samplerate = librosa.load(aud, sr=None, mono=True)
+                        snd_list.append((audio, samplerate))
+                        add_content += f" <|audio_{ str(len(snd_list)) }|>"
                 if ext in iio_formats:
                     img = iio.imread(p)
                     w, h = Image.open(p).size
@@ -1065,7 +1091,7 @@ def answer(history: list):
                     new_img = (new_img * 255).astype(np.uint8)
                     img = Image.fromarray(new_img)
                     img_list.append(img)
-                    add_content += f"<|image_{ str(len(img_list)) }|>"
+                    add_content += f" <|image_{ str(len(img_list)) }|>"
         if add_role != role:
             add_role = role
             alt_history.append({
@@ -1091,7 +1117,7 @@ def answer(history: list):
     generate_ids = MODELS["answer"].generate(
         **inputs,
         max_new_tokens=512,
-        num_beams=6,
+        num_beams=32,
         length_penalty=0.1,
         num_logits_to_keep=1,
     )
@@ -6565,14 +6591,16 @@ def get_chat_response(message, history: list):
         including.append("text")
         orig_lang = language(message["text"])
         if message["files"]:
-            history.append({"role": "user", "content": "Please carefully examine the attachments in the current chat, and deeply examine the attachments in this message carefully!"})
+            history.append({"role": "user", "content": "Please deeply examine every attachment from this new message carefully!"})
         history.append({"role": "user", "content": message["text"]})
 
     if message["files"]:
         including.append("files")
         for file_path in message["files"]:
             history.append({"role": "user", "content": {"path": file_path}})
-            
+
+    history.append({"role": "user", "content": "Please double-check your response before answering!"})
+
     nl = "\n"
     including = "\n".join(including)
     log("Chat", f'Got a message in {language_codes[orig_lang]}.{nl}{nl}The message including the following types of data:{nl}{including}')
