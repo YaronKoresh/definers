@@ -3605,10 +3605,10 @@ def paths(*patterns):
 def copy(src, dst):
     if is_directory(full_path(src)):
         shutil.copytree(
-            src, dst, symlinks=False, ignore_dangling_symlinks=True
+            str(src), str(dst), symlinks=False, ignore_dangling_symlinks=True
         )
     else:
-        shutil.copy(src, dst)
+        shutil.copy(str(src), str(dst))
 
 
 def big_number(zeros=10):
@@ -3754,7 +3754,8 @@ def directory(dir):
 
 def move(src, dest):
     try:
-        shutil.move(str(src), str(dest))
+        copy(src, dest)
+        delete(src)
     except Exception as e:
         catch(f"Failed to move '{src}' to '{dest}': {e}")
 
@@ -7981,7 +7982,7 @@ def init_stable_whisper():
     )
 
     MODELS["stable-whisper"] = stable_whisper.load_model(
-        "large-v3", device="cpu"
+        "large-v3", device=device()
     )
 
 
@@ -7998,6 +7999,7 @@ def lyric_video(
     stroke_width=2,
     fade_duration=0.5,
 ):
+    import edlib
     import torch
     from moviepy import (
         AudioFileClip,
@@ -8061,26 +8063,54 @@ def lyric_video(
 
             log("Processed Lines", processed_lines)
 
-            word_idx = 0
-            for original_line, clean_line_words in processed_lines:
-                if not clean_line_words:
-                    continue
-    
-                start_time, end_time = None, None
-    
-                for i in range(word_idx, len(processed_timestamps)):
-                    if processed_timestamps[i]["word"] == clean_line_words[0]:
-                        start_time = processed_timestamps[i]["start"]
+
+
+
+            correct_words_flat = [word for _, line_words in processed_lines for word in line_words]
+            transcript_words_flat = [p['word'] for p in processed_timestamps]
+
+            line_boundaries = []
+            word_counter = 0
+            for _, line_words in processed_lines:
+                start_index = word_counter
+                word_counter += len(line_words)
+                end_index = word_counter
+                line_boundaries.append((start_index, end_index))
+
+            alignment = edlib.align(correct_words_flat, transcript_words_flat, mode="NW", task="path")
+
+            correct_to_transcript_map = {}
+            transcript_idx = -1
+            correct_idx = -1
             
-                        line_len = len(clean_line_words)
-                        if i + line_len <= len(processed_timestamps):
-                            transcript_slice = [p["word"] for p in processed_timestamps[i : i + line_len]]
-                            if transcript_slice == clean_line_words:
-                                end_time = processed_timestamps[i + line_len - 1]["end"]
-                                word_idx = i + line_len
-                                break
-    
-                if start_time is not None and end_time is not None:
+            if alignment['cigar']:
+                operations = re.findall(r'(\d+)([=XDI])', alignment['cigar'])
+                for length, op in operations:
+                    for _ in range(int(length)):
+                        if op in ('=', 'X'):
+                            transcript_idx += 1
+                            correct_idx += 1
+                            correct_to_transcript_map[correct_idx] = transcript_idx
+                        elif op == 'D':
+                            transcript_idx += 1
+                        elif op == 'I':
+                            correct_idx += 1
+                            correct_to_transcript_map[correct_idx] = -1
+
+            for i, original_line in enumerate(lines):
+                start_word_idx, end_word_idx = line_boundaries[i]
+                first_transcript_idx, last_transcript_idx = -1, -1
+
+                for word_i in range(start_word_idx, end_word_idx):
+                    mapped_idx = correct_to_transcript_map.get(word_i, -1)
+                    if mapped_idx != -1:
+                        if first_transcript_idx == -1:
+                            first_transcript_idx = mapped_idx
+                        last_transcript_idx = mapped_idx
+                
+                if first_transcript_idx != -1 and last_transcript_idx != -1:
+                    start_time = processed_timestamps[first_transcript_idx]['start']
+                    end_time = processed_timestamps[last_transcript_idx]['end']
                     timed_lyrics.append((start_time, end_time, original_line))
 
             del model, result
@@ -8092,7 +8122,7 @@ def lyric_video(
             )
             return None
 
-    log("timed_lyrics", timed_lyrics)
+    log("Timed Lyrics", timed_lyrics)
     print("✅ Synchronization complete.")
 
     output_size = (max_dim, max_dim)
@@ -8139,7 +8169,7 @@ def lyric_video(
     lyric_clips = []
 
     for start, end, line in timed_lyrics:
-        clip_duration = end - start
+        clip_duration = round(end - start, 3)
         log('Clip duration', clip_duration)
         if clip_duration <= 0:
             continue
