@@ -4837,13 +4837,13 @@ html > body main {
         border-radius: 2mm !important;
         border: none !important;
         cursor: pointer !important;
+        margin-inline: 8px !important;
     }
 
     textarea {
         border: 1px solid #ccc !important;
         border-radius: 5px !important;
         padding: 8px !important;
-        margin-bottom: 10px !important;
     }
 
     textarea:focus{
