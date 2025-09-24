@@ -7989,7 +7989,7 @@ def init_stable_whisper():
     )
 
     MODELS["stable-whisper"] = stable_whisper.load_model(
-        "large-v3", device=device()
+        "base", device="cpu"
     )
 
 
