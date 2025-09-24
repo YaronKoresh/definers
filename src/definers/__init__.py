@@ -6560,13 +6560,19 @@ def get_chat_response(message, history: list):
 
     orig_lang = None
 
+    including = []
+
     if message["files"]:
+        including.append("files")
         for file_path in message["files"]:
             history.append({"role": "user", "content": {"path": file_path}})
 
     if message["text"]:
+        including.append("text")
         orig_lang = language(message["text"])
         history.append({"role": "user", "content": message["text"]})
+
+    log("Chat", f'Got a message in {language_codes[orig_lang]}.\n\nThe message including the following types of data:\n{ "\n".join(including) }')
 
     response = answer(history)
 
