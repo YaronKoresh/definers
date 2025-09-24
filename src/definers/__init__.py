@@ -3731,11 +3731,10 @@ def find_package_paths(package_name):
 
 def tmp(suffix: str = ".data", keep: bool = True, dir=False):
     if dir:
-        with tempfile.TemporaryDirectory() as temp:
-            temp_name = temp
+        temp_dir_path = tempfile.mkdtemp()
         if not keep:
-            delete(temp_name)
-        return temp_name
+            delete(temp_dir_path)
+        return temp_dir_path
     if not suffix.startswith("."):
         if len(suffix.split(".")) > 1:
             suffix = suffix.split(".")
@@ -3827,21 +3826,10 @@ def directory(dir):
 
 
 def move(src, dest):
-    if (
-        is_directory(src)
-        or is_symlink(src)
-        and is_directory(full_path(src))
-    ):
-        shutil.copytree(
-            str(src),
-            str(dest),
-            symlinks=False,
-            ignore_dangling_symlinks=True,
-            copy_function=shutil.move,
-        )
-        shutil.rmtree(str(src))
-    else:
+    try:
         shutil.move(str(src), str(dest))
+    except Exception as e:
+        catch(f"Failed to move '{src}' to '{dest}': {e}")
 
 
 def is_directory(*p):
