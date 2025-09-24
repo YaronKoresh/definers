@@ -8066,7 +8066,7 @@ def init_stable_whisper():
     )
 
     MODELS["stable-whisper"] = stable_whisper.load_model(
-        "large-v2", device="cpu"
+        "large-v3", device="cpu"
     )
 
 
