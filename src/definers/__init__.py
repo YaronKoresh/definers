@@ -635,8 +635,8 @@ common_audio_formats = [
     "wma",
 ]
 
-_negative_prompt_ = "worst quality, blurry, bad anatomy, mutated body, painting, 3d, text, watermark, duplicate, cropped"
-_base_prompt_ = "highly realistic, highly detailed, natural lighting, film grain, national geographic, reasonable scenario"
+_negative_prompt_ = "blurry, mutated, painted, 3d, textual, watermarked, duplicated, cropped"
+_base_prompt_ = "proportional, realistic, detailed, natural, film grain, national geographic, reasonable"
 
 
 def get_os_name():
@@ -3258,8 +3258,8 @@ def init_upscale():
 def upscale(
     path,
     upscale_factor: int = 2,
-    prompt: str = "sharp, high contrast",
-    negative_prompt: str = "blurry",
+    prompt: str = "sharp, high contrast, sharp, high contrast, sharp, high contrast.",
+    negative_prompt: str = "blurry, blurry.",
     seed: int = None,
     controlnet_scale: float = 0.7,
     controlnet_decay: float = 0.8,
@@ -5623,13 +5623,13 @@ def choose_random_words(word_list, num_words=10):
 
 def optimize_prompt_realism(prompt):
     prompt = preprocess_prompt(prompt)
-    prompt = f'{prompt}, { _base_prompt_ }'
+    prompt = f'{ _base_prompt_ }, {prompt}, { _base_prompt_ }.'
     return prompt
 
 
 def preprocess_prompt(prompt):
     prompt = ai_translate(prompt)
-    prompt = summary(prompt, max_words=20)
+    prompt = summary(prompt, max_words=14)
     return prompt
 
 
