@@ -4833,7 +4833,7 @@ html > body main {
     padding-inline: 20px !important;
 }
 
-    button {
+    button:not(:has(svg)) {
         border-radius: 2mm !important;
         border: none !important;
         cursor: pointer !important;
