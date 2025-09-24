@@ -3225,10 +3225,10 @@ def init_upscale():
 def upscale(
     path,
     upscale_factor: int = 2,
-    prompt: str = "highest quality, sharp, high contrast",
-    negative_prompt: str = "blurry, lowest quality",
+    prompt: str = "sharp, high contrast",
+    negative_prompt: str = "blurry",
     seed: int = None,
-    controlnet_scale: float = 0.5,
+    controlnet_scale: float = 0.7,
     controlnet_decay: float = 0.8,
     condition_scale: float = 8.0,
     tile_width: int = 768,
@@ -3267,7 +3267,7 @@ def upscale(
         tile_size=(tile_height, tile_width),
         denoise_strength=denoise_strength,
         num_inference_steps=num_inference_steps,
-        loras_scale={"more_details": 0.1, "sdxl_render": 1.0},
+        loras_scale={"more_details": 1.0, "sdxl_render": 1.0},
         solver_type=solver_type,
     )
 
