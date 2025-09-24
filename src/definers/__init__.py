@@ -3650,10 +3650,14 @@ def add_path(*p):
         return run(f'setx PATH "%PATH%;{path}"')
 
 
+def normalize_path(p):
+    return p.rstrip("/").replace(os.path.sep, "/")
+
+
 def full_path(*p):
-    return str(
+    return normalize_path(str(
         Path(os.path.join(*[str(_p).strip() for _p in p])).resolve()
-    ).rstrip("/").replace(os.path.sep, "/")
+    ))
 
 
 def paths(*patterns):
@@ -5264,9 +5268,9 @@ def git(
                 if content.startswith(
                     "version https://git-lfs.github.com/spec"
                 ):
-                    filepath_in_repo = os.path.relpath(
+                    filepath_in_repo = normalize_path(os.path.relpath(
                         p, clone_dir
-                    ).replace(os.path.sep, "/")
+                    ))
                     asset_url = f"https://media.githubusercontent.com/media/{user}/{repo}/{branch}/{filepath_in_repo}"
                     try:
                         download_file(asset_url, p)
@@ -5282,7 +5286,7 @@ def git(
 
     ps = paths(f"{clone_dir}/*")
     for p in ps:
-        n = p.strip("/").split("/")[-1]
+        n = path_end(p)
         if n == ".git":
             continue
         move(p, f"{parent}/{n}")
@@ -8062,7 +8066,7 @@ def init_stable_whisper():
     )
 
     MODELS["stable-whisper"] = stable_whisper.load_model(
-        "base", device="cpu"
+        "large-v2", device="cpu"
     )
 
 
@@ -8117,8 +8121,9 @@ def lyric_video(
             print(
                 "Transcribing audio with music-optimized settings..."
             )
-            result = model.transcribe_minimal(
+            result = model.transcribe(
                 audio_path,
+                vad=True,
                 language=detected_lang,
                 no_speech_threshold=None,
                 denoiser="demucs",
@@ -8132,10 +8137,14 @@ def lyric_video(
                 for segment in result.segments for w in segment.words
             ]
 
+            log("Processed Timestamps", processed_timestamps)
+
             processed_lines = [
                 (line, [clean_word(w) for w in re.findall(r"\b[\w'-]+\b", line)])
                 for line in lines
             ]
+
+            log("Processed Lines", processed_lines)
 
             word_idx = 0
             for original_line, clean_line_words in processed_lines:
@@ -8213,13 +8222,6 @@ def lyric_video(
         print(f"No background provided. Using default size: {output_size[0]}x{output_size[1]} pixels.")
 
     lyric_clips = []
-
-    font = "Alef-Bold.ttf"
-    if not exist(font):
-        print(f'Downloading "{font}"')
-        google_drive_download(
-            "1C48KkYWQDYu7ypbNtSXAUJ6kuzoZ42sI", font
-        )
 
     for start, end, line in timed_lyrics:
         clip_duration = end - start
