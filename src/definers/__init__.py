@@ -3259,10 +3259,10 @@ def upscale(
     seed: int = None,
     controlnet_scale: float = 0.7,
     controlnet_decay: float = 0.8,
-    condition_scale: float = 8.0,
+    condition_scale: float = 4.0,
     tile_width: int = 768,
     tile_height: int = 768,
-    denoise_strength: float = 0.2,
+    denoise_strength: float = 0.05,
     num_inference_steps: int = 60,
     solver: str = "DPMSolver",
 ):
@@ -3296,7 +3296,7 @@ def upscale(
         tile_size=(tile_height, tile_width),
         denoise_strength=denoise_strength,
         num_inference_steps=num_inference_steps,
-        loras_scale={"more_details": 0.0, "sdxl_render": 1.0},
+        loras_scale={"more_details": 0.0, "sdxl_render": 0.0},
         solver_type=solver_type,
     )
 
