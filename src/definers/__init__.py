@@ -6578,8 +6578,8 @@ def get_chat_response(message, history: list):
     response = answer(history)
 
     if orig_lang and orig_lang != language(response):
-        response = ai_translate(response, lang=orig_lang)
         response = summary(response)
+        response = ai_translate(response, lang=orig_lang)
 
     return response
 
