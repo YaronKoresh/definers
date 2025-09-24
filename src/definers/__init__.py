@@ -1120,7 +1120,7 @@ def answer(history: list):
     generate_ids = MODELS["answer"].generate(
         **inputs,
         max_new_tokens=512,
-        num_beams=32,
+        num_beams=6,
         length_penalty=0.1,
         num_logits_to_keep=1,
     )
@@ -6612,7 +6612,6 @@ def get_chat_response(message, history: list):
 
     if orig_lang and orig_lang != language(response):
         response = summary(response)
-        response = ai_translate(response, lang=orig_lang)
 
     return response
 
