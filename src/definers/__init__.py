@@ -4866,11 +4866,14 @@ html > body main {
     padding-inline: 20px !important;
 }
 
-    button:not(:has(svg)) {
+    button {
         border-radius: 2mm !important;
         border: none !important;
         cursor: pointer !important;
         margin-inline: 8px !important;
+    }
+
+    button:not(:has(svg)) {
         width: auto !important;
     }
 
