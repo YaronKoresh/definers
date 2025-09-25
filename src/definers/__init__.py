@@ -3258,8 +3258,8 @@ def init_upscale():
 def upscale(
     path,
     upscale_factor: int = 2,
-    prompt: str = "sharp, high contrast, sharp, high contrast, sharp, high contrast.",
-    negative_prompt: str = "blurry, blurry.",
+    prompt: str = _base_prompt_,
+    negative_prompt: str = _negative_prompt_,
     seed: int = None,
     controlnet_scale: float = 0.7,
     controlnet_decay: float = 0.8,
