@@ -636,7 +636,7 @@ common_audio_formats = [
 ]
 
 _negative_prompt_ = "glamour, makeup, airbrushed, smooth skin, retouching, studio lighting, perfect, wierd, bokeh, golden hour, digitaly painted, blurry, body mutation, 3d, polished texture, text, watermark, duplicated, cropped, oversaturated, CGI, vfx, SFX, octane render, unreal engine, render"
-_base_prompt_ = "A truly realistic moment from inside a minimal-environment with roughly textures which spontaneously captured"
+_base_prompt_ = "A truly realistic rough-textures photograph of a moment from inside a minimal-environment with spontaneously captured"
 
 
 def get_os_name():
