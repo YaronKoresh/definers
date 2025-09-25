@@ -9055,21 +9055,21 @@ def enhance_audio(audio_path):
     audio_path = autotune_song(audio_path)
     audio_path = master(audio_path, "wav")
     audio_path = audio_limiter(audio_path)
-    audio_path = audio_limiter(audio_path)
+    audio_path = audio_limiter(audio_path, soft_clip_db=0)
     audio_path = riaa_filter(audio_path, bass_factor=0.01)
-    audio_path = audio_limiter(audio_path, release_ms=0.1, soft_clip_db=0)
-    audio_path = audio_limiter(audio_path, release_ms=0.1, soft_clip_db=0)
+    audio_path = audio_limiter(audio_path, release_ms=1)
+    audio_path = audio_limiter(audio_path, release_ms=1, soft_clip_db=0)
     return audio_path
 
 
 def autotune_song(
     audio_path,
     output_path = None,
-    strength=0.5,
+    strength=1.0,
     correct_timing=True,
     quantize_grid_strength=8,
-    tolerance_cents=20,
-    attack_smoothing_ms=20,
+    tolerance_cents=1,
+    attack_smoothing_ms=5,
 ):
     import librosa
     import madmom
@@ -9102,8 +9102,8 @@ def autotune_song(
 
         y_vocals, sr = librosa.load(vocals_path, sr=None, mono=True)
         
-        n_fft = 8192
-        hop_length = 128
+        n_fft = 2048
+        hop_length = 1024
         
         processed_vocals_path = vocals_path
 
@@ -9229,13 +9229,13 @@ def autotune_song(
 def audio_limiter(
     input_filename,
     output_filename=None,
-    db_boost=4.0,
+    db_boost=3.0,
     db_limit=-0.1,
-    attack_ms=0.1,
-    release_ms=100.0,
+    attack_ms=2.0,
+    release_ms=30.0,
     lookahead_ms=60000.0,
-    oversampling=2,
-    soft_clip_db=-2.0
+    oversampling=4,
+    soft_clip_db=-1.0
 ):
     from scipy.io import wavfile
     from scipy import signal
