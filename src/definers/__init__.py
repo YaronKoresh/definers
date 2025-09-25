@@ -3264,10 +3264,10 @@ def upscale(
     controlnet_scale: float = 0.7,
     controlnet_decay: float = 0.8,
     condition_scale: float = 4.0,
-    tile_width: int = 768,
-    tile_height: int = 768,
-    denoise_strength: float = 0.05,
-    num_inference_steps: int = 60,
+    tile_width: int = 128,
+    tile_height: int = 128,
+    denoise_strength: float = 0.1,
+    num_inference_steps: int = 30,
     solver: str = "DPMSolver",
 ):
     from PIL import Image
@@ -3300,7 +3300,7 @@ def upscale(
         tile_size=(tile_height, tile_width),
         denoise_strength=denoise_strength,
         num_inference_steps=num_inference_steps,
-        loras_scale={"more_details": 0.0, "sdxl_render": 0.0},
+        loras_scale={"more_details": 0.2, "sdxl_render": 0.4},
         solver_type=solver_type,
     )
 
@@ -9049,12 +9049,14 @@ def get_scale_notes(
 
 
 def enhance_audio(audio_path):
-    return audio_limiter(
-        riaa_filter(
-            master( autotune_song(audio_path), "wav"),
-            bass_factor=0.5
-        )
-    )
+    audio_path = autotune_song(audio_path)
+    audio_path = master(audio_path, "wav"),
+    audio_path = audio_limiter(audio_path)
+    audio_path = audio_limiter(audio_path)
+    audio_path = riaa_filter(audio_path, bass_factor=0.01)
+    audio_path = audio_limiter(audio_path, release_ms=0.1, soft_clip_db=0)
+    audio_path = audio_limiter(audio_path, release_ms=0.1, soft_clip_db=0)
+    return audio_path
 
 
 def autotune_song(
@@ -9063,8 +9065,8 @@ def autotune_song(
     strength=0.5,
     correct_timing=True,
     quantize_grid_strength=8,
-    tolerance_cents=15,
-    attack_smoothing_ms=1,
+    tolerance_cents=20,
+    attack_smoothing_ms=20,
 ):
     import librosa
     import madmom
@@ -9224,12 +9226,12 @@ def autotune_song(
 def audio_limiter(
     input_filename,
     output_filename=None,
-    db_boost=12.0,
+    db_boost=4.0,
     db_limit=-0.1,
-    attack_ms=1.0,
+    attack_ms=0.1,
     release_ms=100.0,
-    lookahead_ms=2.0,
-    oversampling=8,
+    lookahead_ms=60000.0,
+    oversampling=2,
     soft_clip_db=-2.0
 ):
     from scipy.io import wavfile
@@ -9371,9 +9373,11 @@ def audio_limiter(
         limited_audio = signal.resample_poly(limited_audio, 1, oversampling, axis=0)
 
     # --- 9. Final Clip, Length Adjustment, and Conversion ---
-    current_length = limited_audio.shape[0]
+    current_length = int(limited_audio.shape[0])
+    lookahead_len = int(lookahead_ms / 1000 * sample_rate)
+    max_len = lookahead_len + original_length
     if current_length > original_length:
-        final_processed_audio = limited_audio[:original_length]
+        final_processed_audio = limited_audio[lookahead_len:max_len]
     elif current_length < original_length:
         pad_amount = original_length - current_length
         pad_width = [(0, pad_amount)] + [(0, 0)] * (limited_audio.ndim - 1)
