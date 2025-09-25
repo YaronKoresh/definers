@@ -636,8 +636,7 @@ common_audio_formats = [
 ]
 
 _negative_prompt_ = "glamour or makeup, airbrushed or smooth, retouching or polished, perfect or oversaturated, CGI or 3d, vfx or SFX, rendered or painted, unreal or octane, cinematic or bokeh, blurry or cropped, mutated or duplicated"
-_pre_prompt_ = "raw, documentary, trademarks, grainy, minimal, proportional, real, messy"
-_post_prompt_ = "photographed, interactive, logos, gritty, reasonable, positioned, natural, rough"
+_positive_prompt_ = "reality, documentary, national geographic, high contrast, highly detailed"
 
 
 def get_os_name():
@@ -5127,8 +5126,8 @@ def _summarize(text_to_summarize, is_chunk=False):
 
     gen_kwargs = {
         "max_length": 512,
-        "repetition_penalty": 2.0,
-        "length_penalty": 1.0,
+        "repetition_penalty": 1.5,
+        "length_penalty": 0,1,
         "no_repeat_ngram_size": 3,
         "num_beams": 32,
         "early_stopping": True,
@@ -5167,10 +5166,13 @@ def map_reduce_summary(text, max_words=50):
 def summary(text, max_words=20):
     word_count = len(text.split())
 
-    if word_count > 350:
-        return map_reduce_summary(text, max_words)
+    if word_count > 350 or word_count > max_words:
+        res = map_reduce_summary(text, max_words)
     else:
-        return _summarize(text, is_chunk=False)
+        res = _summarize(text, is_chunk=False)
+
+    log("Summary", res)
+    return res
 
 
 def path_end(p: str):
@@ -5627,13 +5629,13 @@ def choose_random_words(word_list, num_words=10):
 
 def optimize_prompt_realism(prompt):
     prompt = preprocess_prompt(prompt)
-    prompt = f'{_pre_prompt_}, {prompt}, {_post_prompt_}'
+    prompt = f'{prompt}, {_positive_prompt_}, {_positive_prompt_}, {_post_prompt_}'
     return prompt
 
 
 def preprocess_prompt(prompt):
     prompt = ai_translate(prompt)
-    prompt = summary(prompt, max_words=24)
+    prompt = summary(prompt, max_words=14)
     return prompt
 
 
@@ -5665,14 +5667,14 @@ def pipe(
         params2["prompt"] = prompt
         params2["height"] = height
         params2["width"] = width
-        params2["guidance_scale"] = 6.5
+        params2["guidance_scale"] =9.0
         if task == "video":
             params2["num_videos_per_prompt"] = 1
             params2["num_frames"] = length
         else:
             # params2["negative_prompt"] = _negative_prompt_
             params2["max_sequence_length"] = 512
-        params2["num_inference_steps"] = 60
+        params2["num_inference_steps"] = 80
         params2["generator"] = torch.Generator(device()).manual_seed(
             random.randint(0, big_number())
         )
