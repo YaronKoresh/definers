@@ -635,8 +635,9 @@ common_audio_formats = [
     "wma",
 ]
 
-_negative_prompt_ = "glamour, makeup, airbrushed, smooth skin, retouching, studio lighting, perfect, wierd, bokeh, golden hour, digitaly painted, blurry, body mutation, 3d, polished texture, text, watermark, duplicated, cropped, oversaturated, CGI, vfx, SFX, octane render, unreal engine, render"
-_base_prompt_ = "raw, documentary, gritty, national geographic, minimalist, rough, imperfect, hyperrealistic, proportional, anatomically plausible, reasonable mess"
+_negative_prompt_ = "glamour or makeup, airbrushed or smooth, retouching or polished, perfect or oversaturated, CGI or 3d, vfx or SFX, rendered or painted, unreal or octane, cinematic or bokeh, blurry or cropped, mutated or duplicated"
+_base_prompt_ = "raw and photographed, documentary and interactive, trademarks and logos, grainy and gritty, minimal and reasonable, proportional and positioned, real and natural, messy and rough"
+
 
 def get_os_name():
     return platform.system().lower()
@@ -3257,8 +3258,8 @@ def init_upscale():
 def upscale(
     path,
     upscale_factor: int = 2,
-    prompt: str = ", ".join([ _base_prompt_, _base_prompt_, _base_prompt_ ]),
-    negative_prompt: str = ", ".join([ _negative_prompt_, _negative_prompt_, _negative_prompt_ ]),
+    prompt: str = "high sharpness, high contrast, high sharpness, high contrast",
+    negative_prompt: str = "blurry, polished, blurry, polished",
     seed: int = None,
     controlnet_scale: float = 0.7,
     controlnet_decay: float = 0.8,
@@ -3299,7 +3300,7 @@ def upscale(
         tile_size=(tile_height, tile_width),
         denoise_strength=denoise_strength,
         num_inference_steps=num_inference_steps,
-        loras_scale={"more_details": 0.3, "sdxl_render": 0.6},
+        loras_scale={"more_details": 0.0, "sdxl_render": 0.1},
         solver_type=solver_type,
     )
 
@@ -9228,13 +9229,13 @@ def autotune_song(
 def audio_limiter(
     input_filename,
     output_filename=None,
-    db_boost=3.0,
+    db_boost=4.0,
     db_limit=-0.1,
-    attack_ms=2.0,
-    release_ms=30.0,
+    attack_ms=1,
+    release_ms=100.0,
     lookahead_ms=60000.0,
-    oversampling=4,
-    soft_clip_db=-1.0
+    oversampling=2,
+    soft_clip_db=-2.0
 ):
     from scipy.io import wavfile
     from scipy import signal
