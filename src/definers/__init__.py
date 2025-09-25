@@ -9053,7 +9053,7 @@ def get_scale_notes(
 
 def enhance_audio(audio_path):
     audio_path = autotune_song(audio_path)
-    audio_path = master(audio_path, "wav"),
+    audio_path = master(audio_path, "wav")
     audio_path = audio_limiter(audio_path)
     audio_path = audio_limiter(audio_path)
     audio_path = riaa_filter(audio_path, bass_factor=0.01)
