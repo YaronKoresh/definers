@@ -635,7 +635,7 @@ common_audio_formats = [
     "wma",
 ]
 
-_negative_prompt_ = "perfect, wierd, bokeh, golden hour, digitaly painted, blurry, body mutation, 3d, polished texture, text, watermark, duplicated, cropped"
+_negative_prompt_ = "glamour, makeup, airbrushed, smooth skin, retouching, studio lighting, perfect, wierd, bokeh, golden hour, digitaly painted, blurry, body mutation, 3d, polished texture, text, watermark, duplicated, cropped, oversaturated, CGI, vfx, SFX, octane render, unreal engine, render"
 _base_prompt_ = "quick spontaneous snapshot, raw photo style, subtle anatomical asymmetry, detailed rough texture, minimalist setting, natural muted color palette"
 
 
