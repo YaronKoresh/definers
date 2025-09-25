@@ -636,7 +636,7 @@ common_audio_formats = [
 ]
 
 _negative_prompt_ = "glamour, makeup, airbrushed, smooth skin, retouching, studio lighting, perfect, wierd, bokeh, golden hour, digitaly painted, blurry, body mutation, 3d, polished texture, text, watermark, duplicated, cropped, oversaturated, CGI, vfx, SFX, octane render, unreal engine, render"
-_base_prompt_ = "A hyperrealistic raw style photograph spontaneously captured a moment inside a minimal-environment with rough textures"
+_base_prompt_ = "raw style photograph, spontaneously captured, hyperrealistic environment, minimal background, rough textures"
 
 
 def get_os_name():
@@ -5626,13 +5626,13 @@ def choose_random_words(word_list, num_words=10):
 
 def optimize_prompt_realism(prompt):
     prompt = preprocess_prompt(prompt)
-    prompt = f"{_base_prompt_}: {prompt}."
+    prompt = f'! "{_base_prompt_}, {prompt}, {_base_prompt_}" !'
     return prompt
 
 
 def preprocess_prompt(prompt):
     prompt = ai_translate(prompt)
-    prompt = summary(prompt, max_words=20)
+    prompt = summary(prompt, max_words=14)
     return prompt
 
 
