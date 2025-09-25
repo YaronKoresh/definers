@@ -636,8 +636,7 @@ common_audio_formats = [
 ]
 
 _negative_prompt_ = "glamour, makeup, airbrushed, smooth skin, retouching, studio lighting, perfect, wierd, bokeh, golden hour, digitaly painted, blurry, body mutation, 3d, polished texture, text, watermark, duplicated, cropped, oversaturated, CGI, vfx, SFX, octane render, unreal engine, render"
-_base_prompt_ = "raw style photograph, spontaneously captured, hyperrealistic environment, minimal background, rough textures"
-
+_base_prompt_ = "raw, documentary, gritty, national geographic, minimalist, rough, imperfect, hyperrealistic, proportional, anatomically plausible, reasonable mess"
 
 def get_os_name():
     return platform.system().lower()
@@ -3258,8 +3257,8 @@ def init_upscale():
 def upscale(
     path,
     upscale_factor: int = 2,
-    prompt: str = _base_prompt_,
-    negative_prompt: str = _negative_prompt_,
+    prompt: str = ", ".join([ _base_prompt_, _base_prompt_, _base_prompt_ ]),
+    negative_prompt: str = ", ".join([ _negative_prompt_, _negative_prompt_, _negative_prompt_ ]),
     seed: int = None,
     controlnet_scale: float = 0.7,
     controlnet_decay: float = 0.8,
@@ -3300,7 +3299,7 @@ def upscale(
         tile_size=(tile_height, tile_width),
         denoise_strength=denoise_strength,
         num_inference_steps=num_inference_steps,
-        loras_scale={"more_details": 0.2, "sdxl_render": 0.4},
+        loras_scale={"more_details": 0.3, "sdxl_render": 0.6},
         solver_type=solver_type,
     )
 
@@ -5626,7 +5625,7 @@ def choose_random_words(word_list, num_words=10):
 
 def optimize_prompt_realism(prompt):
     prompt = preprocess_prompt(prompt)
-    prompt = f'! "{_base_prompt_}, {prompt}, {_base_prompt_}" !'
+    prompt = f'{_base_prompt_}, {prompt}, {_base_prompt_}'
     return prompt
 
 
