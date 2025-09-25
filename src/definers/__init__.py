@@ -636,7 +636,8 @@ common_audio_formats = [
 ]
 
 _negative_prompt_ = "glamour or makeup, airbrushed or smooth, retouching or polished, perfect or oversaturated, CGI or 3d, vfx or SFX, rendered or painted, unreal or octane, cinematic or bokeh, blurry or cropped, mutated or duplicated"
-_base_prompt_ = "raw and photographed, documentary and interactive, trademarks and logos, grainy and gritty, minimal and reasonable, proportional and positioned, real and natural, messy and rough"
+_pre_prompt_ = "raw, documentary, trademarks, grainy, minimal, proportional, real, messy"
+_post_prompt_ = "photographed, interactive, logos, gritty, reasonable, positioned, natural, rough"
 
 
 def get_os_name():
@@ -5626,13 +5627,13 @@ def choose_random_words(word_list, num_words=10):
 
 def optimize_prompt_realism(prompt):
     prompt = preprocess_prompt(prompt)
-    prompt = f'{_base_prompt_}, {prompt}, {_base_prompt_}'
+    prompt = f'{_pre_prompt_}, {prompt}, {_post_prompt_}'
     return prompt
 
 
 def preprocess_prompt(prompt):
     prompt = ai_translate(prompt)
-    prompt = summary(prompt, max_words=14)
+    prompt = summary(prompt, max_words=24)
     return prompt
 
 
@@ -5664,14 +5665,14 @@ def pipe(
         params2["prompt"] = prompt
         params2["height"] = height
         params2["width"] = width
-        params2["guidance_scale"] = 4.5
+        params2["guidance_scale"] = 6.5
         if task == "video":
             params2["num_videos_per_prompt"] = 1
             params2["num_frames"] = length
         else:
             # params2["negative_prompt"] = _negative_prompt_
             params2["max_sequence_length"] = 512
-        params2["num_inference_steps"] = 100
+        params2["num_inference_steps"] = 60
         params2["generator"] = torch.Generator(device()).manual_seed(
             random.randint(0, big_number())
         )
@@ -9054,22 +9055,19 @@ def get_scale_notes(
 def enhance_audio(audio_path):
     audio_path = autotune_song(audio_path)
     audio_path = master(audio_path, "wav")
+    audio_path = riaa_filter(audio_path, bass_factor=0.001)
     audio_path = audio_limiter(audio_path)
-    audio_path = audio_limiter(audio_path, soft_clip_db=0)
-    audio_path = riaa_filter(audio_path, bass_factor=0.01)
-    audio_path = audio_limiter(audio_path, release_ms=1)
-    audio_path = audio_limiter(audio_path, release_ms=1, soft_clip_db=0)
     return audio_path
 
 
 def autotune_song(
     audio_path,
     output_path = None,
-    strength=1.0,
+    strength=0.9,
     correct_timing=True,
     quantize_grid_strength=8,
-    tolerance_cents=1,
-    attack_smoothing_ms=5,
+    tolerance_cents=5,
+    attack_smoothing_ms=1,
 ):
     import librosa
     import madmom
@@ -9213,7 +9211,7 @@ def autotune_song(
         tuned_vocals_audio = pydub.AudioSegment.from_file(tuned_vocals_path)
         tuned_vocals_audio = tuned_vocals_audio.set_frame_rate(instrumental_audio.frame_rate)
         
-        combined = instrumental_audio.overlay(tuned_vocals_audio)
+        combined = instrumental_audio.overlay(tuned_vocals_audio + 2)
         
         output_format = get_ext(output_path)
         combined.export(output_path, format=output_format)
@@ -9229,13 +9227,13 @@ def autotune_song(
 def audio_limiter(
     input_filename,
     output_filename=None,
-    db_boost=4.0,
+    db_boost=20.0,
     db_limit=-0.1,
-    attack_ms=1,
-    release_ms=100.0,
-    lookahead_ms=60000.0,
+    attack_ms=1.0,
+    release_ms=0.01,
+    lookahead_ms=0.0001,
     oversampling=2,
-    soft_clip_db=-2.0
+    soft_clip_db=-5.0
 ):
     from scipy.io import wavfile
     from scipy import signal
