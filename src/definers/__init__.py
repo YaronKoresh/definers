@@ -636,7 +636,7 @@ common_audio_formats = [
 ]
 
 _negative_prompt_ = "glamour, makeup, airbrushed, smooth skin, retouching, studio lighting, perfect, wierd, bokeh, golden hour, digitaly painted, blurry, body mutation, 3d, polished texture, text, watermark, duplicated, cropped, oversaturated, CGI, vfx, SFX, octane render, unreal engine, render"
-_base_prompt_ = "A truly realistic rough-textures photograph of a moment from inside a minimal-environment with spontaneously captured"
+_base_prompt_ = "A hyperrealistic raw style photograph spontaneously captured a moment inside a minimal-environment with rough textures"
 
 
 def get_os_name():
@@ -5626,13 +5626,13 @@ def choose_random_words(word_list, num_words=10):
 
 def optimize_prompt_realism(prompt):
     prompt = preprocess_prompt(prompt)
-    prompt = f"{_base_prompt_} from {prompt}"
+    prompt = f"{_base_prompt_}: {prompt}."
     return prompt
 
 
 def preprocess_prompt(prompt):
     prompt = ai_translate(prompt)
-    prompt = summary(prompt, max_words=14)
+    prompt = summary(prompt, max_words=20)
     return prompt
 
 
@@ -5664,7 +5664,7 @@ def pipe(
         params2["prompt"] = prompt
         params2["height"] = height
         params2["width"] = width
-        params2["guidance_scale"] = 5.5
+        params2["guidance_scale"] = 4.5
         if task == "video":
             params2["num_videos_per_prompt"] = 1
             params2["num_frames"] = length
