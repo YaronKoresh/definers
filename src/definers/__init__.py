@@ -635,8 +635,8 @@ common_audio_formats = [
     "wma",
 ]
 
-_negative_prompt_ = "perfect, clean, wierd, bokeh, golden hour, digital, blurry, mutated, painted, 3d, textual, watermarked, duplicated, cropped"
-_base_prompt_ = "simple background, rough texture, messy details, realistic imperfection, reasonable proportions, natural flaws, quick snapshot"
+_negative_prompt_ = "perfect, wierd, bokeh, golden hour, digitaly painted, blurry, body mutation, 3d, polished texture, text, watermark, duplicated, cropped"
+_base_prompt_ = "quick spontaneous snapshot, raw photo style, subtle anatomical asymmetry, detailed rough texture, minimalist setting, natural muted color palette"
 
 
 def get_os_name():
