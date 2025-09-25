@@ -635,8 +635,8 @@ common_audio_formats = [
     "wma",
 ]
 
-_negative_prompt_ = "blurry, mutated, painted, 3d, textual, watermarked, duplicated, cropped"
-_base_prompt_ = "proportional, realistic, detailed, natural, film grain, national geographic, reasonable"
+_negative_prompt_ = "perfect, clean, wierd, bokeh, golden hour, digital, blurry, mutated, painted, 3d, textual, watermarked, duplicated, cropped"
+_base_prompt_ = "imperfect, simple, daily, messy, proportional, realistic, natural flaws, reasonable, normal, daily moment quick snapshot"
 
 
 def get_os_name():
@@ -5661,7 +5661,7 @@ def pipe(
         params2["prompt"] = prompt
         params2["height"] = height
         params2["width"] = width
-        params2["guidance_scale"] = 4.5
+        params2["guidance_scale"] = 7.0
         if task == "video":
             params2["num_videos_per_prompt"] = 1
             params2["num_frames"] = length
