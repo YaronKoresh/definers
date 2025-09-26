@@ -5637,7 +5637,7 @@ def optimize_prompt_realism(prompt):
 
 def preprocess_prompt(prompt):
     prompt = ai_translate(prompt)
-    prompt = summary(prompt, max_words=16)
+    prompt = summary(prompt, max_words=20)
     return prompt
 
 
