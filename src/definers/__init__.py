@@ -7837,6 +7837,8 @@ def music_video(
 
         frame = np.zeros((h, w, 3), dtype=np.uint8)
 
+        grid_x, grid_y = np.meshgrid(np.arange(w), np.arange(h))
+
         if preset == "vortex":
             angle = np.arctan2(grid_y - center_y, grid_x - center_x)
             dist = np.sqrt((grid_y - center_y)**2 + (grid_x - center_x)**2)
@@ -7858,8 +7860,6 @@ def music_video(
 
         elif preset == "glitch":
             pattern_freq = 5.0 + centroid_val * 15.0
-            grid_x, grid_y = np.meshgrid(np.arange(w), np.arange(h))
-
             base_pattern = np.sin(grid_x / (60 + rms_val * 100) * pattern_freq + t * 5) * \
                            np.cos(grid_y / 40 * pattern_freq - t * 3)
             
