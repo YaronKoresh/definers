@@ -9071,7 +9071,7 @@ def autotune_song(
     correct_timing=True,
     quantize_grid_strength=8,
     tolerance_cents=2,
-    attack_smoothing_ms=40,
+    attack_smoothing_ms=80,
 ):
     import librosa
     import madmom
