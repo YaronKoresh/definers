@@ -9229,12 +9229,12 @@ def autotune_song(
 def audio_limiter(
     input_filename,
     output_filename=None,
-    db_boost=18.0,
+    db_boost=30.0,
     db_limit=-0.1,
-    attack_ms=0.0001,
-    release_ms=0.01,
-    lookahead_ms=0.0005,
-    oversampling=2,
+    attack_ms=2000,
+    release_ms=100,
+    lookahead_ms=5,
+    oversampling=4,
     soft_clip_db=-2.0
 ):
     from scipy.io import wavfile
