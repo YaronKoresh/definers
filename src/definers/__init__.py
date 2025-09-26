@@ -9251,7 +9251,7 @@ def compute_gain_envelope(sidechain, sample_rate, threshold, attack_ms, release_
     return envelope
 
 
-def audio_limiter(input_filename, output_filename=None, db_boost=60.0, db_limit=-0.2, attack_ms=1.0, release_ms=50.0, lookahead_ms=1.5, oversampling=2):
+def audio_limiter(input_filename, output_filename=None, db_boost=30.0, db_limit=-0.2, attack_ms=1.0, release_ms=50.0, lookahead_ms=1.5, oversampling=2):
     from scipy.io import wavfile
     from scipy import signal
 
