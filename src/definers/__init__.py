@@ -7875,71 +7875,81 @@ def music_video(
                     + np.pi * 4 / 3
                 )
             )
-
         elif preset == "glitch":
-            frame[:, :, 0] = 10 + centroid_val * 50
-            frame[:, :, 1] = 20 + centroid_val * 30
-            frame[:, :, 2] = 40 + centroid_val * 80
+            grid_x, grid_y = np.meshgrid(np.arange(w), np.arange(h))
+            pattern_freq = 5.0 + centroid_val * 15.0
+            base_pattern = np.sin(grid_x / (50 + rms_val * 100) * pattern_freq + t * 5) * np.cos(grid_y / 30 * pattern_freq - t * 3)
+            
+            brightness = 0.4 + rms_val * 0.6
+            r = 128 + 127 * np.sin(base_pattern * np.pi) * brightness
+            g = 128 + 127 * np.sin(base_pattern * np.pi + np.pi/2) * brightness
+            b = 60 + 100 * centroid_val + 60 * np.sin(base_pattern * np.pi + np.pi) * brightness
+            frame = np.stack([b, g, r], axis=-1).astype(np.uint8)
 
-            scanline_strength = int(5 + 20 * rms_val)
-            scanlines = (
-                np.sin(np.arange(h)[:, None] * 0.5 + t * 100) > 0.98
-            ) * scanline_strength
-            frame = np.clip(
-                frame - scanlines[..., np.newaxis], 0, 255
-            ).astype(np.uint8)
+            rms_shift = int(rms_val * 15)
+            if rms_shift > 1:
+                frame[:, :, 2] = np.roll(frame[:, :, 2], rms_shift, axis=1)
+                frame[:, :, 0] = np.roll(frame[:, :, 0], -rms_shift, axis=1)
+
+            scanline_intensity = 0.5 * rms_val
+            scanline_effect = (np.sin(grid_y * (1.5 + np.sin(t*10)) + t*50) * 20 * scanline_intensity).reshape(h, w, 1)
+            frame = np.clip(frame.astype(np.int16) - scanline_effect, 0, 255).astype(np.uint8)
 
             if is_beat:
-                shift_amount = np.random.randint(-80, 80)
-                frame[:, :, 0] = np.roll(
-                    frame[:, :, 0], shift_amount, axis=1
-                )
-                frame[:, :, 2] = np.roll(
-                    frame[:, :, 2], -shift_amount, axis=1
-                )
+                frame = 255 - frame
+                
+                for _ in range(np.random.randint(2, 6)):
+                    y_start = np.random.randint(0, h - h // 5)
+                    y_end = y_start + np.random.randint(h // 20, h // 5)
+                    block_shift = np.random.randint(-w // 3, w // 3)
+                    frame[y_start:y_end, :] = np.roll(frame[y_start:y_end, :], block_shift, axis=1)
 
-                y_start = np.random.randint(0, h - h // 4)
-                y_end = y_start + np.random.randint(h // 10, h // 4)
-                block_shift = np.random.randint(-w // 4, w // 4)
-                frame[y_start:y_end, :] = np.roll(
-                    frame[y_start:y_end, :], block_shift, axis=1
-                )
+                shake_x, shake_y = np.random.randint(-15, 15, size=2)
+                frame = np.roll(np.roll(frame, shake_y, axis=0), shake_x, axis=1)
 
-            noise_intensity = int(100 * rms_val)
-            if noise_intensity > 0:
-                noise = np.random.randint(
-                    -noise_intensity,
-                    noise_intensity,
-                    frame.shape,
-                    dtype=np.int16,
-                )
-                frame = np.clip(
-                    frame.astype(np.int16) + noise, 0, 255
-                ).astype(np.uint8)
+            noise_intensity = int(150 * rms_val**2)
+            if noise_intensity > 5:
+                block_size = 8
+                noise_h, noise_w = h // block_size, w // block_size
+                low_res_noise = np.random.randint(-noise_intensity, noise_intensity, (noise_h, noise_w, 3))
+                noise = cv2.resize(low_res_noise.astype(np.float32), (w, h), interpolation=cv2.INTER_NEAREST)
+                frame = np.clip(frame.astype(np.int16) + noise.astype(np.int16), 0, 255).astype(np.uint8)
 
         elif preset == "israel":
             ISRAEL_BLUE = (0, 56, 184)
-            ORANGE = (252, 215, 38)
+            LIGHT_BLUE = (0, 127, 255)
+            MIDNIGHT_BLUE = (25, 25, 112)
             WHITE = (255, 255, 255)
+
             stripe_height = int(h * 0.15)
             gap_height = int(h * 0.1)
 
             radius = int((h * 0.15) + rms_val * (h * 0.3))
-            rotation_angle = t * 90 + centroid_val * 15
+            rotation_angle = t * 45 + centroid_val * 30
 
             frame[:, :] = WHITE
-            frame[
-                gap_height : gap_height + stripe_height
-            ] = ORANGE
-            frame[
-                h - gap_height - stripe_height : h - gap_height
-            ] = ORANGE
-
-            star_thickness = 12
-            star_color = ISRAEL_BLUE
 
             if is_beat:
-                radius = int(radius * 1.6)
+                radius = int(radius * 1.1)
+
+                star_thickness = 15
+                star_color = MIDNIGHT_BLUE
+                frame[
+                    gap_height : gap_height + stripe_height
+                ] = LIGHT_BLUE
+                frame[
+                    h - gap_height - stripe_height : h - gap_height
+                ] = LIGHT_BLUE
+
+            else:
+                star_thickness = 12
+                star_color = ISRAEL_BLUE
+                frame[
+                    gap_height : gap_height + stripe_height
+                ] = ISRAEL_BLUE
+                frame[
+                    h - gap_height - stripe_height : h - gap_height
+                ] = ISRAEL_BLUE
 
             draw_star_of_david(
                 frame,
@@ -9062,7 +9072,7 @@ def enhance_audio(audio_path):
     audio_path = autotune_song(audio_path)
     audio_path = master(audio_path, "wav")
     audio_path = riaa_filter(audio_path, bass_factor=0.01)
-    audio_path = audio_limiter(audio_path)
+    audio_path = loudness_maximizer(audio_path)
     return audio_path
 
 
@@ -9253,7 +9263,20 @@ def compute_gain_envelope(sidechain, sample_rate, threshold, attack_ms, release_
     return envelope
 
 
-def audio_limiter(input_filename, output_filename=None, db_boost=30.0, db_limit=-0.2, attack_ms=1.0, release_ms=50.0, lookahead_ms=1.5, oversampling=2):
+def loudness_maximizer(
+    input_filename,
+    output_filename=None,
+    comp_threshold_db=-18.0,
+    comp_ratio=4.0,
+    comp_attack_ms=5.0,
+    comp_release_ms=150.0,
+    db_boost=12.0,
+    db_limit=-0.2,
+    limit_attack_ms=1.0,
+    limit_release_ms=200.0,
+    lookahead_ms=1.5,
+    oversampling=2
+):
     from scipy.io import wavfile
     from scipy import signal
 
@@ -9287,12 +9310,21 @@ def audio_limiter(input_filename, output_filename=None, db_boost=30.0, db_limit=
         effective_rate = sample_rate * oversampling
         audio_float = signal.resample_poly(audio_float, oversampling, 1, axis=0)
     
-    initial_rms_db = 20 * np.log10(np.sqrt(np.mean(audio_float**2)))
-    print(f"Initial RMS: {initial_rms_db:.2f} dB")
+    compressed_audio = apply_compressor(
+        audio_float,
+        effective_rate,
+        threshold_db=comp_threshold_db,
+        ratio=comp_ratio,
+        attack_ms=comp_attack_ms,
+        release_ms=comp_release_ms
+    )
+    
+    initial_rms_db = 20 * np.log10(np.sqrt(np.mean(compressed_audio**2)))
+    print(f"Post-Compressor RMS: {initial_rms_db:.2f} dB")
     
     linear_boost = 10 ** (db_boost / 20.0)
-    boosted_audio = audio_float * linear_boost
-    print(f"Applied {db_boost} dB boost.")
+    boosted_audio = compressed_audio * linear_boost
+    print(f"Applied {db_boost} dB of makeup gain.")
 
     if boosted_audio.ndim > 1:
         sidechain = np.max(np.abs(boosted_audio), axis=1)
@@ -9314,7 +9346,7 @@ def audio_limiter(input_filename, output_filename=None, db_boost=30.0, db_limit=
     else:
         sidechain_padded = sidechain
         
-    gain = compute_gain_envelope(sidechain_padded, effective_rate, threshold, attack_ms, release_ms)
+    gain = compute_gain_envelope(sidechain_padded, effective_rate, threshold, limit_attack_ms, limit_release_ms)
     
     if boosted_audio.ndim > 1:
         gain = np.tile(gain[:, np.newaxis], (1, boosted_audio.shape[1]))
@@ -9355,6 +9387,65 @@ def audio_limiter(input_filename, output_filename=None, db_boost=30.0, db_limit=
     except Exception as e:
         print(f"Error writing audio file: {e}")
         return None
+
+
+def apply_compressor(
+    audio,
+    sample_rate,
+    threshold_db=-20.0,
+    ratio=4.0,
+    attack_ms=5.0,
+    release_ms=150.0,
+    knee_db=5.0
+):
+    print(f"Applying compressor: Threshold={threshold_db}dB, Ratio={ratio}:1")
+
+    threshold_linear = 10.0 ** (threshold_db / 20.0)
+    
+    attack_samples = (sample_rate / 1000.0) * attack_ms
+    release_samples = (sample_rate / 1000.0) * release_ms
+    alpha_attack = np.exp(-1.0 / attack_samples)
+    alpha_release = np.exp(-1.0 / release_samples)
+
+    if audio.ndim > 1:
+        sidechain = np.max(np.abs(audio), axis=1)
+    else:
+        sidechain = np.abs(audio)
+    
+    sidechain = np.maximum(sidechain, 1e-8)
+    
+    sidechain_db = 20.0 * np.log10(sidechain)
+
+    gain_reduction_db = np.zeros_like(sidechain_db)
+    
+    half_knee = knee_db / 2.0
+    knee_start = threshold_db - half_knee
+    knee_end = threshold_db + half_knee
+
+    above_knee_start_indices = np.where(sidechain_db > knee_start)[0]
+    
+    for i in above_knee_start_indices:
+        level = sidechain_db[i]
+        if level <= knee_end: # Inside the knee
+            x = (level - knee_start) / knee_db
+            reduction = x * x * (threshold_db - level) * (1.0 - 1.0 / ratio)
+            gain_reduction_db[i] = reduction
+        else:
+            gain_reduction_db[i] = (threshold_db - level) * (1.0 - 1.0 / ratio)
+
+    smoothed_gain_db = np.zeros_like(gain_reduction_db)
+    for i in range(1, len(gain_reduction_db)):
+        if gain_reduction_db[i] < smoothed_gain_db[i-1]:
+            smoothed_gain_db[i] = alpha_attack * smoothed_gain_db[i-1] + (1 - alpha_attack) * gain_reduction_db[i]
+        else:
+            smoothed_gain_db[i] = alpha_release * smoothed_gain_db[i-1] + (1 - alpha_release) * gain_reduction_db[i]
+    
+    final_gain = 10.0 ** (smoothed_gain_db / 20.0)
+    
+    if audio.ndim > 1:
+        final_gain = np.tile(final_gain[:, np.newaxis], (1, audio.shape[1]))
+
+    return audio * final_gain
 
 
 def create_sample_audio(filename="sample_audio.wav", duration=5, sample_rate=44100):
