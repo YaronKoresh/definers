@@ -9065,11 +9065,11 @@ def enhance_audio(audio_path):
 def autotune_song(
     audio_path,
     output_path = None,
-    strength=0.9,
+    strength=1.0,
     correct_timing=True,
     quantize_grid_strength=8,
-    tolerance_cents=5,
-    attack_smoothing_ms=1,
+    tolerance_cents=1,
+    attack_smoothing_ms=5,
 ):
     import librosa
     import madmom
