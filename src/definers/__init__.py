@@ -7500,7 +7500,8 @@ def value_to_keys(dictionary, target_value):
 def transcribe_audio(audio_path, language):
     if MODELS["speech-recognition"] is None:
         init_pretrained_model("speech-recognition")
-    vocal, _ = separate_stems(audio_limiter(master(audio_path, "mp3"), db_boost=15.0, db_limit=-0.1))
+    audio_path = normalize_audio_to_peak(audio_path)
+    vocal, _ = separate_stems(audio_path)
     lang_code = value_to_keys(language_codes, language)[0]
     lang_code = lang_code.replace("iw", "he")
     return MODELS["speech-recognition"](
@@ -9343,10 +9344,6 @@ def audio_limiter(input_filename, output_filename=None, db_boost=30.0, db_limit=
     
     final_rms_db = 20 * np.log10(np.sqrt(np.mean(final_processed_audio**2)))
     print(f"Final RMS: {final_rms_db:.2f} dB.")
-    if final_rms_db > -3.0:
-        print("✅ Target RMS above -3 dB achieved.")
-    else:
-        print("⚠️ Target RMS was not met. The source material may be too dynamic or quiet.")
 
     processed_audio_int = (final_processed_audio * max_val)
     final_audio = processed_audio_int.astype(original_dtype)
