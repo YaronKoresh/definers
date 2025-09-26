@@ -7796,7 +7796,7 @@ def music_video(
     from moviepy import AudioFileClip
     from moviepy.video.VideoClip import VideoClip
 
-    hop_length = 512
+    hop_length = 1024
     y, sr = librosa.load(audio_path)
     duration = librosa.get_duration(y=y, sr=sr)
 
@@ -7807,7 +7807,7 @@ def music_video(
         y=y, sr=sr, hop_length=hop_length
     )[0]
 
-    proc = madmom.features.beats.DBNBeatTrackingProcessor(fps=100)
+    proc = madmom.features.beats.DBNBeatTrackingProcessor(fps=50)
     act = madmom.features.beats.RNNBeatProcessor()(audio_path)
     beat_times = proc(act)
     beat_frames = librosa.time_to_frames(
@@ -8046,7 +8046,7 @@ def init_stable_whisper():
     )
 
     MODELS["stable-whisper"] = stable_whisper.load_model(
-        "base", device="cpu"
+        "tiny", device="cpu"
     )
 
 
@@ -8126,9 +8126,6 @@ def lyric_video(
             ]
 
             log("Processed Lines", processed_lines)
-
-
-
 
             correct_words_flat = [word for _, line_words in processed_lines for word in line_words]
             transcript_words_flat = [p['word'] for p in processed_timestamps]
