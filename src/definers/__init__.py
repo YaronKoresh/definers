@@ -3258,16 +3258,16 @@ def init_upscale():
 def upscale(
     path,
     upscale_factor: int = 2,
-    prompt: str = "high sharpness, high contrast, high sharpness, high contrast",
-    negative_prompt: str = "blurry, polished, blurry, polished",
+    prompt: str = ", ".join([_positive_prompt_, _positive_prompt_, _positive_prompt_]),
+    negative_prompt: str = ", ".join([_negative_prompt_, _negative_prompt_, _negative_prompt_]),
     seed: int = None,
     controlnet_scale: float = 0.7,
     controlnet_decay: float = 0.8,
     condition_scale: float = 4.0,
     tile_width: int = 128,
     tile_height: int = 128,
-    denoise_strength: float = 0.1,
-    num_inference_steps: int = 30,
+    denoise_strength: float = 0.15,
+    num_inference_steps: int = 50,
     solver: str = "DPMSolver",
 ):
     from PIL import Image
