@@ -5163,16 +5163,16 @@ def map_reduce_summary(text, max_words=50):
     return final_summary
 
 
-def summary(text, max_words=20):
-    word_count = len(text.split())
+def summary(text, max_words=20, min_loops=1):
+    while len(text.split()) > max_words or min_loops > 0:
+        if len(text.split()) > 350:
+            text = map_reduce_summary(text, max_words)
+        else:
+            text = _summarize(text, is_chunk=False)
+        min_loops = min_loops - 1
 
-    if word_count > 350 or word_count > max_words:
-        res = map_reduce_summary(text, max_words)
-    else:
-        res = _summarize(text, is_chunk=False)
-
-    log("Summary", res)
-    return res
+    log("Summary", text)
+    return text
 
 
 def path_end(p: str):
