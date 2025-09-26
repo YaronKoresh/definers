@@ -1086,7 +1086,7 @@ def answer(history: list):
             for p in ps:
                 ext = p.split(".")[-1]
                 if ext in common_audio_formats:
-                    aud = split_audio_by_duration(p, duration=25, count=1, resample=7000)[0]
+                    aud = split_audio_by_duration(p, duration=20, count=1, resample=8000)[0]
                     audio, samplerate = librosa.load(aud, sr=None, mono=True)
                     snd_list.append((audio, samplerate))
                     add_content += f" <|audio_{ str(len(snd_list)) }|>"
