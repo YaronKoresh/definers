@@ -5129,7 +5129,7 @@ def _summarize(text_to_summarize, is_chunk=False):
         "repetition_penalty": 1.5,
         "length_penalty": 0.1,
         "no_repeat_ngram_size": 3,
-        "num_beams": 32,
+        "num_beams": 12,
         "early_stopping": True,
     }
 
