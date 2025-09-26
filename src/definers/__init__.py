@@ -5667,7 +5667,7 @@ def pipe(
         params2["prompt"] = prompt
         params2["height"] = height
         params2["width"] = width
-        params2["guidance_scale"] =9.0
+        params2["guidance_scale"] =8.0
         if task == "video":
             params2["num_videos_per_prompt"] = 1
             params2["num_frames"] = length
