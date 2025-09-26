@@ -7835,6 +7835,8 @@ def music_video(
         centroid_val = centroid_norm[safe_idx]
         is_beat = any(abs(frame_idx - bf) < 3 for bf in beat_frames)
 
+        frame = np.zeros((h, w, 3), dtype=np.uint8)
+
         if preset == "vortex":
             angle = np.arctan2(grid_y - center_y, grid_x - center_x)
             dist = np.sqrt((grid_y - center_y)**2 + (grid_x - center_x)**2)
@@ -7855,8 +7857,6 @@ def music_video(
             frame = cv2.cvtColor(value, cv2.COLOR_GRAY2BGR)
 
         elif preset == "glitch":
-            frame = np.zeros((h, w, 3), dtype=np.uint8)
-            
             pattern_freq = 5.0 + centroid_val * 15.0
             base_pattern = np.sin(grid_x / (60 + rms_val * 100) * pattern_freq + t * 5) * \
                            np.cos(grid_y / 40 * pattern_freq - t * 3)
@@ -7918,7 +7918,6 @@ def music_video(
             draw_star_of_david(frame, (center_x, center_y), radius, rotation_angle, ISRAEL_BLUE, 14)
 
         else:
-            frame = np.zeros((h, w, 3), dtype=np.uint8)
             num_bars = 128
             spectrum = stft_norm[:, min(frame_idx, stft_norm.shape[1] - 1)]
             
