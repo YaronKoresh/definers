@@ -9070,7 +9070,7 @@ def autotune_song(
     strength=1.0,
     correct_timing=True,
     quantize_grid_strength=8,
-    tolerance_cents=1,
+    tolerance_cents=2,
     attack_smoothing_ms=40,
 ):
     import librosa
@@ -9215,7 +9215,7 @@ def autotune_song(
         tuned_vocals_audio = pydub.AudioSegment.from_file(tuned_vocals_path)
         tuned_vocals_audio = tuned_vocals_audio.set_frame_rate(instrumental_audio.frame_rate)
         
-        combined = instrumental_audio.overlay(tuned_vocals_audio + 2)
+        combined = instrumental_audio.overlay(tuned_vocals_audio)
         
         output_format = get_ext(output_path)
         combined.export(output_path, format=output_format)
