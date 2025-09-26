@@ -1086,14 +1086,14 @@ def answer(history: list):
             for p in ps:
                 ext = p.split(".")[-1]
                 if ext in common_audio_formats:
-                    aud = split_audio_by_duration(p, duration=30, count=1, resample=8000)[0]
+                    aud = split_audio_by_duration(p, duration=25, count=1, resample=7000)[0]
                     audio, samplerate = librosa.load(aud, sr=None, mono=True)
                     snd_list.append((audio, samplerate))
                     add_content += f" <|audio_{ str(len(snd_list)) }|>"
                 if ext in iio_formats:
                     img = iio.imread(p)
                     w, h = Image.open(p).size
-                    w, h = get_max_resolution(w, h, mega_pixels=0.1)
+                    w, h = get_max_resolution(w, h, mega_pixels=0.07)
                     new_img = resize_image(img, h, w)
                     new_img = (new_img * 255).astype(np.uint8)
                     img = Image.fromarray(new_img)
@@ -1123,8 +1123,8 @@ def answer(history: list):
 
     generate_ids = MODELS["answer"].generate(
         **inputs,
-        max_new_tokens=512,
-        num_beams=12,
+        max_new_tokens=4096,
+        num_beams=16,
         length_penalty=0.1,
         num_logits_to_keep=1,
     )
@@ -6620,8 +6620,9 @@ def get_chat_response(message, history: list):
 
     response = answer(history)
 
+    response = summary(response, max_words=50)
     if orig_lang and orig_lang != language(response):
-        response = summary(response)
+        response = ai_translate(response, lang=orig_lang)
 
     return response
 
