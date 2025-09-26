@@ -7741,7 +7741,7 @@ def beat_visualizer(
     final_clip = final_clip.with_audio(audio_clip)
     final_clip.write_videofile(
         output_path,
-        fps=24,
+        fps=20,
         codec="libx264",
         audio_codec="aac",
         preset="ultrafast",
@@ -7788,7 +7788,7 @@ def draw_star_of_david(
 
 
 def music_video(
-    audio_path, preset="israel", width=1024, height=1024, fps=24
+    audio_path, preset="israel", width=640, height=640, fps=20
 ):
     import cv2
     import librosa
@@ -7830,6 +7830,7 @@ def music_video(
     def make_frame(t):
         frame_idx = int(t * sr / hop_length)
         safe_idx = min(frame_idx, len(rms_norm) - 1, len(centroid_norm) - 1)
+        grid_x, grid_y = np.meshgrid(np.arange(w), np.arange(h))
 
         rms_val = rms_norm[safe_idx]
         centroid_val = centroid_norm[safe_idx]
@@ -7837,26 +7838,27 @@ def music_video(
 
         frame = np.zeros((h, w, 3), dtype=np.uint8)
 
-        grid_x, grid_y = np.meshgrid(np.arange(w), np.arange(h))
-
         if preset == "vortex":
             angle = np.arctan2(grid_y - center_y, grid_x - center_x)
             dist = np.sqrt((grid_y - center_y)**2 + (grid_x - center_x)**2)
 
-            zoom = 1.0 - 0.5 * rms_val
+            zoom = 1.0 - 0.6 * rms_val
             if is_beat:
-                zoom *= 0.8 
+                zoom *= 0.4 
 
-            num_arms1 = round(3 + 8 * rms_val)
-            num_arms2 = round(5 + 8 * centroid_val)
+            num_arms1 = round(1 + 3 * rms_val)
+            num_arms2 = round(4 + 2 * centroid_val)
             
-            pattern1 = np.sin(dist * zoom / 25.0 + angle * num_arms1 - t * 8.0)
-            pattern2 = np.cos(dist * zoom / 40.0 - angle * num_arms2 + t * 6.0)
+            pattern1 = np.sin(dist * zoom / 3.0 + angle * num_arms1 - t * 2.0)
+            pattern2 = np.cos(dist * zoom / 8.0 - angle * num_arms2 + t * 3.0)
             
             final_pattern = np.clip(pattern1 * pattern2, -1.0, 1.0)
             
             value = (128 * (1 + final_pattern)).astype(np.uint8)
             frame = cv2.cvtColor(value, cv2.COLOR_GRAY2BGR)
+
+            if is_beat:
+                frame = 255 - frame
 
         elif preset == "glitch":
             pattern_freq = 5.0 + centroid_val * 15.0
@@ -7891,6 +7893,7 @@ def music_video(
 
         elif preset == "israel":
             ISRAEL_BLUE = (0, 56, 184)
+            LIGHT_BLUE = (0, 64, 127)
             WHITE = (255, 255, 255)
             
             bg_color_top = np.array([255, 255, 255])
@@ -7903,8 +7906,8 @@ def music_video(
             stripe_height = int(h * 0.15)
             gap_height = int(h * 0.1)
             
-            frame[gap_height : gap_height + stripe_height] = ISRAEL_BLUE
-            frame[h - gap_height - stripe_height : h - gap_height] = ISRAEL_BLUE
+            frame[gap_height : gap_height + stripe_height] = LIGHT_BLUE
+            frame[h - gap_height - stripe_height : h - gap_height] = LIGHT_BLUE
             
             base_radius = h * 0.18
             radius = int(base_radius + rms_val * (h * 0.2))
@@ -7918,6 +7921,9 @@ def music_video(
                 cv2.circle(frame, (center_x, center_y), shockwave_radius, WHITE, 4)
 
             draw_star_of_david(frame, (center_x, center_y), radius, rotation_angle, ISRAEL_BLUE, 14)
+
+            if is_beat:
+                frame = 255 - frame
 
         else:
             num_bars = 128
@@ -7995,7 +8001,7 @@ def lyric_video(
     lyrics_text,
     text_position,
     *,
-    max_dim=1024,
+    max_dim=640,
     font_size=70,
     text_color="white",
     stroke_color="black",
@@ -8205,7 +8211,7 @@ def lyric_video(
     final_clip.write_videofile(
         output_path,
         codec="libx264",
-        fps=24,
+        fps=20,
         audio_codec="aac",
         preset="ultrafast",
         threads=cores(),
