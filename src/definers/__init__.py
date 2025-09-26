@@ -7888,7 +7888,7 @@ def music_video(
                 frame = np.roll(np.roll(frame, shake_y, axis=0), shake_x, axis=1)
 
         elif preset == "israel":
-            ISRAEL_BLUE = (184, 56, 0)
+            ISRAEL_BLUE = (0, 56, 184)
             WHITE = (255, 255, 255)
             
             bg_color_top = np.array([255, 255, 255])
