@@ -6602,19 +6602,19 @@ def get_chat_response(message, history: list):
 
     including = []
 
-    if message["text"]:
-        including.append("text")
-        orig_lang = language(message["text"])
-        if message["files"]:
-            history.append({"role": "user", "content": "Please deeply examine every attachment from this new message carefully!"})
-        history.append({"role": "user", "content": message["text"]})
-
     if message["files"]:
         including.append("files")
         for file_path in message["files"]:
             history.append({"role": "user", "content": {"path": file_path}})
 
-    history.append({"role": "user", "content": "Please double-check your response before answering!"})
+    if message["text"]:
+        including.append("text")
+        orig_lang = language(message["text"])
+        history.append({"role": "user", "content": message["text"]})
+        if message["files"]:
+            history.append({"role": "user", "content": "and please deeply examine the attachments from the last message carefully!"})
+
+    history.append({"role": "user", "content": "and make sure to double-check your response."})
 
     nl = "\n"
     including = "\n".join(including)
@@ -7858,6 +7858,8 @@ def music_video(
 
         elif preset == "glitch":
             pattern_freq = 5.0 + centroid_val * 15.0
+            grid_x, grid_y = np.meshgrid(np.arange(w), np.arange(h))
+
             base_pattern = np.sin(grid_x / (60 + rms_val * 100) * pattern_freq + t * 5) * \
                            np.cos(grid_y / 40 * pattern_freq - t * 3)
             
