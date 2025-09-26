@@ -9057,7 +9057,7 @@ def get_scale_notes(
 def enhance_audio(audio_path):
     audio_path = autotune_song(audio_path)
     audio_path = master(audio_path, "wav")
-    audio_path = riaa_filter(audio_path, bass_factor=0.001)
+    audio_path = riaa_filter(audio_path, bass_factor=0.01)
     audio_path = audio_limiter(audio_path)
     return audio_path
 
@@ -9229,13 +9229,13 @@ def autotune_song(
 def audio_limiter(
     input_filename,
     output_filename=None,
-    db_boost=20.0,
+    db_boost=18.0,
     db_limit=-0.1,
-    attack_ms=1.0,
-    release_ms=0.01,
-    lookahead_ms=0.0001,
+    attack_ms=0.001,
+    release_ms=0.1,
+    lookahead_ms=0.005,
     oversampling=2,
-    soft_clip_db=-5.0
+    soft_clip_db=-2.0
 ):
     from scipy.io import wavfile
     from scipy import signal
