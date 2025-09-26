@@ -9069,7 +9069,7 @@ def autotune_song(
     correct_timing=True,
     quantize_grid_strength=8,
     tolerance_cents=1,
-    attack_smoothing_ms=5,
+    attack_smoothing_ms=40,
 ):
     import librosa
     import madmom
@@ -9102,8 +9102,8 @@ def autotune_song(
 
         y_vocals, sr = librosa.load(vocals_path, sr=None, mono=True)
         
-        n_fft = 2048
-        hop_length = 1024
+        n_fft = 4096
+        hop_length = 3072
         
         processed_vocals_path = vocals_path
 
