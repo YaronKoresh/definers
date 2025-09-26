@@ -636,7 +636,7 @@ common_audio_formats = [
 ]
 
 _negative_prompt_ = "glamour or makeup, airbrushed or smooth, retouching or polished, perfect or oversaturated, CGI or 3d, vfx or SFX, rendered or painted, unreal or octane, cinematic or bokeh, blurry or cropped, mutated or duplicated"
-_positive_prompt_ = "reality, documentary, national geographic, high contrast, highly detailed"
+_positive_prompt_ = "journalism, realism, national geographic, stark, minimal, rough, sunlit, grainy, imperfect"
 
 
 def get_os_name():
@@ -3258,16 +3258,16 @@ def init_upscale():
 def upscale(
     path,
     upscale_factor: int = 2,
-    prompt: str = "high sharpness, high contrast, high sharpness, high contrast",
-    negative_prompt: str = "blurry, polished, blurry, polished",
+    prompt: str = "dark muted colors, rough texture, dark muted colors, rough texture",
+    negative_prompt: str = "burry, airbrushed, burry, airbrushed",
     seed: int = None,
-    controlnet_scale: float = 0.7,
+    controlnet_scale: float = 0.8,
     controlnet_decay: float = 0.8,
-    condition_scale: float = 4.0,
-    tile_width: int = 128,
-    tile_height: int = 128,
-    denoise_strength: float = 0.1,
-    num_inference_steps: int = 30,
+    condition_scale: float = 8.0,
+    tile_width: int = 64,
+    tile_height: int = 768,
+    denoise_strength: float = 0.05,
+    num_inference_steps: int = 50,
     solver: str = "DPMSolver",
 ):
     from PIL import Image
@@ -3300,7 +3300,7 @@ def upscale(
         tile_size=(tile_height, tile_width),
         denoise_strength=denoise_strength,
         num_inference_steps=num_inference_steps,
-        loras_scale={"more_details": 0.0, "sdxl_render": 0.1},
+        loras_scale={"more_details": 0.0, "sdxl_render": 0.0},
         solver_type=solver_type,
     )
 
@@ -5163,16 +5163,18 @@ def map_reduce_summary(text, max_words=50):
     return final_summary
 
 
-def summary(text, max_words=20):
-    word_count = len(text.split())
+def summary(text, max_words=20, min_loops=1):
+    words_count = len(text.split())
+    while words_count > max_words or min_loops > 0:
+        if words_count > 350:
+            text = map_reduce_summary(text, max_words)
+        else:
+            text = _summarize(text, is_chunk=False)
+        min_loops = min_loops - 1
+        words_count = len(text.split())
 
-    if word_count > 350 or word_count > max_words:
-        res = map_reduce_summary(text, max_words)
-    else:
-        res = _summarize(text, is_chunk=False)
-
-    log("Summary", res)
-    return res
+    log("Summary", text)
+    return text
 
 
 def path_end(p: str):
@@ -5629,13 +5631,13 @@ def choose_random_words(word_list, num_words=10):
 
 def optimize_prompt_realism(prompt):
     prompt = preprocess_prompt(prompt)
-    prompt = f'{prompt}, {_positive_prompt_}, {_positive_prompt_}, {_post_prompt_}'
+    prompt = f'{prompt}, {_positive_prompt_}, {_positive_prompt_}'
     return prompt
 
 
 def preprocess_prompt(prompt):
     prompt = ai_translate(prompt)
-    prompt = summary(prompt, max_words=14)
+    prompt = summary(prompt, max_words=20)
     return prompt
 
 
@@ -5667,7 +5669,7 @@ def pipe(
         params2["prompt"] = prompt
         params2["height"] = height
         params2["width"] = width
-        params2["guidance_scale"] =9.0
+        params2["guidance_scale"] =8.0
         if task == "video":
             params2["num_videos_per_prompt"] = 1
             params2["num_frames"] = length
@@ -9066,11 +9068,11 @@ def enhance_audio(audio_path):
 def autotune_song(
     audio_path,
     output_path = None,
-    strength=0.9,
+    strength=1.0,
     correct_timing=True,
     quantize_grid_strength=8,
-    tolerance_cents=5,
-    attack_smoothing_ms=1,
+    tolerance_cents=2,
+    attack_smoothing_ms=80,
 ):
     import librosa
     import madmom
@@ -9103,8 +9105,8 @@ def autotune_song(
 
         y_vocals, sr = librosa.load(vocals_path, sr=None, mono=True)
         
-        n_fft = 2048
-        hop_length = 1024
+        n_fft = 4096
+        hop_length = 3072
         
         processed_vocals_path = vocals_path
 
@@ -9214,7 +9216,7 @@ def autotune_song(
         tuned_vocals_audio = pydub.AudioSegment.from_file(tuned_vocals_path)
         tuned_vocals_audio = tuned_vocals_audio.set_frame_rate(instrumental_audio.frame_rate)
         
-        combined = instrumental_audio.overlay(tuned_vocals_audio + 2)
+        combined = instrumental_audio.overlay(tuned_vocals_audio)
         
         output_format = get_ext(output_path)
         combined.export(output_path, format=output_format)
@@ -9227,159 +9229,106 @@ def autotune_song(
         for path in temp_files:
             delete(path)
 
-def audio_limiter(
-    input_filename,
-    output_filename=None,
-    db_boost=18.0,
-    db_limit=-0.1,
-    attack_ms=0.001,
-    release_ms=0.1,
-    lookahead_ms=0.005,
-    oversampling=2,
-    soft_clip_db=-2.0
-):
+
+def compute_gain_envelope(sidechain, sample_rate, threshold, attack_ms, release_ms):
+    gain = 1.0
+    envelope = np.zeros_like(sidechain)
+    attack_samples = (attack_ms / 1000.0) * sample_rate
+    release_samples = (release_ms / 1000.0) * sample_rate
+    attack_coeff = np.exp(-np.log(9) / attack_samples) if attack_samples > 0 else 0.0
+    release_coeff = np.exp(-np.log(9) / release_samples) if release_samples > 0 else 0.0
+
+    for i in range(len(sidechain)):
+        current_sample_abs = np.abs(sidechain[i])
+        if current_sample_abs > threshold:
+            target_gain = threshold / current_sample_abs
+        else:
+            target_gain = 1.0
+        if target_gain < gain:
+            gain = (attack_coeff * gain) + (1 - attack_coeff) * target_gain
+        else:
+            gain = (release_coeff * gain) + (1 - release_coeff) * target_gain
+        envelope[i] = gain
+    return envelope
+
+
+def audio_limiter(input_filename, output_filename=None, db_boost=30.0, db_limit=-0.2, attack_ms=1.0, release_ms=50.0, lookahead_ms=1.5, oversampling=2):
     from scipy.io import wavfile
     from scipy import signal
-    import numba
-
-    # JIT-compiled helper for the saturation stage (for performance)
-    @numba.njit
-    def _apply_soft_clip(data, threshold):
-        """Applies a tanh soft clipper to samples exceeding the threshold."""
-        clipped_data = np.copy(data)
-        # The range above the threshold that will be compressed
-        headroom = 1.0 - threshold
-        if headroom <= 0:
-            return clipped_data # Cannot clip if threshold is 1.0 or higher
-            
-        # Indices of samples that are over the threshold
-        over_indices = np.where(np.abs(data) > threshold)
-        
-        for i in over_indices[0]:
-            # Handle stereo/mono by iterating through potential second dimension
-            if data.ndim == 1:
-                sample = data[i]
-                sign = np.sign(sample)
-                # The amount the sample is over the threshold
-                overage = np.abs(sample) - threshold
-                # Apply the tanh curve to the overage, scaled to the headroom
-                transformed_overage = headroom * np.tanh(overage / headroom)
-                clipped_data[i] = sign * (threshold + transformed_overage)
-            else:
-                for j in range(data.shape[1]):
-                    sample = data[i, j]
-                    sign = np.sign(sample)
-                    overage = np.abs(sample) - threshold
-                    transformed_overage = headroom * np.tanh(overage / headroom)
-                    clipped_data[i, j] = sign * (threshold + transformed_overage)
-
-        return clipped_data
-
-    # JIT-compiled helper for the core limiter logic (unchanged from before)
-    @numba.njit
-    def _compute_gain_envelope(data, sample_rate, threshold, attack_ms, release_ms):
-        """Calculates the dynamic gain envelope."""
-        # Coefficients are calculated based on the formula: exp(-1 / (time_in_seconds * sample_rate))
-        attack_coeff = np.exp(-1.0 / (attack_ms * sample_rate / 1000.0))
-        release_coeff = np.exp(-1.0 / (release_ms * sample_rate / 1000.0))
-        
-        num_samples = len(data)
-        gain_envelope = np.ones(num_samples, dtype=np.float32)
-        current_gain = 1.0
-
-        for i in range(num_samples):
-            abs_sample = np.abs(data[i])
-            
-            if abs_sample > threshold:
-                target_gain = threshold / abs_sample
-                current_gain = (1 - attack_coeff) * target_gain + attack_coeff * current_gain
-            else:
-                target_gain = 1.0
-                current_gain = (1 - release_coeff) * target_gain + release_coeff * current_gain
-            
-            gain_envelope[i] = current_gain
-                
-        return gain_envelope
 
     if output_filename is None:
-        output_filename = tmp("wav", keep=False)
+        output_filename = tmp("mp3", keep=False)
 
     try:
-        sample_rate, data = wavfile.read(input_filename)
-        print(f"Read '{input_filename}' (Sample Rate: {sample_rate}, Dtype: {data.dtype})")
+        sample_rate, audio = wavfile.read(input_filename)
+        print(f"Reading '{input_filename}' at {sample_rate} Hz.")
     except Exception as e:
         print(f"Error reading audio file: {e}")
-        return
+        return None
 
-    original_dtype = data.dtype
-    original_length = data.shape[0]
-    
-    # --- 1. Normalize Audio to Float ---
-    if original_dtype == np.int16: max_val = 32767.0
-    elif original_dtype == np.int32: max_val = 2147483647.0
-    elif original_dtype == np.uint8: data, max_val = data.astype(np.float32) - 128.0, 128.0
-    elif np.issubdtype(original_dtype, np.floating): max_val = 1.0
-    else: print(f"Error: Unsupported data type '{original_dtype}'."); return
+    original_dtype = audio.dtype
+    if original_dtype == np.int16:
+        max_val = 32767.0
+    elif original_dtype == np.int32:
+        max_val = 2147483647.0
+    elif original_dtype == np.uint8:
+        audio = audio.astype(np.float32) - 128.0
+        max_val = 127.0
+    else:
+        max_val = 1.0
         
-    audio_float = data.astype(np.float32) / max_val
-    
-    # --- 2. Oversample ---
+    audio_float = audio.astype(np.float32) / max_val
+    original_length = audio.shape[0]
+
     effective_rate = sample_rate
     if oversampling > 1 and isinstance(oversampling, int):
-        print(f"Upsampling by {oversampling}x...")
+        print(f"Oversampling audio by a factor of {oversampling}x...")
         effective_rate = sample_rate * oversampling
         audio_float = signal.resample_poly(audio_float, oversampling, 1, axis=0)
     
-    # --- 3. Optional Soft Clipping / Saturation ---
-    if soft_clip_db < 0:
-        clip_threshold = 10 ** (soft_clip_db / 20.0)
-        print(f"Applying soft clipping above {soft_clip_db} dB...")
-        audio_float = _apply_soft_clip(audio_float, clip_threshold)
-
-    # --- 4. Apply Gain Boost ---
+    initial_rms_db = 20 * np.log10(np.sqrt(np.mean(audio_float**2)))
+    print(f"Initial RMS: {initial_rms_db:.2f} dB")
+    
     linear_boost = 10 ** (db_boost / 20.0)
     boosted_audio = audio_float * linear_boost
     print(f"Applied {db_boost} dB boost.")
 
-    # Determine sidechain for gain calculation (max peak of all channels)
     if boosted_audio.ndim > 1:
         sidechain = np.max(np.abs(boosted_audio), axis=1)
     else:
-        sidechain = boosted_audio
+        sidechain = np.abs(boosted_audio)
 
-    # --- 5. Lookahead ---
     lookahead_samples = int(lookahead_ms * effective_rate / 1000.0)
     if lookahead_samples > 0:
-        pad_width = [(lookahead_samples, 0)] + [(0, 0)] * (boosted_audio.ndim - 1)
-        delayed_audio = np.pad(boosted_audio, pad_width, 'constant')
+        pad_width_audio = [(lookahead_samples, 0)] + [(0, 0)] * (boosted_audio.ndim - 1)
+        delayed_audio = np.pad(boosted_audio, pad_width_audio, 'constant')
     else:
         delayed_audio = boosted_audio
 
-    # --- 6. Compute Gain Envelope ---
     threshold = 10 ** (db_limit / 20.0)
     print("Computing gain envelope...")
+    
     if lookahead_samples > 0:
         sidechain_padded = np.pad(sidechain, (0, lookahead_samples), 'constant')
     else:
         sidechain_padded = sidechain
-    gain = _compute_gain_envelope(sidechain_padded, effective_rate, threshold, attack_ms, release_ms)
+        
+    gain = compute_gain_envelope(sidechain_padded, effective_rate, threshold, attack_ms, release_ms)
     
     if boosted_audio.ndim > 1:
-        gain = gain.reshape(-1, 1) # Reshape for stereo multiplication
+        gain = np.tile(gain[:, np.newaxis], (1, boosted_audio.shape[1]))
 
-    # --- 7. Apply Limiter ---
     limited_audio = delayed_audio * gain
     print(f"Applied limiting with a ceiling of {db_limit} dB.")
     
-    # --- 8. Downsample ---
     if oversampling > 1 and isinstance(oversampling, int):
         print(f"Downsampling back to {sample_rate} Hz...")
         limited_audio = signal.resample_poly(limited_audio, 1, oversampling, axis=0)
-
-    # --- 9. Final Clip, Length Adjustment, and Conversion ---
+    
     current_length = int(limited_audio.shape[0])
     lookahead_len = int(lookahead_ms / 1000 * sample_rate)
     max_len = lookahead_len + original_length
+
     if current_length > original_length:
         final_processed_audio = limited_audio[lookahead_len:max_len]
     elif current_length < original_length:
@@ -9391,6 +9340,13 @@ def audio_limiter(
 
     print(f"Applying final brickwall clip at {db_limit} dB.")
     np.clip(final_processed_audio, -threshold, threshold, out=final_processed_audio)
+    
+    final_rms_db = 20 * np.log10(np.sqrt(np.mean(final_processed_audio**2)))
+    print(f"Final RMS: {final_rms_db:.2f} dB.")
+    if final_rms_db > -3.0:
+        print("✅ Target RMS above -3 dB achieved.")
+    else:
+        print("⚠️ Target RMS was not met. The source material may be too dynamic or quiet.")
 
     processed_audio_int = (final_processed_audio * max_val)
     final_audio = processed_audio_int.astype(original_dtype)
@@ -9401,7 +9357,8 @@ def audio_limiter(
         return output_filename
     except Exception as e:
         print(f"Error writing audio file: {e}")
-        
+        return None
+
 
 def create_sample_audio(filename="sample_audio.wav", duration=5, sample_rate=44100):
     from scipy.io import wavfile
