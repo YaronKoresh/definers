@@ -9226,8 +9226,6 @@ def autotune_song(
         for path in temp_files:
             delete(path)
 
-import numpy as np
-import os
 
 def compute_gain_envelope(sidechain, sample_rate, threshold, attack_ms, release_ms):
     gain = 1.0
@@ -9249,6 +9247,7 @@ def compute_gain_envelope(sidechain, sample_rate, threshold, attack_ms, release_
             gain = (release_coeff * gain) + (1 - release_coeff) * target_gain
         envelope[i] = gain
     return envelope
+
 
 def audio_limiter(input_filename, output_filename=None, db_boost=60.0, db_limit=-0.2, attack_ms=1.0, release_ms=50.0, lookahead_ms=1.5, oversampling=2):
     from scipy.io import wavfile
@@ -9292,7 +9291,7 @@ def audio_limiter(input_filename, output_filename=None, db_boost=60.0, db_limit=
     print(f"Applied {db_boost} dB boost.")
 
     if boosted_audio.ndim > 1:
-        sidechain = np.max(np.abs(boosted_audio), axis=0)
+        sidechain = np.max(np.abs(boosted_audio), axis=1)
     else:
         sidechain = np.abs(boosted_audio)
 
