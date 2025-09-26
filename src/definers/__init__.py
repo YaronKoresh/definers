@@ -9231,9 +9231,9 @@ def audio_limiter(
     output_filename=None,
     db_boost=18.0,
     db_limit=-0.1,
-    attack_ms=0.001,
-    release_ms=0.1,
-    lookahead_ms=0.005,
+    attack_ms=0.0001,
+    release_ms=0.01,
+    lookahead_ms=0.0005,
     oversampling=2,
     soft_clip_db=-2.0
 ):
