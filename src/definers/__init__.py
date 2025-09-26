@@ -3258,15 +3258,15 @@ def init_upscale():
 def upscale(
     path,
     upscale_factor: int = 2,
-    prompt: str = ", ".join([_positive_prompt_, _positive_prompt_, _positive_prompt_]),
-    negative_prompt: str = ", ".join([_negative_prompt_, _negative_prompt_, _negative_prompt_]),
+    prompt: str = "dark muted colors, rough texture, dark muted colors, rough texture",
+    negative_prompt: str = "burry, airbrushed, burry, airbrushed",
     seed: int = None,
-    controlnet_scale: float = 0.7,
+    controlnet_scale: float = 0.8,
     controlnet_decay: float = 0.8,
-    condition_scale: float = 4.0,
-    tile_width: int = 128,
-    tile_height: int = 128,
-    denoise_strength: float = 0.15,
+    condition_scale: float = 8.0,
+    tile_width: int = 64,
+    tile_height: int = 768,
+    denoise_strength: float = 0.05,
     num_inference_steps: int = 50,
     solver: str = "DPMSolver",
 ):
@@ -3300,7 +3300,7 @@ def upscale(
         tile_size=(tile_height, tile_width),
         denoise_strength=denoise_strength,
         num_inference_steps=num_inference_steps,
-        loras_scale={"more_details": 0.0, "sdxl_render": 0.1},
+        loras_scale={"more_details": 0.0, "sdxl_render": 0.0},
         solver_type=solver_type,
     )
 
