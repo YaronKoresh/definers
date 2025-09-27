@@ -1,0 +1,4 @@
+runpod
+
+--extra-index-url https://pypi.nvidia.com
+definers[cuda] @ git+https://github.com/YaronKoresh/definers.git

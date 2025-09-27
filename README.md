@@ -1,5 +1,6 @@
 # Definers: Your All-in-One Python Toolkit
 
+[![Runpod](https://api.runpod.io/badge/YaronKoresh/definers)](https://console.runpod.io/hub/YaronKoresh/definers)
 [![CI Tests](https://github.com/YaronKoresh/definers/actions/workflows/tests-status.yml/badge.svg?branch=main&cache_bust=1)](https://github.com/YaronKoresh/definers/actions/workflows/tests-status.yml)
 [![codecov](https://codecov.io/gh/YaronKoresh/definers/graph/badge.svg?token=QRZ33FO9N3&cache_bust=1)](https://codecov.io/gh/YaronKoresh/definers)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)

@@ -1,0 +1,16 @@
+{
+  "title": "Definers",
+  "description": "Definers: Your All-in-One Python Toolkit",
+  "type": "serverless",
+  "category": "embedding",
+  "config": {
+    "runsOn": "GPU",
+    "containerDiskInGb": 128,
+    "gpuCount": 1,
+    "gpuIds": "RTX A4000,-NVIDIA RTX 4090",
+    "allowedCudaVersions": [
+      "12.8", "12.7", "12.6", "12.5", "12.4",
+      "12.3", "12.2", "12.1", "12.0"
+    ],
+  }
+}
