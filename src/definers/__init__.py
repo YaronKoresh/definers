@@ -9022,11 +9022,11 @@ def enhance_audio(audio_path):
 def autotune_song(
     audio_path,
     output_path = None,
-    strength=0.9,
+    strength=0.7,
     correct_timing=True,
-    quantize_grid_strength=8,
-    tolerance_cents=5,
-    attack_smoothing_ms=150,
+    quantize_grid_strength=16,
+    tolerance_cents=15,
+    attack_smoothing_ms=0.1,
 ):
     import librosa
     import madmom
@@ -9209,14 +9209,14 @@ def compute_gain_envelope(sidechain, sample_rate, threshold, attack_ms, release_
 def loudness_maximizer(
     input_filename,
     output_filename=None,
-    comp_threshold_db=-18.0,
-    comp_ratio=4.0,
-    comp_attack_ms=5.0,
-    comp_release_ms=150.0,
+    comp_threshold_db=-12.0,
+    comp_ratio=10.0,
+    comp_attack_ms=0.1,
+    comp_release_ms=300.0,
     db_boost=12.0,
     db_limit=-0.2,
-    limit_attack_ms=1.0,
-    limit_release_ms=200.0,
+    limit_attack_ms=0.1,
+    limit_release_ms=400.0,
     lookahead_ms=1.5,
     oversampling=2
 ):
