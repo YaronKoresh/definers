@@ -7840,30 +7840,24 @@ def music_video(
         rms_val = rms_norm[safe_idx]
         centroid_val = centroid_norm[safe_idx]
 
-        zoom = 1.0 - 0.65 * rms_val
         frame = np.zeros((h, w, 3), dtype=np.uint8)
 
-        base_radius = h * 0.18
+        base_radius = h * 0.12
         radius = int(base_radius + rms_val * (h * 0.2))
 
         is_beat = any(abs(frame_idx - bf) < 3 for bf in beat_frames)
         if is_beat:
-            radius = int(radius * 1.25)
+            radius = int(radius / rms_val / centroid_val)
             frame += random.randint(32,192)
-            zoom *= 0.35
-
-        scanline_intensity = 0.6 * rms_val
-        scanline_effect = (np.sin(grid_y * 2 + t * 60) * 25 * scanline_intensity).reshape(h, w, 1)
-        frame = np.clip(frame.astype(np.int16) - scanline_effect, 0, 255)
 
         angle = np.arctan2(grid_y - center_y, grid_x - center_x)
         dist = np.sqrt((grid_y - center_y)**2 + (grid_x - center_x)**2)
 
-        num_arms1 = round(1 + 5 * rms_val)
-        num_arms2 = round(1 + 5 * centroid_val)
+        num_arms1 = round(5 + 10 * rms_val * centroid_val)
+        num_arms2 = round(5 + 10 * centroid_val)
             
-        pattern1 = np.sin(dist * zoom / 30.0 + angle * num_arms1 - t * 10.0)
-        pattern2 = np.cos(dist * zoom / 10.0 - angle * num_arms2 + t * 30.0)
+        pattern1 = np.sin(dist / 30.0 + angle * num_arms1 - t * 10.0)
+        pattern2 = np.cos(dist / 10.0 - angle * num_arms2 + t * 30.0)
 
         pattern_freq = 10.0 + centroid_val * 20.0
         base_pattern = np.sin(grid_x / (60 + rms_val * 100) * pattern_freq + t * 5) * np.cos(grid_y / 40 * pattern_freq - t * 3)
@@ -7872,12 +7866,10 @@ def music_video(
         r = 128 + 127 * np.sin(base_pattern * np.pi) * brightness
         g = 128 + 127 * np.sin(base_pattern * np.pi + np.pi/2) * brightness
         b = 60 + 100 * centroid_val + 60 * np.sin(base_pattern * np.pi + np.pi) * brightness
-        frame_rgb = frame_rgb = np.stack((r, g, b), axis=-1)
-        frame += frame_rgb
+        frame_rgb = np.stack((r, g, b), axis=-1)
 
-        final_pattern = np.clip(base_pattern * pattern1 * pattern2, -1.0, 1.0)
+        final_pattern = np.clip(pattern1 * pattern2, -1.0, 1.0)
         n = 128 * (1 + final_pattern)
-        frame *= np.stack((n, n, n), axis=-1)
             
         rms_shift = int(rms_val * 64)
         if rms_shift > 1:
@@ -7889,12 +7881,11 @@ def music_video(
         block_shift = np.random.randint(-w // 4, w // 4)
         frame[y_start:y_end, :] = np.roll(frame[y_start:y_end, :], block_shift, axis=1)
 
-        shake_x, shake_y = np.random.randint(-32, 32, size=2)
+        shake_x, shake_y = np.random.randint(-64, 64, size=2)
         frame = np.roll(np.roll(frame, shake_y, axis=0), shake_x, axis=1)
 
         ISRAEL_BLUE = (0, 56, 184)
-        LIGHT_BLUE = (0, 64, 127)
-        WHITE = (255, 255, 255)
+        METALIC_BLACK = (44, 44, 43)
             
         bg_color_top = np.array([255, 255, 255])
         bg_color_bottom = np.array([230, 230, 250])
@@ -7908,19 +7899,20 @@ def music_video(
         stripe_height = int(h * 0.15)
         gap_height = int(h * 0.1)
             
-        frame[gap_height : gap_height + stripe_height] = LIGHT_BLUE
-        frame[h - gap_height - stripe_height : h - gap_height] = LIGHT_BLUE
+        frame[gap_height : gap_height + stripe_height] = ISRAEL_BLUE
+        frame[h - gap_height - stripe_height : h - gap_height] = ISRAEL_BLUE
             
-        rotation_angle = t * 20 + centroid_val * 50
+        rotation_angle = t * 15 + centroid_val * 70
             
         if is_beat:
             shockwave_radius = int(radius * 1.5)
-            cv2.circle(frame, (center_x, center_y), shockwave_radius, WHITE, 4)
+            cv2.circle(frame, (center_x, center_y), shockwave_radius, n, 4)
 
-        draw_star_of_david(frame, (center_x, center_y), radius, rotation_angle, ISRAEL_BLUE, 14)
+        draw_star_of_david(frame, (center_x, center_y), radius, rotation_angle, METALIC_BLACK, 14)
 
-        if is_beat:
-            frame = 255 - frame
+        scanline_intensity = 0.9 * rms_val
+        scanline_effect = (np.sin(grid_y * 2 + t * 60) * 25 * scanline_intensity).reshape(h, w, 1)
+        frame = np.clip(frame.astype(np.int16) - scanline_effect, 0, 255)
 
         num_bars = 128
         spectrum = stft_norm[:, min(frame_idx, stft_norm.shape[1] - 1)]
@@ -7941,7 +7933,7 @@ def music_video(
 
             
         min_radius = 60 + 150 * rms_val
-        rotation = t * 20
+        rotation = t * 30
             
         points = []
         for i in range(num_bars):
@@ -7959,17 +7951,17 @@ def music_video(
             color_hsv = np.uint8([[[hue, 255, 255]]])
             color_bgr = cv2.cvtColor(color_hsv, cv2.COLOR_HSV2BGR)[0][0].tolist()
 
-            thickness = 8 if is_beat else 4
+            thickness = 12 if is_beat else 4
             cv2.line(frame, (start_x, start_y), (end_x, end_y), color_bgr, thickness, lineType=cv2.LINE_AA)
             
         cv2.polylines(frame, [np.array(points)], isClosed=True, color=(200, 200, 200), thickness=2, lineType=cv2.LINE_AA)
             
-        center_color_val = int(20 + 80 * centroid_val)
+        center_color_val = min(int(100 + 150 * centroid_val), 255)
         center_color = (center_color_val, center_color_val, 200)
-        cv2.circle(frame, (center_x, center_y), int(min_radius * 0.9), center_color, -1, lineType=cv2.LINE_AA)
+        cv2.circle(frame, (center_x, center_y), int(min_radius * 0.7), center_color, -1, lineType=cv2.LINE_AA)
 
         if is_beat:
-            cv2.circle(frame, (center_x, center_y), int(min_radius), ISRAEL_BLUE, 3, lineType=cv2.LINE_AA)
+            cv2.circle(frame, (center_x, center_y), int(min_radius), frame_rgb, 3, lineType=cv2.LINE_AA)
 
         return frame.astype(np.uint8)
 
