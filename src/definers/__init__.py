@@ -4910,7 +4910,11 @@ def random_string(min_len=50, max_len=60):
     return "".join(random.choice(characters) for _ in range(length))
 
 
-def random_number(size):
+def random_salt(size):
+    return int.from_bytes(os.urandom(size), sys.byteorder)
+
+
+def random_number(min=0, max=100):
     return int.from_bytes(os.urandom(size), sys.byteorder)
 
 
@@ -4930,7 +4934,7 @@ def file_to_sha3_512(path, salt_num=None):
 
 def string_to_sha3_512(str, salt_num=None):
     if salt_num == None:
-        salt_num = random_number(16)
+        salt_num = random_salt(16)
     salt = number_to_hex(salt_num)
 
     m = hashlib.sha3_512()
@@ -7788,7 +7792,7 @@ def draw_star_of_david(
 
 
 def music_video(
-    audio_path, preset="israel", width=640, height=640, fps=20
+    audio_path, width=640, height=640, fps=20
 ):
     import cv2
     import librosa
@@ -7828,141 +7832,146 @@ def music_video(
     center_x, center_y = w // 2, h // 2
 
     def make_frame(t):
+
         frame_idx = int(t * sr / hop_length)
         safe_idx = min(frame_idx, len(rms_norm) - 1, len(centroid_norm) - 1)
         grid_x, grid_y = np.meshgrid(np.arange(w), np.arange(h))
 
         rms_val = rms_norm[safe_idx]
         centroid_val = centroid_norm[safe_idx]
-        is_beat = any(abs(frame_idx - bf) < 3 for bf in beat_frames)
 
+        zoom = 1.0 - 0.65 * rms_val
         frame = np.zeros((h, w, 3), dtype=np.uint8)
 
-        if preset == "vortex":
-            angle = np.arctan2(grid_y - center_y, grid_x - center_x)
-            dist = np.sqrt((grid_y - center_y)**2 + (grid_x - center_x)**2)
+        base_radius = h * 0.18
+        radius = int(base_radius + rms_val * (h * 0.2))
 
-            zoom = 1.0 - 0.6 * rms_val
-            if is_beat:
-                zoom *= 0.4 
+        is_beat = any(abs(frame_idx - bf) < 3 for bf in beat_frames)
+        if is_beat:
+            radius = int(radius * 1.25)
+            frame += random.randint(32,192)
+            zoom *= 0.35
 
-            num_arms1 = round(1 + 3 * rms_val)
-            num_arms2 = round(4 + 2 * centroid_val)
+        scanline_intensity = 0.6 * rms_val
+        scanline_effect = (np.sin(grid_y * 2 + t * 60) * 25 * scanline_intensity).reshape(h, w, 1)
+        frame = np.clip(frame.astype(np.int16) - scanline_effect, 0, 255)
+
+        angle = np.arctan2(grid_y - center_y, grid_x - center_x)
+        dist = np.sqrt((grid_y - center_y)**2 + (grid_x - center_x)**2)
+
+        num_arms1 = round(1 + 5 * rms_val)
+        num_arms2 = round(1 + 5 * centroid_val)
             
-            pattern1 = np.sin(dist * zoom / 3.0 + angle * num_arms1 - t * 2.0)
-            pattern2 = np.cos(dist * zoom / 8.0 - angle * num_arms2 + t * 3.0)
-            
-            final_pattern = np.clip(pattern1 * pattern2, -1.0, 1.0)
-            
-            value = (128 * (1 + final_pattern)).astype(np.uint8)
-            frame = cv2.cvtColor(value, cv2.COLOR_GRAY2BGR)
+        pattern1 = np.sin(dist * zoom / 30.0 + angle * num_arms1 - t * 10.0)
+        pattern2 = np.cos(dist * zoom / 10.0 - angle * num_arms2 + t * 30.0)
 
-            if is_beat:
-                frame = 255 - frame
+        pattern_freq = 10.0 + centroid_val * 20.0
+        base_pattern = np.sin(grid_x / (60 + rms_val * 100) * pattern_freq + t * 5) * np.cos(grid_y / 40 * pattern_freq - t * 3)
 
-        elif preset == "glitch":
-            pattern_freq = 5.0 + centroid_val * 15.0
-            base_pattern = np.sin(grid_x / (60 + rms_val * 100) * pattern_freq + t * 5) * \
-                           np.cos(grid_y / 40 * pattern_freq - t * 3)
+        brightness = 0.5 + rms_val * 0.5
+        r = 128 + 127 * np.sin(base_pattern * np.pi) * brightness
+        g = 128 + 127 * np.sin(base_pattern * np.pi + np.pi/2) * brightness
+        b = 60 + 100 * centroid_val + 60 * np.sin(base_pattern * np.pi + np.pi) * brightness
+        frame_rgb = frame_rgb = np.stack((r, g, b), axis=-1)
+        frame += frame_rgb
+
+        final_pattern = np.clip(base_pattern * pattern1 * pattern2, -1.0, 1.0)
+        n = 128 * (1 + final_pattern)
+        frame *= np.stack((n, n, n), axis=-1)
             
-            brightness = 0.5 + rms_val * 0.5
-            r = 128 + 127 * np.sin(base_pattern * np.pi) * brightness
-            g = 128 + 127 * np.sin(base_pattern * np.pi + np.pi/2) * brightness
-            b = 60 + 100 * centroid_val + 60 * np.sin(base_pattern * np.pi + np.pi) * brightness
-            frame = np.stack([b, g, r], axis=-1).astype(np.uint8)
-            
-            rms_shift = int(rms_val * 20)
-            if rms_shift > 1:
-                frame[:, :, 2] = np.roll(frame[:, :, 2], rms_shift, axis=1)
-                frame[:, :, 0] = np.roll(frame[:, :, 0], -rms_shift, axis=1)
-
-            scanline_intensity = 0.6 * rms_val
-            scanline_effect = (np.sin(grid_y * 2 + t * 60) * 25 * scanline_intensity).reshape(h, w, 1)
-            frame = np.clip(frame.astype(np.int16) - scanline_effect, 0, 255).astype(np.uint8)
-
-            if is_beat:
-                frame = 255 - frame
+        rms_shift = int(rms_val * 64)
+        if rms_shift > 1:
+            frame[:, :, 2] = np.roll(frame[:, :, 2], rms_shift, axis=1)
+            frame[:, :, 0] = np.roll(frame[:, :, 0], -rms_shift, axis=1)
                 
-                y_start = np.random.randint(0, h - h // 4)
-                y_end = y_start + np.random.randint(h // 20, h // 4)
-                block_shift = np.random.randint(-w // 4, w // 4)
-                frame[y_start:y_end, :] = np.roll(frame[y_start:y_end, :], block_shift, axis=1)
+        y_start = np.random.randint(0, h - h // 4)
+        y_end = y_start + np.random.randint(h // 20, h // 4)
+        block_shift = np.random.randint(-w // 4, w // 4)
+        frame[y_start:y_end, :] = np.roll(frame[y_start:y_end, :], block_shift, axis=1)
+
+        shake_x, shake_y = np.random.randint(-32, 32, size=2)
+        frame = np.roll(np.roll(frame, shake_y, axis=0), shake_x, axis=1)
+
+        ISRAEL_BLUE = (0, 56, 184)
+        LIGHT_BLUE = (0, 64, 127)
+        WHITE = (255, 255, 255)
+            
+        bg_color_top = np.array([255, 255, 255])
+        bg_color_bottom = np.array([230, 230, 250])
+
+        pulse = 0.5 + 0.5 * np.sin(t * np.pi)
+
+        for i in range(h):
+            interp_color = bg_color_top * (1 - i/h) + bg_color_bottom * (i/h) * (1 - rms_val * 0.2 * pulse)
+            frame[i, :] = interp_color.astype(np.uint8)
+            
+        stripe_height = int(h * 0.15)
+        gap_height = int(h * 0.1)
+            
+        frame[gap_height : gap_height + stripe_height] = LIGHT_BLUE
+        frame[h - gap_height - stripe_height : h - gap_height] = LIGHT_BLUE
+            
+        rotation_angle = t * 20 + centroid_val * 50
+            
+        if is_beat:
+            shockwave_radius = int(radius * 1.5)
+            cv2.circle(frame, (center_x, center_y), shockwave_radius, WHITE, 4)
+
+        draw_star_of_david(frame, (center_x, center_y), radius, rotation_angle, ISRAEL_BLUE, 14)
+
+        if is_beat:
+            frame = 255 - frame
+
+        num_bars = 128
+        spectrum = stft_norm[:, min(frame_idx, stft_norm.shape[1] - 1)]
+            
+        log_freq_indices = np.logspace(0, np.log10(len(spectrum) - 1), num_bars + 1, dtype=int)
+
+        bar_values = []
+        for i in range(num_bars):
+            start_idx = log_freq_indices[i]
+            end_idx = log_freq_indices[i+1]
+    
+            if start_idx >= end_idx:
+                value = 0.0
+            else:
+                value = np.mean(spectrum[start_idx:end_idx])
+    
+            bar_values.append(value)
+
+            
+        min_radius = 60 + 150 * rms_val
+        rotation = t * 20
+            
+        points = []
+        for i in range(num_bars):
+            value = bar_values[i]
+            angle = np.deg2rad(i * (360 / num_bars) + rotation)
                 
-                shake_x, shake_y = np.random.randint(-20, 20, size=2)
-                frame = np.roll(np.roll(frame, shake_y, axis=0), shake_x, axis=1)
-
-        elif preset == "israel":
-            ISRAEL_BLUE = (0, 56, 184)
-            LIGHT_BLUE = (0, 64, 127)
-            WHITE = (255, 255, 255)
-            
-            bg_color_top = np.array([255, 255, 255])
-            bg_color_bottom = np.array([230, 230, 250])
-            pulse = 0.5 + 0.5 * np.sin(t * np.pi)
-            for i in range(h):
-                interp_color = bg_color_top * (1 - i/h) + bg_color_bottom * (i/h) * (1 - rms_val * 0.2 * pulse)
-                frame[i, :] = interp_color.astype(np.uint8)
-            
-            stripe_height = int(h * 0.15)
-            gap_height = int(h * 0.1)
-            
-            frame[gap_height : gap_height + stripe_height] = LIGHT_BLUE
-            frame[h - gap_height - stripe_height : h - gap_height] = LIGHT_BLUE
-            
-            base_radius = h * 0.18
-            radius = int(base_radius + rms_val * (h * 0.2))
-            if is_beat:
-                radius = int(radius * 1.25)
-
-            rotation_angle = t * 30 + centroid_val * 45
-            
-            if is_beat:
-                shockwave_radius = int(radius * 1.5)
-                cv2.circle(frame, (center_x, center_y), shockwave_radius, WHITE, 4)
-
-            draw_star_of_david(frame, (center_x, center_y), radius, rotation_angle, ISRAEL_BLUE, 14)
-
-            if is_beat:
-                frame = 255 - frame
-
-        else:
-            num_bars = 128
-            spectrum = stft_norm[:, min(frame_idx, stft_norm.shape[1] - 1)]
-            
-            log_freq_indices = np.logspace(0, np.log10(len(spectrum) - 1), num_bars, dtype=int)
-            bar_values = [np.mean(spectrum[log_freq_indices[i]:log_freq_indices[i+1]]) if i+1 < len(log_freq_indices) else spectrum[-1] for i in range(num_bars)]
-            
-            min_radius = 60 + 150 * rms_val
-            rotation = t * 20
-            
-            points = []
-            for i in range(num_bars):
-                value = bar_values[i]
-                angle = np.deg2rad(i * (360 / num_bars) + rotation)
+            bar_length = value * (h * 0.35)
+            start_x = int(center_x + min_radius * np.cos(angle))
+            start_y = int(center_y + min_radius * np.sin(angle))
+            end_x = int(center_x + (min_radius + bar_length) * np.cos(angle))
+            end_y = int(center_y + (min_radius + bar_length) * np.sin(angle))
+            points.append([end_x, end_y])
                 
-                bar_length = value * (h * 0.35)
-                start_x = int(center_x + min_radius * np.cos(angle))
-                start_y = int(center_y + min_radius * np.sin(angle))
-                end_x = int(center_x + (min_radius + bar_length) * np.cos(angle))
-                end_y = int(center_y + (min_radius + bar_length) * np.sin(angle))
-                points.append([end_x, end_y])
-                
-                hue = int((i / num_bars) * 180)
-                color_hsv = np.uint8([[[hue, 255, 255]]])
-                color_bgr = cv2.cvtColor(color_hsv, cv2.COLOR_HSV2BGR)[0][0].tolist()
+            hue = int((i / num_bars) * 180)
+            color_hsv = np.uint8([[[hue, 255, 255]]])
+            color_bgr = cv2.cvtColor(color_hsv, cv2.COLOR_HSV2BGR)[0][0].tolist()
 
-                thickness = 6 if is_beat else 3
-                cv2.line(frame, (start_x, start_y), (end_x, end_y), color_bgr, thickness, lineType=cv2.LINE_AA)
+            thickness = 8 if is_beat else 4
+            cv2.line(frame, (start_x, start_y), (end_x, end_y), color_bgr, thickness, lineType=cv2.LINE_AA)
             
-            cv2.polylines(frame, [np.array(points)], isClosed=True, color=(200, 200, 200), thickness=2, lineType=cv2.LINE_AA)
+        cv2.polylines(frame, [np.array(points)], isClosed=True, color=(200, 200, 200), thickness=2, lineType=cv2.LINE_AA)
             
-            center_color_val = int(20 + 80 * centroid_val)
-            center_color = (center_color_val, center_color_val, 200)
-            cv2.circle(frame, (center_x, center_y), int(min_radius * 0.9), center_color, -1, lineType=cv2.LINE_AA)
-            if is_beat:
-                cv2.circle(frame, (center_x, center_y), int(min_radius), (255,255,255), 3, lineType=cv2.LINE_AA)
+        center_color_val = int(20 + 80 * centroid_val)
+        center_color = (center_color_val, center_color_val, 200)
+        cv2.circle(frame, (center_x, center_y), int(min_radius * 0.9), center_color, -1, lineType=cv2.LINE_AA)
 
-        return frame
+        if is_beat:
+            cv2.circle(frame, (center_x, center_y), int(min_radius), ISRAEL_BLUE, 3, lineType=cv2.LINE_AA)
+
+        return frame.astype(np.uint8)
 
     output_path = audio_path.rsplit(".", 1)[0] + "_video.mp4"
     animation = VideoClip(make_frame, duration=duration)
@@ -9025,7 +9034,7 @@ def autotune_song(
     correct_timing=True,
     quantize_grid_strength=8,
     tolerance_cents=2,
-    attack_smoothing_ms=80,
+    attack_smoothing_ms=150,
 ):
     import librosa
     import madmom
