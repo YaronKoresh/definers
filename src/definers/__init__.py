@@ -9030,10 +9030,10 @@ def enhance_audio(audio_path):
 def autotune_song(
     audio_path,
     output_path = None,
-    strength=1.0,
+    strength=0.9,
     correct_timing=True,
     quantize_grid_strength=8,
-    tolerance_cents=2,
+    tolerance_cents=5,
     attack_smoothing_ms=150,
 ):
     import librosa
@@ -9067,8 +9067,8 @@ def autotune_song(
 
         y_vocals, sr = librosa.load(vocals_path, sr=None, mono=True)
         
-        n_fft = 4096
-        hop_length = 3072
+        n_fft = 8192
+        hop_length = 64
         
         processed_vocals_path = vocals_path
 
