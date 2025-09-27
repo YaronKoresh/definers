@@ -7792,7 +7792,7 @@ def draw_star_of_david(
 
 
 def music_video(
-    audio_path, width=640, height=640, fps=20
+    audio_path, width=1920, height=1080, fps=30
 ):
     import cv2
     import librosa
