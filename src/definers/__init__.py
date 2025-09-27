@@ -9769,3 +9769,90 @@ def infer(task: str, inference_file: str, model_type: str = None):
 
     print(f"Prediction saved to {output_filename}")
     return output_filename
+
+
+def start(proj:str):
+    import gradio as gr
+    proj = proj.strip().lower()
+
+    if proj == "image":
+        init_pretrained_model( "translate", True)
+        init_pretrained_model( "summary", True )
+        init_pretrained_model( "image", True )
+        init_upscale()
+
+        def title(image_path,top,middle,bottom):
+            return write_on_image(image_path,top,middle,bottom)
+
+        def handle_generation(text, w, h):
+            w, h = get_max_resolution(w, h, mega_pixels=1.5);
+            text = optimize_prompt_realism(text)
+            return pipe("image", prompt=text, resolution=f"{w}x{h}")
+
+        def handle_upscaling(path):
+            return upscale(path)
+
+        with gr.Blocks(theme=theme(), css=css()) as app:
+            gr.Markdown("# Text-to-Image generator")
+            gr.Markdown("### Realistic. Upscalable. Multilingual.")
+            with gr.Row():
+                with gr.Column(scale=1):
+                    width_input = gr.Slider(minimum=1, maximum=16, step=1, label="Width")
+                    height_input = gr.Slider(minimum=1, maximum=16, step=1, label="Height")
+                    data = gr.Textbox(
+                        placeholder="Input data",
+                        value="",
+                        lines=4,
+                        label="Prompt",
+                        container=True
+                    )
+                    top = gr.Textbox(placeholder="Top title", value="", max_lines=1, label="Top Title")
+                    middle = gr.Textbox(placeholder="Middle title", value="", max_lines=1, label="Middle Title")
+                    bottom = gr.Textbox(placeholder="Bottom title", value="", max_lines=1, label="Bottom Title")
+                with gr.Column(scale=1):
+                    cover = gr.Image(interactive=False, label="Result", type='filepath', show_share_button=False, container=True, show_download_button=True)
+                    generate_image = gr.Button("Generate")
+                    upscale_now = gr.Button("Upscale")
+                    add_titles = gr.Button("Add title(s)")
+            generate_image.click(fn=handle_generation, inputs=[data,width_input,height_input], outputs=[cover])
+            upscale_now.click(fn=handle_upscaling, inputs=[cover], outputs=[cover])
+            add_titles.click(fn=title, inputs=[cover, top, middle, bottom], outputs=[cover])
+        app.queue().launch(inbrowser=True)
+
+    elif proj == "chat":
+        init_pretrained_model("summary", True)
+        init_pretrained_model("answer", True)
+        init_pretrained_model("translate", True)
+
+        def _get_chat_response(message, history):
+            return get_chat_response(message, history)
+
+        with gr.Blocks(theme=theme(), title="Multilingual AI assistant", css=css()) as app:
+            chat = init_chat(
+                "Multilingual AI assistant",
+                _get_chat_response
+            )
+        app.queue().launch(inbrowser=True)
+
+    elif proj == "faiss":
+        apt_install()
+        whl = build_faiss()
+
+        def calc():
+            return whl
+
+        with gr.Blocks() as app:
+            f = gr.File(label="Download faiss wheel", value=whl)
+            f.change(calc,[], [f])
+        app.queue().launch(inbrowser=True)
+
+    elif proj == "audio":
+        os.system("pip install --upgrade --force-reinstall git+https://github.com/YaronKoresh/audio-studio-pro.git")
+        os.system("audio-studio-pro")
+
+    elif proj == "train":
+        os.system('pip install git+https://github.com/YaronKoresh/teachless.git')
+        os.system('teachless')
+
+    else:
+        catch(f"Error: No project called '{ proj }' !")
