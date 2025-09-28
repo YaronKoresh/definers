@@ -10405,7 +10405,7 @@ def start(proj: str):
                 inputs=[cover, top, middle, bottom],
                 outputs=[cover],
             )
-        app.queue().launch(inbrowser=True)
+        app.queue().launch(server_name="0.0.0.0", server_port=7860)
 
     elif proj == "chat":
         init_pretrained_model("summary")
@@ -10423,7 +10423,7 @@ def start(proj: str):
             chat = init_chat(
                 "Multilingual AI assistant", _get_chat_response
             )
-        app.queue().launch(inbrowser=True)
+        app.queue().launch(server_name="0.0.0.0", server_port=7860)
 
     elif proj == "faiss":
         apt_install()
@@ -10435,7 +10435,7 @@ def start(proj: str):
         with gr.Blocks() as app:
             f = gr.File(label="Download faiss wheel", value=whl)
             f.change(calc, [], [f])
-        app.queue().launch(inbrowser=True)
+        app.queue().launch(server_name="0.0.0.0", server_port=7860)
 
     elif proj == "audio":
         os.system(
