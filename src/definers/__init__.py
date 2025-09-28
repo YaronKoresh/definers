@@ -10325,6 +10325,30 @@ def infer(task: str, inference_file: str, model_type: str = None):
     return output_filename
 
 
+def keep_alive(func, *args, **kwargs):
+    result_container = [None]
+
+    def thread_target():
+        try:
+            result_container[0] = func(*args, **kwargs)
+        except Exception as e:
+            result_container[0] = e
+
+    thread = threading.Thread(target=thread_target)
+    thread.start()
+
+    while thread.is_alive():
+        yield None
+        time.sleep(2)
+
+    thread.join()
+
+    if isinstance(result_container[0], Exception):
+        raise result_container[0]
+
+    yield result_container[0]
+
+
 def start(proj: str):
     import gradio as gr
 
@@ -10396,16 +10420,16 @@ def start(proj: str):
                     upscale_now = gr.Button("Upscale")
                     add_titles = gr.Button("Add title(s)")
             generate_image.click(
-                fn=handle_generation,
-                inputs=[data, width_input, height_input],
+                fn=keep_alive,
+                inputs=[gr.State(handle_generation), data, width_input, height_input],
                 outputs=[cover],
             )
             upscale_now.click(
-                fn=handle_upscaling, inputs=[cover], outputs=[cover]
+                fn=keep_alive, inputs=[gr.State(handle_upscaling), cover], outputs=[cover]
             )
             add_titles.click(
-                fn=title,
-                inputs=[cover, top, middle, bottom],
+                fn=keep_alive,
+                inputs=[gr.State(title), cover, top, middle, bottom],
                 outputs=[cover],
             )
         app.launch(server_name="0.0.0.0", server_port=7860)
