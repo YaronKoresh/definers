@@ -10325,33 +10325,41 @@ def infer(task: str, inference_file: str, model_type: str = None):
     return output_filename
 
 
-def keep_alive(f):
+def keep_alive(fn, outputs:int=1):
 
-  def _keep_alive(func, *args, **kwargs):
-  
-    result_container = [None]
+    def worker(*args, **kwargs):
+        result_container = [None]
+        
+        def thread_target():
+            try:
+                result_container[0] = fn(*args, **kwargs)
+            except Exception as e:
+                result_container[0] = e
 
-    def thread_target():
-        try:
-            result_container[0] = func(*args, **kwargs)
-        except Exception as e:
-            result_container[0] = e
+        thread = threading.Thread(target=thread_target)
+        thread.start()
 
-    thread = threading.Thread(target=thread_target)
-    thread.start()
+        while thread.is_alive():
+            yield (None,) * outputs
+            time.sleep(1)
+        thread.join()
 
-    while thread.is_alive():
-        yield None
-        time.sleep(2)
+        final_result = result_container[0]
+        if isinstance(final_result, Exception):
+            raise final_result
 
-    thread.join()
-
-    if isinstance(result_container[0], Exception):
-        raise result_container[0]
-
-    yield result_container[0]
-
-  return partial(_keep_alive, f)
+        if isinstance(final_result, tuple):
+            if len(final_result) > outputs:
+                yield final_result[:outputs]
+            elif len(final_result) < outputs:
+                dif = outputs - len(final_result)
+                yield final_result + (None,) * dif
+            else:
+                yield final_result
+        else:
+            yield (final_result,) * outputs
+            
+    return worker
 
 
 def start(proj: str):
