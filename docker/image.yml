@@ -1,8 +1,7 @@
-version: "3.9"
 services:
-  yaron-store:
+  image:
     container_name: image
     image: yaronkoresh/image
     build:
       context: ../
-      dockerfile: ./image
+      dockerfile: ./docker/image

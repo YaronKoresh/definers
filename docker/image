@@ -1,10 +1,7 @@
-FROM python:3.11.1-slim
+FROM python:3.11-slim
 
-WORKDIR ../
+WORKDIR .
 
-COPY src .
-COPY pyproject.toml .
+COPY ./image.py ./app.py
 
-RUN pip install .
-
-CMD ["python", "-c", "from definers import start; start('image')"]
+CMD [python", "-c", "./app.sh"]
