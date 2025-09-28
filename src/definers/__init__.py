@@ -7629,7 +7629,7 @@ def generate_voice(text, reference_audio, format_choice):
         catch(f"Generation failed: {e}")
 
 
-def generate_music(prompt, duration_s, format_choice, humanize):
+def generate_music(prompt, duration_s, format_choice):
     from scipy.io.wavfile import write as write_wav
 
     inputs = PROCESSORS["music"](
@@ -7985,7 +7985,6 @@ def music_video(audio_path, width=1920, height=1080, fps=30):
         frame_rgb = np.stack((r, g, b), axis=-1)
 
         final_pattern = np.clip(pattern1 * pattern2, -1.0, 1.0)
-        n = 128 * (1 + final_pattern)
 
         rms_shift = int(rms_val * 64)
         if rms_shift > 1:
@@ -8032,12 +8031,15 @@ def music_video(audio_path, width=1920, height=1080, fps=30):
             ISRAEL_BLUE
         )
 
+        frame = cv2.addWeighted(frame, 0.7, frame_rgb.astype(np.uint8), 0.3, 0)
+
         rotation_angle = t * 15 + centroid_val * 70
 
         if is_beat:
             shockwave_radius = int(radius * 1.5)
+            shockwave_color = (200, 200, 200)
             cv2.circle(
-                frame, (center_x, center_y), shockwave_radius, n, 4
+                frame, (center_x, center_y), shockwave_radius, shockwave_color, 4
             )
 
         draw_star_of_david(
@@ -8048,6 +8050,11 @@ def music_video(audio_path, width=1920, height=1080, fps=30):
             METALIC_BLACK,
             14,
         )
+
+        distortion_strength = 50 * rms_val
+        distortion = final_pattern * distortion_strength
+        distortion_3d = distortion[..., np.newaxis]
+        frame = np.clip(frame.astype(np.int16) + distortion_3d, 0, 255).astype(np.uint8)
 
         scanline_intensity = 0.9 * rms_val
         scanline_effect = (
@@ -8134,11 +8141,12 @@ def music_video(audio_path, width=1920, height=1080, fps=30):
         )
 
         if is_beat:
+            pulse_color = (255, 255, 255)
             cv2.circle(
                 frame,
                 (center_x, center_y),
                 int(min_radius),
-                frame_rgb,
+                pulse_color,
                 3,
                 lineType=cv2.LINE_AA,
             )
@@ -8988,7 +8996,7 @@ def identify_instruments(audio_path):
 
 
 def extend_audio(
-    audio_path, extend_duration_s, format_choice, humanize=True
+    audio_path, extend_duration_s, format_choice
 ):
     import librosa
     import pydub
