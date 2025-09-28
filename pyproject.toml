@@ -77,7 +77,7 @@ dependencies = [
     "gast==0.6.0",
     "google-pasta==0.2.0",
     "googledrivedownloader==1.1.0",
-    "gradio==3.36.1",
+    "gradio==5.31.0",
     "greenlet==3.0.3",
     "grpcio==1.74.0",
     "h11==0.16.0",
