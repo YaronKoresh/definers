@@ -3749,7 +3749,10 @@ def cwd(dir=None):
         yield dir
 
     finally:
-        os.chdir(owd)
+        try:
+            os.chdir(owd)
+        except:
+            pass
 
 
 def log(subject, data, status=None):
@@ -5241,7 +5244,6 @@ def git(
                             f"Warning: Could not download asset '{filepath_in_repo}'. Error: {e3}"
                         )
             except Exception as e2:
-                catch(e2)
                 continue
 
     _lfs(clone_dir)
