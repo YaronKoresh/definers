@@ -9,8 +9,8 @@ import gc
 import getpass
 import hashlib
 import importlib
-import io
 import inspect
+import io
 import json
 import logging
 import math
@@ -37,7 +37,7 @@ import traceback
 import urllib.request
 import warnings
 import zipfile
-from collections import namedtuple, OrderedDict, Counter
+from collections import Counter, OrderedDict, namedtuple
 from concurrent.futures import ProcessPoolExecutor
 from contextlib import contextmanager
 from ctypes.util import find_library
@@ -75,57 +75,85 @@ def patch_cupy_numpy():
     import numpy as _np
 
     type_aliases = {
-        "intp": _np.int_, "float": _np.float64, "int": _np.int64,
-        "bool": _np.bool_, "complex": _np.complex128, "object": _np.object_,
-        "str": _np.str_, "string_": _np.bytes_,
+        "intp": _np.int_,
+        "float": _np.float64,
+        "int": _np.int64,
+        "bool": _np.bool_,
+        "complex": _np.complex128,
+        "object": _np.object_,
+        "str": _np.str_,
+        "string_": _np.bytes_,
     }
     for alias, target in type_aliases.items():
         if not hasattr(_np, alias):
             setattr(_np, alias, target)
 
     func_aliases = {
-        "round_": _np.round, "product": _np.prod, "cumproduct": _np.cumprod,
-        "alltrue": _np.all, "sometrue": _np.any, "rank": _np.ndim,
+        "round_": _np.round,
+        "product": _np.prod,
+        "cumproduct": _np.cumprod,
+        "alltrue": _np.all,
+        "sometrue": _np.any,
+        "rank": _np.ndim,
     }
     for alias, target in func_aliases.items():
         if not hasattr(_np, alias):
             setattr(_np, alias, target)
 
-    if not hasattr(_np, 'asscalar'):
+    if not hasattr(_np, "asscalar"):
+
         def asscalar(a):
             return a.item()
+
         _np.asscalar = asscalar
 
     if not hasattr(_np.core, "machar"):
-        class MachAr: pass
+
+        class MachAr:
+            pass
+
         _np.core.machar = MachAr
 
     if hasattr(_np, "testing") and not hasattr(_np.testing, "Tester"):
+
         class Tester:
-            def test(self, label='fast', extra_argv=None): return True
+            def test(self, label="fast", extra_argv=None):
+                return True
+
         _np.testing.Tester = Tester
 
     if not hasattr(_np, "distutils"):
+
         class DummyDistutils:
             class MiscUtils:
-                def get_info(self, *args, **kwargs): return {}
+                def get_info(self, *args, **kwargs):
+                    return {}
+
         _np.distutils = DummyDistutils()
 
     if not hasattr(_np, "set_string_function"):
-        def set_string_function(*args, **kwargs): pass
+
+        def set_string_function(*args, **kwargs):
+            pass
+
         _np.set_string_function = set_string_function
 
     _original_finfo = _np.finfo
+
     def patched_finfo(dtype):
         try:
             return _original_finfo(dtype)
         except TypeError:
             return _np.iinfo(dtype)
+
     _np.finfo = patched_finfo
 
     def dummy_npwarn_decorator_factory():
-        def npwarn_decorator(x): return x
+        def npwarn_decorator(x):
+            return x
+
         return npwarn_decorator
+
     _np._no_nep50_warning = getattr(
         _np, "_no_nep50_warning", dummy_npwarn_decorator_factory
     )
@@ -252,20 +280,14 @@ unesco_mapping = {
         "arb_Arab",
         "ars_Arab",
         "ary_Arab",
-        "arz_Arab"
+        "arz_Arab",
     ],
     "af": "afr_Latn",
-    "ak": [
-        "aka_Latn",
-        "twi_Latn"
-    ],
+    "ak": ["aka_Latn", "twi_Latn"],
     "am": "amh_Ethi",
     "as": "asm_Beng",
     "ay": "ayr_Latn",
-    "az": [
-        "azb_Arab",
-        "azj_Latn"
-    ],
+    "az": ["azb_Arab", "azj_Latn"],
     "bm": "bam_Latn",
     "be": "bel_Cyrl",
     "bn": "ben_Beng",
@@ -332,20 +354,14 @@ unesco_mapping = {
     "mi": "mri_Latn",
     "my": "mya_Mymr",
     "nl": "nld_Latn",
-    "no": [
-        "nno_Latn",
-        "nob_Latn"
-    ],
+    "no": ["nno_Latn", "nob_Latn"],
     "ne": "npi_Deva",
     "nso": "nso_Latn",
     "ny": "nya_Latn",
     "om": "gaz_Latn",
     "or": "ory_Orya",
     "pa": "pan_Guru",
-    "fa": [
-        "pes_Arab",
-        "prs_Arab"
-    ],
+    "fa": ["pes_Arab", "prs_Arab"],
     "pl": "pol_Latn",
     "pt": "por_Latn",
     "ps": "pbt_Arab",
@@ -388,7 +404,7 @@ unesco_mapping = {
     "zh-cn": "zho_Hans",
     "zh-tw": "zho_Hant",
     "ms": "zsm_Latn",
-    "zu": "zul_Latn"
+    "zu": "zul_Latn",
 }
 
 language_codes = {
@@ -1011,7 +1027,9 @@ def set_system_message(
     log("System Message Updated", SYSTEM_MESSAGE)
 
 
-def split_audio_by_duration(file_path, duration=5, count=None, resample=None):
+def split_audio_by_duration(
+    file_path, duration=5, count=None, resample=None
+):
     import librosa
     import soundfile as sf
 
@@ -1026,7 +1044,7 @@ def split_audio_by_duration(file_path, duration=5, count=None, resample=None):
     for i, start in enumerate(range(0, len(y), chunk_samples)):
         end = start + chunk_samples
         chunk = y[start:end]
-            
+
         chunk_name = f"chunk_{i+1}.mp3"
         output_path = full_path(output_dir, chunk_name)
 
@@ -1044,8 +1062,8 @@ def split_audio_by_duration(file_path, duration=5, count=None, resample=None):
 
 
 def answer(history: list):
-    import librosa
     import imageio as iio
+    import librosa
     from PIL import Image
 
     img_list = []
@@ -1065,7 +1083,10 @@ def answer(history: list):
         content = h["content"]
         role = h["role"]
 
-        is_text = bool(not isinstance(content, dict) and not isinstance(content, tuple))
+        is_text = bool(
+            not isinstance(content, dict)
+            and not isinstance(content, tuple)
+        )
 
         add_content = ""
 
@@ -1073,7 +1094,7 @@ def answer(history: list):
             content_lang = language(content)
             if content_lang != required_lang:
                 content = ai_translate(content, lang=required_lang)
-            add_content += " "+content
+            add_content += " " + content
 
         else:
             ps = []
@@ -1086,10 +1107,16 @@ def answer(history: list):
             for p in ps:
                 ext = p.split(".")[-1]
                 if ext in common_audio_formats:
-                    aud = split_audio_by_duration(p, duration=25, count=1, resample=8000)[0]
-                    audio, samplerate = librosa.load(aud, sr=None, mono=True)
+                    aud = split_audio_by_duration(
+                        p, duration=25, count=1, resample=8000
+                    )[0]
+                    audio, samplerate = librosa.load(
+                        aud, sr=None, mono=True
+                    )
                     snd_list.append((audio, samplerate))
-                    add_content += f" <|audio_{ str(len(snd_list)) }|>"
+                    add_content += (
+                        f" <|audio_{ str(len(snd_list)) }|>"
+                    )
                 if ext in iio_formats:
                     img = iio.imread(p)
                     w, h = Image.open(p).size
@@ -1098,13 +1125,14 @@ def answer(history: list):
                     new_img = (new_img * 255).astype(np.uint8)
                     img = Image.fromarray(new_img)
                     img_list.append(img)
-                    add_content += f" <|image_{ str(len(img_list)) }|>"
+                    add_content += (
+                        f" <|image_{ str(len(img_list)) }|>"
+                    )
         if add_role != role:
             add_role = role
-            alt_history.append({
-                "role": add_role,
-                "content": add_content.strip()
-            })
+            alt_history.append(
+                {"role": add_role, "content": add_content.strip()}
+            )
             continue
         alt_history[-1]["content"] += add_content
 
@@ -1329,24 +1357,14 @@ def tokenize_and_pad(rows, tokenizer=None):
 
     features_list = []
     for row in rows:
-        if isinstance(
-            row, dict
-        ):
+        if isinstance(row, dict):
             features_strings = []
             for key, value in row.items():
                 if isinstance(value, (list, np.ndarray)):
-                    features_strings.extend(
-                        map(str, value)
-                    )
-                elif (
-                    value is not None
-                ):
-                    features_strings.append(
-                        str(value)
-                    )
-            features_list.append(
-                " ".join(features_strings)
-            )
+                    features_strings.extend(map(str, value))
+                elif value is not None:
+                    features_strings.append(str(value))
+            features_list.append(" ".join(features_strings))
         elif isinstance(row, str):
             features_list.append(row)
         else:
@@ -1367,11 +1385,14 @@ def init_tokenizer(tok):
     return AutoTokenizer.from_pretrained(tok)
 
 
-def init_model_file(task:str, turbo:bool=False, model_type:str=None):
+def init_model_file(
+    task: str, turbo: bool = False, model_type: str = None
+):
     import pickle
+
+    import joblib
     import onnxruntime
     import torch
-    import joblib
     from safetensors.torch import load_file
 
     free()
@@ -1386,20 +1407,33 @@ def init_model_file(task:str, turbo:bool=False, model_type:str=None):
         model_type = get_ext(model_path)
     model_type = model_type.lower()
 
-    if model_path.startswith("https://") or model_path.startswith("https://"):
+    if model_path.startswith("https://") or model_path.startswith(
+        "https://"
+    ):
         temp_model_path = tmp(model_type, keep=False)
-        model_path = download_file( model_path, temp_model_path)
+        model_path = download_file(model_path, temp_model_path)
 
     try:
         model = None
 
-        supported_types = ["onnx", "pkl", "pt", "pth", "safetensors", "joblib"]
+        supported_types = [
+            "onnx",
+            "pkl",
+            "pt",
+            "pth",
+            "safetensors",
+            "joblib",
+        ]
 
         if model_type not in supported_types:
-            print(f'Error: Model type "{model_type}" is not supported. Must be one of {supported_types}')
+            print(
+                f'Error: Model type "{model_type}" is not supported. Must be one of {supported_types}'
+            )
             return None
 
-        print(f"Attempting to load a {model_type.upper()} model from: {model_path}")
+        print(
+            f"Attempting to load a {model_type.upper()} model from: {model_path}"
+        )
 
         if model_type == "joblib":
             model = joblib.load(model_path)
@@ -1414,10 +1448,9 @@ def init_model_file(task:str, turbo:bool=False, model_type:str=None):
             else:
                 model = load_file(model_path, map_location=device())
 
-            if hasattr(model, 'eval'):
+            if hasattr(model, "eval"):
                 model.eval()
                 print("Model set to evaluation mode.")
-
 
         if not turbo:
             try:
@@ -1431,15 +1464,15 @@ def init_model_file(task:str, turbo:bool=False, model_type:str=None):
                 pass
 
             optimizations = [
-                'enable_vae_slicing',
-                'enable_vae_tiling',
-                'enable_model_cpu_offload',
-                'enable_sequential_cpu_offload',
-                'enable_attention_slicing'
+                "enable_vae_slicing",
+                "enable_vae_tiling",
+                "enable_model_cpu_offload",
+                "enable_sequential_cpu_offload",
+                "enable_attention_slicing",
             ]
             for opt in optimizations:
                 try:
-                    if opt == 'enable_attention_slicing':
+                    if opt == "enable_attention_slicing":
                         getattr(model, opt)(1)
                     else:
                         getattr(model, opt)()
@@ -1455,7 +1488,9 @@ def init_model_file(task:str, turbo:bool=False, model_type:str=None):
         print(f"Error: The file was not found at '{model_path}'")
         return None
     except Exception as e:
-        print(f"An unexpected error occurred while loading the model: {e}")
+        print(
+            f"An unexpected error occurred while loading the model: {e}"
+        )
         return None
     finally:
         free()
@@ -3518,9 +3553,13 @@ def build_faiss():
         temp_dir = tmp(dir=True)
 
         with cwd("./xfaiss/build/faiss/python"):
-            print("faiss - stage 4: Building wheel with numpy==1.26.4 constraint")
+            print(
+                "faiss - stage 4: Building wheel with numpy==1.26.4 constraint"
+            )
 
-            with tempfile.NamedTemporaryFile(mode='w', delete=False) as reqs:
+            with tempfile.NamedTemporaryFile(
+                mode="w", delete=False
+            ) as reqs:
                 reqs.write("numpy==1.26.4\n")
                 constraints_path = reqs.name
 
@@ -3536,14 +3575,16 @@ def build_faiss():
 
         free()
 
-        any_wheel_path = paths(f'{temp_dir}/faiss-*.whl')[0]
+        any_wheel_path = paths(f"{temp_dir}/faiss-*.whl")[0]
 
         repaired_wheel_dir = tmp(dir=True)
 
         print("faiss - stage 5: Repairing wheel")
-        run(f"{sys.executable} -m auditwheel repair {any_wheel_path} -w {repaired_wheel_dir}")
+        run(
+            f"{sys.executable} -m auditwheel repair {any_wheel_path} -w {repaired_wheel_dir}"
+        )
 
-        return paths(f'{repaired_wheel_dir}/faiss-*.whl')[0]
+        return paths(f"{repaired_wheel_dir}/faiss-*.whl")[0]
 
     except subprocess.CalledProcessError as e:
         print(f"Error during installation: {e}")
@@ -3561,9 +3602,7 @@ def simple_text(prompt):
     prompt = re.sub("(\n){1,}", " ", prompt)
     prompt = re.sub("( ){2,}", " ", prompt)
 
-    prompt = re.sub(
-        "[\. ]+\.[\.]*|[\. ]*\.[\.]+", ".", prompt
-    )
+    prompt = re.sub("[\. ]+\.[\.]*|[\. ]*\.[\.]+", ".", prompt)
     prompt = re.sub("(-){2,}", "-", prompt)
     prompt = prompt.replace("|", " or ")
     prompt = re.sub("([ !]){1,}\?([ !?]){1,}", " I wonder ", prompt)
@@ -3615,9 +3654,13 @@ def normalize_path(p):
 
 
 def full_path(*p):
-    return normalize_path(str(
-        Path(os.path.join(*[str(_p).strip() for _p in p])).resolve()
-    ))
+    return normalize_path(
+        str(
+            Path(
+                os.path.join(*[str(_p).strip() for _p in p])
+            ).resolve()
+        )
+    )
 
 
 def paths(*patterns):
@@ -3638,7 +3681,10 @@ def paths(*patterns):
 def copy(src, dst):
     if is_directory(full_path(src)):
         shutil.copytree(
-            str(src), str(dst), symlinks=False, ignore_dangling_symlinks=True
+            str(src),
+            str(dst),
+            symlinks=False,
+            ignore_dangling_symlinks=True,
         )
     else:
         shutil.copy(str(src), str(dst))
@@ -4658,14 +4704,16 @@ def extract_text(url, selector):
     return elems[0]
 
 
-def camel_case(txt:str):
+def camel_case(txt: str):
     return txt[0].upper() + txt[1:].lower()
 
 
 def ai_translate(text, lang="en"):
     import torch
-    from stopes.pipelines.monolingual.utils.sentence_split import get_split_algo
     from sacremoses import MosesPunctNormalizer
+    from stopes.pipelines.monolingual.utils.sentence_split import (
+        get_split_algo,
+    )
 
     punct_normalizer = MosesPunctNormalizer(lang="en")
 
@@ -4713,7 +4761,9 @@ def ai_translate(text, lang="en"):
             )
             translated_chunk = model.generate(
                 input_ids=torch.tensor([input_tokens]).to(device()),
-                forced_bos_token_id=tokenizer.convert_tokens_to_ids(tgt_code),
+                forced_bos_token_id=tokenizer.convert_tokens_to_ids(
+                    tgt_code
+                ),
                 max_length=len(input_tokens) + 50,
                 num_return_sequences=1,
                 num_beams=32,
@@ -4783,12 +4833,28 @@ def duck_translate(text, lang="en"):
 
 def theme():
     import gradio as gr
-    return gr.themes.Base(primary_hue=gr.themes.colors.slate, secondary_hue=gr.themes.colors.indigo, font=(gr.themes.GoogleFont("Inter"), "ui-sans-serif", "system-ui", "sans-serif")).set(
-        body_background_fill_dark="#111827", block_background_fill_dark="#1f2937", block_border_width="1px",
-        block_title_background_fill_dark="#374151", button_primary_background_fill_dark="linear-gradient(90deg, #4f46e5, #7c3aed)",
-        button_primary_text_color_dark="#ffffff", button_secondary_background_fill_dark="#374151",
-        button_secondary_text_color_dark="#ffffff", slider_color_dark="#6366f1"
+
+    return gr.themes.Base(
+        primary_hue=gr.themes.colors.slate,
+        secondary_hue=gr.themes.colors.indigo,
+        font=(
+            gr.themes.GoogleFont("Inter"),
+            "ui-sans-serif",
+            "system-ui",
+            "sans-serif",
+        ),
+    ).set(
+        body_background_fill_dark="#111827",
+        block_background_fill_dark="#1f2937",
+        block_border_width="1px",
+        block_title_background_fill_dark="#374151",
+        button_primary_background_fill_dark="linear-gradient(90deg, #4f46e5, #7c3aed)",
+        button_primary_text_color_dark="#ffffff",
+        button_secondary_background_fill_dark="#374151",
+        button_secondary_text_color_dark="#ffffff",
+        slider_color_dark="#6366f1",
     )
+
 
 def css():
     return """
@@ -5233,9 +5299,9 @@ def git(
                 if content.startswith(
                     "version https://git-lfs.github.com/spec"
                 ):
-                    filepath_in_repo = normalize_path(os.path.relpath(
-                        p, clone_dir
-                    ))
+                    filepath_in_repo = normalize_path(
+                        os.path.relpath(p, clone_dir)
+                    )
                     asset_url = f"https://media.githubusercontent.com/media/{user}/{repo}/{branch}/{filepath_in_repo}"
                     try:
                         download_file(asset_url, p)
@@ -5271,12 +5337,14 @@ def init_model_repo(task: str, turbo: bool = False):
     if task in ["translate"]:
 
         import nltk
-        from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+        from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
         nltk.download("punkt_tab")
 
         TOKENIZERS[task] = AutoTokenizer.from_pretrained(tasks[task])
-        model = AutoModelForSeq2SeqLM.from_pretrained(tasks[task]).to(device())
+        model = AutoModelForSeq2SeqLM.from_pretrained(tasks[task]).to(
+            device()
+        )
 
     elif task in ["tts"]:
 
@@ -5544,18 +5612,16 @@ py-modules = {py_modules}
     elif task in ["image"]:
         import torch
         from diffusers import FluxPipeline
-        from safetensors.torch import load_file
         from huggingface_hub import hf_hub_download
+        from safetensors.torch import load_file
 
         model = FluxPipeline.from_pretrained(
-            tasks[task],
-            torch_dtype=dtype(),
-            use_safetensors=True
+            tasks[task], torch_dtype=dtype(), use_safetensors=True
         ).to(device())
 
         srpo_path = hf_hub_download(
             repo_id=tasks["image-spro"],
-            filename="diffusion_pytorch_model.safetensors"
+            filename="diffusion_pytorch_model.safetensors",
         )
         state_dict = load_file(srpo_path)
         model.transformer.load_state_dict(state_dict)
@@ -5588,12 +5654,12 @@ py-modules = {py_modules}
         try:
             model.enable_sequential_cpu_offload()
         except Exception as e:
-                pass
+            pass
 
         try:
             model.enable_attention_slicing(1)
         except Exception as e:
-                pass
+            pass
 
     MODELS[task] = model
 
@@ -5612,7 +5678,12 @@ def init_pretrained_model(task: str, turbo: bool = False):
     repo_tasks_override = ["svc", "tts"]
     if task in MODELS and MODELS[task]:
         return
-    if task in repo_tasks_override or task in tasks and is_huggingface_repo(tasks[task]) or is_huggingface_repo(task):
+    if (
+        task in repo_tasks_override
+        or task in tasks
+        and is_huggingface_repo(tasks[task])
+        or is_huggingface_repo(task)
+    ):
         return init_model_repo(task, turbo)
     return init_model_file(task, turbo)
 
@@ -5637,7 +5708,7 @@ def choose_random_words(word_list, num_words=10):
 
 def optimize_prompt_realism(prompt):
     prompt = preprocess_prompt(prompt)
-    prompt = f'{prompt}, {_positive_prompt_}, {_positive_prompt_}'
+    prompt = f"{prompt}, {_positive_prompt_}, {_positive_prompt_}"
     return prompt
 
 
@@ -5675,7 +5746,7 @@ def pipe(
         params2["prompt"] = prompt
         params2["height"] = height
         params2["width"] = width
-        params2["guidance_scale"] =8.0
+        params2["guidance_scale"] = 8.0
         if task == "video":
             params2["num_videos_per_prompt"] = 1
             params2["num_frames"] = length
@@ -6611,20 +6682,35 @@ def get_chat_response(message, history: list):
     if message["files"]:
         including.append("files")
         for file_path in message["files"]:
-            history.append({"role": "user", "content": {"path": file_path}})
+            history.append(
+                {"role": "user", "content": {"path": file_path}}
+            )
 
     if message["text"]:
         including.append("text")
         orig_lang = language(message["text"])
         history.append({"role": "user", "content": message["text"]})
         if message["files"]:
-            history.append({"role": "user", "content": "and please deeply examine the attachments from the last message carefully!"})
+            history.append(
+                {
+                    "role": "user",
+                    "content": "and please deeply examine the attachments from the last message carefully!",
+                }
+            )
 
-    history.append({"role": "user", "content": "and make sure to double-check your response."})
+    history.append(
+        {
+            "role": "user",
+            "content": "and make sure to double-check your response.",
+        }
+    )
 
     nl = "\n"
     including = "\n".join(including)
-    log("Chat", f'Got a message in {language_codes[orig_lang]}.{nl}{nl}The message including the following types of data:{nl}{including}')
+    log(
+        "Chat",
+        f"Got a message in {language_codes[orig_lang]}.{nl}{nl}The message including the following types of data:{nl}{including}",
+    )
 
     response = answer(history)
 
@@ -6639,7 +6725,10 @@ def init_chat(title="Chatbot", handler=get_chat_response):
     import gradio as gr
 
     chatbot = gr.Chatbot(
-        elem_id="chatbot", type="messages", show_copy_button=True, rtl=True
+        elem_id="chatbot",
+        type="messages",
+        show_copy_button=True,
+        rtl=True,
     )
 
     return gr.ChatInterface(
@@ -7704,16 +7793,20 @@ def beat_visualizer(
     hop_length = 512
 
     effect_strength = scale_intensity - 1.0
-    
-    rms = librosa.feature.rms(y=y, hop_length=hop_length)[0]
-    rms_normalized = (rms - np.min(rms)) / (np.max(rms) - np.min(rms) + 1e-7)
-    rms_scales = 1.0 + (rms_normalized * effect_strength * 0.5) 
 
-    tempo, beat_frames = librosa.beat.beat_track(y=y, sr=sr, hop_length=hop_length)
-    
+    rms = librosa.feature.rms(y=y, hop_length=hop_length)[0]
+    rms_normalized = (rms - np.min(rms)) / (
+        np.max(rms) - np.min(rms) + 1e-7
+    )
+    rms_scales = 1.0 + (rms_normalized * effect_strength * 0.5)
+
+    tempo, beat_frames = librosa.beat.beat_track(
+        y=y, sr=sr, hop_length=hop_length
+    )
+
     beat_impulses = np.zeros_like(rms_normalized)
-    decay_rate = 0.75 
-    
+    decay_rate = 0.75
+
     for beat_frame in beat_frames:
         frame = beat_frame
         impulse = 1.0
@@ -7721,7 +7814,7 @@ def beat_visualizer(
             beat_impulses[frame] = max(beat_impulses[frame], impulse)
             impulse *= decay_rate
             frame += 1
-            
+
     beat_scales = 1.0 + (beat_impulses * effect_strength)
 
     def base_animation_func(t):
@@ -7734,14 +7827,22 @@ def beat_visualizer(
     def final_scale_func(t):
         frame_index = int(t * sr / hop_length)
         frame_index = min(frame_index, len(rms_scales) - 1)
-        
-        return base_animation_func(t) * rms_scales[frame_index] * beat_scales[frame_index]
+
+        return (
+            base_animation_func(t)
+            * rms_scales[frame_index]
+            * beat_scales[frame_index]
+        )
 
     image_clip = ImageClip(np.array(img), duration=duration)
 
-    animated_image = image_clip.with_position(("center", "center")).resized(final_scale_func)
+    animated_image = image_clip.with_position(
+        ("center", "center")
+    ).resized(final_scale_func)
 
-    background = ColorClip(size=(W, H), color=(0, 0, 0), duration=duration)
+    background = ColorClip(
+        size=(W, H), color=(0, 0, 0), duration=duration
+    )
 
     final_clip = CompositeVideoClip([background, animated_image])
     final_clip = final_clip.with_audio(audio_clip)
@@ -7793,9 +7894,7 @@ def draw_star_of_david(
     )
 
 
-def music_video(
-    audio_path, width=1920, height=1080, fps=30
-):
+def music_video(audio_path, width=1920, height=1080, fps=30):
     import cv2
     import librosa
     import madmom
@@ -7836,7 +7935,9 @@ def music_video(
     def make_frame(t):
 
         frame_idx = int(t * sr / hop_length)
-        safe_idx = min(frame_idx, len(rms_norm) - 1, len(centroid_norm) - 1)
+        safe_idx = min(
+            frame_idx, len(rms_norm) - 1, len(centroid_norm) - 1
+        )
         grid_x, grid_y = np.meshgrid(np.arange(w), np.arange(h))
 
         rms_val = rms_norm[safe_idx]
@@ -7850,120 +7951,197 @@ def music_video(
         is_beat = any(abs(frame_idx - bf) < 3 for bf in beat_frames)
         if is_beat:
             radius = int(radius / rms_val / centroid_val)
-            frame += random.randint(32,192)
+            frame += random.randint(32, 192)
 
         angle = np.arctan2(grid_y - center_y, grid_x - center_x)
-        dist = np.sqrt((grid_y - center_y)**2 + (grid_x - center_x)**2)
+        dist = np.sqrt(
+            (grid_y - center_y) ** 2 + (grid_x - center_x) ** 2
+        )
 
         num_arms1 = round(5 + 10 * rms_val * centroid_val)
         num_arms2 = round(5 + 10 * centroid_val)
-            
+
         pattern1 = np.sin(dist / 30.0 + angle * num_arms1 - t * 10.0)
         pattern2 = np.cos(dist / 10.0 - angle * num_arms2 + t * 30.0)
 
         pattern_freq = 10.0 + centroid_val * 20.0
-        base_pattern = np.sin(grid_x / (60 + rms_val * 100) * pattern_freq + t * 5) * np.cos(grid_y / 40 * pattern_freq - t * 3)
+        base_pattern = np.sin(
+            grid_x / (60 + rms_val * 100) * pattern_freq + t * 5
+        ) * np.cos(grid_y / 40 * pattern_freq - t * 3)
 
         brightness = 0.5 + rms_val * 0.5
         r = 128 + 127 * np.sin(base_pattern * np.pi) * brightness
-        g = 128 + 127 * np.sin(base_pattern * np.pi + np.pi/2) * brightness
-        b = 60 + 100 * centroid_val + 60 * np.sin(base_pattern * np.pi + np.pi) * brightness
+        g = (
+            128
+            + 127
+            * np.sin(base_pattern * np.pi + np.pi / 2)
+            * brightness
+        )
+        b = (
+            60
+            + 100 * centroid_val
+            + 60 * np.sin(base_pattern * np.pi + np.pi) * brightness
+        )
         frame_rgb = np.stack((r, g, b), axis=-1)
 
         final_pattern = np.clip(pattern1 * pattern2, -1.0, 1.0)
         n = 128 * (1 + final_pattern)
-            
+
         rms_shift = int(rms_val * 64)
         if rms_shift > 1:
-            frame[:, :, 2] = np.roll(frame[:, :, 2], rms_shift, axis=1)
-            frame[:, :, 0] = np.roll(frame[:, :, 0], -rms_shift, axis=1)
-                
+            frame[:, :, 2] = np.roll(
+                frame[:, :, 2], rms_shift, axis=1
+            )
+            frame[:, :, 0] = np.roll(
+                frame[:, :, 0], -rms_shift, axis=1
+            )
+
         y_start = np.random.randint(0, h - h // 4)
         y_end = y_start + np.random.randint(h // 20, h // 4)
         block_shift = np.random.randint(-w // 4, w // 4)
-        frame[y_start:y_end, :] = np.roll(frame[y_start:y_end, :], block_shift, axis=1)
+        frame[y_start:y_end, :] = np.roll(
+            frame[y_start:y_end, :], block_shift, axis=1
+        )
 
         shake_x, shake_y = np.random.randint(-64, 64, size=2)
-        frame = np.roll(np.roll(frame, shake_y, axis=0), shake_x, axis=1)
+        frame = np.roll(
+            np.roll(frame, shake_y, axis=0), shake_x, axis=1
+        )
 
         ISRAEL_BLUE = (0, 56, 184)
         METALIC_BLACK = (44, 44, 43)
-            
+
         bg_color_top = np.array([255, 255, 255])
         bg_color_bottom = np.array([230, 230, 250])
 
         pulse = 0.5 + 0.5 * np.sin(t * np.pi)
 
         for i in range(h):
-            interp_color = bg_color_top * (1 - i/h) + bg_color_bottom * (i/h) * (1 - rms_val * 0.2 * pulse)
+            interp_color = bg_color_top * (
+                1 - i / h
+            ) + bg_color_bottom * (i / h) * (
+                1 - rms_val * 0.2 * pulse
+            )
             frame[i, :] = interp_color.astype(np.uint8)
-            
+
         stripe_height = int(h * 0.15)
         gap_height = int(h * 0.1)
-            
+
         frame[gap_height : gap_height + stripe_height] = ISRAEL_BLUE
-        frame[h - gap_height - stripe_height : h - gap_height] = ISRAEL_BLUE
-            
+        frame[h - gap_height - stripe_height : h - gap_height] = (
+            ISRAEL_BLUE
+        )
+
         rotation_angle = t * 15 + centroid_val * 70
-            
+
         if is_beat:
             shockwave_radius = int(radius * 1.5)
-            cv2.circle(frame, (center_x, center_y), shockwave_radius, n, 4)
+            cv2.circle(
+                frame, (center_x, center_y), shockwave_radius, n, 4
+            )
 
-        draw_star_of_david(frame, (center_x, center_y), radius, rotation_angle, METALIC_BLACK, 14)
+        draw_star_of_david(
+            frame,
+            (center_x, center_y),
+            radius,
+            rotation_angle,
+            METALIC_BLACK,
+            14,
+        )
 
         scanline_intensity = 0.9 * rms_val
-        scanline_effect = (np.sin(grid_y * 2 + t * 60) * 25 * scanline_intensity).reshape(h, w, 1)
-        frame = np.clip(frame.astype(np.int16) - scanline_effect, 0, 255)
+        scanline_effect = (
+            np.sin(grid_y * 2 + t * 60) * 25 * scanline_intensity
+        ).reshape(h, w, 1)
+        frame = np.clip(
+            frame.astype(np.int16) - scanline_effect, 0, 255
+        )
 
         num_bars = 128
-        spectrum = stft_norm[:, min(frame_idx, stft_norm.shape[1] - 1)]
-            
-        log_freq_indices = np.logspace(0, np.log10(len(spectrum) - 1), num_bars + 1, dtype=int)
+        spectrum = stft_norm[
+            :, min(frame_idx, stft_norm.shape[1] - 1)
+        ]
+
+        log_freq_indices = np.logspace(
+            0, np.log10(len(spectrum) - 1), num_bars + 1, dtype=int
+        )
 
         bar_values = []
         for i in range(num_bars):
             start_idx = log_freq_indices[i]
-            end_idx = log_freq_indices[i+1]
-    
+            end_idx = log_freq_indices[i + 1]
+
             if start_idx >= end_idx:
                 value = 0.0
             else:
                 value = np.mean(spectrum[start_idx:end_idx])
-    
+
             bar_values.append(value)
 
-            
         min_radius = 60 + 150 * rms_val
         rotation = t * 30
-            
+
         points = []
         for i in range(num_bars):
             value = bar_values[i]
             angle = np.deg2rad(i * (360 / num_bars) + rotation)
-                
+
             bar_length = value * (h * 0.35)
             start_x = int(center_x + min_radius * np.cos(angle))
             start_y = int(center_y + min_radius * np.sin(angle))
-            end_x = int(center_x + (min_radius + bar_length) * np.cos(angle))
-            end_y = int(center_y + (min_radius + bar_length) * np.sin(angle))
+            end_x = int(
+                center_x + (min_radius + bar_length) * np.cos(angle)
+            )
+            end_y = int(
+                center_y + (min_radius + bar_length) * np.sin(angle)
+            )
             points.append([end_x, end_y])
-                
+
             hue = int((i / num_bars) * 180)
             color_hsv = np.uint8([[[hue, 255, 255]]])
-            color_bgr = cv2.cvtColor(color_hsv, cv2.COLOR_HSV2BGR)[0][0].tolist()
+            color_bgr = cv2.cvtColor(color_hsv, cv2.COLOR_HSV2BGR)[0][
+                0
+            ].tolist()
 
             thickness = 12 if is_beat else 4
-            cv2.line(frame, (start_x, start_y), (end_x, end_y), color_bgr, thickness, lineType=cv2.LINE_AA)
-            
-        cv2.polylines(frame, [np.array(points)], isClosed=True, color=(200, 200, 200), thickness=2, lineType=cv2.LINE_AA)
-            
+            cv2.line(
+                frame,
+                (start_x, start_y),
+                (end_x, end_y),
+                color_bgr,
+                thickness,
+                lineType=cv2.LINE_AA,
+            )
+
+        cv2.polylines(
+            frame,
+            [np.array(points)],
+            isClosed=True,
+            color=(200, 200, 200),
+            thickness=2,
+            lineType=cv2.LINE_AA,
+        )
+
         center_color_val = min(int(100 + 150 * centroid_val), 255)
         center_color = (center_color_val, center_color_val, 200)
-        cv2.circle(frame, (center_x, center_y), int(min_radius * 0.7), center_color, -1, lineType=cv2.LINE_AA)
+        cv2.circle(
+            frame,
+            (center_x, center_y),
+            int(min_radius * 0.7),
+            center_color,
+            -1,
+            lineType=cv2.LINE_AA,
+        )
 
         if is_beat:
-            cv2.circle(frame, (center_x, center_y), int(min_radius), frame_rgb, 3, lineType=cv2.LINE_AA)
+            cv2.circle(
+                frame,
+                (center_x, center_y),
+                int(min_radius),
+                frame_rgb,
+                3,
+                lineType=cv2.LINE_AA,
+            )
 
         return frame.astype(np.uint8)
 
@@ -7971,16 +8149,20 @@ def music_video(
     animation = VideoClip(make_frame, duration=duration)
     final_clip = animation.with_audio(AudioFileClip(audio_path))
     final_clip.write_videofile(
-        output_path, codec="libx264", audio_codec="aac", fps=fps,
+        output_path,
+        codec="libx264",
+        audio_codec="aac",
+        fps=fps,
         ffmpeg_params=["-pix_fmt", "yuv420p"],
-        preset="ultrafast", threads=cores(),
+        preset="ultrafast",
+        threads=cores(),
     )
     return output_path
 
 
 def strip_nikud(text: str) -> str:
     return "".join(
-        char for char in text if not "\u0591" <= char <= "\u05C7"
+        char for char in text if not "\u0591" <= char <= "\u05c7"
     )
 
 
@@ -7989,9 +8171,7 @@ def init_stable_whisper():
 
     global MODELS
 
-    print(
-        "Loading multilingual transcription model (stable-ts)..."
-    )
+    print("Loading multilingual transcription model (stable-ts)...")
 
     MODELS["stable-whisper"] = stable_whisper.load_model(
         "tiny", device="cpu"
@@ -8062,21 +8242,38 @@ def lyric_video(
 
             word_timestamps = []
             processed_timestamps = [
-                {"word": clean_word(w.word), "start": w.start, "end": w.end}
-                for segment in result.segments for w in segment.words
+                {
+                    "word": clean_word(w.word),
+                    "start": w.start,
+                    "end": w.end,
+                }
+                for segment in result.segments
+                for w in segment.words
             ]
 
             log("Processed Timestamps", processed_timestamps)
 
             processed_lines = [
-                (line, [clean_word(w) for w in re.findall(r"\b[\w'-]+\b", line)])
+                (
+                    line,
+                    [
+                        clean_word(w)
+                        for w in re.findall(r"\b[\w'-]+\b", line)
+                    ],
+                )
                 for line in lines
             ]
 
             log("Processed Lines", processed_lines)
 
-            correct_words_flat = [word for _, line_words in processed_lines for word in line_words]
-            transcript_words_flat = [p['word'] for p in processed_timestamps]
+            correct_words_flat = [
+                word
+                for _, line_words in processed_lines
+                for word in line_words
+            ]
+            transcript_words_flat = [
+                p["word"] for p in processed_timestamps
+            ]
 
             line_boundaries = []
             word_counter = 0
@@ -8086,41 +8283,63 @@ def lyric_video(
                 end_index = word_counter
                 line_boundaries.append((start_index, end_index))
 
-            alignment = edlib.align(correct_words_flat, transcript_words_flat, mode="NW", task="path")
+            alignment = edlib.align(
+                correct_words_flat,
+                transcript_words_flat,
+                mode="NW",
+                task="path",
+            )
 
             correct_to_transcript_map = {}
             transcript_idx = -1
             correct_idx = -1
-            
-            if alignment['cigar']:
-                operations = re.findall(r'(\d+)([=XDI])', alignment['cigar'])
+
+            if alignment["cigar"]:
+                operations = re.findall(
+                    r"(\d+)([=XDI])", alignment["cigar"]
+                )
                 for length, op in operations:
                     for _ in range(int(length)):
-                        if op in ('=', 'X'):
+                        if op in ("=", "X"):
                             transcript_idx += 1
                             correct_idx += 1
-                            correct_to_transcript_map[correct_idx] = transcript_idx
-                        elif op == 'D':
+                            correct_to_transcript_map[correct_idx] = (
+                                transcript_idx
+                            )
+                        elif op == "D":
                             transcript_idx += 1
-                        elif op == 'I':
+                        elif op == "I":
                             correct_idx += 1
-                            correct_to_transcript_map[correct_idx] = -1
+                            correct_to_transcript_map[correct_idx] = (
+                                -1
+                            )
 
             for i, original_line in enumerate(lines):
                 start_word_idx, end_word_idx = line_boundaries[i]
                 first_transcript_idx, last_transcript_idx = -1, -1
 
                 for word_i in range(start_word_idx, end_word_idx):
-                    mapped_idx = correct_to_transcript_map.get(word_i, -1)
+                    mapped_idx = correct_to_transcript_map.get(
+                        word_i, -1
+                    )
                     if mapped_idx != -1:
                         if first_transcript_idx == -1:
                             first_transcript_idx = mapped_idx
                         last_transcript_idx = mapped_idx
-                
-                if first_transcript_idx != -1 and last_transcript_idx != -1:
-                    start_time = processed_timestamps[first_transcript_idx]['start']
-                    end_time = processed_timestamps[last_transcript_idx]['end']
-                    timed_lyrics.append((start_time, end_time, original_line))
+
+                if (
+                    first_transcript_idx != -1
+                    and last_transcript_idx != -1
+                ):
+                    start_time = processed_timestamps[
+                        first_transcript_idx
+                    ]["start"]
+                    end_time = processed_timestamps[
+                        last_transcript_idx
+                    ]["end"]
+                    timed_lyrics.append(
+                        (start_time, end_time, original_line)
+                    )
 
             del model, result
             gc.collect()
@@ -8161,11 +8380,17 @@ def lyric_video(
             else:
                 new_h = max_dim
                 new_w = int(w * (max_dim / h))
-            
-            background_clip = background_clip.resized(width=new_w, height=new_h)
-            print(f"Background detected. Downscaling to: {new_w}x{new_h} pixels.")
+
+            background_clip = background_clip.resized(
+                width=new_w, height=new_h
+            )
+            print(
+                f"Background detected. Downscaling to: {new_w}x{new_h} pixels."
+            )
         else:
-            print(f"Background detected. Using original size: {w}x{h} pixels.")
+            print(
+                f"Background detected. Using original size: {w}x{h} pixels."
+            )
 
         output_size = background_clip.size
 
@@ -8173,13 +8398,15 @@ def lyric_video(
         background_clip = ColorClip(
             size=output_size, color=(0, 0, 0), duration=duration
         )
-        print(f"No background provided. Using default size: {output_size[0]}x{output_size[1]} pixels.")
+        print(
+            f"No background provided. Using default size: {output_size[0]}x{output_size[1]} pixels."
+        )
 
     lyric_clips = []
 
     for start, end, line in timed_lyrics:
         clip_duration = round(end - start, 3)
-        log('Clip duration', clip_duration)
+        log("Clip duration", clip_duration)
         if clip_duration <= 0:
             continue
 
@@ -8203,7 +8430,7 @@ def lyric_video(
         )
         lyric_clips.append(text_clip)
 
-    log('Lyric clips', len(lyric_clips) )
+    log("Lyric clips", len(lyric_clips))
 
     final_clip = CompositeVideoClip(
         [background_clip] + lyric_clips, size=output_size
@@ -8923,6 +9150,7 @@ def normalize_audio_to_peak(
     input_path: str, target_level: float = 0.9, format: str = None
 ):
     from pydub import AudioSegment
+
     if not 0.0 <= target_level <= 1.0:
         catch("target_level must be between 0.0 and 1.0")
         return None
@@ -8937,21 +9165,25 @@ def normalize_audio_to_peak(
         catch(f"Input file not found at {input_path}")
         return None
 
-    if target_level == 0.0 or audio.max_dBFS == -float('inf'):
+    if target_level == 0.0 or audio.max_dBFS == -float("inf"):
         silent_audio = AudioSegment.silent(duration=len(audio))
         silent_audio.export(output_path, format=format)
-        print(f"Target level is 0 or audio is silent. Saved silent file to '{output_path}'")
+        print(
+            f"Target level is 0 or audio is silent. Saved silent file to '{output_path}'"
+        )
         return output_path
 
     target_dbfs = 20 * math.log10(target_level)
-    
+
     gain_to_apply = target_dbfs - audio.max_dBFS
-    
+
     normalized_audio = audio.apply_gain(gain_to_apply)
 
     normalized_audio.export(output_path, format=format)
 
-    print(f"Successfully normalized '{input_path}' to a peak of {target_dbfs:.2f} dBFS.")
+    print(
+        f"Successfully normalized '{input_path}' to a peak of {target_dbfs:.2f} dBFS."
+    )
     print(f"Saved result to '{output_path}'")
 
     return output_path
@@ -9023,7 +9255,7 @@ def enhance_audio(audio_path):
 
 def autotune_song(
     audio_path,
-    output_path = None,
+    output_path=None,
     strength=0.7,
     correct_timing=True,
     quantize_grid_strength=16,
@@ -9047,7 +9279,9 @@ def autotune_song(
 
     temp_files = []
     try:
-        detected_key, detected_mode, detected_bpm = analyze_audio_features(audio_path, False)
+        detected_key, detected_mode, detected_bpm = (
+            analyze_audio_features(audio_path, False)
+        )
         if not detected_key:
             catch("Could not determine song key. Aborting.")
             return None
@@ -9056,24 +9290,28 @@ def autotune_song(
         if not vocals_path or not instrumental_path:
             catch("Vocal separation failed.")
             return None
-        
+
         temp_files.extend([vocals_path, instrumental_path])
 
         y_vocals, sr = librosa.load(vocals_path, sr=None, mono=True)
-        
+
         n_fft = 8192
         hop_length = 64
-        
+
         processed_vocals_path = vocals_path
 
         if correct_timing:
             beat_proc = madmom.features.beats.RNNBeatProcessor()
             beat_act = beat_proc(instrumental_path)
-            beat_times = madmom.features.beats.BeatTrackingProcessor(fps=100)(beat_act)
+            beat_times = madmom.features.beats.BeatTrackingProcessor(
+                fps=100
+            )(beat_act)
 
             if quantize_grid_strength > 1 and len(beat_times) > 1:
                 beat_interval = np.mean(np.diff(beat_times))
-                subdivision_interval = beat_interval / quantize_grid_strength
+                subdivision_interval = (
+                    beat_interval / quantize_grid_strength
+                )
                 quantized_beat_times = []
                 for i in range(len(beat_times) - 1):
                     quantized_beat_times.extend(
@@ -9087,71 +9325,103 @@ def autotune_song(
                 quantized_beat_times.append(beat_times[-1])
                 beat_times = np.array(sorted(quantized_beat_times))
 
-            onsets = librosa.onset.onset_detect(y=y_vocals, sr=sr, hop_length=hop_length, units="time")
-            
+            onsets = librosa.onset.onset_detect(
+                y=y_vocals, sr=sr, hop_length=hop_length, units="time"
+            )
+
             if len(onsets) > 1 and len(beat_times) > 0:
                 time_map_data = []
                 for onset_time in onsets:
-                    closest_beat_index = np.argmin(np.abs(beat_times - onset_time))
+                    closest_beat_index = np.argmin(
+                        np.abs(beat_times - onset_time)
+                    )
                     target_time = beat_times[closest_beat_index]
-                    time_map_data.append(f"{onset_time:.6f} {target_time:.6f}")
-                
+                    time_map_data.append(
+                        f"{onset_time:.6f} {target_time:.6f}"
+                    )
+
                 time_map_path = tmp(".txt")
                 temp_files.append(time_map_path)
-                with open(time_map_path, 'w') as f:
+                with open(time_map_path, "w") as f:
                     f.write("\n".join(time_map_data))
-                
+
                 quantized_vocals_path = tmp(".wav")
                 command = [
-                    "rubberband", "--time", "1", "--timemap", f'"{time_map_path}"', f'"{vocals_path}"', f'"{quantized_vocals_path}"'
+                    "rubberband",
+                    "--time",
+                    "1",
+                    "--timemap",
+                    f'"{time_map_path}"',
+                    f'"{vocals_path}"',
+                    f'"{quantized_vocals_path}"',
                 ]
                 run(" ".join(command))
 
                 if exist(quantized_vocals_path):
-                    y_vocals, sr = librosa.load(quantized_vocals_path, sr=sr)
+                    y_vocals, sr = librosa.load(
+                        quantized_vocals_path, sr=sr
+                    )
                     processed_vocals_path = quantized_vocals_path
                     temp_files.append(quantized_vocals_path)
 
-        allowed_notes_midi = get_scale_notes(key=detected_key, scale=detected_mode)
+        allowed_notes_midi = get_scale_notes(
+            key=detected_key, scale=detected_mode
+        )
         f0, voiced_flag, _ = librosa.pyin(
-            y_vocals, fmin=librosa.note_to_hz("C2"), fmax=librosa.note_to_hz("C7"),
-            sr=sr, frame_length=n_fft, hop_length=hop_length
+            y_vocals,
+            fmin=librosa.note_to_hz("C2"),
+            fmax=librosa.note_to_hz("C7"),
+            sr=sr,
+            frame_length=n_fft,
+            hop_length=hop_length,
         )
         f0 = np.nan_to_num(f0, nan=0.0)
-        
+
         target_f0 = np.copy(f0)
         voiced_mask = voiced_flag & (f0 > 0)
-        
+
         if np.any(voiced_mask):
             voiced_f0 = f0[voiced_mask]
             voiced_midi = librosa.hz_to_midi(voiced_f0)
 
-            note_diffs = np.abs(allowed_notes_midi.reshape(-1, 1) - voiced_midi)
+            note_diffs = np.abs(
+                allowed_notes_midi.reshape(-1, 1) - voiced_midi
+            )
             closest_note_indices = np.argmin(note_diffs, axis=0)
             target_midi = allowed_notes_midi[closest_note_indices]
 
             cents_deviation = np.abs(voiced_midi - target_midi) * 100
             correction_mask = cents_deviation > tolerance_cents
 
-            ideal_f0 = librosa.midi_to_hz(target_midi[correction_mask])
+            ideal_f0 = librosa.midi_to_hz(
+                target_midi[correction_mask]
+            )
             original_f0_to_correct = voiced_f0[correction_mask]
-            corrected_f0_subset = original_f0_to_correct + (ideal_f0 - original_f0_to_correct) * strength
+            corrected_f0_subset = (
+                original_f0_to_correct
+                + (ideal_f0 - original_f0_to_correct) * strength
+            )
 
             temp_voiced_f0 = np.copy(voiced_f0)
             temp_voiced_f0[correction_mask] = corrected_f0_subset
-            
+
             if attack_smoothing_ms > 0:
-                smoothing_window_size = int(sr / hop_length * (attack_smoothing_ms / 1000.0))
+                smoothing_window_size = int(
+                    sr / hop_length * (attack_smoothing_ms / 1000.0)
+                )
                 if smoothing_window_size % 2 == 0:
                     smoothing_window_size += 1
                 if smoothing_window_size > 1:
-                     temp_voiced_f0 = medfilt(temp_voiced_f0, kernel_size=smoothing_window_size)
-            
+                    temp_voiced_f0 = medfilt(
+                        temp_voiced_f0,
+                        kernel_size=smoothing_window_size,
+                    )
+
             target_f0[voiced_mask] = temp_voiced_f0
 
         freq_map_path = tmp(".txt")
         temp_files.append(freq_map_path)
-        with open(freq_map_path, 'w') as f:
+        with open(freq_map_path, "w") as f:
             ratios = target_f0 / f0
             ratios[~voiced_flag | (f0 == 0)] = 1.0
             for i in range(len(ratios)):
@@ -9159,26 +9429,39 @@ def autotune_song(
                 f.write(f"{sample_num} {ratios[i]:.6f}\n")
 
         tuned_vocals_path = tmp(".wav")
-        command = ["rubberband", "--formant", "--freqmap", f'"{freq_map_path}"', f'"{processed_vocals_path}"', f'"{tuned_vocals_path}"']
+        command = [
+            "rubberband",
+            "--formant",
+            "--freqmap",
+            f'"{freq_map_path}"',
+            f'"{processed_vocals_path}"',
+            f'"{tuned_vocals_path}"',
+        ]
         run(" ".join(command))
-        
+
         if not exist(tuned_vocals_path):
             catch("Pitch correction with rubberband failed.")
             return None
-        
+
         temp_files.append(tuned_vocals_path)
 
-        instrumental_audio = pydub.AudioSegment.from_file(instrumental_path)
-        tuned_vocals_audio = pydub.AudioSegment.from_file(tuned_vocals_path)
-        tuned_vocals_audio = tuned_vocals_audio.set_frame_rate(instrumental_audio.frame_rate)
-        
+        instrumental_audio = pydub.AudioSegment.from_file(
+            instrumental_path
+        )
+        tuned_vocals_audio = pydub.AudioSegment.from_file(
+            tuned_vocals_path
+        )
+        tuned_vocals_audio = tuned_vocals_audio.set_frame_rate(
+            instrumental_audio.frame_rate
+        )
+
         combined = instrumental_audio.overlay(tuned_vocals_audio)
-        
+
         output_format = get_ext(output_path)
         combined.export(output_path, format=output_format)
-        
+
         normalize_audio_to_peak(output_path)
-        
+
         return output_path
 
     finally:
@@ -9186,13 +9469,23 @@ def autotune_song(
             delete(path)
 
 
-def compute_gain_envelope(sidechain, sample_rate, threshold, attack_ms, release_ms):
+def compute_gain_envelope(
+    sidechain, sample_rate, threshold, attack_ms, release_ms
+):
     gain = 1.0
     envelope = np.zeros_like(sidechain)
     attack_samples = (attack_ms / 1000.0) * sample_rate
     release_samples = (release_ms / 1000.0) * sample_rate
-    attack_coeff = np.exp(-np.log(9) / attack_samples) if attack_samples > 0 else 0.0
-    release_coeff = np.exp(-np.log(9) / release_samples) if release_samples > 0 else 0.0
+    attack_coeff = (
+        np.exp(-np.log(9) / attack_samples)
+        if attack_samples > 0
+        else 0.0
+    )
+    release_coeff = (
+        np.exp(-np.log(9) / release_samples)
+        if release_samples > 0
+        else 0.0
+    )
 
     for i in range(len(sidechain)):
         current_sample_abs = np.abs(sidechain[i])
@@ -9201,9 +9494,13 @@ def compute_gain_envelope(sidechain, sample_rate, threshold, attack_ms, release_
         else:
             target_gain = 1.0
         if target_gain < gain:
-            gain = (attack_coeff * gain) + (1 - attack_coeff) * target_gain
+            gain = (attack_coeff * gain) + (
+                1 - attack_coeff
+            ) * target_gain
         else:
-            gain = (release_coeff * gain) + (1 - release_coeff) * target_gain
+            gain = (release_coeff * gain) + (
+                1 - release_coeff
+            ) * target_gain
         envelope[i] = gain
     return envelope
 
@@ -9220,10 +9517,10 @@ def loudness_maximizer(
     limit_attack_ms=0.1,
     limit_release_ms=400.0,
     lookahead_ms=1.5,
-    oversampling=2
+    oversampling=2,
 ):
-    from scipy.io import wavfile
     from scipy import signal
+    from scipy.io import wavfile
 
     if output_filename is None:
         output_filename = tmp("mp3", keep=False)
@@ -9245,7 +9542,7 @@ def loudness_maximizer(
         max_val = 127.0
     else:
         max_val = 1.0
-        
+
     audio_float = audio.astype(np.float32) / max_val
     original_length = audio.shape[0]
 
@@ -9253,20 +9550,24 @@ def loudness_maximizer(
     if oversampling > 1 and isinstance(oversampling, int):
         print(f"Oversampling audio by a factor of {oversampling}x...")
         effective_rate = sample_rate * oversampling
-        audio_float = signal.resample_poly(audio_float, oversampling, 1, axis=0)
-    
+        audio_float = signal.resample_poly(
+            audio_float, oversampling, 1, axis=0
+        )
+
     compressed_audio = apply_compressor(
         audio_float,
         effective_rate,
         threshold_db=comp_threshold_db,
         ratio=comp_ratio,
         attack_ms=comp_attack_ms,
-        release_ms=comp_release_ms
+        release_ms=comp_release_ms,
     )
-    
-    initial_rms_db = 20 * np.log10(np.sqrt(np.mean(compressed_audio**2)))
+
+    initial_rms_db = 20 * np.log10(
+        np.sqrt(np.mean(compressed_audio**2))
+    )
     print(f"Post-Compressor RMS: {initial_rms_db:.2f} dB")
-    
+
     linear_boost = 10 ** (db_boost / 20.0)
     boosted_audio = compressed_audio * linear_boost
     print(f"Applied {db_boost} dB of makeup gain.")
@@ -9278,31 +9579,47 @@ def loudness_maximizer(
 
     lookahead_samples = int(lookahead_ms * effective_rate / 1000.0)
     if lookahead_samples > 0:
-        pad_width_audio = [(lookahead_samples, 0)] + [(0, 0)] * (boosted_audio.ndim - 1)
-        delayed_audio = np.pad(boosted_audio, pad_width_audio, 'constant')
+        pad_width_audio = [(lookahead_samples, 0)] + [(0, 0)] * (
+            boosted_audio.ndim - 1
+        )
+        delayed_audio = np.pad(
+            boosted_audio, pad_width_audio, "constant"
+        )
     else:
         delayed_audio = boosted_audio
 
     threshold = 10 ** (db_limit / 20.0)
     print("Computing gain envelope...")
-    
+
     if lookahead_samples > 0:
-        sidechain_padded = np.pad(sidechain, (0, lookahead_samples), 'constant')
+        sidechain_padded = np.pad(
+            sidechain, (0, lookahead_samples), "constant"
+        )
     else:
         sidechain_padded = sidechain
-        
-    gain = compute_gain_envelope(sidechain_padded, effective_rate, threshold, limit_attack_ms, limit_release_ms)
-    
+
+    gain = compute_gain_envelope(
+        sidechain_padded,
+        effective_rate,
+        threshold,
+        limit_attack_ms,
+        limit_release_ms,
+    )
+
     if boosted_audio.ndim > 1:
-        gain = np.tile(gain[:, np.newaxis], (1, boosted_audio.shape[1]))
+        gain = np.tile(
+            gain[:, np.newaxis], (1, boosted_audio.shape[1])
+        )
 
     limited_audio = delayed_audio * gain
     print(f"Applied limiting with a ceiling of {db_limit} dB.")
-    
+
     if oversampling > 1 and isinstance(oversampling, int):
         print(f"Downsampling back to {sample_rate} Hz...")
-        limited_audio = signal.resample_poly(limited_audio, 1, oversampling, axis=0)
-    
+        limited_audio = signal.resample_poly(
+            limited_audio, 1, oversampling, axis=0
+        )
+
     current_length = int(limited_audio.shape[0])
     lookahead_len = int(lookahead_ms / 1000 * sample_rate)
     max_len = lookahead_len + original_length
@@ -9311,23 +9628,36 @@ def loudness_maximizer(
         final_processed_audio = limited_audio[lookahead_len:max_len]
     elif current_length < original_length:
         pad_amount = original_length - current_length
-        pad_width = [(0, pad_amount)] + [(0, 0)] * (limited_audio.ndim - 1)
-        final_processed_audio = np.pad(limited_audio, pad_width, 'constant')
+        pad_width = [(0, pad_amount)] + [(0, 0)] * (
+            limited_audio.ndim - 1
+        )
+        final_processed_audio = np.pad(
+            limited_audio, pad_width, "constant"
+        )
     else:
         final_processed_audio = limited_audio
 
     print(f"Applying final brickwall clip at {db_limit} dB.")
-    np.clip(final_processed_audio, -threshold, threshold, out=final_processed_audio)
-    
-    final_rms_db = 20 * np.log10(np.sqrt(np.mean(final_processed_audio**2)))
+    np.clip(
+        final_processed_audio,
+        -threshold,
+        threshold,
+        out=final_processed_audio,
+    )
+
+    final_rms_db = 20 * np.log10(
+        np.sqrt(np.mean(final_processed_audio**2))
+    )
     print(f"Final RMS: {final_rms_db:.2f} dB.")
 
-    processed_audio_int = (final_processed_audio * max_val)
+    processed_audio_int = final_processed_audio * max_val
     final_audio = processed_audio_int.astype(original_dtype)
 
     try:
         wavfile.write(output_filename, sample_rate, final_audio)
-        print(f"✅ Successfully saved processed audio to '{output_filename}'.")
+        print(
+            f"✅ Successfully saved processed audio to '{output_filename}'."
+        )
         return output_filename
     except Exception as e:
         print(f"Error writing audio file: {e}")
@@ -9341,12 +9671,14 @@ def apply_compressor(
     ratio=4.0,
     attack_ms=5.0,
     release_ms=150.0,
-    knee_db=5.0
+    knee_db=5.0,
 ):
-    print(f"Applying compressor: Threshold={threshold_db}dB, Ratio={ratio}:1")
+    print(
+        f"Applying compressor: Threshold={threshold_db}dB, Ratio={ratio}:1"
+    )
 
     threshold_linear = 10.0 ** (threshold_db / 20.0)
-    
+
     attack_samples = (sample_rate / 1000.0) * attack_ms
     release_samples = (sample_rate / 1000.0) * release_ms
     alpha_attack = np.exp(-1.0 / attack_samples)
@@ -9356,53 +9688,69 @@ def apply_compressor(
         sidechain = np.max(np.abs(audio), axis=1)
     else:
         sidechain = np.abs(audio)
-    
+
     sidechain = np.maximum(sidechain, 1e-8)
-    
+
     sidechain_db = 20.0 * np.log10(sidechain)
 
     gain_reduction_db = np.zeros_like(sidechain_db)
-    
+
     half_knee = knee_db / 2.0
     knee_start = threshold_db - half_knee
     knee_end = threshold_db + half_knee
 
     above_knee_start_indices = np.where(sidechain_db > knee_start)[0]
-    
+
     for i in above_knee_start_indices:
         level = sidechain_db[i]
-        if level <= knee_end: # Inside the knee
+        if level <= knee_end:  # Inside the knee
             x = (level - knee_start) / knee_db
-            reduction = x * x * (threshold_db - level) * (1.0 - 1.0 / ratio)
+            reduction = (
+                x * x * (threshold_db - level) * (1.0 - 1.0 / ratio)
+            )
             gain_reduction_db[i] = reduction
         else:
-            gain_reduction_db[i] = (threshold_db - level) * (1.0 - 1.0 / ratio)
+            gain_reduction_db[i] = (threshold_db - level) * (
+                1.0 - 1.0 / ratio
+            )
 
     smoothed_gain_db = np.zeros_like(gain_reduction_db)
     for i in range(1, len(gain_reduction_db)):
-        if gain_reduction_db[i] < smoothed_gain_db[i-1]:
-            smoothed_gain_db[i] = alpha_attack * smoothed_gain_db[i-1] + (1 - alpha_attack) * gain_reduction_db[i]
+        if gain_reduction_db[i] < smoothed_gain_db[i - 1]:
+            smoothed_gain_db[i] = (
+                alpha_attack * smoothed_gain_db[i - 1]
+                + (1 - alpha_attack) * gain_reduction_db[i]
+            )
         else:
-            smoothed_gain_db[i] = alpha_release * smoothed_gain_db[i-1] + (1 - alpha_release) * gain_reduction_db[i]
-    
+            smoothed_gain_db[i] = (
+                alpha_release * smoothed_gain_db[i - 1]
+                + (1 - alpha_release) * gain_reduction_db[i]
+            )
+
     final_gain = 10.0 ** (smoothed_gain_db / 20.0)
-    
+
     if audio.ndim > 1:
-        final_gain = np.tile(final_gain[:, np.newaxis], (1, audio.shape[1]))
+        final_gain = np.tile(
+            final_gain[:, np.newaxis], (1, audio.shape[1])
+        )
 
     return audio * final_gain
 
 
-def create_sample_audio(filename="sample_audio.wav", duration=5, sample_rate=44100):
+def create_sample_audio(
+    filename="sample_audio.wav", duration=5, sample_rate=44100
+):
     from scipy.io import wavfile
 
     print("Creating a sample audio file for testing...")
-    t = np.linspace(0., duration, int(sample_rate * duration))
-    amplitude_ramp = np.linspace(0.1, 1.0, int(sample_rate * duration))
-    audio_data = amplitude_ramp * np.sin(2. * np.pi * 440. * t)
-    
+    t = np.linspace(0.0, duration, int(sample_rate * duration))
+    amplitude_ramp = np.linspace(
+        0.1, 1.0, int(sample_rate * duration)
+    )
+    audio_data = amplitude_ramp * np.sin(2.0 * np.pi * 440.0 * t)
+
     audio_data_int = np.int16(audio_data * 32767)
-    
+
     wavfile.write(filename, sample_rate, audio_data_int)
     print(f"Sample audio saved as '{filename}'.")
 
@@ -9422,12 +9770,18 @@ def riaa_filter(input_filename, bass_factor=1.0):
             and audio_data.dtype != np.float64
         ):
             info = np.iinfo(audio_data.dtype)
-            audio_data = audio_data.astype(np.float32) / (info.max + 1)
-        
-        print(f"Read '{input_filename}' with sample rate {sample_rate} Hz.")
+            audio_data = audio_data.astype(np.float32) / (
+                info.max + 1
+            )
+
+        print(
+            f"Read '{input_filename}' with sample rate {sample_rate} Hz."
+        )
 
     except FileNotFoundError:
-        print(f"File '{input_filename}' not found. Generating white noise for demonstration.")
+        print(
+            f"File '{input_filename}' not found. Generating white noise for demonstration."
+        )
         sample_rate = 44100
         duration = 5
         audio_data = np.random.randn(sample_rate * duration)
@@ -9437,35 +9791,44 @@ def riaa_filter(input_filename, bass_factor=1.0):
     t2 = 318e-6
     t3 = 75e-6
 
-    print(f"Applying a custom RIAA de-emphasis with a bass factor of {bass_factor}...")
+    print(
+        f"Applying a custom RIAA de-emphasis with a bass factor of {bass_factor}..."
+    )
 
     t1_modified = (1 - bass_factor) * t2 + bass_factor * t1_original
-    
+
     num_s = [t2, 1]
     den_s = [t1_modified * t3, t1_modified + t3, 1]
 
-    w1k = 2 * np.pi * 1000 
-    
+    w1k = 2 * np.pi * 1000
+
     _, h = freqs(num_s, den_s, worN=[w1k])
     gain_at_1k = np.abs(h[0])
-    
+
     num_s_normalized = [c / gain_at_1k for c in num_s]
 
     b_riaa, a_riaa = bilinear(num_s_normalized, den_s, fs=sample_rate)
 
     if audio_data.ndim > 1:
-        processed_audio = np.array([lfilter(b_riaa, a_riaa, channel) for channel in audio_data])
+        processed_audio = np.array(
+            [
+                lfilter(b_riaa, a_riaa, channel)
+                for channel in audio_data
+            ]
+        )
     else:
         processed_audio = lfilter(b_riaa, a_riaa, audio_data)
 
     max_abs = np.max(np.abs(processed_audio))
     if max_abs > 0:
         processed_audio /= max_abs
-    
+
     processed_audio_int16 = np.int16((processed_audio * 32767).T)
 
     wavfile.write(output_filename, sample_rate, processed_audio_int16)
-    print(f"Successfully applied custom RIAA EQ and saved to '{output_filename}'.")
+    print(
+        f"Successfully applied custom RIAA EQ and saved to '{output_filename}'."
+    )
 
     return output_filename
 
@@ -9475,187 +9838,369 @@ def get_model_instructions(task: str, model_type: str) -> str:
     import torch.nn as nn
 
     try:
+        from sklearn.feature_extraction.text import (
+            CountVectorizer,
+            TfidfVectorizer,
+        )
         from sklearn.pipeline import Pipeline
-        from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
+
         SKLEARN_AVAILABLE = True
     except ImportError:
         SKLEARN_AVAILABLE = False
 
     try:
         import onnxruntime
+
         ONNX_AVAILABLE = True
     except ImportError:
         ONNX_AVAILABLE = False
     profile = {
-        "framework": "Unknown", "modalities": set(), "architecture": {"type": "Unknown", "details": []},
-        "inputs": [], "outputs": [], "example_code": "", "notes": []
+        "framework": "Unknown",
+        "modalities": set(),
+        "architecture": {"type": "Unknown", "details": []},
+        "inputs": [],
+        "outputs": [],
+        "example_code": "",
+        "notes": [],
     }
 
     def _analyze_architecture_pytorch(model_obj):
-        if not isinstance(model_obj, nn.Module): return
-        layer_counts = Counter(layer.__class__.__name__ for layer in model_obj.modules())
-        if layer_counts['TransformerEncoderLayer'] > 0 or layer_counts['MultiheadAttention'] > 0:
-            profile['architecture']['type'] = "Transformer-based"
-            if layer_counts['Conv2d'] > 2:
-                 profile['architecture']['details'].append(f"{layer_counts['TransformerEncoderLayer']} Transformer Blocks indicate a Vision Transformer (ViT) or hybrid architecture.")
+        if not isinstance(model_obj, nn.Module):
+            return
+        layer_counts = Counter(
+            layer.__class__.__name__ for layer in model_obj.modules()
+        )
+        if (
+            layer_counts["TransformerEncoderLayer"] > 0
+            or layer_counts["MultiheadAttention"] > 0
+        ):
+            profile["architecture"]["type"] = "Transformer-based"
+            if layer_counts["Conv2d"] > 2:
+                profile["architecture"]["details"].append(
+                    f"{layer_counts['TransformerEncoderLayer']} Transformer Blocks indicate a Vision Transformer (ViT) or hybrid architecture."
+                )
             else:
-                 profile['architecture']['details'].append(f"{layer_counts['MultiheadAttention']} Attention Layers and {layer_counts['Embedding']} Embedding Layers form the core of this NLP/sequence model.")
-        elif layer_counts['Conv2d'] > 4:
-            profile['architecture']['type'] = "Convolutional Neural Network (CNN)"
-            profile['architecture']['details'].extend([f"{layer_counts['Conv2d']} Conv2d layers", f"{layer_counts['MaxPool2d']} Max-Pooling layers", f"{layer_counts['Linear']} Fully-Connected layers"])
-        elif layer_counts['Linear'] > 0:
-            profile['architecture']['type'] = "Multi-Layer Perceptron (MLP)"
-            profile['architecture']['details'].append(f"{layer_counts['Linear']} Linear layers")
+                profile["architecture"]["details"].append(
+                    f"{layer_counts['MultiheadAttention']} Attention Layers and {layer_counts['Embedding']} Embedding Layers form the core of this NLP/sequence model."
+                )
+        elif layer_counts["Conv2d"] > 4:
+            profile["architecture"][
+                "type"
+            ] = "Convolutional Neural Network (CNN)"
+            profile["architecture"]["details"].extend(
+                [
+                    f"{layer_counts['Conv2d']} Conv2d layers",
+                    f"{layer_counts['MaxPool2d']} Max-Pooling layers",
+                    f"{layer_counts['Linear']} Fully-Connected layers",
+                ]
+            )
+        elif layer_counts["Linear"] > 0:
+            profile["architecture"][
+                "type"
+            ] = "Multi-Layer Perceptron (MLP)"
+            profile["architecture"]["details"].append(
+                f"{layer_counts['Linear']} Linear layers"
+            )
 
     def _probe_model_pytorch(model_obj):
-        if not isinstance(model_obj, nn.Module): return
+        if not isinstance(model_obj, nn.Module):
+            return
         try:
             sig = inspect.signature(model_obj.forward)
             dummy_inputs_kwargs = {}
             for param in sig.parameters.values():
                 arg_name = param.name
-                if arg_name in ['self', 'args', 'kwargs']: continue
-                
-                input_spec = next((item for item in profile['inputs'] if item["name"] == arg_name), None)
-                if not input_spec: continue
-                
-                shape = tuple(d if isinstance(d, int) else 2 for d in input_spec['shape'])
-                dtype_str = input_spec['dtype']
-                
-                if 'float' in dtype_str:
-                    dummy_inputs_kwargs[arg_name] = torch.randn(shape, dtype=getattr(torch, dtype_str))
-                elif 'long' in dtype_str or 'int' in dtype_str:
-                    vocab_size = next((l.num_embeddings for l in model_obj.modules() if isinstance(l, nn.Embedding)), 2000)
-                    dummy_inputs_kwargs[arg_name] = torch.randint(0, vocab_size, shape, dtype=torch.long)
-            
+                if arg_name in ["self", "args", "kwargs"]:
+                    continue
+
+                input_spec = next(
+                    (
+                        item
+                        for item in profile["inputs"]
+                        if item["name"] == arg_name
+                    ),
+                    None,
+                )
+                if not input_spec:
+                    continue
+
+                shape = tuple(
+                    d if isinstance(d, int) else 2
+                    for d in input_spec["shape"]
+                )
+                dtype_str = input_spec["dtype"]
+
+                if "float" in dtype_str:
+                    dummy_inputs_kwargs[arg_name] = torch.randn(
+                        shape, dtype=getattr(torch, dtype_str)
+                    )
+                elif "long" in dtype_str or "int" in dtype_str:
+                    vocab_size = next(
+                        (
+                            l.num_embeddings
+                            for l in model_obj.modules()
+                            if isinstance(l, nn.Embedding)
+                        ),
+                        2000,
+                    )
+                    dummy_inputs_kwargs[arg_name] = torch.randint(
+                        0, vocab_size, shape, dtype=torch.long
+                    )
+
             if not dummy_inputs_kwargs:
-                profile['notes'].append("Dynamic probe skipped: could not determine input arguments for `forward` method.")
+                profile["notes"].append(
+                    "Dynamic probe skipped: could not determine input arguments for `forward` method."
+                )
                 return
 
             model_obj.eval()
             with torch.no_grad():
                 output = model_obj(**dummy_inputs_kwargs)
 
-            output_tensors = [output] if isinstance(output, torch.Tensor) else output if isinstance(output, (list, tuple)) else []
+            output_tensors = (
+                [output]
+                if isinstance(output, torch.Tensor)
+                else (
+                    output
+                    if isinstance(output, (list, tuple))
+                    else []
+                )
+            )
             for i, out_tensor in enumerate(output_tensors):
                 if isinstance(out_tensor, torch.Tensor):
-                    profile['outputs'].append({"name": f"output_{i}", "shape": tuple(out_tensor.shape), "dtype": str(out_tensor.dtype).replace('torch.', '')})
-            profile['notes'].append("Dynamic probe SUCCESS: Input/Output specifications confirmed.")
+                    profile["outputs"].append(
+                        {
+                            "name": f"output_{i}",
+                            "shape": tuple(out_tensor.shape),
+                            "dtype": str(out_tensor.dtype).replace(
+                                "torch.", ""
+                            ),
+                        }
+                    )
+            profile["notes"].append(
+                "Dynamic probe SUCCESS: Input/Output specifications confirmed."
+            )
         except Exception as e:
-            profile['notes'].append(f"Dynamic probe FAILED: Model `forward` pass raised an error, which may indicate complex input requirements not automatically detectable. Error: {e}")
+            profile["notes"].append(
+                f"Dynamic probe FAILED: Model `forward` pass raised an error, which may indicate complex input requirements not automatically detectable. Error: {e}"
+            )
 
     def _generate_report():
-        modalities_str = ", ".join(sorted([m.capitalize() for m in profile['modalities']])) if profile['modalities'] else "Undetermined"
+        modalities_str = (
+            ", ".join(
+                sorted(
+                    [m.capitalize() for m in profile["modalities"]]
+                )
+            )
+            if profile["modalities"]
+            else "Undetermined"
+        )
         report = f"## 🔬 Model Deep Dive Analysis: `{task}`\n\n"
         report += f"**Framework**: `{profile['framework']}`\n"
         report += f"**Detected Modality**: `{modalities_str}`\n"
         report += f"**Detected Architecture**: `{profile['architecture']['type']}`\n"
-        if profile['architecture']['details']:
-            details = "\n".join([f"- {d}" for d in profile['architecture']['details']])
+        if profile["architecture"]["details"]:
+            details = "\n".join(
+                [f"- {d}" for d in profile["architecture"]["details"]]
+            )
             report += f"**Architectural Details**:\n{details}\n"
         report += "\n---\n### 📥 Input & 📤 Output Specification\n"
 
-        if not profile['inputs']: report += "**Inputs**: Could not be determined automatically.\n"
-        for i, inp in enumerate(profile['inputs']):
+        if not profile["inputs"]:
+            report += (
+                "**Inputs**: Could not be determined automatically.\n"
+            )
+        for i, inp in enumerate(profile["inputs"]):
             report += f"- **INPUT `{i}` (`{inp.get('name', 'N/A')}`)**: Shape=`{inp['shape']}`, DType=`{inp['dtype']}`\n"
 
-        if not profile['outputs']: report += "**Outputs**: Not confirmed. Dynamic probe did not run or failed.\n"
-        for i, out in enumerate(profile['outputs']):
+        if not profile["outputs"]:
+            report += "**Outputs**: Not confirmed. Dynamic probe did not run or failed.\n"
+        for i, out in enumerate(profile["outputs"]):
             report += f"- **OUTPUT `{i}` (`{out.get('name', 'N/A')}`)**: Shape=`{out['shape']}`, DType=`{out['dtype']}` (Confirmed by probe)\n"
 
         report += "\n---\n### ⚙️ Preprocessing & Usage Guide\n"
-        
+
         example_imports, prep_steps, example_body = "", "", ""
-        if profile['framework'] == 'PyTorch':
+        if profile["framework"] == "PyTorch":
             example_imports = "import torch\n"
             example_body = f"model = YourModelClass() # Instantiate your defined model architecture\nmodel.load_state_dict(torch.load('path/to/{task}.pt'))\nmodel.eval()\n\ndummy_inputs = {{}}\n"
-            
-            for inp in profile['inputs']:
-                shape, dtype, name = inp['shape'], inp['dtype'], inp['name']
-                if 'image' in name or 'pixel' in name:
+
+            for inp in profile["inputs"]:
+                shape, dtype, name = (
+                    inp["shape"],
+                    inp["dtype"],
+                    inp["name"],
+                )
+                if "image" in name or "pixel" in name:
                     C, H, W = shape[1], shape[2], shape[3]
                     prep_steps += f"**For Input `{name}` (Image)**:\n1. Load image (e.g., with Pillow).\n2. Resize to `{H}x{W}`.\n3. Convert to a tensor and normalize (e.g., ImageNet stats).\n4. Ensure shape is `(1, {C}, {H}, {W})`.\n"
                     example_imports += "from PIL import Image\nimport torchvision.transforms as T\n"
-                    example_body += f"image = Image.open('path/to/image.jpg')\n"
+                    example_body += (
+                        f"image = Image.open('path/to/image.jpg')\n"
+                    )
                     example_body += f"preprocess = T.Compose([T.Resize(({H}, {W})), T.ToTensor(), T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])\n"
                     example_body += f"dummy_inputs['{name}'] = preprocess(image).unsqueeze(0)\n"
-                elif 'text' in name or 'ids' in name:
+                elif "text" in name or "ids" in name:
                     prep_steps += f"**For Input `{name}` (Text)**:\n1. Use the specific tokenizer the model was trained with.\n2. Convert text to token IDs.\n3. Format as a `{dtype}` tensor with shape `{shape}`.\n"
                     example_body += f"# Use the model's specific tokenizer\ndummy_inputs['{name}'] = torch.randint(0, 1000, {shape}, dtype=torch.long)\n"
-            
-            example_body += f"\nwith torch.no_grad():\n    output = model(**dummy_inputs)\n    print(f'Output: {{output}}')\n"
-            profile['example_code'] = f"```python\n{example_imports}\n# 1. Define or import your model class (YourModelClass)\n\n# 2. Load model and prepare inputs\n{example_body}```"
 
-        elif profile['framework'] == 'scikit-learn':
+            example_body += f"\nwith torch.no_grad():\n    output = model(**dummy_inputs)\n    print(f'Output: {{output}}')\n"
+            profile["example_code"] = (
+                f"```python\n{example_imports}\n# 1. Define or import your model class (YourModelClass)\n\n# 2. Load model and prepare inputs\n{example_body}```"
+            )
+
+        elif profile["framework"] == "scikit-learn":
             prep_steps += "1. Ensure your input data is in the correct format (NumPy array, Pandas DataFrame, or raw text for pipelines).\n2. Apply the exact same feature engineering and preprocessing steps used during training.\n"
             example_body = f"import joblib\nmodel = joblib.load('path/to/{task}.pkl')\n"
-            if "TfidfVectorizer" in profile['architecture']['details']:
+            if (
+                "TfidfVectorizer"
+                in profile["architecture"]["details"]
+            ):
                 example_body += "input_data = ['your first sentence', 'your second sentence']\n"
             else:
-                n_features = profile['inputs'][0]['shape'][1]
+                n_features = profile["inputs"][0]["shape"][1]
                 example_body += f"import numpy as np\n# Input must be a 2D array with shape (n_samples, {n_features})\ninput_data = np.random.rand(2, {n_features})\n"
             example_body += "predictions = model.predict(input_data)\nprint(predictions)"
-            profile['example_code'] = f"```python\n{example_body}\n```"
+            profile["example_code"] = (
+                f"```python\n{example_body}\n```"
+            )
 
-        report += prep_steps + "\n#### Example Usage Snippet\n" + profile['example_code']
-        if profile['notes']:
-            report += "\n---\n### 🕵️ Analyst Notes\n" + "\n".join([f"- {n}" for n in profile['notes']])
+        report += (
+            prep_steps
+            + "\n#### Example Usage Snippet\n"
+            + profile["example_code"]
+        )
+        if profile["notes"]:
+            report += "\n---\n### 🕵️ Analyst Notes\n" + "\n".join(
+                [f"- {n}" for n in profile["notes"]]
+            )
         return report
 
     model_object = MODELS.get(task)
     if model_object is None:
-        log(f"Analysis Failed for '{task}'", f"Model file `{task}` could not be found or loaded.", status=False)
+        log(
+            f"Analysis Failed for '{task}'",
+            f"Model file `{task}` could not be found or loaded.",
+            status=False,
+        )
         return
-    
-    if isinstance(model_object, nn.Module) or isinstance(model_object, (dict, OrderedDict)):
-        profile['framework'] = 'PyTorch'
+
+    if isinstance(model_object, nn.Module) or isinstance(
+        model_object, (dict, OrderedDict)
+    ):
+        profile["framework"] = "PyTorch"
         if isinstance(model_object, (dict, OrderedDict)):
-            profile['architecture']['type'] = 'Raw State Dictionary'
-            profile['notes'].append("Analysis is based on a state_dict, not a full model. Instantiate the model class before loading these weights.")
+            profile["architecture"]["type"] = "Raw State Dictionary"
+            profile["notes"].append(
+                "Analysis is based on a state_dict, not a full model. Instantiate the model class before loading these weights."
+            )
             first_key, first_tensor = next(iter(model_object.items()))
-            in_features = first_tensor.shape[1] if len(first_tensor.shape) == 2 else 'N/A'
-            profile['inputs'].append({"name": "input_0", "shape": f"(batch_size, {in_features})", "dtype": str(first_tensor.dtype)})
-            profile['modalities'].add("Tabular" if in_features != 'N/A' else "Unknown")
+            in_features = (
+                first_tensor.shape[1]
+                if len(first_tensor.shape) == 2
+                else "N/A"
+            )
+            profile["inputs"].append(
+                {
+                    "name": "input_0",
+                    "shape": f"(batch_size, {in_features})",
+                    "dtype": str(first_tensor.dtype),
+                }
+            )
+            profile["modalities"].add(
+                "Tabular" if in_features != "N/A" else "Unknown"
+            )
         else:
             sig = inspect.signature(model_object.forward)
             for param in sig.parameters.values():
-                if param.name in ['self', 'args', 'kwargs']: continue
+                if param.name in ["self", "args", "kwargs"]:
+                    continue
                 name = param.name
-                if 'image' in name or 'pixel' in name:
-                    profile['modalities'].add("Image")
-                    profile['inputs'].append({"name": name, "shape": (1, 3, 32, 32), "dtype": "float32"})
-                elif 'text' in name or 'ids' in name:
-                    profile['modalities'].add("Text")
-                    profile['inputs'].append({"name": name, "shape": (1, 16), "dtype": "long"})
-                else: # Generic fallback
-                    profile['modalities'].add("Tabular")
-                    profile['inputs'].append({"name": name, "shape": (1, 64), "dtype": "float32"})
+                if "image" in name or "pixel" in name:
+                    profile["modalities"].add("Image")
+                    profile["inputs"].append(
+                        {
+                            "name": name,
+                            "shape": (1, 3, 32, 32),
+                            "dtype": "float32",
+                        }
+                    )
+                elif "text" in name or "ids" in name:
+                    profile["modalities"].add("Text")
+                    profile["inputs"].append(
+                        {
+                            "name": name,
+                            "shape": (1, 16),
+                            "dtype": "long",
+                        }
+                    )
+                else:  # Generic fallback
+                    profile["modalities"].add("Tabular")
+                    profile["inputs"].append(
+                        {
+                            "name": name,
+                            "shape": (1, 64),
+                            "dtype": "float32",
+                        }
+                    )
             _analyze_architecture_pytorch(model_object)
             _probe_model_pytorch(model_object)
 
-    elif SKLEARN_AVAILABLE and hasattr(model_object, 'predict'):
-        profile['framework'] = 'scikit-learn'
+    elif SKLEARN_AVAILABLE and hasattr(model_object, "predict"):
+        profile["framework"] = "scikit-learn"
         if isinstance(model_object, Pipeline):
-            profile['architecture']['type'] = 'Scikit-learn Pipeline'
-            steps = [f"{name} ({step.__class__.__name__})" for name, step in model_object.steps]
-            profile['architecture']['details'] = steps
+            profile["architecture"]["type"] = "Scikit-learn Pipeline"
+            steps = [
+                f"{name} ({step.__class__.__name__})"
+                for name, step in model_object.steps
+            ]
+            profile["architecture"]["details"] = steps
             if any("TfidfVectorizer" in s for s in steps):
-                profile['modalities'].add("Text")
-                profile['inputs'].append({"name": "raw_text", "shape": "(n_samples,)", "dtype": "string"})
+                profile["modalities"].add("Text")
+                profile["inputs"].append(
+                    {
+                        "name": "raw_text",
+                        "shape": "(n_samples,)",
+                        "dtype": "string",
+                    }
+                )
         else:
-            profile['architecture']['type'] = f"Standard Model ({model_object.__class__.__name__})"
-            profile['modalities'].add("Tabular")
-            n_features = getattr(model_object, 'n_features_in_', 'N/A')
-            profile['inputs'].append({"name": "X", "shape": f"(n_samples, {n_features})", "dtype": "float"})
+            profile["architecture"][
+                "type"
+            ] = f"Standard Model ({model_object.__class__.__name__})"
+            profile["modalities"].add("Tabular")
+            n_features = getattr(
+                model_object, "n_features_in_", "N/A"
+            )
+            profile["inputs"].append(
+                {
+                    "name": "X",
+                    "shape": f"(n_samples, {n_features})",
+                    "dtype": "float",
+                }
+            )
 
     elif ONNX_AVAILABLE and isinstance(model_object, MockOnnxModel):
-        profile['framework'] = 'ONNX'
-        profile['architecture']['type'] = 'ONNX Graph'
+        profile["framework"] = "ONNX"
+        profile["architecture"]["type"] = "ONNX Graph"
         for inp in model_object.get_inputs():
-            profile['inputs'].append({"name": inp.name, "shape": inp.shape, "dtype": inp.type})
-            if len(inp.shape) == 4 and inp.shape[1] in [1, 3]: profile['modalities'].add("Image")
+            profile["inputs"].append(
+                {
+                    "name": inp.name,
+                    "shape": inp.shape,
+                    "dtype": inp.type,
+                }
+            )
+            if len(inp.shape) == 4 and inp.shape[1] in [1, 3]:
+                profile["modalities"].add("Image")
         for out in model_object.get_outputs():
-            profile['outputs'].append({"name": out.name, "shape": out.shape, "dtype": out.type})
+            profile["outputs"].append(
+                {
+                    "name": out.name,
+                    "shape": out.shape,
+                    "dtype": out.type,
+                }
+            )
 
     final_report = _generate_report()
     log(f"Deep Dive Analysis for '{task}'", final_report)
@@ -9666,8 +10211,8 @@ def generate_song(arg1, arg):
 
 
 def infer(task: str, inference_file: str, model_type: str = None):
-    import torch
     import imageio as iio
+    import torch
     from scipy.io import wavfile
 
     vec = None
@@ -9704,9 +10249,7 @@ def infer(task: str, inference_file: str, model_type: str = None):
         input_data = numpy_to_cupy(load_as_numpy(inference_file))
 
     if input_data == None:
-        log(
-            "Could not load input data", inference_file, status=False
-        )
+        log("Could not load input data", inference_file, status=False)
         return None
 
     pred = None
@@ -9715,7 +10258,7 @@ def infer(task: str, inference_file: str, model_type: str = None):
     try:
         if model_type in ["joblib", "pkl"]:
             pred = mod.predict(input_numpy)
-        
+
         elif model_type in ["pt", "pth", "safetensors"]:
             input_tensor = torch.from_numpy(input_numpy).to(device())
             with torch.no_grad():
@@ -9724,11 +10267,15 @@ def infer(task: str, inference_file: str, model_type: str = None):
 
         elif model_type == "onnx":
             input_name = mod.get_inputs()[0].name
-            onnx_output = mod.run(None, {input_name: input_numpy.astype(np.float32)})
+            onnx_output = mod.run(
+                None, {input_name: input_numpy.astype(np.float32)}
+            )
             pred = onnx_output[0]
 
     except Exception as e:
-        logging.error(f"Model prediction failed for type '{model_type}': {e}")
+        logging.error(
+            f"Model prediction failed for type '{model_type}': {e}"
+        )
         return None
 
     if pred is None:
@@ -9754,7 +10301,9 @@ def infer(task: str, inference_file: str, model_type: str = None):
 
     handlers = {
         "video": lambda: write_video(pred, 24),
-        "image": lambda: iio.imwrite(output_filename, (pred * 255).astype(np.uint8)),
+        "image": lambda: iio.imwrite(
+            output_filename, (pred * 255).astype(np.uint8)
+        ),
         "audio": lambda: wavfile.write(output_filename, 32000, pred),
         "text": lambda: open(output_filename, "w").write(pred),
     }
@@ -9773,21 +10322,22 @@ def infer(task: str, inference_file: str, model_type: str = None):
     return output_filename
 
 
-def start(proj:str):
+def start(proj: str):
     import gradio as gr
+
     proj = proj.strip().lower()
 
     if proj == "image":
-        init_pretrained_model( "translate" )
-        init_pretrained_model( "summary" )
-        init_pretrained_model( "image" )
+        init_pretrained_model("translate")
+        init_pretrained_model("summary")
+        init_pretrained_model("image")
         init_upscale()
 
-        def title(image_path,top,middle,bottom):
-            return write_on_image(image_path,top,middle,bottom)
+        def title(image_path, top, middle, bottom):
+            return write_on_image(image_path, top, middle, bottom)
 
         def handle_generation(text, w, h):
-            w, h = get_max_resolution(w, h, mega_pixels=1.5);
+            w, h = get_max_resolution(w, h, mega_pixels=1.5)
             text = optimize_prompt_realism(text)
             return pipe("image", prompt=text, resolution=f"{w}x{h}")
 
@@ -9799,26 +10349,62 @@ def start(proj:str):
             gr.Markdown("### Realistic. Upscalable. Multilingual.")
             with gr.Row():
                 with gr.Column(scale=1):
-                    width_input = gr.Slider(minimum=1, maximum=16, step=1, label="Width")
-                    height_input = gr.Slider(minimum=1, maximum=16, step=1, label="Height")
+                    width_input = gr.Slider(
+                        minimum=1, maximum=16, step=1, label="Width"
+                    )
+                    height_input = gr.Slider(
+                        minimum=1, maximum=16, step=1, label="Height"
+                    )
                     data = gr.Textbox(
                         placeholder="Input data",
                         value="",
                         lines=4,
                         label="Prompt",
-                        container=True
+                        container=True,
                     )
-                    top = gr.Textbox(placeholder="Top title", value="", max_lines=1, label="Top Title")
-                    middle = gr.Textbox(placeholder="Middle title", value="", max_lines=1, label="Middle Title")
-                    bottom = gr.Textbox(placeholder="Bottom title", value="", max_lines=1, label="Bottom Title")
+                    top = gr.Textbox(
+                        placeholder="Top title",
+                        value="",
+                        max_lines=1,
+                        label="Top Title",
+                    )
+                    middle = gr.Textbox(
+                        placeholder="Middle title",
+                        value="",
+                        max_lines=1,
+                        label="Middle Title",
+                    )
+                    bottom = gr.Textbox(
+                        placeholder="Bottom title",
+                        value="",
+                        max_lines=1,
+                        label="Bottom Title",
+                    )
                 with gr.Column(scale=1):
-                    cover = gr.Image(interactive=False, label="Result", type='filepath', show_share_button=False, container=True, show_download_button=True)
+                    cover = gr.Image(
+                        interactive=False,
+                        label="Result",
+                        type="filepath",
+                        show_share_button=False,
+                        container=True,
+                        show_download_button=True,
+                    )
                     generate_image = gr.Button("Generate")
                     upscale_now = gr.Button("Upscale")
                     add_titles = gr.Button("Add title(s)")
-            generate_image.click(fn=handle_generation, inputs=[data,width_input,height_input], outputs=[cover])
-            upscale_now.click(fn=handle_upscaling, inputs=[cover], outputs=[cover])
-            add_titles.click(fn=title, inputs=[cover, top, middle, bottom], outputs=[cover])
+            generate_image.click(
+                fn=handle_generation,
+                inputs=[data, width_input, height_input],
+                outputs=[cover],
+            )
+            upscale_now.click(
+                fn=handle_upscaling, inputs=[cover], outputs=[cover]
+            )
+            add_titles.click(
+                fn=title,
+                inputs=[cover, top, middle, bottom],
+                outputs=[cover],
+            )
         app.queue().launch(inbrowser=True)
 
     elif proj == "chat":
@@ -9829,10 +10415,13 @@ def start(proj:str):
         def _get_chat_response(message, history):
             return get_chat_response(message, history)
 
-        with gr.Blocks(theme=theme(), title="Multilingual AI assistant", css=css()) as app:
+        with gr.Blocks(
+            theme=theme(),
+            title="Multilingual AI assistant",
+            css=css(),
+        ) as app:
             chat = init_chat(
-                "Multilingual AI assistant",
-                _get_chat_response
+                "Multilingual AI assistant", _get_chat_response
             )
         app.queue().launch(inbrowser=True)
 
@@ -9845,16 +10434,20 @@ def start(proj:str):
 
         with gr.Blocks() as app:
             f = gr.File(label="Download faiss wheel", value=whl)
-            f.change(calc,[], [f])
+            f.change(calc, [], [f])
         app.queue().launch(inbrowser=True)
 
     elif proj == "audio":
-        os.system("pip install --upgrade --force-reinstall git+https://github.com/YaronKoresh/audio-studio-pro.git")
+        os.system(
+            "pip install --upgrade --force-reinstall git+https://github.com/YaronKoresh/audio-studio-pro.git"
+        )
         os.system("audio-studio-pro")
 
     elif proj == "train":
-        os.system('pip install git+https://github.com/YaronKoresh/teachless.git')
-        os.system('teachless')
+        os.system(
+            "pip install git+https://github.com/YaronKoresh/teachless.git"
+        )
+        os.system("teachless")
 
     else:
         catch(f"Error: No project called '{ proj }' !")
