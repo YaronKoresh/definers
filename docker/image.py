@@ -1,7 +1,7 @@
 import os
 
-os.system("apt update -y")
-os.system("apt install -y git")
+os.system("apt-get update -y")
+os.system("apt-get install -y git")
 os.system('pip install --no-cache-dir --force-reinstall "definers @ git+https://github.com/YaronKoresh/definers.git"')
 
 exec("""
