@@ -6702,9 +6702,15 @@ def get_chat_response(message, history: list):
 
     nl = "\n"
     including = "\n".join(including)
+
+    if orig_lang is None:
+        msg = f"Got a new message.{nl}{nl}The message including the following types of data:{nl}{including}"
+    else:
+        msg = f"Got a new message in {language_codes[orig_lang]}.{nl}{nl}The message including the following types of data:{nl}{including}"
+
     log(
         "Chat",
-        f"Got a message in {language_codes[orig_lang]}.{nl}{nl}The message including the following types of data:{nl}{including}",
+        msg,
     )
 
     response = answer(history)
