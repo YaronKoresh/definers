@@ -1,2 +1,0 @@
-runpod
-definers @ git+https://github.com/YaronKoresh/definers.git

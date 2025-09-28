@@ -1,0 +1,10 @@
+FROM python:3.11.1-slim
+
+WORKDIR ../
+
+COPY src .
+COPY pyproject.toml .
+
+RUN pip install .
+
+CMD ["python", "-c", "from definers import start; start('image')"]

@@ -249,6 +249,7 @@ dependencies = [
     "stopes[inference-cpu] @ git+https://github.com/YaronKoresh/stopes.git",
     "chatterbox-tts @ git+https://github.com/YaronKoresh/chatterbox.git",
     "fairseq @ git+https://github.com/YaronKoresh/fairseq.git",
+    "faiss @ https://github.com/YaronKoresh/faiss/releases/download/6470b8d/faiss-1.12.0-py3-none-manylinux_2_35_x86_64.whl",
     "basic-pitch @ git+https://github.com/YaronKoresh/basic-pitch.git",
     "madmom @ git+https://github.com/CPJKU/madmom@0551aa8f48d71a367d92b5d3a347a0cf7cd97cc9",
     "refiners @ git+https://github.com/finegrain-ai/refiners@d288e94fa8eed1386bd28cd0d5ceb8109c3ff398",
@@ -288,7 +289,6 @@ cuda = [
     'nvidia-nccl-cu12==2.27.3; platform_system == "Linux" and platform_machine == "x86_64"',
     'nvidia-nvjitlink-cu12==12.8.93; platform_system == "Linux" and platform_machine == "x86_64"',
     'nvidia-nvtx-cu12==12.8.90; platform_system == "Linux" and platform_machine == "x86_64"',
-    "faiss @ https://github.com/YaronKoresh/faiss/releases/download/6470b8d/faiss-1.12.0-py3-none-manylinux_2_35_x86_64.whl",
 ]
 
 [tool.autoflake]
