@@ -9,7 +9,7 @@ os.system(
 )
 
 exec(
-    """
+"""
 from definers import start
 start("image")
 """
