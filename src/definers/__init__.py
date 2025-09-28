@@ -10425,16 +10425,16 @@ def start(proj: str):
                     upscale_now = gr.Button("Upscale")
                     add_titles = gr.Button("Add title(s)")
             generate_image.click(
-                fn=keep_alive,
-                inputs=[gr.State(handle_generation), data, width_input, height_input],
+                fn=keep_alive(handle_generation),
+                inputs=[data, width_input, height_input],
                 outputs=[cover],
             )
             upscale_now.click(
-                fn=keep_alive, inputs=[gr.State(handle_upscaling), cover], outputs=[cover]
+                fn=keep_alive(handle_upscaling), inputs=[cover], outputs=[cover]
             )
             add_titles.click(
-                fn=keep_alive,
-                inputs=[gr.State(title), cover, top, middle, bottom],
+                fn=keep_alive(title),
+                inputs=[cover, top, middle, bottom],
                 outputs=[cover],
             )
         app.launch(server_name="0.0.0.0", server_port=7860)
