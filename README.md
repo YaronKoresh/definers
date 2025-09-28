@@ -72,5 +72,3 @@ Contributions are welcome! If you have a feature request, bug report, or want to
 This project is licensed under the MIT License - see the [LICENSE](https://github.com/YaronKoresh/definers/LICENSE) file for details.
 
 
-
-
