@@ -1,7 +1,7 @@
 services:
   image:
     container_name: image
-    image: yaronkoresh/image
+    image: yaronkoresh/image:latest
     build:
       context: ../
       dockerfile: ./docker/image
