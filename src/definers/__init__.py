@@ -44,7 +44,7 @@ from ctypes.util import find_library
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from functools import lru_cache
+from functools import lru_cache, partial
 from glob import glob
 from pathlib import Path
 from string import ascii_letters, digits, punctuation
@@ -10325,7 +10325,10 @@ def infer(task: str, inference_file: str, model_type: str = None):
     return output_filename
 
 
-def keep_alive(func, *args, **kwargs):
+def keep_alive(f):
+
+  def _keep_alive(func, *args, **kwargs):
+  
     result_container = [None]
 
     def thread_target():
@@ -10347,6 +10350,8 @@ def keep_alive(func, *args, **kwargs):
         raise result_container[0]
 
     yield result_container[0]
+
+  return partial(_keep_alive, f)
 
 
 def start(proj: str):
