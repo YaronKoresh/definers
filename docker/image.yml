@@ -3,5 +3,6 @@ services:
     container_name: image
     image: yaronkoresh/image:latest
     build:
-      context: ../
-      dockerfile: ./docker/image
+      context: .
+      dockerfile: image.docker
+      no_cache: true

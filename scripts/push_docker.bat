@@ -3,7 +3,7 @@
 cd %~dp0
 
 set "tag_id=latest"
-set /p "image_name=Please write the project name: "
+set /p "image_name=Please choose a project: "
 
 for /f "delims=" %%i in ('docker images --filter "reference=yaronkoresh/%image_name%" --format "{{.ID}}"') do (
     set "image_id=%%i"
