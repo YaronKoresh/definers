@@ -6,5 +6,5 @@ os.system('pip install --no-cache-dir --force-reinstall "definers @ git+https://
 
 exec("""
 from definers import start
-start("image")
+start("audio")
 """)

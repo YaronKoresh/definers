@@ -9776,9 +9776,9 @@ def start(proj:str):
     proj = proj.strip().lower()
 
     if proj == "image":
-        init_pretrained_model( "translate", True)
-        init_pretrained_model( "summary", True )
-        init_pretrained_model( "image", True )
+        init_pretrained_model( "translate" )
+        init_pretrained_model( "summary" )
+        init_pretrained_model( "image" )
         init_upscale()
 
         def title(image_path,top,middle,bottom):
@@ -9820,9 +9820,9 @@ def start(proj:str):
         app.queue().launch(inbrowser=True)
 
     elif proj == "chat":
-        init_pretrained_model("summary", True)
-        init_pretrained_model("answer", True)
-        init_pretrained_model("translate", True)
+        init_pretrained_model("summary")
+        init_pretrained_model("answer")
+        init_pretrained_model("translate")
 
         def _get_chat_response(message, history):
             return get_chat_response(message, history)

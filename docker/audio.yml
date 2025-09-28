@@ -1,0 +1,8 @@
+services:
+  audio:
+    container_name: audio
+    image: yaronkoresh/audio:latest
+    build:
+      context: .
+      dockerfile: audio.docker
+      no_cache: true
