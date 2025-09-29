@@ -10376,8 +10376,13 @@ def keep_alive(fn, outputs:int=1):
 def start(proj: str):
     import gradio as gr
 
+    global np
+    global _np
+    
     pip_install("numpy==1.26.4 scipy==1.15.3")
 
+    np, _np = patch_cupy_numpy()
+    
     proj = proj.strip().lower()
 
     if proj == "image":
