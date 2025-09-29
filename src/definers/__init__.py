@@ -10339,37 +10339,24 @@ def keep_alive(fn, outputs:int=1):
     import gradio as gr
 
     def worker(*args, **kwargs):
-        result_container = [None]
+        result_container = [(gr.update(),) * outputs]
         
         def thread_target():
             try:
                 result_container[0] = fn(*args, **kwargs)
             except Exception as e:
-                result_container[0] = e
+                catch(e)
 
-        thread = threading.Thread(target=thread_target)
-        thread.start()
+        t = thread(thread_target)
 
-        while thread.is_alive():
-            yield (gr.update(),) * outputs
+        while t.is_alive():
+            yield result_container[0]
             sleep(1)
-        thread.join()
+        
+        wait(t)
 
-        final_result = result_container[0]
-        if isinstance(final_result, Exception):
-            raise final_result
-
-        if isinstance(final_result, tuple):
-            if len(final_result) > outputs:
-                yield final_result[:outputs]
-            elif len(final_result) < outputs:
-                dif = outputs - len(final_result)
-                yield final_result + (gr.update(),) * dif
-            else:
-                yield final_result
-        else:
-            yield (final_result,) * outputs
-            
+        return result_container[0]
+        
     return worker
 
 
