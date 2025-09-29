@@ -10376,7 +10376,7 @@ def keep_alive(fn, outputs:int=1):
 def start(proj: str):
     import gradio as gr
 
-    pip_install("numpy==1.26.4 scipy")
+    pip_install("numpy==1.26.4 scipy==1.15.3")
 
     proj = proj.strip().lower()
 
