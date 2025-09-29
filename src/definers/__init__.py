@@ -3507,18 +3507,22 @@ def is_clusters_model(model):
     return hasattr(model, "cluster_centers_")
 
 
-def pip_install(pack):
-    if (
-        pack.startswith("https://")
-        or pack.startswith("http://")
-        and pack.endswith(".whl")
-    ):
-        temp_path = tmp("whl", keep=False)
-        download_file(pack, temp_path)
-        pack = temp_path
+def pip_install(packs):
+    packs_arr = packs.strip().split()
 
+    for idx, pack in enumerate(packs_arr):
+        if (
+            pack.startswith("https://")
+            or pack.startswith("http://")
+            and pack.endswith(".whl")
+        ):
+            temp_path = tmp("whl", keep=False)
+            download_file(pack, temp_path)
+            packs_arr[idx] = temp_path
+
+    packs = " ".join(packs_arr)
     return run(
-        f"{sys.executable} -m pip install --force-reinstall {pack}"
+        f"{sys.executable} -m pip install --force-reinstall {packs}"
     )
 
 
