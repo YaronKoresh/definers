@@ -10332,6 +10332,7 @@ def infer(task: str, inference_file: str, model_type: str = None):
 
 
 def keep_alive(fn, outputs:int=1):
+    import gradio as gr
 
     def worker(*args, **kwargs):
         result_container = [None]
@@ -10346,8 +10347,8 @@ def keep_alive(fn, outputs:int=1):
         thread.start()
 
         while thread.is_alive():
-            yield (None,) * outputs
-            time.sleep(1)
+            yield (gr.update(),) * outputs
+            sleep(1)
         thread.join()
 
         final_result = result_container[0]
@@ -10359,7 +10360,7 @@ def keep_alive(fn, outputs:int=1):
                 yield final_result[:outputs]
             elif len(final_result) < outputs:
                 dif = outputs - len(final_result)
-                yield final_result + (None,) * dif
+                yield final_result + (gr.update(),) * dif
             else:
                 yield final_result
         else:
