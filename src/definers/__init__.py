@@ -3527,7 +3527,7 @@ def pip_install(packs):
     packs = " ".join(packs_arr)
     
     return run(
-        f"pip install --force-reinstall {packs}"
+        f"pip install {packs}"
     )
 
 
