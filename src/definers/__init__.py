@@ -1462,14 +1462,19 @@ def init_model_file(
                 model.eval()
                 print("Model set to evaluation mode.")
 
-        if not turbo:
+        if turbo:
             try:
-                pipe.vae.enable_slicing()
+                model = compile_model(model)
+            except Exception as e:
+                pass
+        else:
+            try:
+                model.vae.enable_slicing()
             except:
                 pass
 
             try:
-                pipe.vae.enable_tiling()
+                model.vae.enable_tiling()
             except:
                 pass
 
@@ -3521,7 +3526,7 @@ def pip_install(packs):
             packs_arr[idx] = temp_path
         else:
             run(
-                f"{sys.executable} -m pip uninstall -y { pack.split("=")[0].split("<")[0].split(">")[0] }"
+                f'{sys.executable} -m pip uninstall -y { pack.split("=")[0].split("<")[0].split(">")[0] }'
             )
             
     packs = " ".join(packs_arr)
@@ -5710,31 +5715,39 @@ py-modules = {py_modules}
             trust_remote_code=True,
         ).to(device())
 
-    if turbo is False:
+    if turbo:
         try:
-            model.enable_vae_slicing()
+            model = compile_model(model)
         except Exception as e:
+            pass
+    else:
+        try:
+            model.vae.enable_slicing()
+        except:
             pass
 
         try:
-            model.enable_vae_tiling()
-        except Exception as e:
+            model.vae.enable_tiling()
+        except:
             pass
 
-        try:
-            model.enable_model_cpu_offload()
-        except Exception as e:
-            pass
-
-        try:
-            model.enable_sequential_cpu_offload()
-        except Exception as e:
-            pass
-
-        try:
-            model.enable_attention_slicing(1)
-        except Exception as e:
-            pass
+        optimizations = [
+                "enable_vae_slicing",
+                "enable_vae_tiling",
+                "enable_model_cpu_offload",
+                "enable_sequential_cpu_offload",
+                "enable_attention_slicing",
+        ]
+        for opt in optimizations:
+            try:
+                if opt == "enable_attention_slicing":
+                    getattr(model, opt)(1)
+                else:
+                    getattr(model, opt)()
+            except AttributeError:
+                pass
+            except Exception as e:
+                print(f"Could not apply optimization {opt}: {e}")
 
     MODELS[task] = model
 
@@ -10409,6 +10422,53 @@ def infer(task: str, inference_file: str, model_type: str = None):
 
     print(f"Prediction saved to {output_filename}")
     return output_filename
+
+
+def compile_model(model_or_pipeline):
+    import torch
+    import warnings
+
+    try:
+        from diffusers import DiffusionPipeline
+        from diffusers.models.modeling_utils import ModelMixin
+        from transformers import PreTrainedModel
+    except ImportError:
+        warnings.warn("Please install `diffusers` and `transformers` for full functionality.")
+        return model_or_pipeline
+
+    if not hasattr(torch, "compile"):
+        warnings.warn("torch.compile() is not available. Please use PyTorch 2.0 or newer.")
+        return model_or_pipeline
+
+    if isinstance(model_or_pipeline, DiffusionPipeline):
+        print("✅ Detected a Diffusers pipeline. Dynamically compiling submodels...")
+        for attr_name, attr_value in model_or_pipeline.__dict__.items():
+            if isinstance(attr_value, ModelMixin):
+                try:
+                    print(f"   -> Compiling {attr_name}...")
+                    if attr_name == "vae":
+                        attr_value.decode = torch.compile(
+                            attr_value.decode, mode="reduce-overhead", fullgraph=False
+                        )
+                    else:
+                        setattr(model_or_pipeline, attr_name, torch.compile(
+                            attr_value, mode="reduce-overhead", fullgraph=False
+                        ))
+                except Exception as e:
+                    warnings.warn(f"Could not compile submodel '{attr_name}'. Reason: {e}")
+        return model_or_pipeline
+
+    elif isinstance(model_or_pipeline, PreTrainedModel):
+        print("✅ Detected a Transformers model. Compiling the model...")
+        try:
+            return torch.compile(model_or_pipeline, mode="reduce-overhead", fullgraph=False)
+        except Exception as e:
+            warnings.warn(f"Could not compile the model. Reason: {e}")
+            return model_or_pipeline
+
+    else:
+        warnings.warn("Object is not a recognized Diffusers pipeline or Transformers model. No action taken.")
+        return model_or_pipeline
 
 
 def keep_alive(fn, outputs:int=1):
