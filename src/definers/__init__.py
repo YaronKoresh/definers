@@ -1462,12 +1462,7 @@ def init_model_file(
                 model.eval()
                 print("Model set to evaluation mode.")
 
-        if turbo:
-            try:
-                model = compile_model(model)
-            except Exception as e:
-                pass
-        else:
+        if not turbo:
             try:
                 model.vae.enable_slicing()
             except:
