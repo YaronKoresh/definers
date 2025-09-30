@@ -10427,6 +10427,8 @@ def infer(task: str, inference_file: str, model_type: str = None):
 def compile_model(model_or_pipeline):
     import torch
     import warnings
+    import types
+    import inspect
 
     try:
         from diffusers import DiffusionPipeline
@@ -10440,13 +10442,33 @@ def compile_model(model_or_pipeline):
         warnings.warn("torch.compile() is not available. Please use PyTorch 2.0 or newer.")
         return model_or_pipeline
 
-    compile_kwargs = {"mode": "reduce-overhead", "fullgraph": False, "backend": "aot_eager"}
+    compile_kwargs = {
+        "mode": "reduce-overhead",
+        "fullgraph": False,
+        "backend": "aot_eager",
+        "dynamic": True,
+    }
+
+    def patch_forward(obj):
+        if not hasattr(obj, "forward"):
+            return obj
+        orig_forward = obj.forward
+        src = inspect.getsource(orig_forward)
+        if ".to(sample.device)" in src:
+            patched_src = src.replace(".to(sample.device)", ".to(sample.device.type)")
+            globals_dict = orig_forward.__globals__.copy()
+            exec(patched_src, globals_dict)
+            new_forward = globals_dict[orig_forward.__name__]
+            obj.forward = types.MethodType(new_forward, obj)
+            print(f"⚡️ Patched {type(obj).__name__}.forward to avoid .to(sample.device) bug for torch.compile.")
+        return obj
 
     if isinstance(model_or_pipeline, DiffusionPipeline):
         print("✅ Detected a Diffusers pipeline. Dynamically compiling submodels...")
         for attr_name, attr_value in model_or_pipeline.__dict__.items():
             if isinstance(attr_value, ModelMixin):
                 try:
+                    attr_value = patch_forward(attr_value)
                     print(f"   -> Compiling {attr_name}...")
                     if attr_name == "vae":
                         attr_value.decode = torch.compile(
