@@ -3532,7 +3532,7 @@ def pip_install(packs):
     packs = " ".join(packs_arr)
     
     return run(
-        f"pip install --upgrade --force-reinstall {packs}"
+        f"pip install --force-reinstall {packs}"
     )
 
 
