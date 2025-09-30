@@ -3526,13 +3526,13 @@ def pip_install(packs):
             packs_arr[idx] = temp_path
         else:
             run(
-                f'{sys.executable} -m pip uninstall -y { pack.split("=")[0].split("<")[0].split(">")[0] }'
+                f'pip uninstall -y { pack.split("=")[0].split("<")[0].split(">")[0] }'
             )
             
     packs = " ".join(packs_arr)
     
     return run(
-        f"{sys.executable} -m pip install --upgrade --force-reinstall {packs}"
+        f"pip install --upgrade --force-reinstall {packs}"
     )
 
 
