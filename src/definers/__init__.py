@@ -10499,8 +10499,8 @@ def keep_alive(fn, outputs:int=1):
         t = thread(thread_target)
 
         while t.is_alive():
+            sleep(5)
             yield result_container[0]
-            sleep(1)
         
         wait(t)
 
