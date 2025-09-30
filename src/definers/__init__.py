@@ -3519,8 +3519,13 @@ def pip_install(packs):
             temp_path = tmp("whl", keep=False)
             download_file(pack, temp_path)
             packs_arr[idx] = temp_path
-
+        else:
+            run(
+                f"{sys.executable} -m pip uninstall -y {pack}"
+            )
+            
     packs = " ".join(packs_arr)
+    
     return run(
         f"{sys.executable} -m pip install --upgrade --force-reinstall {packs}"
     )
