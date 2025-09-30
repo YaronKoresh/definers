@@ -3522,7 +3522,7 @@ def pip_install(packs):
 
     packs = " ".join(packs_arr)
     return run(
-        f"{sys.executable} -m pip install --force-reinstall {packs}"
+        f"{sys.executable} -m pip install --upgrade --force-reinstall {packs}"
     )
 
 
@@ -10366,7 +10366,7 @@ def start(proj: str):
     global np
     global _np
     
-    pip_install("numpy==1.26.4 scipy==1.12.0")
+    pip_install("numpy==1.26.4 scipy==1.12.0 transformers==4.53.0 nltk==3.8.1")
 
     np, _np = patch_cupy_numpy()
     
