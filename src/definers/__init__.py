@@ -5715,12 +5715,7 @@ py-modules = {py_modules}
             trust_remote_code=True,
         ).to(device())
 
-    if turbo:
-        try:
-            model = compile_model(model)
-        except Exception as e:
-            pass
-    else:
+    if not turbo:
         try:
             model.vae.enable_slicing()
         except:
@@ -10445,7 +10440,6 @@ def compile_model(model_or_pipeline):
     compile_kwargs = {
         "mode": "reduce-overhead",
         "fullgraph": False,
-        "backend": "aot_eager",
         "dynamic": True,
     }
 
