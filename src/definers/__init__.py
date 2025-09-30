@@ -3526,6 +3526,69 @@ def pip_install(packs):
     )
 
 
+def modify_wheel_requirements(wheel_path:str, requirements_map:dict):
+    print(f"Modifying metadata for wheel: {wheel_path}")
+    if not os.path.exists(wheel_path):
+        raise FileNotFoundError(f"Wheel file not found at {wheel_path}")
+
+    temp_dir = tmp(dir=True)
+    output_dir = os.path.dirname(wheel_path) or '.'
+    wheel_filename = os.path.basename(wheel_path)
+
+    try:
+        with zipfile.ZipFile(wheel_path, 'r') as wheel_zip:
+            wheel_zip.extractall(temp_dir)
+        metadata_files = paths(os.path.join(temp_dir, '*.dist-info', 'METADATA'))
+        if not metadata_files:
+            raise FileNotFoundError("Could not find METADATA file in wheel.")
+        metadata_path = metadata_files[0]
+
+        with open(metadata_path, 'r', encoding='utf-8') as f:
+            metadata_content = f.read()
+
+        for package_name, version_specifier in requirements_map.items():
+            pattern = re.compile(
+                r"^(Requires-Dist:\s*{}(\s|\[|;|$).*)$".format(re.escape(package_name)),
+                re.IGNORECASE | re.MULTILINE
+            )
+            
+            if version_specifier:
+                replacement = f"Requires-Dist: {package_name} ({version_specifier})"
+                found = pattern.search(metadata_content)
+                if found:
+                    metadata_content = pattern.sub(replacement, metadata_content)
+                    print(f"Modified dependency: {package_name} -> {version_specifier}")
+                else:
+                    metadata_content += f"\n{replacement}"
+                    print(f"Added new dependency: {package_name} ({version_specifier})")
+            else:
+                metadata_content, count = pattern.subn("", metadata_content)
+                if count > 0:
+                    print(f"Removed dependency: {package_name}")
+
+        metadata_content = "\n".join(line for line in metadata_content.splitlines() if line.strip())
+
+        with open(metadata_path, 'w', encoding='utf-8') as f:
+            f.write(metadata_content)
+
+        new_wheel_path = os.path.join(output_dir, wheel_filename)
+        if os.path.abspath(wheel_path) == os.path.abspath(new_wheel_path):
+            os.remove(wheel_path)
+
+        with zipfile.ZipFile(new_wheel_path, 'w', zipfile.ZIP_DEFLATED) as new_wheel_zip:
+            for root, _, files in os.walk(temp_dir):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    arcname = os.path.relpath(file_path, temp_dir)
+                    new_wheel_zip.write(file_path, arcname)
+
+        print(f"Repacked wheel to: {new_wheel_path}")
+        return new_wheel_path
+
+    finally:
+        delete(temp_dir)
+
+
 def build_faiss():
     with cwd():
         git("YaronKoresh", "faiss", parent="./xfaiss")
@@ -3598,14 +3661,22 @@ def build_faiss():
             f"{sys.executable} -m auditwheel repair {any_wheel_path} -w {repaired_wheel_dir}"
         )
 
-        return paths(f"{repaired_wheel_dir}/faiss-*.whl")[0]
+        required_wheel_path = paths(f"{repaired_wheel_dir}/faiss-*.whl")[0]
+        
+        print("faiss - stage 6: Modifying final wheel metadata for runtime constraints")
+        dependency_constraints = {
+            'numpy': '==1.26.4'
+        }
+        final_wheel_path = modify_wheel_requirements(repaired_wheel_path, dependency_constraints)
 
+        return final_wheel_path
+        
     except subprocess.CalledProcessError as e:
-        print(f"Error during installation: {e}")
+        catch(f"Error during installation: {e}")
     except FileNotFoundError as e:
-        print(f"File not found error: {e}")
+        catch(f"File not found error: {e}")
     except Exception as e:
-        print(f"An unexpected error occurred: {e}")
+        catch(f"An unexpected error occurred: {e}")
 
 
 def simple_text(prompt):
