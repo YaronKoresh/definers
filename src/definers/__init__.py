@@ -10440,6 +10440,8 @@ def compile_model(model_or_pipeline):
         warnings.warn("torch.compile() is not available. Please use PyTorch 2.0 or newer.")
         return model_or_pipeline
 
+    compile_kwargs = {"mode": "reduce-overhead", "fullgraph": False, "backend": "aot_eager"}
+
     if isinstance(model_or_pipeline, DiffusionPipeline):
         print("✅ Detected a Diffusers pipeline. Dynamically compiling submodels...")
         for attr_name, attr_value in model_or_pipeline.__dict__.items():
@@ -10448,11 +10450,11 @@ def compile_model(model_or_pipeline):
                     print(f"   -> Compiling {attr_name}...")
                     if attr_name == "vae":
                         attr_value.decode = torch.compile(
-                            attr_value.decode, mode="reduce-overhead", fullgraph=False
+                            attr_value.decode, **compile_kwargs
                         )
                     else:
                         setattr(model_or_pipeline, attr_name, torch.compile(
-                            attr_value, mode="reduce-overhead", fullgraph=False
+                            attr_value, **compile_kwargs
                         ))
                 except Exception as e:
                     warnings.warn(f"Could not compile submodel '{attr_name}'. Reason: {e}")
@@ -10461,7 +10463,7 @@ def compile_model(model_or_pipeline):
     elif isinstance(model_or_pipeline, PreTrainedModel):
         print("✅ Detected a Transformers model. Compiling the model...")
         try:
-            return torch.compile(model_or_pipeline, mode="reduce-overhead", fullgraph=False)
+            return torch.compile(model_or_pipeline, **compile_kwargs)
         except Exception as e:
             warnings.warn(f"Could not compile the model. Reason: {e}")
             return model_or_pipeline
