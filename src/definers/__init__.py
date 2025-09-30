@@ -10440,7 +10440,12 @@ def compile_model(model_or_pipeline):
         warnings.warn("torch.compile() is not available. Please use PyTorch 2.0 or newer.")
         return model_or_pipeline
 
-    compile_kwargs = {"mode": "reduce-overhead", "fullgraph": False, "backend": "aot_eager"}
+    compile_kwargs = {
+        "mode": "reduce-overhead",
+        "fullgraph": False,
+        "backend": "aot_eager",
+        "dynamic": True,
+    }
 
     if isinstance(model_or_pipeline, DiffusionPipeline):
         print("✅ Detected a Diffusers pipeline. Dynamically compiling submodels...")
