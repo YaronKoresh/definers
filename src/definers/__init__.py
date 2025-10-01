@@ -82,6 +82,7 @@ logger = _init_logger()
 
 
 def patch_cupy_numpy():
+    from numpy.lib import recfunctions
     import numpy as _np
 
     type_aliases = {
@@ -118,7 +119,6 @@ def patch_cupy_numpy():
         _np.asscalar = asscalar
 
     if not hasattr(_np, 'rec'):
-        from numpy.lib import recfunctions
 
         class NumpyRec:
             
