@@ -101,7 +101,7 @@ def patch_cupy_numpy():
         "str_": np.str_,
         "string_": np.bytes_,
         "strings": np.bytes_,
-        "unicode": np.unicode_,
+        "unicode": np.str_,
     }
     func_aliases = {
         "round_": np.round,
