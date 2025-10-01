@@ -62,6 +62,7 @@ dependencies = [
     "tensorboard>=2.18.0,<2.19.0",
     "tensorflow>=2.18.0,<2.19.0",
     "torch>=2.8.0,<2.9.0",
+    "torchvision>=2.8.0,<2.9.0",
     "transformers>=4.53.0,<4.54.0",
     "uvicorn>=0.35.0,<0.36.0",
     "yarl>=1.20.0,<1.21.0",
