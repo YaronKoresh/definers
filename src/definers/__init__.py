@@ -115,6 +115,19 @@ def patch_cupy_numpy():
     _set_aliases(np, type_aliases)
     _set_aliases(np, func_aliases)
 
+    if "char" not in getattr(np, '__dict__', {}):
+        import types
+        setattr(np, "char", types.SimpleNamespace())
+
+    char_funcs = {
+        "encode": lambda s, encoding=None: bytes(s, encoding or "utf-8"),
+        "decode": lambda b, encoding=None: b.decode(encoding or "utf-8"),
+    }
+    
+    for name, func in char_funcs.items():
+        if not hasattr(np.char, name):
+            setattr(np.char, name, func)
+
     if "asscalar" not in getattr(np, '__dict__', {}):
         np.asscalar = lambda a: a.item()
 
