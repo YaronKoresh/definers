@@ -115,7 +115,7 @@ def patch_cupy_numpy():
     if not hasattr(np, "asscalar"):
         np.asscalar = lambda a: a.item()
 
-    if not hasattr(np, 'rec'):
+    if 'rec' not in getattr(np, '__dict__', {}):
         class NumpyRec:
             @staticmethod
             def append_fields(base, names, data, dtypes=None):
