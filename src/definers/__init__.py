@@ -82,124 +82,96 @@ logger = _init_logger()
 
 
 def patch_cupy_numpy():
+    import numpy as np
     from numpy.lib import recfunctions
-    import numpy as _np
+
+    def _set_aliases(module, aliases):
+        for alias, target in aliases.items():
+            if not hasattr(module, alias):
+                setattr(module, alias, target)
 
     type_aliases = {
-        "intp": _np.int_,
-        "float": _np.float64,
-        "int": _np.int64,
-        "bool": _np.bool_,
-        "complex": _np.complex128,
-        "object": _np.object_,
-        "str": _np.str_,
-        "string_": _np.bytes_,
+        "intp": np.int_,
+        "float": np.float64,
+        "int": np.int64,
+        "bool": np.bool_,
+        "complex": np.complex128,
+        "object": np.object_,
+        "str": np.str_,
+        "string_": np.bytes_,
     }
-    for alias, target in type_aliases.items():
-        if not hasattr(_np, alias):
-            setattr(_np, alias, target)
-
     func_aliases = {
-        "round_": _np.round,
-        "product": _np.prod,
-        "cumproduct": _np.cumprod,
-        "alltrue": _np.all,
-        "sometrue": _np.any,
-        "rank": _np.ndim,
+        "round_": np.round,
+        "product": np.prod,
+        "cumproduct": np.cumprod,
+        "alltrue": np.all,
+        "sometrue": np.any,
+        "rank": np.ndim,
     }
-    for alias, target in func_aliases.items():
-        if not hasattr(_np, alias):
-            setattr(_np, alias, target)
 
-    if not hasattr(_np, "asscalar"):
+    _set_aliases(np, type_aliases)
+    _set_aliases(np, func_aliases)
 
-        def asscalar(a):
-            return a.item()
+    if not hasattr(np, "asscalar"):
+        np.asscalar = lambda a: a.item()
 
-        _np.asscalar = asscalar
-
-    if not hasattr(_np, 'rec'):
-
+    if not hasattr(np, 'rec'):
         class NumpyRec:
-            
             @staticmethod
             def append_fields(base, names, data, dtypes=None):
                 return recfunctions.append_fields(base, names, data, dtypes=dtypes)
-
             @staticmethod
             def drop_fields(base, names):
                 return recfunctions.drop_fields(base, names)
-
             @staticmethod
             def rename_fields(base, name_dict):
                 return recfunctions.rename_fields(base, name_dict)
-
             @staticmethod
             def merge_arrays(arrays, fill_value=-1, flatten=False):
                 return recfunctions.merge_arrays(arrays, fill_value=fill_value, flatten=flatten)
+        np.rec = NumpyRec()
 
-        _np.rec = NumpyRec()
-
-    if not hasattr(_np.core, "machar"):
-
+    if not hasattr(np.core, "machar"):
         class MachAr:
             pass
+        np.core.machar = MachAr
 
-        _np.core.machar = MachAr
-
-    if hasattr(_np, "testing") and not hasattr(_np.testing, "Tester"):
-
+    if hasattr(np, "testing") and not hasattr(np.testing, "Tester"):
         class Tester:
             def test(self, label="fast", extra_argv=None):
                 return True
+        np.testing.Tester = Tester
 
-        _np.testing.Tester = Tester
-
-    if not hasattr(_np, "distutils"):
-
+    if not hasattr(np, "distutils"):
         class DummyDistutils:
             class MiscUtils:
                 def get_info(self, *args, **kwargs):
                     return {}
+        np.distutils = DummyDistutils()
 
-        _np.distutils = DummyDistutils()
+    if not hasattr(np, "set_string_function"):
+        np.set_string_function = lambda *args, **kwargs: None
 
-    if not hasattr(_np, "set_string_function"):
-
-        def set_string_function(*args, **kwargs):
-            pass
-
-        _np.set_string_function = set_string_function
-
-    _original_finfo = _np.finfo
-
+    _original_finfo = np.finfo
     def patched_finfo(dtype):
         try:
             return _original_finfo(dtype)
         except TypeError:
-            return _np.iinfo(dtype)
+            return np.iinfo(dtype)
+    np.finfo = patched_finfo
 
-    _np.finfo = patched_finfo
+    if not hasattr(np, "_no_nep50_warning"):
+        def dummy_npwarn_decorator_factory():
+            def npwarn_decorator(x):
+                return x
+            return npwarn_decorator
+        np._no_nep50_warning = dummy_npwarn_decorator_factory
 
-    def dummy_npwarn_decorator_factory():
-        def npwarn_decorator(x):
-            return x
-
-        return npwarn_decorator
-
-    _np._no_nep50_warning = getattr(
-        _np, "_no_nep50_warning", dummy_npwarn_decorator_factory
-    )
-
-    _np.__version__ = "1.26.4"
-    
     try:
-        import cupy as np
-    except:
-        np = _np
-
-    return np, _np
-
+        import cupy
+        return cupy, np
+    except ImportError:
+        return np, np
 
 np, _np = patch_cupy_numpy()
 
