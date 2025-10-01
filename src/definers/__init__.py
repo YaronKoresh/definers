@@ -3517,15 +3517,11 @@ def pip_install(packs):
             temp_path = tmp("whl", keep=False)
             download_file(pack, temp_path)
             packs_arr[idx] = temp_path
-        else:
-            run(
-                f'pip uninstall -y { pack.split("=")[0].split("<")[0].split(">")[0] }'
-            )
-            
+
     packs = " ".join(packs_arr)
     
     return run(
-        f"pip install {packs}"
+        f"pip install --force-reinstall {packs}"
     )
 
 
@@ -10509,6 +10505,8 @@ def keep_alive(fn, outputs:int=1):
 
 def start(proj: str):
     import gradio as gr
+
+    pip_install("numpy==1.26.4")
     
     proj = proj.strip().lower()
 
