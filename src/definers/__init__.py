@@ -117,6 +117,29 @@ def patch_cupy_numpy():
 
         _np.asscalar = asscalar
 
+    if not hasattr(_np, 'rec'):
+        from numpy.lib import recfunctions
+
+        class NumpyRec:
+            
+            @staticmethod
+            def append_fields(base, names, data, dtypes=None):
+                return recfunctions.append_fields(base, names, data, dtypes=dtypes)
+
+            @staticmethod
+            def drop_fields(base, names):
+                return recfunctions.drop_fields(base, names)
+
+            @staticmethod
+            def rename_fields(base, name_dict):
+                return recfunctions.rename_fields(base, name_dict)
+
+            @staticmethod
+            def merge_arrays(arrays, fill_value=-1, flatten=False):
+                return recfunctions.merge_arrays(arrays, fill_value=fill_value, flatten=flatten)
+
+        _np.rec = NumpyRec()
+
     if not hasattr(_np.core, "machar"):
 
         class MachAr:
@@ -169,11 +192,11 @@ def patch_cupy_numpy():
     )
 
     _np.__version__ = "1.26.4"
-
+    
     try:
         import cupy as np
     except:
-        import numpy as np
+        np = _np
 
     return np, _np
 
