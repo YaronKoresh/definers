@@ -10515,7 +10515,7 @@ def start(proj: str):
     global np
     global _np
     
-    pip_install("accelerate==1.10.1 bitsandbytes==0.47.0 torch==2.8.0 numpy==1.26.4 scipy==1.12.0 transformers==4.53.0 nltk==3.9.1")
+    pip_install("numpy==1.26.4")
     
     np, _np = patch_cupy_numpy()
     
