@@ -87,7 +87,7 @@ def patch_cupy_numpy():
 
     def _set_aliases(module, aliases):
         for alias, target in aliases.items():
-            if not hasattr(module, alias):
+            if alias not in getattr(module, '__dict__', {}):
                 setattr(module, alias, target)
 
     type_aliases = {
@@ -115,7 +115,7 @@ def patch_cupy_numpy():
     _set_aliases(np, type_aliases)
     _set_aliases(np, func_aliases)
 
-    if not hasattr(np, "asscalar"):
+    if "asscalar" not in getattr(np, '__dict__', {}):
         np.asscalar = lambda a: a.item()
 
     if 'rec' not in getattr(np, '__dict__', {}):
@@ -134,7 +134,7 @@ def patch_cupy_numpy():
                 return recfunctions.merge_arrays(arrays, fill_value=fill_value, flatten=flatten)
         np.rec = NumpyRec()
 
-    if not hasattr(np.core, "machar"):
+    if "machar" not in getattr(np, '__dict__', {}):
         class MachAr:
             pass
         np.core.machar = MachAr
@@ -145,14 +145,14 @@ def patch_cupy_numpy():
                 return True
         np.testing.Tester = Tester
 
-    if not hasattr(np, "distutils"):
+    if "distutils" not in getattr(np, '__dict__', {}):
         class DummyDistutils:
             class MiscUtils:
                 def get_info(self, *args, **kwargs):
                     return {}
         np.distutils = DummyDistutils()
 
-    if not hasattr(np, "set_string_function"):
+    if "set_string_function" not in getattr(np, '__dict__', {}):
         np.set_string_function = lambda *args, **kwargs: None
 
     _original_finfo = np.finfo
@@ -163,7 +163,7 @@ def patch_cupy_numpy():
             return np.iinfo(dtype)
     np.finfo = patched_finfo
 
-    if not hasattr(np, "_no_nep50_warning"):
+    if "_no_nep50_warning" not in getattr(np, '__dict__', {}):
         def dummy_npwarn_decorator_factory():
             def npwarn_decorator(x):
                 return x
