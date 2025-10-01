@@ -122,6 +122,63 @@ def patch_cupy_numpy():
     char_funcs = {
         "encode": lambda s, encoding=None: bytes(s, encoding or "utf-8"),
         "decode": lambda b, encoding=None: b.decode(encoding or "utf-8"),
+    
+        "lower": lambda s: s.lower(),
+        "upper": lambda s: s.upper(),
+        "capitalize": lambda s: s.capitalize(),
+        "casefold": lambda s: s.casefold(),
+        "title": lambda s: s.title(),
+        "swapcase": lambda s: s.swapcase(),
+    
+        "startswith": lambda s, prefix, *args: s.startswith(prefix, *args),
+        "endswith": lambda s, suffix, *args: s.endswith(suffix, *args),
+    
+        "strip": lambda s, chars=None: s.strip(chars) if chars is not None else s.strip(),
+        "lstrip": lambda s, chars=None: s.lstrip(chars) if chars is not None else s.lstrip(),
+        "rstrip": lambda s, chars=None: s.rstrip(chars) if chars is not None else s.rstrip(),
+    
+        "replace": lambda s, old, new, count=-1: s.replace(old, new, count) if count != -1 else s.replace(old, new),
+        "split": lambda s, sep=None, maxsplit=-1: s.split(sep, maxsplit) if sep is not None else s.split(),
+        "rsplit": lambda s, sep=None, maxsplit=-1: s.rsplit(sep, maxsplit) if sep is not None else s.rsplit(),
+        "splitlines": lambda s, keepends=False: s.splitlines(keepends),
+        "partition": lambda s, sep: s.partition(sep),
+        "rpartition": lambda s, sep: s.rpartition(sep),
+        "join": lambda sep, iterable: sep.join(iterable),
+    
+        "count": lambda s, sub, start=None, end=None: s.count(sub, start, end) if (start is not None and end is not None) else (s.count(sub, start) if start is not None else s.count(sub)),
+        "find": lambda s, sub, start=None, end=None: s.find(sub, start, end) if (start is not None and end is not None) else (s.find(sub, start) if start is not None else s.find(sub)),
+        "rfind": lambda s, sub, start=None, end=None: s.rfind(sub, start, end) if (start is not None and end is not None) else (s.rfind(sub, start) if start is not None else s.rfind(sub)),
+        "index": lambda s, sub, start=None, end=None: s.index(sub, start, end) if (start is not None and end is not None) else (s.index(sub, start) if start is not None else s.index(sub)),
+        "rindex": lambda s, sub, start=None, end=None: s.rindex(sub, start, end) if (start is not None and end is not None) else (s.rindex(sub, start) if start is not None else s.rindex(sub)),
+    
+        "zfill": lambda s, width: s.zfill(width),
+        "center": lambda s, width, fillchar=' ': s.center(width, fillchar),
+        "ljust": lambda s, width, fillchar=' ': s.ljust(width, fillchar),
+        "rjust": lambda s, width, fillchar=' ': s.rjust(width, fillchar),
+    
+        "isalpha": lambda s: s.isalpha(),
+        "isalnum": lambda s: s.isalnum(),
+        "isdigit": lambda s: s.isdigit(),
+        "isdecimal": lambda s: s.isdecimal(),
+        "isnumeric": lambda s: s.isnumeric(),
+        "isspace": lambda s: s.isspace(),
+        "islower": lambda s: s.islower(),
+        "isupper": lambda s: s.isupper(),
+        "istitle": lambda s: s.istitle(),
+    
+        "add": lambda a, b: a + b,
+        "multiply": lambda a, n: a * n,
+        "mod": lambda s, values: s % values,
+    
+        "string_": lambda s: str(s),
+        "bytes_": lambda s: bytes(s, "utf-8") if not isinstance(s, bytes) else s,
+    
+        "equal": lambda a, b: a == b,
+        "not_equal": lambda a, b: a != b,
+        "greater": lambda a, b: a > b,
+        "greater_equal": lambda a, b: a >= b,
+        "less": lambda a, b: a < b,
+        "less_equal": lambda a, b: a <= b,
     }
     
     for name, func in char_funcs.items():
