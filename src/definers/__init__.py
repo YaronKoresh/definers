@@ -10626,7 +10626,7 @@ def start(proj: str):
 
     elif proj == "audio":
         os.system(
-            "pip install --upgrade --force-reinstall git+https://github.com/YaronKoresh/audio-studio-pro.git"
+            "pip install git+https://github.com/YaronKoresh/audio-studio-pro.git"
         )
         os.system("audio-studio-pro")
 
