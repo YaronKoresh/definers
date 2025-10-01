@@ -98,7 +98,10 @@ def patch_cupy_numpy():
         "complex": np.complex128,
         "object": np.object_,
         "str": np.str_,
+        "str_": np.str_,
         "string_": np.bytes_,
+        "strings": np.bytes_,
+        "unicode": np.unicode_,
     }
     func_aliases = {
         "round_": np.round,
