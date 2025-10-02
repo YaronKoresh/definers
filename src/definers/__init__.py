@@ -10514,86 +10514,6 @@ def start(proj: str):
     import gradio as gr
     import spaces
 
-    global np
-    global _np
-    global logger
-
-    os.environ["HF_HOME"] = "/opt/ml/checkpoints/"
-    os.environ["HF_DATASETS_CACHE"] = "/opt/ml/checkpoints/"
-    os.environ["GRADIO_ALLOW_FLAGGING"] = "never"
-    os.environ["OMP_NUM_THREADS"] = "4"
-    if sys.platform == "darwin":
-        os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
-    os.environ["DISPLAY"] = ":0.0"
-    os.environ["NUMBA_CACHE_DIR"] = f'{os.environ["HOME"]}/.tmp'
-    os.environ["DISABLE_FLASH_ATTENTION"] = "True"
-    os.environ["GRADIO_WEBSOCKET_ENABLED"] = "False"
-
-    import numpy
-    _np = numpy
-    
-    try:
-        import cupy
-        np = cupy
-    except:
-        np = numpy
-
-    logger = _init_logger()
-
-    importlib.util.find_spec = _find_spec
-
-    if get_os_name() == "linux":
-        apt_install()
-    
-    if _find_spec("dask"):
-        import dask
-        import dask.array
-        import dask.dataframe
-        import dask.diagnostics
-        from dask import base
-        from dask.graph_manipulation import (
-            bind,
-            checkpoint,
-            clone,
-            wait_on,
-        )
-        from dask.optimization import cull, fuse, inline, inline_functions
-        from dask.utils import key_split
-    
-        dask.dataframe.core = dask.dataframe
-        dask.diagnostics.core = dask.diagnostics
-        dask.array.core = dask.array
-    
-        sys.modules["dask.dataframe.core"] = sys.modules["dask.dataframe"]
-        sys.modules["dask.diagnostics.core"] = sys.modules[
-            "dask.diagnostics"
-        ]
-        sys.modules["dask.array.core"] = sys.modules["dask.array"]
-    
-        dask.core = base
-    
-        dask.core.fuse = fuse
-        dask.core.cull = cull
-        dask.core.inline = inline
-        dask.core.inline_functions = inline_functions
-    
-        dask.core.key_split = key_split
-    
-        dask.core.checkpoint = checkpoint
-        dask.core.bind = bind
-        dask.core.wait_on = wait_on
-        dask.core.clone = clone
-    
-        dask.core.get = dask.get
-    
-        def _visualize_wrapper(dsk, **kwargs):
-            return dask.visualize(dsk, **kwargs)
-    
-        dask.core.visualize = _visualize_wrapper
-        dask.core.to_graphviz = _visualize_wrapper
-
-    patch_torch_proxy_mode()
-
     proj = proj.strip().lower()
 
     if proj == "video":
@@ -10882,3 +10802,78 @@ def start(proj: str):
 
     else:
         catch(f"Error: No project called '{ proj }' !")
+
+
+os.environ["HF_HOME"] = "/opt/ml/checkpoints/"
+os.environ["HF_DATASETS_CACHE"] = "/opt/ml/checkpoints/"
+os.environ["GRADIO_ALLOW_FLAGGING"] = "never"
+os.environ["OMP_NUM_THREADS"] = "4"
+if sys.platform == "darwin":
+    os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
+os.environ["DISPLAY"] = ":0.0"
+os.environ["NUMBA_CACHE_DIR"] = f'{os.environ["HOME"]}/.tmp'
+os.environ["DISABLE_FLASH_ATTENTION"] = "True"
+os.environ["GRADIO_WEBSOCKET_ENABLED"] = "False"
+
+import numpy as _np
+
+try:
+    import cupy as np
+except:
+    import numpy as np
+
+logger = _init_logger()
+
+importlib.util.find_spec = _find_spec
+
+if get_os_name() == "linux":
+    apt_install()
+    
+if _find_spec("dask"):
+    import dask
+    import dask.array
+    import dask.dataframe
+    import dask.diagnostics
+    from dask import base
+    from dask.graph_manipulation import (
+        bind,
+        checkpoint,
+        clone,
+        wait_on,
+    )
+    from dask.optimization import cull, fuse, inline, inline_functions
+    from dask.utils import key_split
+    
+    dask.dataframe.core = dask.dataframe
+    dask.diagnostics.core = dask.diagnostics
+    dask.array.core = dask.array
+    
+    sys.modules["dask.dataframe.core"] = sys.modules["dask.dataframe"]
+    sys.modules["dask.diagnostics.core"] = sys.modules[
+        "dask.diagnostics"
+    ]
+    sys.modules["dask.array.core"] = sys.modules["dask.array"]
+    
+    dask.core = base
+    
+    dask.core.fuse = fuse
+    dask.core.cull = cull
+    dask.core.inline = inline
+    dask.core.inline_functions = inline_functions
+    
+    dask.core.key_split = key_split
+    
+    dask.core.checkpoint = checkpoint
+    dask.core.bind = bind
+    dask.core.wait_on = wait_on
+    dask.core.clone = clone
+    
+    dask.core.get = dask.get
+    
+    def _visualize_wrapper(dsk, **kwargs):
+        return dask.visualize(dsk, **kwargs)
+    
+    dask.core.visualize = _visualize_wrapper
+    dask.core.to_graphviz = _visualize_wrapper
+
+patch_torch_proxy_mode()
