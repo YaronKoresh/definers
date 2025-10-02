@@ -10512,6 +10512,7 @@ def keep_alive(fn, outputs:int=1):
 
 def start(proj: str):
     import gradio as gr
+    import spaces
 
     global np
     global _np
@@ -10606,6 +10607,15 @@ def start(proj: str):
 
         chunks = tmp(dir=True)
 
+        def get_chunk_duration(orig_image, prompt, negative_prompt, steps, guidance, duration, fps, seed, chunk_state, progress):
+            BASE_OVERHEAD_SECONDS = 10
+            TIME_PER_STEP_FRAME = 0.15
+    
+            estimated_generation_time = FRAMES_PER_CHUNK * int(steps) * TIME_PER_STEP_FRAME
+            total_seconds = BASE_OVERHEAD_SECONDS + estimated_generation_time
+            return int(total_seconds)
+
+        @spaces.GPU(duration=get_chunk_duration)
         def generate_chunk(
             orig_image, prompt, negative_prompt, steps, guidance, duration, fps, seed,
             chunk_state, progress=gr.Progress()
@@ -10759,11 +10769,13 @@ def start(proj: str):
         def title(image_path, top, middle, bottom):
             return write_on_image(image_path, top, middle, bottom)
 
+        @spaces.GPU(duration=90)
         def handle_generation(text, w, h):
             w, h = get_max_resolution(w, h, mega_pixels=1.5)
             text = optimize_prompt_realism(text)
             return pipe("image", prompt=text, resolution=f"{w}x{h}")
 
+        @spaces.GPU(duration=90)
         def handle_upscaling(path):
             return upscale(path)
 
@@ -10835,6 +10847,7 @@ def start(proj: str):
         init_pretrained_model("answer")
         init_pretrained_model("translate")
 
+        @spaces.GPU(duration=60)
         def _get_chat_response(message, history):
             return get_chat_response(message, history)
 
@@ -10851,25 +10864,21 @@ def start(proj: str):
     elif proj == "faiss":
         whl = build_faiss()
 
-        def calc():
-            return whl
+        @spaces.GPU(duration=10)
+        def nop():
+            return None
 
         with gr.Blocks() as app:
             f = gr.File(label="Download faiss wheel", value=whl)
-            f.change(calc, [], [f])
         app.launch(server_name="0.0.0.0", server_port=7860)
 
     elif proj == "audio":
-        os.system(
-            "pip install git+https://github.com/YaronKoresh/audio-studio-pro.git"
-        )
-        os.system("audio-studio-pro")
+        pip_install("git+https://github.com/YaronKoresh/audio-studio-pro.git")
+        run("audio-studio-pro")
 
     elif proj == "train":
-        os.system(
-            "pip install git+https://github.com/YaronKoresh/teachless.git"
-        )
-        os.system("teachless")
+        pip_install("git+https://github.com/YaronKoresh/teachless.git")
+        run("teachless")
 
     else:
         catch(f"Error: No project called '{ proj }' !")
