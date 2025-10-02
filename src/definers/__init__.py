@@ -3525,7 +3525,6 @@ def pip_install(packs):
             temp_path = tmp("whl", keep=False)
             download_file(pack, temp_path)
             packs_arr[idx] = temp_path
-        else:
             
     packs = " ".join(packs_arr)
     
