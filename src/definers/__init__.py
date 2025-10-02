@@ -5678,9 +5678,14 @@ py-modules = {py_modules}
 
     elif task in ["video"]:
 
-        from diffusers import DiffusionPipeline
+        import torch
+        from diffusers import StableVideoDiffusionPipeline
 
-        model = DiffusionPipeline.from_pretrained(tasks[task], torch_dtype=dtype())
+        model = StableVideoDiffusionPipeline.from_pretrained(
+            tasks[task],
+            torch_dtype=torch.float16,
+            variant="fp16",
+        )
         model.to(device())
 
     elif task in ["image"]:
@@ -10560,6 +10565,9 @@ def start(proj: str):
                 input_image = last_frame
                 gr.Info(f"Generating chunk {current_chunk_index}/{total_chunks} using context from previous chunk...")
 
+            if input_image.mode == "RGBA":
+                input_image = input_image.convert("RGB")
+
             if seed == -1:
                 seed = random.randint(0, 2**32 - 1)
 
@@ -10568,6 +10576,8 @@ def start(proj: str):
             output = MODELS["video"](
                 image=input_image,
                 generator=generator,
+                num_frames=25,
+                decode_chunk_size=2,
             )
     
             chunk_path = full_path(chunks, f"chunk_{current_chunk_index}.gif")
