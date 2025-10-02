@@ -3529,7 +3529,7 @@ def pip_install(packs):
     packs = " ".join(packs_arr)
 
     run(
-        f"{sys.executable} -m pip install --upgrade {packs}"
+        f"pip install --upgrade {packs}"
     )
 
     for idx, pack in enumerate(packs_arr):
