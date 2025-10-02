@@ -54,286 +54,8 @@ from urllib.parse import quote
 
 collections.MutableSequence = collections.abc.MutableSequence
 
-os.environ["HF_HOME"] = "/opt/ml/checkpoints/"
-os.environ["HF_DATASETS_CACHE"] = "/opt/ml/checkpoints/"
-os.environ["GRADIO_ALLOW_FLAGGING"] = "never"
-os.environ["OMP_NUM_THREADS"] = "4"
-if sys.platform == "darwin":
-    os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
-os.environ["DISPLAY"] = ":0.0"
-os.environ["NUMBA_CACHE_DIR"] = f'{os.environ["HOME"]}/.tmp'
-os.environ["DISABLE_FLASH_ATTENTION"] = "True"
-os.environ["GRADIO_WEBSOCKET_ENABLED"] = "False"
 
-def _init_logger():
-    logger = logging.getLogger(__name__)
-    logger.setLevel(logging.DEBUG)
-    console_handler = logging.StreamHandler()
-    formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
-    console_handler.setFormatter(formatter)
-    if not logger.handlers:
-        logger.addHandler(console_handler)
-    return logger
-
-
-logger = _init_logger()
-
-
-def patch_cupy_numpy():
-    import numpy as np
-    from numpy.lib import recfunctions
-
-    def _set_aliases(module, aliases):
-        for alias, target in aliases.items():
-            if alias not in getattr(module, '__dict__', {}):
-                setattr(module, alias, target)
-
-    type_aliases = {
-        "intp": np.int_,
-        "float": np.float64,
-        "int": np.int64,
-        "bool": np.bool_,
-        "complex": np.complex128,
-        "object": np.object_,
-        "str": np.str_,
-        "str_": np.str_,
-        "string_": np.bytes_,
-        "strings": np.bytes_,
-        "unicode": np.str_,
-        "inf": float('inf'),
-        "Inf": float('inf'),
-    }
-    func_aliases = {
-        "round_": np.round,
-        "product": np.prod,
-        "cumproduct": np.cumprod,
-        "alltrue": np.all,
-        "sometrue": np.any,
-        "rank": np.ndim,
-    }
-
-    _set_aliases(np, type_aliases)
-    _set_aliases(np, func_aliases)
-
-    if "char" not in getattr(np, '__dict__', {}):
-        import types
-        setattr(np, "char", types.SimpleNamespace())
-
-    char_funcs = {
-        "encode": lambda s, encoding=None: bytes(s, encoding or "utf-8"),
-        "decode": lambda b, encoding=None: b.decode(encoding or "utf-8"),
-    
-        "lower": lambda s: s.lower(),
-        "upper": lambda s: s.upper(),
-        "capitalize": lambda s: s.capitalize(),
-        "casefold": lambda s: s.casefold(),
-        "title": lambda s: s.title(),
-        "swapcase": lambda s: s.swapcase(),
-    
-        "startswith": lambda s, prefix, *args: s.startswith(prefix, *args),
-        "endswith": lambda s, suffix, *args: s.endswith(suffix, *args),
-    
-        "strip": lambda s, chars=None: s.strip(chars) if chars is not None else s.strip(),
-        "lstrip": lambda s, chars=None: s.lstrip(chars) if chars is not None else s.lstrip(),
-        "rstrip": lambda s, chars=None: s.rstrip(chars) if chars is not None else s.rstrip(),
-    
-        "replace": lambda s, old, new, count=-1: s.replace(old, new, count) if count != -1 else s.replace(old, new),
-        "split": lambda s, sep=None, maxsplit=-1: s.split(sep, maxsplit) if sep is not None else s.split(),
-        "rsplit": lambda s, sep=None, maxsplit=-1: s.rsplit(sep, maxsplit) if sep is not None else s.rsplit(),
-        "splitlines": lambda s, keepends=False: s.splitlines(keepends),
-        "partition": lambda s, sep: s.partition(sep),
-        "rpartition": lambda s, sep: s.rpartition(sep),
-        "join": lambda sep, iterable: sep.join(iterable),
-    
-        "count": lambda s, sub, start=None, end=None: s.count(sub, start, end) if (start is not None and end is not None) else (s.count(sub, start) if start is not None else s.count(sub)),
-        "find": lambda s, sub, start=None, end=None: s.find(sub, start, end) if (start is not None and end is not None) else (s.find(sub, start) if start is not None else s.find(sub)),
-        "rfind": lambda s, sub, start=None, end=None: s.rfind(sub, start, end) if (start is not None and end is not None) else (s.rfind(sub, start) if start is not None else s.rfind(sub)),
-        "index": lambda s, sub, start=None, end=None: s.index(sub, start, end) if (start is not None and end is not None) else (s.index(sub, start) if start is not None else s.index(sub)),
-        "rindex": lambda s, sub, start=None, end=None: s.rindex(sub, start, end) if (start is not None and end is not None) else (s.rindex(sub, start) if start is not None else s.rindex(sub)),
-    
-        "zfill": lambda s, width: s.zfill(width),
-        "center": lambda s, width, fillchar=' ': s.center(width, fillchar),
-        "ljust": lambda s, width, fillchar=' ': s.ljust(width, fillchar),
-        "rjust": lambda s, width, fillchar=' ': s.rjust(width, fillchar),
-    
-        "isalpha": lambda s: s.isalpha(),
-        "isalnum": lambda s: s.isalnum(),
-        "isdigit": lambda s: s.isdigit(),
-        "isdecimal": lambda s: s.isdecimal(),
-        "isnumeric": lambda s: s.isnumeric(),
-        "isspace": lambda s: s.isspace(),
-        "islower": lambda s: s.islower(),
-        "isupper": lambda s: s.isupper(),
-        "istitle": lambda s: s.istitle(),
-    
-        "add": lambda a, b: a + b,
-        "multiply": lambda a, n: a * n,
-        "mod": lambda s, values: s % values,
-    
-        "string_": lambda s: str(s),
-        "bytes_": lambda s: bytes(s, "utf-8") if not isinstance(s, bytes) else s,
-    
-        "equal": lambda a, b: a == b,
-        "not_equal": lambda a, b: a != b,
-        "greater": lambda a, b: a > b,
-        "greater_equal": lambda a, b: a >= b,
-        "less": lambda a, b: a < b,
-        "less_equal": lambda a, b: a <= b,
-    }
-    
-    for name, func in char_funcs.items():
-        if not hasattr(np.char, name):
-            setattr(np.char, name, func)
-
-    if "asscalar" not in getattr(np, '__dict__', {}):
-        np.asscalar = lambda a: a.item()
-
-    if 'rec' not in getattr(np, '__dict__', {}):
-        class NumpyRec:
-            @staticmethod
-            def append_fields(base, names, data, dtypes=None):
-                return recfunctions.append_fields(base, names, data, dtypes=dtypes)
-            @staticmethod
-            def drop_fields(base, names):
-                return recfunctions.drop_fields(base, names)
-            @staticmethod
-            def rename_fields(base, name_dict):
-                return recfunctions.rename_fields(base, name_dict)
-            @staticmethod
-            def merge_arrays(arrays, fill_value=-1, flatten=False):
-                return recfunctions.merge_arrays(arrays, fill_value=fill_value, flatten=flatten)
-        np.rec = NumpyRec()
-
-    if "machar" not in getattr(np, '__dict__', {}):
-        class MachAr:
-            pass
-        np.core.machar = MachAr
-
-    if hasattr(np, "testing") and not hasattr(np.testing, "Tester"):
-        class Tester:
-            def test(self, label="fast", extra_argv=None):
-                return True
-        np.testing.Tester = Tester
-
-    if "distutils" not in getattr(np, '__dict__', {}):
-        class DummyDistutils:
-            class MiscUtils:
-                def get_info(self, *args, **kwargs):
-                    return {}
-        np.distutils = DummyDistutils()
-
-    if "set_string_function" not in getattr(np, '__dict__', {}):
-        np.set_string_function = lambda *args, **kwargs: None
-
-    _original_finfo = np.finfo
-    def patched_finfo(dtype):
-        try:
-            return _original_finfo(dtype)
-        except TypeError:
-            return np.iinfo(dtype)
-    np.finfo = patched_finfo
-
-    if "_no_nep50_warning" not in getattr(np, '__dict__', {}):
-        def dummy_npwarn_decorator_factory():
-            def npwarn_decorator(x):
-                return x
-            return npwarn_decorator
-        np._no_nep50_warning = dummy_npwarn_decorator_factory
-
-    try:
-        import cupy
-        return cupy, np
-    except ImportError:
-        return np, np
-
-np, _np = patch_cupy_numpy()
-
-
-def _find_spec(mod_name):
-    try:
-        mod = importlib.import_module(mod_name)
-        return mod.__spec__
-    except:
-        return None
-
-
-importlib.util.find_spec = _find_spec
-
-
-if _find_spec("dask"):
-    import dask
-    import dask.array
-    import dask.dataframe
-    import dask.diagnostics
-    from dask import base
-    from dask.graph_manipulation import (
-        bind,
-        checkpoint,
-        clone,
-        wait_on,
-    )
-    from dask.optimization import cull, fuse, inline, inline_functions
-    from dask.utils import key_split
-
-    dask.dataframe.core = dask.dataframe
-    dask.diagnostics.core = dask.diagnostics
-    dask.array.core = dask.array
-
-    sys.modules["dask.dataframe.core"] = sys.modules["dask.dataframe"]
-    sys.modules["dask.diagnostics.core"] = sys.modules[
-        "dask.diagnostics"
-    ]
-    sys.modules["dask.array.core"] = sys.modules["dask.array"]
-
-    dask.core = base
-
-    dask.core.fuse = fuse
-    dask.core.cull = cull
-    dask.core.inline = inline
-    dask.core.inline_functions = inline_functions
-
-    dask.core.key_split = key_split
-
-    dask.core.checkpoint = checkpoint
-    dask.core.bind = bind
-    dask.core.wait_on = wait_on
-    dask.core.clone = clone
-
-    dask.core.get = dask.get
-
-    def _visualize_wrapper(dsk, **kwargs):
-        return dask.visualize(dsk, **kwargs)
-
-    dask.core.visualize = _visualize_wrapper
-    dask.core.to_graphviz = _visualize_wrapper
-
-
-def patch_torch_proxy_mode():
-    import torch
-    from torch.fx.experimental import proxy_tensor
-
-    def get_proxy_mode():  # -> Optional[ProxyTorchDispatchMode]
-        pre_dispatch_mode = (
-            torch._ops._get_dispatch_mode_pre_dispatch(
-                torch._C._TorchDispatchModeKey.PROXY
-            )
-        )
-        mode = torch._C._get_dispatch_mode(
-            torch._C._TorchDispatchModeKey.PROXY
-        )
-        assert (
-            pre_dispatch_mode is None or mode is None
-        ), f"pre_dispatch_mode={pre_dispatch_mode}, mode={mode}"
-        return pre_dispatch_mode or mode
-
-    proxy_tensor.get_proxy_mode = getattr(
-        proxy_tensor, "get_proxy_mode", get_proxy_mode
-    )
-
-
-patch_torch_proxy_mode()
+logger, np, _np = None, None, None
 
 
 ai_model_extensions = {
@@ -733,6 +455,218 @@ common_audio_formats = [
 
 _negative_prompt_ = "glamour or makeup, airbrushed or smooth, retouching or polished, perfect or oversaturated, CGI or 3d, vfx or SFX, rendered or painted, unreal or octane, cinematic or bokeh, blurry or cropped, mutated or duplicated"
 _positive_prompt_ = "journalism, realism, national geographic, stark, minimal, rough, sunlit, grainy, imperfect"
+
+
+def _init_logger():
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.DEBUG)
+    console_handler = logging.StreamHandler()
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
+    console_handler.setFormatter(formatter)
+    if not logger.handlers:
+        logger.addHandler(console_handler)
+    return logger
+
+
+def patch_cupy_numpy():
+    import numpy as np
+    from numpy.lib import recfunctions
+
+    def _set_aliases(module, aliases):
+        for alias, target in aliases.items():
+            if alias not in getattr(module, '__dict__', {}):
+                setattr(module, alias, target)
+
+    type_aliases = {
+        "intp": np.int_,
+        "float": np.float64,
+        "int": np.int64,
+        "bool": np.bool_,
+        "complex": np.complex128,
+        "object": np.object_,
+        "str": np.str_,
+        "str_": np.str_,
+        "string_": np.bytes_,
+        "strings": np.bytes_,
+        "unicode": np.str_,
+        "inf": float('inf'),
+        "Inf": float('inf'),
+    }
+    func_aliases = {
+        "round_": np.round,
+        "product": np.prod,
+        "cumproduct": np.cumprod,
+        "alltrue": np.all,
+        "sometrue": np.any,
+        "rank": np.ndim,
+    }
+
+    _set_aliases(np, type_aliases)
+    _set_aliases(np, func_aliases)
+
+    if "char" not in getattr(np, '__dict__', {}):
+        import types
+        setattr(np, "char", types.SimpleNamespace())
+
+    char_funcs = {
+        "encode": lambda s, encoding=None: bytes(s, encoding or "utf-8"),
+        "decode": lambda b, encoding=None: b.decode(encoding or "utf-8"),
+    
+        "lower": lambda s: s.lower(),
+        "upper": lambda s: s.upper(),
+        "capitalize": lambda s: s.capitalize(),
+        "casefold": lambda s: s.casefold(),
+        "title": lambda s: s.title(),
+        "swapcase": lambda s: s.swapcase(),
+    
+        "startswith": lambda s, prefix, *args: s.startswith(prefix, *args),
+        "endswith": lambda s, suffix, *args: s.endswith(suffix, *args),
+    
+        "strip": lambda s, chars=None: s.strip(chars) if chars is not None else s.strip(),
+        "lstrip": lambda s, chars=None: s.lstrip(chars) if chars is not None else s.lstrip(),
+        "rstrip": lambda s, chars=None: s.rstrip(chars) if chars is not None else s.rstrip(),
+    
+        "replace": lambda s, old, new, count=-1: s.replace(old, new, count) if count != -1 else s.replace(old, new),
+        "split": lambda s, sep=None, maxsplit=-1: s.split(sep, maxsplit) if sep is not None else s.split(),
+        "rsplit": lambda s, sep=None, maxsplit=-1: s.rsplit(sep, maxsplit) if sep is not None else s.rsplit(),
+        "splitlines": lambda s, keepends=False: s.splitlines(keepends),
+        "partition": lambda s, sep: s.partition(sep),
+        "rpartition": lambda s, sep: s.rpartition(sep),
+        "join": lambda sep, iterable: sep.join(iterable),
+    
+        "count": lambda s, sub, start=None, end=None: s.count(sub, start, end) if (start is not None and end is not None) else (s.count(sub, start) if start is not None else s.count(sub)),
+        "find": lambda s, sub, start=None, end=None: s.find(sub, start, end) if (start is not None and end is not None) else (s.find(sub, start) if start is not None else s.find(sub)),
+        "rfind": lambda s, sub, start=None, end=None: s.rfind(sub, start, end) if (start is not None and end is not None) else (s.rfind(sub, start) if start is not None else s.rfind(sub)),
+        "index": lambda s, sub, start=None, end=None: s.index(sub, start, end) if (start is not None and end is not None) else (s.index(sub, start) if start is not None else s.index(sub)),
+        "rindex": lambda s, sub, start=None, end=None: s.rindex(sub, start, end) if (start is not None and end is not None) else (s.rindex(sub, start) if start is not None else s.rindex(sub)),
+    
+        "zfill": lambda s, width: s.zfill(width),
+        "center": lambda s, width, fillchar=' ': s.center(width, fillchar),
+        "ljust": lambda s, width, fillchar=' ': s.ljust(width, fillchar),
+        "rjust": lambda s, width, fillchar=' ': s.rjust(width, fillchar),
+    
+        "isalpha": lambda s: s.isalpha(),
+        "isalnum": lambda s: s.isalnum(),
+        "isdigit": lambda s: s.isdigit(),
+        "isdecimal": lambda s: s.isdecimal(),
+        "isnumeric": lambda s: s.isnumeric(),
+        "isspace": lambda s: s.isspace(),
+        "islower": lambda s: s.islower(),
+        "isupper": lambda s: s.isupper(),
+        "istitle": lambda s: s.istitle(),
+    
+        "add": lambda a, b: a + b,
+        "multiply": lambda a, n: a * n,
+        "mod": lambda s, values: s % values,
+    
+        "string_": lambda s: str(s),
+        "bytes_": lambda s: bytes(s, "utf-8") if not isinstance(s, bytes) else s,
+    
+        "equal": lambda a, b: a == b,
+        "not_equal": lambda a, b: a != b,
+        "greater": lambda a, b: a > b,
+        "greater_equal": lambda a, b: a >= b,
+        "less": lambda a, b: a < b,
+        "less_equal": lambda a, b: a <= b,
+    }
+    
+    for name, func in char_funcs.items():
+        if not hasattr(np.char, name):
+            setattr(np.char, name, func)
+
+    if "asscalar" not in getattr(np, '__dict__', {}):
+        np.asscalar = lambda a: a.item()
+
+    if 'rec' not in getattr(np, '__dict__', {}):
+        class NumpyRec:
+            @staticmethod
+            def append_fields(base, names, data, dtypes=None):
+                return recfunctions.append_fields(base, names, data, dtypes=dtypes)
+            @staticmethod
+            def drop_fields(base, names):
+                return recfunctions.drop_fields(base, names)
+            @staticmethod
+            def rename_fields(base, name_dict):
+                return recfunctions.rename_fields(base, name_dict)
+            @staticmethod
+            def merge_arrays(arrays, fill_value=-1, flatten=False):
+                return recfunctions.merge_arrays(arrays, fill_value=fill_value, flatten=flatten)
+        np.rec = NumpyRec()
+
+    if "machar" not in getattr(np, '__dict__', {}):
+        class MachAr:
+            pass
+        np.core.machar = MachAr
+
+    if hasattr(np, "testing") and not hasattr(np.testing, "Tester"):
+        class Tester:
+            def test(self, label="fast", extra_argv=None):
+                return True
+        np.testing.Tester = Tester
+
+    if "distutils" not in getattr(np, '__dict__', {}):
+        class DummyDistutils:
+            class MiscUtils:
+                def get_info(self, *args, **kwargs):
+                    return {}
+        np.distutils = DummyDistutils()
+
+    if "set_string_function" not in getattr(np, '__dict__', {}):
+        np.set_string_function = lambda *args, **kwargs: None
+
+    _original_finfo = np.finfo
+    def patched_finfo(dtype):
+        try:
+            return _original_finfo(dtype)
+        except TypeError:
+            return np.iinfo(dtype)
+    np.finfo = patched_finfo
+
+    if "_no_nep50_warning" not in getattr(np, '__dict__', {}):
+        def dummy_npwarn_decorator_factory():
+            def npwarn_decorator(x):
+                return x
+            return npwarn_decorator
+        np._no_nep50_warning = dummy_npwarn_decorator_factory
+
+    try:
+        import cupy
+        return cupy, np
+    except ImportError:
+        return np, np
+
+
+def _find_spec(mod_name):
+    try:
+        mod = importlib.import_module(mod_name)
+        return mod.__spec__
+    except:
+        return None
+
+
+def patch_torch_proxy_mode():
+    import torch
+    from torch.fx.experimental import proxy_tensor
+
+    def get_proxy_mode():  # -> Optional[ProxyTorchDispatchMode]
+        pre_dispatch_mode = (
+            torch._ops._get_dispatch_mode_pre_dispatch(
+                torch._C._TorchDispatchModeKey.PROXY
+            )
+        )
+        mode = torch._C._get_dispatch_mode(
+            torch._C._TorchDispatchModeKey.PROXY
+        )
+        assert (
+            pre_dispatch_mode is None or mode is None
+        ), f"pre_dispatch_mode={pre_dispatch_mode}, mode={mode}"
+        return pre_dispatch_mode or mode
+
+    proxy_tensor.get_proxy_mode = getattr(
+        proxy_tensor, "get_proxy_mode", get_proxy_mode
+    )
 
 
 def get_os_name():
@@ -3582,19 +3516,28 @@ def pip_install(packs):
 
     for idx, pack in enumerate(packs_arr):
         if (
-            pack.startswith("https://")
-            or pack.startswith("http://")
+            (
+                pack.startswith("https://")
+                or pack.startswith("http://")
+            )
             and pack.endswith(".whl")
         ):
             temp_path = tmp("whl", keep=False)
             download_file(pack, temp_path)
             packs_arr[idx] = temp_path
-
+        else:
+            
     packs = " ".join(packs_arr)
     
-    return run(
-        f"pip install --force-reinstall {packs}"
+    run(
+        f"pip install --upgrade --force-reinstall {packs}"
     )
+
+    for idx, pack in enumerate(packs_arr):
+        if pack.endswith(".whl"):
+            pack = pack.split("-py3")[0].split("-py2")[0]
+        for path in find_package_paths(pack):
+            add_path(path)
 
 
 def modify_wheel_requirements(wheel_path:str, requirements_map:dict):
@@ -3856,22 +3799,22 @@ def find_package_paths(package_name):
 
     site_packages_dirs = site.getsitepackages()
     for site_packages_dir in site_packages_dirs:
-        package_path = os.path.join(
+        package_path = full_path(
             site_packages_dir, package_dir_name
         )
-        if os.path.exists(package_path) and os.path.isdir(
+        if exist(package_path) and is_directory(
             package_path
         ):
             package_paths_found.append(package_path)
 
     for path in sys.path:
         if path:
-            potential_package_path = os.path.join(
+            potential_package_path = full_path(
                 path, package_dir_name
             )
-            if os.path.exists(
+            if exist(
                 potential_package_path
-            ) and os.path.isdir(potential_package_path):
+            ) and is_directory(potential_package_path):
                 package_paths_found.append(potential_package_path)
 
     for site_packages_dir in site_packages_dirs:
@@ -3879,16 +3822,20 @@ def find_package_paths(package_name):
             "site-packages", "dist-packages"
         )
         if dist_packages_dir != site_packages_dir:
-            package_path = os.path.join(
+            package_path = full_path(
                 dist_packages_dir, package_dir_name
             )
-            if os.path.exists(package_path) and os.path.isdir(
+            if exist(package_path) and is_directory(
                 package_path
             ):
                 package_paths_found.append(package_path)
 
-    unique_paths = list(set(package_paths_found))
+    unique_paths = unique(package_paths_found)
     return unique_paths
+
+
+def unique(arr):
+    return list(set(arr))
 
 
 def tmp(suffix: str = ".data", keep: bool = True, dir=False):
@@ -10577,6 +10524,81 @@ def keep_alive(fn, outputs:int=1):
 
 def start(proj: str):
     import gradio as gr
+
+    global np
+    global _np
+    global logger
+
+    os.environ["HF_HOME"] = "/opt/ml/checkpoints/"
+    os.environ["HF_DATASETS_CACHE"] = "/opt/ml/checkpoints/"
+    os.environ["GRADIO_ALLOW_FLAGGING"] = "never"
+    os.environ["OMP_NUM_THREADS"] = "4"
+    if sys.platform == "darwin":
+        os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
+    os.environ["DISPLAY"] = ":0.0"
+    os.environ["NUMBA_CACHE_DIR"] = f'{os.environ["HOME"]}/.tmp'
+    os.environ["DISABLE_FLASH_ATTENTION"] = "True"
+    os.environ["GRADIO_WEBSOCKET_ENABLED"] = "False"
+
+    pip_install("numpy==1.26.4")
+    
+    np, _np = patch_cupy_numpy()
+
+    logger = _init_logger()
+
+    importlib.util.find_spec = _find_spec
+
+    if get_os_name() == "linux":
+        apt_install()
+    
+    if _find_spec("dask"):
+        import dask
+        import dask.array
+        import dask.dataframe
+        import dask.diagnostics
+        from dask import base
+        from dask.graph_manipulation import (
+            bind,
+            checkpoint,
+            clone,
+            wait_on,
+        )
+        from dask.optimization import cull, fuse, inline, inline_functions
+        from dask.utils import key_split
+    
+        dask.dataframe.core = dask.dataframe
+        dask.diagnostics.core = dask.diagnostics
+        dask.array.core = dask.array
+    
+        sys.modules["dask.dataframe.core"] = sys.modules["dask.dataframe"]
+        sys.modules["dask.diagnostics.core"] = sys.modules[
+            "dask.diagnostics"
+        ]
+        sys.modules["dask.array.core"] = sys.modules["dask.array"]
+    
+        dask.core = base
+    
+        dask.core.fuse = fuse
+        dask.core.cull = cull
+        dask.core.inline = inline
+        dask.core.inline_functions = inline_functions
+    
+        dask.core.key_split = key_split
+    
+        dask.core.checkpoint = checkpoint
+        dask.core.bind = bind
+        dask.core.wait_on = wait_on
+        dask.core.clone = clone
+    
+        dask.core.get = dask.get
+    
+        def _visualize_wrapper(dsk, **kwargs):
+            return dask.visualize(dsk, **kwargs)
+    
+        dask.core.visualize = _visualize_wrapper
+        dask.core.to_graphviz = _visualize_wrapper
+
+    patch_torch_proxy_mode()
 
     proj = proj.strip().lower()
 
