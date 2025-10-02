@@ -1122,8 +1122,8 @@ def answer(history: list):
                 ext = p.split(".")[-1]
                 if ext in common_audio_formats:
                     aud = split_audio_by_duration(
-                        p, duration=25, count=1, resample=8000
-                    )[0]
+                        p, duration=10, count=3, resample=4000
+                    )[-1]
                     audio, samplerate = librosa.load(
                         aud, sr=None, mono=True
                     )
@@ -1134,7 +1134,7 @@ def answer(history: list):
                 if ext in iio_formats:
                     img = iio.imread(p)
                     w, h = Image.open(p).size
-                    w, h = get_max_resolution(w, h, mega_pixels=0.07)
+                    w, h = get_max_resolution(w, h, mega_pixels=0.05)
                     new_img = resize_image(img, h, w)
                     new_img = (new_img * 255).astype(np.uint8)
                     img = Image.fromarray(new_img)
@@ -1165,8 +1165,8 @@ def answer(history: list):
 
     generate_ids = MODELS["answer"].generate(
         **inputs,
-        max_new_tokens=768,
-        num_beams=16,
+        max_new_tokens=512,
+        num_beams=32,
         length_penalty=0.1,
         num_logits_to_keep=1,
     )
@@ -4855,8 +4855,8 @@ def ai_translate(text, lang="en"):
                 ),
                 max_length=len(input_tokens) + 50,
                 num_return_sequences=1,
-                num_beams=32,
-                length_penalty=0.1,
+                num_beams=64,
+                length_penalty=0.8,
                 no_repeat_ngram_size=2,
                 renormalize_logits=True,
             )
@@ -5291,7 +5291,7 @@ def _summarize(text_to_summarize, is_chunk=False):
         "repetition_penalty": 2.0,
         "length_penalty": 0.1,
         "no_repeat_ngram_size": 2,
-        "num_beams": 32,
+        "num_beams": 64,
         "early_stopping": True,
     }
 
@@ -5299,9 +5299,7 @@ def _summarize(text_to_summarize, is_chunk=False):
         gen_kwargs["min_length"] = 40
 
     gen = MODELS["summary"].generate(**encoded, **gen_kwargs)
-    return simple_text(
-        TOKENIZERS["summary"].decode(gen[0], skip_special_tokens=True)
-    )
+    return TOKENIZERS["summary"].decode(gen[0], skip_special_tokens=True)
 
 
 def map_reduce_summary(text, max_words=50):
