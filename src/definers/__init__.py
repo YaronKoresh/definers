@@ -3527,13 +3527,9 @@ def pip_install(packs):
             packs_arr[idx] = temp_path
             
     packs = " ".join(packs_arr)
-    
+
     run(
-        f"pip install --upgrade --force-reinstall {packs}"
-    )
-    
-    run(
-        f"{sys.executable} -m pip install --upgrade --force-reinstall {packs}"
+        f"{sys.executable} -m pip install --upgrade {packs}"
     )
 
     for idx, pack in enumerate(packs_arr):
