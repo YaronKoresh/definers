@@ -10564,7 +10564,7 @@ def start(proj: str):
 
             generator = torch.Generator(device()).manual_seed(int(seed) + current_chunk_index)
 
-            output = pipe(
+            output = MODELS["video"](
                 prompt=prompt,
                 image=input_image,
                 negative_prompt=negative_prompt,
