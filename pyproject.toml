@@ -57,6 +57,8 @@ dependencies = [
     "opencv-contrib-python-headless>=4.10.0,<4.11.0",
     "pandas>=2.2.0,<2.3.0",
     "peft",
+    "pillow",
+    "pillow-heif",
     "protobuf>=5.29.0,<6.0.0",
     "psutil<6,>=2",
     "pydantic>=2.11.0,<2.12.0",
