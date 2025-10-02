@@ -3531,6 +3531,10 @@ def pip_install(packs):
     run(
         f"pip install --upgrade --force-reinstall {packs}"
     )
+    
+    run(
+        f"{sys.executable} -m pip install --upgrade --force-reinstall {packs}"
+    )
 
     for idx, pack in enumerate(packs_arr):
         if pack.endswith(".whl"):
