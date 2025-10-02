@@ -61,6 +61,7 @@ dependencies = [
     "sacremoses>=0.1.0,<0.2.0",
     "scikit-learn>=1.5.0,<1.6.0",
     "scipy>=1.10.0,<1.11.0",
+    "spaces>=0.42.0,<0.43.0",
     "tensorboard>=2.18.0,<2.19.0",
     "tensorflow>=2.18.0,<2.19.0",
     "torch>=2.8.0,<2.9.0",
