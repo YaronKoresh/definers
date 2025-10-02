@@ -10700,7 +10700,6 @@ def start(proj: str):
         app.launch(server_name="0.0.0.0", server_port=7860)
 
     elif proj == "faiss":
-        apt_install()
         whl = build_faiss()
 
         def calc():
