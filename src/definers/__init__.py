@@ -353,7 +353,7 @@ FFMPEG_URL = (
 SYSTEM_MESSAGE = "You are a helpful and concise AI assistant. Provide accurate and relevant information to the user's queries in a friendly and clear manner."
 
 tasks = {
-    "video": "tencent/HunyuanVideo",
+    "video": "stabilityai/stable-video-diffusion-img2vid-xt",
     "image": "black-forest-labs/FLUX.1-dev",
     "image-spro": "tencent/SRPO",
     "detect": "facebook/detr-resnet-50",
