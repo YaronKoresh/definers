@@ -10535,7 +10535,7 @@ def start(proj: str):
         from diffusers.utils import export_to_gif
         from PIL import Image, ImageOps
 
-        init_pretrained_model("video")
+        init_pretrained_model("video",True)
 
         chunks = tmp(dir=True)
         FRAMES_PER_CHUNK = 25
@@ -10682,9 +10682,9 @@ def start(proj: str):
         app.launch(server_name="0.0.0.0", server_port=7860)
 
     elif proj == "image":
-        init_pretrained_model("translate")
-        init_pretrained_model("summary")
-        init_pretrained_model("image")
+        init_pretrained_model("translate",True)
+        init_pretrained_model("summary",True)
+        init_pretrained_model("image",True)
         init_upscale()
 
         def title(image_path, top, middle, bottom):
@@ -10764,9 +10764,9 @@ def start(proj: str):
         app.launch(server_name="0.0.0.0", server_port=7860)
 
     elif proj == "chat":
-        init_pretrained_model("summary")
-        init_pretrained_model("answer")
-        init_pretrained_model("translate")
+        init_pretrained_model("summary",True)
+        init_pretrained_model("answer",True)
+        init_pretrained_model("translate",True)
 
         @spaces.GPU(duration=60)
         def _get_chat_response(message, history):
