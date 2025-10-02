@@ -10528,9 +10528,14 @@ def start(proj: str):
     os.environ["DISABLE_FLASH_ATTENTION"] = "True"
     os.environ["GRADIO_WEBSOCKET_ENABLED"] = "False"
 
-    pip_install("numpy==1.26.4")
+    import numpy
+    _np = numpy
     
-    np, _np = patch_cupy_numpy()
+    try:
+        import cupy
+        np = cupy
+    except:
+        np = numpy
 
     logger = _init_logger()
 
