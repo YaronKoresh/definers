@@ -3529,14 +3529,16 @@ def pip_install(packs):
     packs = " ".join(packs_arr)
 
     run(
-        f"pip install --upgrade {packs}"
+        f"pip install --upgrade --force-reinstall --no-cache-dir {packs}"
     )
 
     for idx, pack in enumerate(packs_arr):
         if pack.endswith(".whl"):
             pack = pack.split("-py3")[0].split("-py2")[0]
-        for path in find_package_paths(pack):
-            add_path(path)
+        ps = find_package_paths(pack)
+        log("Package paths", ps)
+        for p in ps:
+            add_path(p)
 
 
 def modify_wheel_requirements(wheel_path:str, requirements_map:dict):
