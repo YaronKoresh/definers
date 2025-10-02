@@ -10487,7 +10487,7 @@ def keep_alive(fn, outputs:int=1):
     import gradio as gr
 
     def worker(*args, **kwargs):
-        result_container = [(gr.update(),) * outputs]
+        result_container = [(gr.update(interactive=False),) * outputs]
         if outputs == 1:
             result_container[0] = result_container[0][0]
 
@@ -10499,9 +10499,12 @@ def keep_alive(fn, outputs:int=1):
 
         t = thread(thread_target)
 
-        if outputs >= 1:
-            while t.is_alive():
-                sleep(5)
+        counter = 0
+        while t.is_alive():
+            sleep(5)
+            counter += 5
+            gr.Info(f"Seconds passed: {str(counter)}", duration=2.5)
+            if outputs >= 1:
                 yield result_container[0]
         
         wait(t)
