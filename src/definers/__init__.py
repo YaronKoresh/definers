@@ -5680,23 +5680,10 @@ py-modules = {py_modules}
 
     elif task in ["video"]:
 
-        from diffusers import (
-            HunyuanVideoPipeline,
-            HunyuanVideoTransformer3DModel,
-        )
+        from diffusers import DiffusionPipeline
 
-        transformer = HunyuanVideoTransformer3DModel.from_pretrained(
-            tasks[task],
-            subfolder="transformer",
-            torch_dtype=dtype(),
-            revision="refs/pr/18",
-        )
-        model = HunyuanVideoPipeline.from_pretrained(
-            tasks[task],
-            transformer=transformer,
-            revision="refs/pr/18",
-            torch_dtype=dtype(),
-        ).to(device())
+        model = DiffusionPipeline.from_pretrained(tasks[task], torch_dtype=dtype())
+        model.to(device())
 
     elif task in ["image"]:
         import torch
@@ -10603,7 +10590,162 @@ def start(proj: str):
 
     proj = proj.strip().lower()
 
-    if proj == "image":
+    if proj == "video":
+        import torch
+        from diffusers.utils import export_to_gif
+        from PIL import Image, ImageOps
+
+        init_pretrained_model("video")
+
+        FRAMES_PER_CHUNK = 8
+
+        chunks = tmp(dir=True)
+
+        def generate_chunk(
+            orig_image, prompt, negative_prompt, steps, guidance, duration, fps, seed,
+            chunk_state, progress=gr.Progress()
+        ):
+            total_frames = int(duration * fps)
+            total_chunks = math.ceil(total_frames / FRAMES_PER_CHUNK)
+    
+            current_chunk_index = chunk_state["current_chunk"]
+    
+            if current_chunk_index > total_chunks:
+                raise gr.Error("All chunks have been generated. Please combine them now.") 
+    
+            if current_chunk_index == 1:
+                input_image = ImageOps.fit(orig_image, (1024, 1024), Image.Resampling.LANCZOS)
+                gr.Info("Generating first chunk using the initial image...")
+            else:
+                previous_chunk_path = chunk_state["chunk_paths"][-1]
+                with Image.open(previous_chunk_path) as gif:
+                    gif.seek(gif.n_frames - 1)
+                    last_frame = gif.copy()
+                input_image = last_frame
+                gr.Info(f"Generating chunk {current_chunk_index}/{total_chunks} using context from previous chunk...")
+
+            if seed == -1:
+                seed = random.randint(0, 2**32 - 1)
+
+            generator = torch.Generator(device()).manual_seed(int(seed) + current_chunk_index)
+
+            output = pipe(
+                prompt=prompt,
+                image=input_image,
+                negative_prompt=negative_prompt,
+                num_inference_steps=steps,
+                guidance_scale=guidance,
+                num_frames=FRAMES_PER_CHUNK,
+                generator=generator,
+            )
+    
+            chunk_path = full_path(chunks, f"chunk_{current_chunk_index}.gif")
+            export_to_gif(output.frames[0], chunk_path, fps=fps)
+    
+            chunk_state["chunk_paths"].append(chunk_path)
+            chunk_state["current_chunk"] += 1
+    
+            progress_text = f"Finished chunk {current_chunk_index-1}/{total_chunks}. Ready for next chunk."
+            if (current_chunk_index - 1) == total_chunks:
+                progress_text = "All chunks generated! You can now combine them."
+        
+            return chunk_path, chunk_state, gr.update(value=progress_text), gr.update(visible=True)
+
+        def combine_chunks(chunk_state, fps):
+
+            if not chunk_state["chunk_paths"]:
+                raise gr.Error("No chunks to combine.")
+        
+            gr.Info(f"Combining {len(chunk_state['chunk_paths'])} chunks into final GIF...")
+    
+            all_frames = []
+            for chunk_path in chunk_state["chunk_paths"]:
+                with Image.open(chunk_path) as gif:
+                    for i in range(gif.n_frames):
+                        gif.seek(i)
+                        all_frames.append(gif.copy().convert("RGBA"))
+    
+            final_gif_path = "final_animation.gif"
+            all_frames[0].save(
+                final_gif_path,
+                save_all=True,
+                append_images=all_frames[1:],
+                loop=0,
+                duration=int(1000 / fps),
+                optimize=True
+            )
+            return final_gif_path, gr.update(visible=False)
+
+        def reset_state():
+
+            global chunks
+            delete(chunks)
+            chunks = tmp(dir=True)
+    
+            initial_state = { "current_chunk": 1, "chunk_paths": [] }
+            return (
+                initial_state,
+                None,
+                "Ready to generate the first chunk.",
+                gr.update(visible=False),
+                gr.update(interactive=True)
+            )
+
+        with gr.Blocks(
+            theme=theme(),
+            css=css()
+        ) as app:
+            chunk_state = gr.State({ "current_chunk": 1, "chunk_paths": [] })
+
+            gr.Markdown("# Image to Animation: Manual Chunking Method")
+            gr.Markdown("This app generates long animations piece-by-piece to avoid timeouts on free services. **You must click 'Generate Next Chunk' repeatedly** until all chunks are created, then click 'Combine'.")
+
+            with gr.Row():
+                with gr.Column(scale=1):
+                    img_input = gr.Image(label="Input Image", type="pil", height=420)
+                    prompt_input = gr.Textbox(label="Prompt", value="a cinematic shot of a woman smiling, golden hour")
+                    negative_prompt_input = gr.Textbox(label="Negative Prompt", value="bad quality, worse quality, low resolution, blurry, noisy, text, watermark, signature, ugly, deformed, disfigured, distorted, out of frame, bad art, bad anatomy")
+            
+                    with gr.Row():
+                        duration_slider = gr.Slider(minimum=1, maximum=30, value=3, step=1, label="Total Duration (s)")
+                        fps_slider = gr.Slider(minimum=8, maximum=30, value=15, step=1, label="FPS")
+            
+                    with gr.Accordion("Advanced Settings", open=False):
+                        steps_slider = gr.Slider(minimum=1, maximum=50, value=2, step=1, label="Steps per Frame")
+                        guidance_slider = gr.Slider(minimum=0.0, maximum=10.0, value=0.0, step=0.5, label="Guidance (CFG)")
+                        seed_input = gr.Number(label="Seed (-1 for random)", minimum=-1, value=-1)
+        
+                with gr.Column(scale=1):
+                    output_chunk = gr.Image(label="Latest Generated Chunk / Final Animation", interactive=False, height=420)
+                    progress_text = gr.Markdown("Ready to generate the first chunk.")
+            
+            with gr.Row():
+                generate_button = gr.Button("Generate Next Chunk", variant="primary")
+                combine_button = gr.Button("Combine Chunks into Final GIF", variant="stop", visible=False)
+                reset_button = gr.Button("Start Over")
+
+            form_inputs = [img_input, prompt_input, negative_prompt_input, steps_slider, guidance_slider, duration_slider, fps_slider, seed_input, chunk_state]
+
+            generate_button.click(
+                fn=generate_chunk,
+                inputs=form_inputs,
+                outputs=[output_chunk, chunk_state, progress_text, combine_button]
+            )
+
+            combine_button.click(
+                fn=combine_chunks,
+                inputs=[chunk_state, fps_slider],
+                outputs=[output_chunk, combine_button]
+            )
+    
+            reset_button.click(
+                fn=reset_state,
+                outputs=[chunk_state, output_chunk, progress_text, combine_button, generate_button]
+            )
+
+        app.launch(server_name="0.0.0.0", server_port=7860)
+
+    elif proj == "image":
         init_pretrained_model("translate")
         init_pretrained_model("summary")
         init_pretrained_model("image")
