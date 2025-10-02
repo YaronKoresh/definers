@@ -70,6 +70,7 @@ dependencies = [
     "starlette==0.48.0",
     "tensorboard>=2.18.0,<2.19.0",
     "tensorflow>=2.18.0,<2.19.0",
+    "tf_keras",
     "torch>=2.8.0,<2.9.0",
     "torchvision<=0.23.0",
     "transformers>=4.53.0,<4.54.0",
