@@ -4856,7 +4856,7 @@ def ai_translate(text, lang="en"):
                 max_length=len(input_tokens) + 50,
                 num_return_sequences=1,
                 num_beams=64,
-                length_penalty=0.8,
+                length_penalty=0.5,
                 no_repeat_ngram_size=2,
                 renormalize_logits=True,
             )
@@ -5277,7 +5277,7 @@ class Database:
 def _summarize(text_to_summarize, is_chunk=False):
     prefix = "summarize: "
     encoded = TOKENIZERS["summary"](
-        prefix + simple_text(text_to_summarize),
+        prefix + text_to_summarize,
         return_tensors="pt",
         truncation=True,
         max_length=512,
