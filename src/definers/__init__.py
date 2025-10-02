@@ -5691,7 +5691,7 @@ py-modules = {py_modules}
 
         model = FluxPipeline.from_pretrained(
             tasks[task], torch_dtype=dtype(), use_safetensors=True
-        ).to(device())
+        )
 
         srpo_path = hf_hub_download(
             repo_id=tasks["image-spro"],
@@ -5699,6 +5699,7 @@ py-modules = {py_modules}
         )
         state_dict = load_file(srpo_path)
         model.transformer.load_state_dict(state_dict)
+        model = model.to(device())
 
     elif task not in tasks:
         from transformers import AutoModel
@@ -5792,6 +5793,7 @@ def optimize_prompt_realism(prompt):
 def preprocess_prompt(prompt):
     prompt = ai_translate(prompt)
     prompt = summary(prompt, max_words=20)
+    prompt = simple_text(prompt)
     return prompt
 
 
@@ -10680,7 +10682,7 @@ def start(proj: str):
 
         @spaces.GPU(duration=90)
         def handle_generation(text, w, h):
-            w, h = get_max_resolution(w, h, mega_pixels=0.6)
+            w, h = get_max_resolution(w, h, mega_pixels=0.15)
             text = optimize_prompt_realism(text)
             return pipe("image", prompt=text, resolution=f"{w}x{h}")
 
