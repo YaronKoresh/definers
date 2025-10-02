@@ -10488,7 +10488,9 @@ def keep_alive(fn, outputs:int=1):
 
     def worker(*args, **kwargs):
         result_container = [(gr.update(),) * outputs]
-        
+        if outputs == 1:
+            result_container[0] = result_container[0][0]
+
         def thread_target():
             try:
                 result_container[0] = fn(*args, **kwargs)
@@ -10497,11 +10499,15 @@ def keep_alive(fn, outputs:int=1):
 
         t = thread(thread_target)
 
-        while t.is_alive():
-            sleep(5)
-            yield result_container[0]
+        if outputs >= 1:
+            while t.is_alive():
+                sleep(5)
+                yield result_container[0]
         
         wait(t)
+
+        if outputs == 0:
+            return
 
         return result_container[0]
         
@@ -10521,21 +10527,13 @@ def start(proj: str):
 
         init_pretrained_model("video")
 
-        FRAMES_PER_CHUNK = 8
-
         chunks = tmp(dir=True)
+        FRAMES_PER_CHUNK = 25
+        fps = 14
 
-        def get_chunk_duration(orig_image, prompt, negative_prompt, steps, guidance, duration, fps, seed, chunk_state, progress):
-            BASE_OVERHEAD_SECONDS = 10
-            TIME_PER_STEP_FRAME = 0.15
-    
-            estimated_generation_time = FRAMES_PER_CHUNK * int(steps) * TIME_PER_STEP_FRAME
-            total_seconds = BASE_OVERHEAD_SECONDS + estimated_generation_time
-            return int(total_seconds)
-
-        @spaces.GPU(duration=get_chunk_duration)
+        @spaces.GPU(duration=70)
         def generate_chunk(
-            orig_image, prompt, negative_prompt, steps, guidance, duration, fps, seed,
+            orig_image, seed, duration,
             chunk_state, progress=gr.Progress()
         ):
             total_frames = int(duration * fps)
@@ -10547,7 +10545,7 @@ def start(proj: str):
                 raise gr.Error("All chunks have been generated. Please combine them now.") 
     
             if current_chunk_index == 1:
-                input_image = ImageOps.fit(orig_image, (1024, 1024), Image.Resampling.LANCZOS)
+                input_image = ImageOps.fit(orig_image, (1024, 576), Image.Resampling.LANCZOS)
                 gr.Info("Generating first chunk using the initial image...")
             else:
                 previous_chunk_path = chunk_state["chunk_paths"][-1]
@@ -10563,12 +10561,7 @@ def start(proj: str):
             generator = torch.Generator(device()).manual_seed(int(seed) + current_chunk_index)
 
             output = MODELS["video"](
-                prompt=prompt,
                 image=input_image,
-                negative_prompt=negative_prompt,
-                num_inference_steps=steps,
-                guidance_scale=guidance,
-                num_frames=FRAMES_PER_CHUNK,
                 generator=generator,
             )
     
@@ -10584,7 +10577,7 @@ def start(proj: str):
         
             return chunk_path, chunk_state, gr.update(value=progress_text), gr.update(visible=True)
 
-        def combine_chunks(chunk_state, fps):
+        def combine_chunks(chunk_state):
 
             if not chunk_state["chunk_paths"]:
                 raise gr.Error("No chunks to combine.")
@@ -10636,16 +10629,11 @@ def start(proj: str):
             with gr.Row():
                 with gr.Column(scale=1):
                     img_input = gr.Image(label="Input Image", type="pil", height=420)
-                    prompt_input = gr.Textbox(label="Prompt", value="a cinematic shot of a woman smiling, golden hour")
-                    negative_prompt_input = gr.Textbox(label="Negative Prompt", value="bad quality, worse quality, low resolution, blurry, noisy, text, watermark, signature, ugly, deformed, disfigured, distorted, out of frame, bad art, bad anatomy")
-            
+
                     with gr.Row():
                         duration_slider = gr.Slider(minimum=1, maximum=30, value=3, step=1, label="Total Duration (s)")
-                        fps_slider = gr.Slider(minimum=8, maximum=30, value=15, step=1, label="FPS")
             
                     with gr.Accordion("Advanced Settings", open=False):
-                        steps_slider = gr.Slider(minimum=1, maximum=50, value=2, step=1, label="Steps per Frame")
-                        guidance_slider = gr.Slider(minimum=0.0, maximum=10.0, value=0.0, step=0.5, label="Guidance (CFG)")
                         seed_input = gr.Number(label="Seed (-1 for random)", minimum=-1, value=-1)
         
                 with gr.Column(scale=1):
@@ -10657,7 +10645,7 @@ def start(proj: str):
                 combine_button = gr.Button("Combine Chunks into Final GIF", variant="stop", visible=False)
                 reset_button = gr.Button("Start Over")
 
-            form_inputs = [img_input, prompt_input, negative_prompt_input, steps_slider, guidance_slider, duration_slider, fps_slider, seed_input, chunk_state]
+            form_inputs = [img_input, seed_input, duration_slider, chunk_state]
 
             generate_button.click(
                 fn=generate_chunk,
@@ -10667,7 +10655,7 @@ def start(proj: str):
 
             combine_button.click(
                 fn=combine_chunks,
-                inputs=[chunk_state, fps_slider],
+                inputs=[chunk_state],
                 outputs=[output_chunk, combine_button]
             )
     
@@ -10689,7 +10677,7 @@ def start(proj: str):
 
         @spaces.GPU(duration=90)
         def handle_generation(text, w, h):
-            w, h = get_max_resolution(w, h, mega_pixels=1.5)
+            w, h = get_max_resolution(w, h, mega_pixels=0.6)
             text = optimize_prompt_realism(text)
             return pipe("image", prompt=text, resolution=f"{w}x{h}")
 
