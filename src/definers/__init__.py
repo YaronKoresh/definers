@@ -350,7 +350,7 @@ FFMPEG_URL = (
     "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
 )
 
-SYSTEM_MESSAGE = "You are a helpful and concise AI assistant. Provide accurate and relevant information to the user's queries in a friendly and clear manner."
+SYSTEM_MESSAGE = "You are a helpful and concise assistant. Respond with accurate and relevant answers in a friendly and clear manner."
 
 tasks = {
     "video": "stabilityai/stable-video-diffusion-img2vid-xt",
