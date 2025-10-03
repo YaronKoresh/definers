@@ -1122,7 +1122,7 @@ def answer(history: list):
                 ext = p.split(".")[-1]
                 if ext in common_audio_formats:
                     aud = split_audio_by_duration(
-                        p, duration=10, count=3, resample=4000
+                        p, duration=10, count=3, resample=8000
                     )[-1]
                     audio, samplerate = librosa.load(
                         aud, sr=None, mono=True
