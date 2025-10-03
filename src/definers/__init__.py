@@ -10500,7 +10500,7 @@ def keep_alive(fn, outputs:int=1):
         
         def thread_target():
             try:
-                result_container = fn(*args, **kwargs)
+                result_container[0] = fn(*args, **kwargs)
             except Exception as e:
                 catch(e)
 
