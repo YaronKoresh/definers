@@ -6774,19 +6774,22 @@ def get_chat_response(message, history: list):
     if message["text"]:
         including.append("text")
         orig_lang = language(message["text"])
+        if orig_lang != "en":
+            message["text"] = ai_translate(message["text"])
+        message["text"] = simple_text(message["text"])
         history.append({"role": "user", "content": message["text"]})
         if message["files"]:
             history.append(
                 {
                     "role": "user",
-                    "content": "and please deeply examine the attachments from the last message carefully!",
+                    "content": "and please examine the attachments from my new message carefully",
                 }
             )
 
     history.append(
         {
             "role": "user",
-            "content": "and make sure to double-check your response.",
+            "content": "and make sure to double-check your conclusions while avoiding any fake data or irrelevant information.",
         }
     )
 
