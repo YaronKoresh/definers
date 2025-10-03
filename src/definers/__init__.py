@@ -6782,7 +6782,7 @@ def get_chat_response(message, history: list):
             history.append(
                 {
                     "role": "user",
-                    "content": "and please examine the attachments from my new message carefully",
+                    "content": "and please read the media from my new message carefully",
                 }
             )
 
