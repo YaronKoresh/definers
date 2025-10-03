@@ -55,9 +55,6 @@ from urllib.parse import quote
 collections.MutableSequence = collections.abc.MutableSequence
 
 
-logger, np, _np = None, None, None
-
-
 ai_model_extensions = {
     "safetensors",  # Stable Diffusion, general use
     "onnx",  # Open Neural Network Exchange
