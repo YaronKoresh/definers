@@ -10525,16 +10525,17 @@ def keep_alive(fn, outputs:int=1):
                     for x in range(outputs):
                         res.append(gr.update(elem_classes=random_string()))
                     res = tuple(res)
-                if finished:
+                if not finished[0]:
+                    yield res
+                else:
                     break
-                yield res
         
         wait(t)
 
         if outputs == 0:
             return
 
-        return result_container[0]
+        return results[0]
         
     return worker
 
