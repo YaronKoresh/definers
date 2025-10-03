@@ -10499,16 +10499,15 @@ def keep_alive(fn, outputs:int=1):
 
     def worker(*args, **kwargs):
 
-        result_container = [None]
-        finished = False
+        results = [None]
+        finished = [False]
         
         def thread_target():
-            global finished
             try:
-                result_container[0] = fn(*args, **kwargs)
+                results[0] = fn(*args, **kwargs)
             except Exception as e:
                 catch(e)
-            finished = True
+            finished[0] = True
 
         t = thread(thread_target)
 
@@ -10520,11 +10519,11 @@ def keep_alive(fn, outputs:int=1):
             if outputs >= 1:
                 res = None
                 if outputs == 1:
-                    res = gr.update(key=random_string())
+                    res = gr.update(elem_classes=random_string())
                 else:
                     res = []
                     for x in range(outputs):
-                        res.append(gr.update(key=random_string()))
+                        res.append(gr.update(elem_classes=random_string()))
                     res = tuple(res)
                 if finished:
                     break
