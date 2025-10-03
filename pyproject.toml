@@ -59,6 +59,7 @@ dependencies = [
     "peft",
     "pillow",
     "pillow-heif",
+    "playwright",
     "protobuf>=5.29.0,<6.0.0",
     "psutil<6,>=2",
     "pydantic>=2.11.0,<2.12.0",
