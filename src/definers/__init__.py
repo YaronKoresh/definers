@@ -10495,13 +10495,12 @@ def keep_alive(fn, outputs:int=1):
     import gradio as gr
 
     def worker(*args, **kwargs):
-        result_container = [(gr.update(interactive=False),) * outputs]
-        if outputs == 1:
-            result_container[0] = result_container[0][0]
 
+        result_container = [None]
+        
         def thread_target():
             try:
-                result_container[0] = fn(*args, **kwargs)
+                result_container = fn(*args, **kwargs)
             except Exception as e:
                 catch(e)
 
@@ -10513,7 +10512,15 @@ def keep_alive(fn, outputs:int=1):
             counter += 5
             gr.Info(f"Seconds passed: {str(counter)}", duration=2.5)
             if outputs >= 1:
-                yield result_container[0]
+                res = None
+                if outputs == 1:
+                    res = gr.update(key=random_string())
+                else:
+                    res = []
+                    for x in range(outputs):
+                        res.append(gr.update(key=random_string()))
+                    res = tuple(res)
+                yield res
         
         wait(t)
 
