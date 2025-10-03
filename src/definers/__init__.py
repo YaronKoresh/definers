@@ -1039,7 +1039,7 @@ def set_system_message(
 
 
 def split_audio_by_duration(
-    file_path, duration=5, count=None, resample=None
+    file_path, duration=5, count=None, skip=0, resample=None
 ):
     import librosa
     import soundfile as sf
@@ -1053,6 +1053,10 @@ def split_audio_by_duration(
     res_paths = []
 
     for i, start in enumerate(range(0, len(y), chunk_samples)):
+        if skip > 0:
+            skip = skip - 1
+            continue
+            
         end = start + chunk_samples
         chunk = y[start:end]
 
