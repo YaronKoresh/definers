@@ -10515,20 +10515,9 @@ def keep_alive(fn, outputs:int=1):
         while t.is_alive():
             sleep(5)
             counter += 5
+            if finished[0]:
+                break
             gr.Info(f"Seconds passed: {str(counter)}", duration=2.5)
-            if outputs >= 1:
-                res = None
-                if outputs == 1:
-                    res = gr.update(elem_classes=random_string())
-                else:
-                    res = []
-                    for x in range(outputs):
-                        res.append(gr.update(elem_classes=random_string()))
-                    res = tuple(res)
-                if not finished[0]:
-                    yield res
-                else:
-                    break
         
         wait(t)
 
