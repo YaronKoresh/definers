@@ -10538,10 +10538,10 @@ def start(proj: str):
         init_pretrained_model("video",True)
 
         chunks = tmp(dir=True)
-        FRAMES_PER_CHUNK = 25
-        fps = 14
+        FRAMES_PER_CHUNK = 24
+        fps = 24
 
-        @spaces.GPU(duration=70)
+        @spaces.GPU(duration=60)
         def generate_chunk(
             orig_image, seed, duration,
             chunk_state, progress=gr.Progress()
@@ -10576,8 +10576,11 @@ def start(proj: str):
             output = MODELS["video"](
                 image=input_image,
                 generator=generator,
-                num_frames=25,
-                decode_chunk_size=2,
+                num_frames=FRAMES_PER_CHUNK,
+                decode_chunk_size=8,
+                fps=fps // 1.5,
+                motion_bucket_id=400,
+                noise_aug_strength=0.3,
             )
     
             chunk_path = full_path(chunks, f"chunk_{current_chunk_index}.gif")
