@@ -10666,7 +10666,7 @@ def start(proj: str):
             form_inputs = [img_input, seed_input, duration_slider, chunk_state]
 
             generate_button.click(
-                fn=generate_chunk,
+                fn=keep_alive(generate_chunk, 4),
                 inputs=form_inputs,
                 outputs=[output_chunk, chunk_state, progress_text, combine_button]
             )
