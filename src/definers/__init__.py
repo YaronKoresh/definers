@@ -10618,7 +10618,7 @@ def start(proj: str):
 
         @spaces.GPU(duration=30)
         def handle_translate(txt, tgt_lang):
-            return ai_translate(txt, value_to_key(language_codes, tgt_lang))
+            return ai_translate(txt, value_to_keys(language_codes, tgt_lang)[0])
 
         with gr.Blocks(theme=theme(), css=css()) as app:
             gr.Markdown("# AI Translator")
