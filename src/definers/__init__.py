@@ -1184,7 +1184,7 @@ def answer(history: list):
             for p in ps:
                 ext = p.split(".")[-1]
                 if ext in common_audio_formats:
-                    aud = split_audio((
+                    aud = split_audio(
                         p, duration=12, count=1, skip=4, resample=12000
                     )[0]
                     audio, samplerate = librosa.load(
