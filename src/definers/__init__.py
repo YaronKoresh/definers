@@ -1132,7 +1132,7 @@ def split_audio(
         shutil.rmtree(output_dir)
         return []
 
-    res_paths = sorted(glob.glob(os.path.join(output_dir, "chunk_*.mp3")))
+    res_paths = sorted(glob(os.path.join(output_dir, "chunk_*.mp3")))
 
     print(f"Successfully created {len(res_paths)} chunks in {output_dir}")
     return res_paths
