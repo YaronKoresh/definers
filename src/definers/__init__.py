@@ -10565,6 +10565,12 @@ def keep_alive(fn, outputs:int=1):
 
     def worker(*args, **kwargs):
 
+        yld = None
+        if outputs >=2:
+            yld = (gr.Update(),) * outputs
+        elif outputs == 1:
+            yld = gr.Update()
+
         results = [None]
         finished = [False]
         
@@ -10583,7 +10589,9 @@ def keep_alive(fn, outputs:int=1):
             counter += 1
             if finished[0]:
                 break
-            gr.Info(f"Seconds passed: {str(counter)}", duration=0.9)
+            if outputs >= 1:
+                yield yld
+            gr.Info(f"Time passed: {str(counter)}s", duration=0.9)
 
         wait(t)
 
