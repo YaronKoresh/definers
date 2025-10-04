@@ -56,22 +56,15 @@ collections.MutableSequence = collections.abc.MutableSequence
 
 
 gen_kwargs = {
-        "top_k": 250,
-        "top_p": 0.85,
-        "min_p": 0.0,
-        "length_penalty": -1.5,
-        "guidance_scale": 5.5,
-        "exponential_decay_length_penalty": (1, 1.05),
-        "num_beams": 32,
-        "early_stopping": True,
-        "repetition_penalty": 1.5,
-        "encoder_repetition_penalty": 1.5,
-        "no_repeat_ngram_size": 2,
-        "encoder_no_repeat_ngram_size": 2,
-        "typical_p": 0.85,
-        "epsilon_cutoff": 0.5,
-        "renormalize_logits": True,
-        "do_sample": True,
+    "num_beams": 32,
+    "do_sample": False,
+    "early_stopping": True,
+    "no_repeat_ngram_size": 2,
+    "encoder_no_repeat_ngram_size": 2,
+    "repetition_penalty": 1.5,
+    "encoder_repetition_penalty": 1.5,
+    "length_penalty": -1.5,
+    "exponential_decay_length_penalty": (1, 1.05),
 }
 
 ai_model_extensions = {
