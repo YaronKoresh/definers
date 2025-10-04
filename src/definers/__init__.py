@@ -10612,6 +10612,7 @@ def start(proj: str):
 
         FRAMES_PER_CHUNK = 15
         fps = 20
+        steps = 40
 
         @spaces.GPU(duration=60)
         def generate_chunk(
@@ -10652,8 +10653,8 @@ def start(proj: str):
                 prompt=txt,
                 image=input_image,
                 generator=generator,
+                num_inference_steps=steps,
                 num_frames=FRAMES_PER_CHUNK,
-                fps=fps // 1.3,
             )
     
             chunk_path = full_path(chunks_path, f"chunk_{current_chunk_index}.gif")
