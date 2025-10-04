@@ -77,12 +77,12 @@ beam_kwargs_translation = {
 }
 
 beam_kwargs_summarization = {
-    "num_beams": 8,
+    "num_beams": 10,
     "early_stopping": True,
-    "length_penalty": 2.5,
+    "length_penalty": 1.4,
     "no_repeat_ngram_size": 3,
-    "encoder_no_repeat_ngram_size": 4,
-    "repetition_penalty": 1.25,
+    "encoder_no_repeat_ngram_size": 3,
+    "repetition_penalty": 1.2,
     "encoder_repetition_penalty": 1.1,
 }
 
