@@ -63,8 +63,7 @@ gen_kwargs = {
     "encoder_no_repeat_ngram_size": 2,
     "repetition_penalty": 1.5,
     "encoder_repetition_penalty": 1.5,
-    "length_penalty": -1.5,
-    "exponential_decay_length_penalty": (1, 1.05),
+    "length_penalty": -0.5,
 }
 
 ai_model_extensions = {
@@ -10822,13 +10821,13 @@ def start(proj: str):
         def title(image_path, top, middle, bottom):
             return write_on_image(image_path, top, middle, bottom)
 
-        @spaces.GPU(duration=90)
+        @spaces.GPU(duration=50)
         def handle_generation(text, w, h):
             w, h = get_max_resolution(w, h, mega_pixels=1.5)
             text = optimize_prompt_realism(text)
             return pipe("image", prompt=text, resolution=f"{w}x{h}")
 
-        @spaces.GPU(duration=90)
+        @spaces.GPU(duration=30)
         def handle_upscaling(path):
             return upscale(path)
 
