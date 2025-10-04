@@ -1039,6 +1039,8 @@ def set_system_message(
 
 
 def get_audio_duration(file_path):
+    file_path = full_path(file_path)
+    
     cmd = [
         "ffprobe",
         "-v", "quiet",
@@ -1068,9 +1070,11 @@ def get_audio_duration(file_path):
 
 
 def split_audio(
-    file_path, duration=5, count=None, skip=0, resample=None
+    file_path:str, duration:float=5, count:int=None, skip:int=0, resample:int=None
 ):
-    if not os.path.exists(file_path):
+    file_path = full_path(file_path)
+    
+    if not exist(file_path):
         print(f"Error: File not found at {file_path}")
         return []
 
@@ -1091,8 +1095,8 @@ def split_audio(
                 print(f"Adjusting skip to {new_skip} to fit {count} chunks of {duration}s each.")
                 skip = new_skip
 
-    output_dir = tempfile.mkdtemp()
-    output_pattern = os.path.join(output_dir, "chunk_%04d.mp3")
+    output_dir = tmp(dir=True)
+    output_pattern = full_path(output_dir, "chunk_%04d.mp3")
 
     cmd = [
         "ffmpeg",
@@ -1125,14 +1129,14 @@ def split_audio(
     except subprocess.CalledProcessError as e:
         print("Error during FFmpeg execution.")
         print(f"FFmpeg stderr:\n{e.stderr.decode()}")
-        shutil.rmtree(output_dir) # Clean up temp directory
+        delete(output_dir)
         return []
     except FileNotFoundError:
         print("Error: ffmpeg command not found. Is FFmpeg installed and in your PATH?")
-        shutil.rmtree(output_dir)
+        delete(output_dir)
         return []
 
-    res_paths = sorted(glob(os.path.join(output_dir, "chunk_*.mp3")))
+    res_paths = sorted(paths(full_path(output_dir, "chunk_*.mp3")))
 
     print(f"Successfully created {len(res_paths)} chunks in {output_dir}")
     return res_paths
@@ -3838,7 +3842,7 @@ def paths(*patterns):
         except Exception as e:
             pass
 
-    return list(set(path_list))
+    return sorted(list(set(path_list)))
 
 
 def copy(src, dst):
@@ -4020,6 +4024,7 @@ def is_symlink(*p):
 
 
 def delete(path):
+    path = full_path(str(path))
     if not exist(path):
         return
     if is_directory(path) and not is_symlink(path):
