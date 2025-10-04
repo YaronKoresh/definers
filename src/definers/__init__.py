@@ -54,13 +54,28 @@ from urllib.parse import quote
 
 collections.MutableSequence = collections.abc.MutableSequence
 
+# Creative mode
+stochastic_kwargs = {
+    "do_sample": True,
+    "top_k": 250,
+    "top_p": 0.85,
+    "min_p": 0.15,
+    "typical_p": 0.5,
+    "epsilon_cutoff": 0.25,
+    "repetition_penalty": 1.5,
+    "encoder_repetition_penalty": 1.5,
+    "renormalize_logits": True,
+}
 
-gen_kwargs = {
-    "num_beams": 48,
+# Coherent mode
+beam_kwargs = {
+    "num_beams": 32,
     "early_stopping": True,
     "no_repeat_ngram_size": 2,
-    "repetition_penalty": 1.5,
-    "length_penalty": 0.0,
+    "encoder_no_repeat_ngram_size": 2,
+    "repetition_penalty": 0.8,
+    "encoder_repetition_penalty": 0.8,
+    "length_penalty": 0.2,
 }
 
 ai_model_extensions = {
@@ -1240,7 +1255,7 @@ def answer(history: list):
 
     generate_ids = MODELS["answer"].generate(
         **inputs,
-        **gen_kwargs,
+        **stochastic_kwargs,
         num_logits_to_keep=1,
     )
 
@@ -4927,7 +4942,7 @@ def ai_translate(text, lang="en"):
                 forced_bos_token_id=tokenizer.convert_tokens_to_ids(
                     tgt_code
                 ),
-                **gen_kwargs,
+                **beam_kwargs,
             )
             translated_chunk = tokenizer.decode(
                 translated_chunk[0], skip_special_tokens=True
@@ -5355,11 +5370,11 @@ def _summarize(text_to_summarize, is_chunk=False):
         key: tensor.to(device()) for key, tensor in encoded.items()
     }
 
-    _gen_kwargs = gen_kwargs
+    gen_kwargs = beam_kwargs
     if is_chunk:
-        _gen_kwargs["min_length"] = 40
+        gen_kwargs["min_length"] = 40
 
-    gen = MODELS["summary"].generate(**encoded, **_gen_kwargs)
+    gen = MODELS["summary"].generate(**encoded, **gen_kwargs)
     return TOKENIZERS["summary"].decode(gen[0], skip_special_tokens=True)
 
 
