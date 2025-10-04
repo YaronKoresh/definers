@@ -10912,11 +10912,11 @@ def start(proj: str):
 
         with gr.Blocks(
             theme=theme(),
-            title="Multilingual AI assistant",
+            title="AI Chatbot",
             css=css(),
         ) as app:
             chat = init_chat(
-                "Multilingual AI assistant", _get_chat_response
+                "AI Chatbot", _get_chat_response
             )
         app.launch(server_name="0.0.0.0", server_port=7860)
 
