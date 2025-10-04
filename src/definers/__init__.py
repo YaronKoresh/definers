@@ -5352,7 +5352,7 @@ def _summarize(text_to_summarize, is_chunk=False):
     gen_kwargs = {
         "max_length": 512,
         "repetition_penalty": 2.0,
-        "length_penalty": 1.0,
+        "length_penalty": 0.1,
         "no_repeat_ngram_size": 2,
         "num_beams": 64,
         "early_stopping": True,
@@ -5855,7 +5855,7 @@ def choose_random_words(word_list, num_words=10):
 
 def optimize_prompt_realism(prompt):
     prompt = preprocess_prompt(prompt)
-    prompt = f"{prompt}, {_positive_prompt_}, {_positive_prompt_}"
+    prompt = f"{_positive_prompt_}, {prompt}, {_positive_prompt_}"
     return prompt
 
 
