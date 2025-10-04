@@ -3913,7 +3913,7 @@ def find_package_paths(package_name):
 
 
 def unique(arr):
-    return list(set(arr))
+    return sorted(list(set(arr)))
 
 
 def tmp(suffix: str = ".data", keep: bool = True, dir=False):
@@ -10634,7 +10634,7 @@ def start(proj: str):
                         container=True,
                     )
                     lang = gr.Dropdown(
-                        choices=language_codes.values(),
+                        choices=unique(language_codes.values()),
                         value="english",
                     )
                 with gr.Column():
