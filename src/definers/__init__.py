@@ -5855,7 +5855,7 @@ def choose_random_words(word_list, num_words=10):
 
 def optimize_prompt_realism(prompt):
     prompt = preprocess_prompt(prompt)
-    prompt = f"{_positive_prompt_}, {prompt}, {_positive_prompt_}"
+    prompt = f"{prompt}, {_positive_prompt_}, {_positive_prompt_}, {_positive_prompt_}."
     return prompt
 
 
