@@ -350,7 +350,7 @@ FFMPEG_URL = (
 SYSTEM_MESSAGE = "You are a helpful and concise assistant. Respond with accurate and relevant answers in a friendly and clear manner. If you dont know the answer politely say so and do not make up information."
 
 tasks = {
-    "video": "stabilityai/stable-video-diffusion-img2vid-xt",
+    "video": "hunyuanvideo-community/HunyuanVideo-I2V",
     "image": "black-forest-labs/FLUX.1-dev",
     "image-spro": "tencent/SRPO",
     "detect": "facebook/detr-resnet-50",
@@ -5680,12 +5680,13 @@ py-modules = {py_modules}
     elif task in ["video"]:
 
         import torch
-        from diffusers import StableVideoDiffusionPipeline
+        from diffusers import HunyuanVideoImageToVideoPipeline, HunyuanVideoTransformer3DModel
 
-        model = StableVideoDiffusionPipeline.from_pretrained(
-            tasks[task],
-            torch_dtype=torch.float16,
-            variant="fp16",
+        transformer = HunyuanVideoTransformer3DModel.from_pretrained(
+            tasks[task], subfolder="transformer", torch_dtype=dtype()
+        )
+        model = HunyuanVideoImageToVideoPipeline.from_pretrained(
+            tasks[task], transformer=transformer, torch_dtype=dtype()
         )
         model.to(device())
 
@@ -5799,6 +5800,7 @@ def optimize_prompt_realism(prompt):
 def preprocess_prompt(prompt):
     if language(prompt) != "en":
         prompt = ai_translate(prompt)
+    prompt = simple_text(prompt)
     prompt = summary(prompt, max_words=20)
     prompt = simple_text(prompt)
     return prompt
@@ -10543,16 +10545,18 @@ def start(proj: str):
 
         init_pretrained_model("video",True)
 
-        chunks = tmp(dir=True)
-        FRAMES_PER_CHUNK = 20
-        fps = 30
+        FRAMES_PER_CHUNK = 15
+        fps = 20
 
         @spaces.GPU(duration=60)
         def generate_chunk(
-            orig_image, seed, duration,
-            chunk_state, progress=gr.Progress()
+            chunks_path,
+            txt, img,
+            dur, seed,
+            chunk_state,
+            progress=gr.Progress()
         ):
-            total_frames = int(duration * fps)
+            total_frames = int(dur * fps)
             total_chunks = math.ceil(total_frames / FRAMES_PER_CHUNK)
     
             current_chunk_index = chunk_state["current_chunk"]
@@ -10561,7 +10565,7 @@ def start(proj: str):
                 raise gr.Error("All chunks have been generated. Please combine them now.") 
     
             if current_chunk_index == 1:
-                input_image = ImageOps.fit(orig_image, (1024, 576), Image.Resampling.LANCZOS)
+                input_image = ImageOps.fit(img, (1024, 576), Image.Resampling.LANCZOS)
                 gr.Info("Generating first chunk using the initial image...")
             else:
                 previous_chunk_path = chunk_state["chunk_paths"][-1]
@@ -10580,16 +10584,14 @@ def start(proj: str):
             generator = torch.Generator(device()).manual_seed(int(seed) + current_chunk_index)
 
             output = MODELS["video"](
+                prompt=txt,
                 image=input_image,
                 generator=generator,
                 num_frames=FRAMES_PER_CHUNK,
-                decode_chunk_size=FRAMES_PER_CHUNK,
-                fps=fps // 1.5,
-                motion_bucket_id=400,
-                noise_aug_strength=0.05,
+                fps=fps // 1.3,
             )
     
-            chunk_path = full_path(chunks, f"chunk_{current_chunk_index}.gif")
+            chunk_path = full_path(chunks_path, f"chunk_{current_chunk_index}.gif")
             export_to_gif(output.frames[0], chunk_path, fps=fps)
     
             chunk_state["chunk_paths"].append(chunk_path)
@@ -10626,14 +10628,14 @@ def start(proj: str):
             )
             return final_gif_path, gr.update(visible=False)
 
-        def reset_state():
+        def reset_state(chunks_path):
 
-            global chunks
-            delete(chunks)
-            chunks = tmp(dir=True)
+            delete(chunks_path)
+            chunks_path = tmp(dir=True)
     
             initial_state = { "current_chunk": 1, "chunk_paths": [] }
             return (
+                chunks_path,
                 initial_state,
                 None,
                 "Ready to generate the first chunk.",
@@ -10652,40 +10654,49 @@ def start(proj: str):
 
             with gr.Row():
                 with gr.Column(scale=1):
-                    img_input = gr.Image(label="Input Image", type="pil", height=420)
 
-                    with gr.Row():
-                        duration_slider = gr.Slider(minimum=1, maximum=30, value=3, step=1, label="Total Duration (s)")
+                    img = gr.Image(label="Input Image", type="pil", height=420)
+                    txt = gr.Textbox(
+                        placeholder="Describe the scene",
+                        value="",
+                        lines=4,
+                        label="Prompt",
+                        container=True,
+                    )
+
+                    dur = gr.Slider(minimum=1, maximum=30, value=3, step=1, label="Total Duration (s)")
             
                     with gr.Accordion("Advanced Settings", open=False):
-                        seed_input = gr.Number(label="Seed (-1 for random)", minimum=-1, value=-1)
+                        seed = gr.Number(label="Seed (-1 for random)", minimum=-1, value=-1)
         
                 with gr.Column(scale=1):
-                    output_chunk = gr.Image(label="Latest Generated Chunk / Final Animation", interactive=False, height=420)
-                    progress_text = gr.Markdown("Ready to generate the first chunk.")
+                    out = gr.Image(label="Latest Generated Chunk / Final Animation", interactive=False, height=420)
+                    prog = gr.Markdown("Ready to generate the first chunk.")
             
             with gr.Row():
                 generate_button = gr.Button("Generate Next Chunk", variant="primary")
                 combine_button = gr.Button("Combine Chunks into Final GIF", variant="stop", visible=False)
                 reset_button = gr.Button("Start Over")
 
-            form_inputs = [img_input, seed_input, duration_slider, chunk_state]
+            with gr.Row(visible=False):
+                chunks_path = tmp(dir=True)
 
             generate_button.click(
                 fn=keep_alive(generate_chunk, 4),
-                inputs=form_inputs,
-                outputs=[output_chunk, chunk_state, progress_text, combine_button]
+                inputs=[chunks_path, txt, img, dur, seed, chunk_state],
+                outputs=[out, chunk_state, prog, combine_button]
             )
 
             combine_button.click(
                 fn=combine_chunks,
                 inputs=[chunk_state],
-                outputs=[output_chunk, combine_button]
+                outputs=[out, combine_button]
             )
     
             reset_button.click(
                 fn=reset_state,
-                outputs=[chunk_state, output_chunk, progress_text, combine_button, generate_button]
+                inputs=[chunks_path],
+                outputs=[chunks_path, chunk_state, out, prog, combine_button, generate_button]
             )
 
         app.launch(server_name="0.0.0.0", server_port=7860)
