@@ -10574,20 +10574,17 @@ def keep_alive(fn, outputs:int=1):
                 catch(e)
             finished[0] = True
 
-        t1 = thread(thread_target)
+        t = thread(thread_target)
 
-        def thread_alive():
-            counter = 0
-            while True:
-                sleep(1)
-                counter += 1
-                if finished[0]:
-                    break
-                gr.Info(f"Seconds passed: {str(counter)}", duration=0.9)
+        counter = 0
+        while True:
+            sleep(1)
+            counter += 1
+            if finished[0]:
+                break
+            gr.Info(f"Seconds passed: {str(counter)}", duration=0.9)
 
-        t2 = thread(thread_alive)
-        
-        wait(t1, t2)
+        wait(t)
 
         if outputs == 0:
             return
