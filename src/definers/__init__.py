@@ -451,7 +451,7 @@ common_audio_formats = [
 ]
 
 _negative_prompt_ = "glamour or makeup, airbrushed or smooth, retouching or polished, perfect or oversaturated, CGI or 3d, vfx or SFX, rendered or painted, unreal or octane, cinematic or bokeh, blurry or cropped, mutated or duplicated"
-_positive_prompt_ = "journalism, realism, national geographic, stark, minimal, rough, sunlit, grainy, imperfect"
+_positive_prompt_ = "journalism, realism, national geographic, stark, minimalism, rough, grainy, imperfect, natural"
 
 
 def _init_logger():
@@ -5896,14 +5896,14 @@ def pipe(
         params2["prompt"] = prompt
         params2["height"] = height
         params2["width"] = width
-        params2["guidance_scale"] = 8.0
+        params2["guidance_scale"] = 5.5
         if task == "video":
             params2["num_videos_per_prompt"] = 1
             params2["num_frames"] = length
         else:
             # params2["negative_prompt"] = _negative_prompt_
             params2["max_sequence_length"] = 512
-        params2["num_inference_steps"] = 40
+        params2["num_inference_steps"] = 50
         params2["generator"] = torch.Generator(device()).manual_seed(
             random.randint(0, big_number())
         )
