@@ -10578,11 +10578,11 @@ def keep_alive(fn, outputs:int=1):
 
         counter = 0
         while t.is_alive():
-            sleep(5)
-            counter += 5
+            sleep(20)
+            counter += 20
             if finished[0]:
                 break
-            gr.Info(f"Seconds passed: {str(counter)}", duration=2.5)
+            gr.Info(f"Seconds passed: {str(counter)}", duration=2.0)
         
         wait(t)
 
