@@ -4918,9 +4918,8 @@ def ai_translate(text, lang="en"):
                 ),
                 max_length=len(input_tokens) + 50,
                 num_return_sequences=1,
-                num_beams=64,
+                num_beams=512,
                 length_penalty=0.1,
-                no_repeat_ngram_size=2,
                 renormalize_logits=True,
             )
             translated_chunk = tokenizer.decode(
