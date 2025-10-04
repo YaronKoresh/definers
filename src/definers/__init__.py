@@ -996,9 +996,9 @@ def set_system_message(
     style_parts = []
 
     if creative == True:
-        style_parts.append("* Style: Be highly creative and imaginative in your responses.")
+        style_parts.append("* Style: Be highly creative and innovative in your responses.")
     elif creative == False:
-        style_parts.append("* Style: Be highly careful and calculated in your responses.")
+        style_parts.append("* Style: Be highly careful and calculated to not give any experimental instructions or unverified content in your responses.")
 
     tone_desc = []
     if friendly == True:
