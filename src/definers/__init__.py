@@ -1245,7 +1245,6 @@ def answer(history: list):
         **inputs,
         **stochastic_kwargs,
         max_length=16384,
-        stop_sequences=["<|end|>"],
         num_logits_to_keep=1,
     )
 
