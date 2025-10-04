@@ -55,6 +55,26 @@ from urllib.parse import quote
 collections.MutableSequence = collections.abc.MutableSequence
 
 
+gen_kwargs = {
+        "top_k": 250,
+        "top_p": 0.85,
+        "min_p": 0.0,
+        "length_penalty": -1.5,
+        "guidance_scale": 5.5,
+        "exponential_decay_length_penalty": (1, 1.05),
+        "num_beams": 32,
+        "early_stopping": True,
+        "repetition_penalty": 1.5,
+        "encoder_repetition_penalty": 1.5,
+        "no_repeat_ngram_size": 2,
+        "encoder_no_repeat_ngram_size": 2,
+        "typical_p": 0.85,
+        "epsilon_cutoff": 0.5,
+        "renormalize_logits": True,
+        "token_healing": True,
+        "do_sample": True,
+}
+
 ai_model_extensions = {
     "safetensors",  # Stable Diffusion, general use
     "onnx",  # Open Neural Network Exchange
@@ -1232,9 +1252,7 @@ def answer(history: list):
 
     generate_ids = MODELS["answer"].generate(
         **inputs,
-        max_new_tokens=16384,
-        num_beams=48,
-        length_penalty=0.1,
+        **gen_kwargs,
         num_logits_to_keep=1,
     )
 
@@ -4921,11 +4939,7 @@ def ai_translate(text, lang="en"):
                 forced_bos_token_id=tokenizer.convert_tokens_to_ids(
                     tgt_code
                 ),
-                max_length=len(input_tokens) + 50,
-                num_return_sequences=1,
-                num_beams=512,
-                length_penalty=0.1,
-                renormalize_logits=True,
+                **gen_kwargs,
             )
             translated_chunk = tokenizer.decode(
                 translated_chunk[0], skip_special_tokens=True
@@ -5353,17 +5367,11 @@ def _summarize(text_to_summarize, is_chunk=False):
         key: tensor.to(device()) for key, tensor in encoded.items()
     }
 
-    gen_kwargs = {
-        "max_length": 512,
-        "length_penalty": 0.1,
-        "num_beams": 64,
-        "early_stopping": True,
-    }
-
+    _gen_kwargs = gen_kwargs
     if is_chunk:
-        gen_kwargs["min_length"] = 40
+        _gen_kwargs["min_length"] = 40
 
-    gen = MODELS["summary"].generate(**encoded, **gen_kwargs)
+    gen = MODELS["summary"].generate(**encoded, **_gen_kwargs)
     return TOKENIZERS["summary"].decode(gen[0], skip_special_tokens=True)
 
 
