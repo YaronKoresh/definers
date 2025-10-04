@@ -10741,7 +10741,7 @@ def start(proj: str):
                 reset_button = gr.Button("Start Over")
 
             with gr.Row(visible=False):
-                chunks_path = tmp(dir=True)
+                chunks_path = gr.Textbox(value=tmp(dir=True))
 
             generate_button.click(
                 fn=keep_alive(generate_chunk, 4),
