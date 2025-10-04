@@ -5350,9 +5350,7 @@ def _summarize(text_to_summarize, is_chunk=False):
 
     gen_kwargs = {
         "max_length": 512,
-        "repetition_penalty": 2.0,
         "length_penalty": 0.1,
-        "no_repeat_ngram_size": 2,
         "num_beams": 64,
         "early_stopping": True,
     }
