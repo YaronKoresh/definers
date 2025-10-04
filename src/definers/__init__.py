@@ -451,7 +451,7 @@ common_audio_formats = [
 ]
 
 _negative_prompt_ = "glamour or makeup, airbrushed or smooth, retouching or polished, perfect or oversaturated, CGI or 3d, vfx or SFX, rendered or painted, unreal or octane, cinematic or bokeh, blurry or cropped, mutated or duplicated"
-_positive_prompt_ = "journalism, realism, national geographic, stark, minimalism, rough, grainy, imperfect, natural"
+_positive_prompt_ = "realism, journalism, realistic, documentary, minimalism, minimalistic, rough textures, textures roughness, grainy, reality, standard, natural, simple, natural reality, simplicity, simple reality"
 
 
 def _init_logger():
@@ -5857,7 +5857,7 @@ def choose_random_words(word_list, num_words=10):
 
 def optimize_prompt_realism(prompt):
     prompt = preprocess_prompt(prompt)
-    prompt = f"{prompt}, {_positive_prompt_}, {_positive_prompt_}, {_positive_prompt_}."
+    prompt = f"{prompt}, {_positive_prompt_}."
     return prompt
 
 
@@ -10662,6 +10662,8 @@ def start(proj: str):
             chunk_state,
             progress=gr.Progress()
         ):
+            txt = optimize_prompt_realism(txt)
+            
             total_frames = int(dur * fps)
             total_chunks = math.ceil(total_frames / FRAMES_PER_CHUNK)
     
