@@ -10645,7 +10645,7 @@ def start(proj: str):
             with gr.Row():
                 btn = gr.Button(value="Translate")
             btn.click(
-                fn=handle_translation,
+                fn=handle_translate,
                 inputs=[txt,lang],
                 outputs=[res],
             )
