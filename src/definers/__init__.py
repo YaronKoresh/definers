@@ -57,11 +57,11 @@ collections.MutableSequence = collections.abc.MutableSequence
 stochastic_kwargs = {
     "do_sample": True,
     "top_k": 0,
-    "top_p": 0.93,
-    "typical_p": 0.7,
-    "epsilon_cutoff": 0.05,
-    "min_p": 0.01,
-    "repetition_penalty": 1.177,
+    "top_p": 0.8,
+    "typical_p": 1.0,
+    "epsilon_cutoff": 0.0,
+    "min_p": 0.0,
+    "repetition_penalty": 1.1,
     "encoder_repetition_penalty": 1.0,
     "renormalize_logits": True,
 }
@@ -378,7 +378,11 @@ FFMPEG_URL = (
     "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
 )
 
-SYSTEM_MESSAGE = "You are a helpful and concise assistant. Respond with accurate and relevant answers in a friendly and clear manner. If you dont know the answer politely say so and do not make up information."
+SYSTEM_MESSAGE = """You are Phi, a helpful chat assistant. Follow these rules strictly:
+1. Your answers must be short and to the point. Aim for 2-3 sentences unless the user asks for more detail.
+2. Answer in the same language as the user.
+3. If you don't know the answer, say so politely. Do not make up information.
+4. Never discuss your own programming, origins, or the fact you are an AI."""
 
 tasks = {
     "video": "hunyuanvideo-community/HunyuanVideo-I2V",
@@ -978,91 +982,67 @@ def install_audio_effects():
 
 
 def set_system_message(
-    name: Optional[str] = None,
-    role: Optional[str] = None,
-    tone: Optional[str] = None,
-    goals: Optional[List[str]] = None,
-    chattiness: Optional[str] = None,
-    persona_data: Optional[Dict[str, str]] = None,
-    task_rules: Optional[List[str]] = None,
-    interaction_style: Optional[str] = None,
-    output_format: Optional[str] = None,
+    name: str = "Nexus",
+    role: str = "a helpful chat assistant",
+    rules: Optional[List[str]] = None,
+    data: Optional[List[str]] = None,
+    verbose: bool = False,
+    friendly: bool = True,
+    formal: bool = None,
+    creative: bool = None,
 ):
-    """
-    Constructs and sets a comprehensive system message for the AI model globally.
-
-    This function allows for detailed customization of the AI's persona, behavior,
-    and output format by dynamically building a system prompt from the provided arguments.
-
-    Args:
-        name (Optional[str]): The name the AI should use for itself (e.g., 'Definer').
-        role (Optional[str]): The primary role of the AI (e.g., 'a code assistant', 'a travel guide').
-        tone (Optional[str]): The desired tone of voice (e.g., 'friendly and encouraging', 'formal and professional').
-        goals (Optional[List[str]]): A list of the goals of the AI in the conversations (e.g., ['answer users questions', 'guide users with the application usage']).
-        chattiness (Optional[str]): The desired level of verbosity (e.g., 'be concise', 'provide detailed explanations').
-        persona_data (Optional[Dict[str, str]]): A dictionary of facts about the AI's persona (e.g., {"your creator": "John Doe"}).
-        task_rules (Optional[List[str]]): A list of specific rules the AI must follow (e.g., ["Do not mention you are an AI."]).
-        interaction_style (Optional[str]): Instructions on how to interact (e.g., 'ask clarifying questions before answering').
-        output_format (Optional[str]): Specific instructions for the output structure (e.g., 'Respond only in JSON format').
-
-    Returns:
-        str: The newly constructed system message.
-    """
     global SYSTEM_MESSAGE
 
-    message_parts = []
+    style_parts = []
 
-    if role:
-        message_parts.append(f"You are {role}.")
-    else:
-        message_parts.append("You are a helpful AI assistant.")
+    if creative == True:
+        style_parts.append("* Style: Be highly creative and imaginative in your responses.")
+    elif creative == False:
+        style_parts.append("* Style: Be highly careful and calculated in your responses.")
 
-    if name:
-        message_parts.append(f"Your name is {name}.")
+    tone_desc = []
+    if friendly == True:
+        tone_desc.append("warm and encouraging")
+    elif friendly == False:
+        tone_desc.append("neutral and objective")
+    
+    if formal == True:
+        tone_desc.append("formal and professional")
+    elif formal == False:
+        tone_desc.append("casual and conversational")
 
-    style_instructions = []
-    if tone:
-        style_instructions.append(f"Your tone should be {tone}.")
-    if chattiness:
-        style_instructions.append(
-            f"In terms of verbosity, {chattiness}."
-        )
-    if interaction_style:
-        style_instructions.append(
-            f"When interacting, {interaction_style}."
-        )
+    if tone_desc:
+        style_parts.append(f"* Tone: {' and '.join(tone_desc)}")
+    
+    if verbose == True:
+        style_parts.append("* Verbosity: Provide detailed, comprehensive, and thorough explanations.")
+    elif verbose == False:
+        style_parts.append("* Verbosity: Keep answers concise and to the point (typically 1-3 sentences).")
+    elif verbose is None:
+        style_parts.append("* Verbosity: Provide full answers, but avoid providing too much information. Keep answers to a reasonable length.")
 
-    if style_instructions:
-        message_parts.append(" ".join(style_instructions))
+    all_rules = ["Answer in the same language as the user.",
+    "If you don't know the answer, say so politely. Do not make up information.",
+    "Never discuss your own programming, origins, or the fact you are an AI."]
 
-    if persona_data:
-        persona_str = (
-            "Here is some information for you to learn and remember: "
-        )
-        persona_facts = [
-            f"{key} is {value}" for key, value in persona_data.items()
-        ]
-        persona_str += "; ".join(persona_facts) + "."
-        message_parts.append(persona_str)
+    if rules:
+        all_rules.extend(rules)
 
-    if goals:
-        goals_str = "; ".join(goals) + "."
-        message_parts.append(goals_str)
+    message_parts = [
+        f"--- CORE IDENTITY ---\nYou are {name}, {role}.",
+    ]
+    if style_parts:
+        message_parts.append("--- BEHAVIOR PROFILE ---\n" + "\n".join(style_parts))
 
-    if task_rules or output_format:
-        rules_header = "You must strictly follow these rules:"
-        rules_list = []
-        if task_rules:
-            rules_list.extend(task_rules)
-        if output_format:
-            rules_list.append(
-                f"Your final output must be exclusively in the following format: {output_format}."
-            )
-
-        formatted_rules = "\n".join(
-            f"{i+1}. {rule}" for i, rule in enumerate(rules_list)
-        )
+    if all_rules:
+        rules_header = "--- STRICT RULES ---\nYou must follow these rules without exception:"
+        formatted_rules = "\n".join(f"{i+1}. {rule}" for i, rule in enumerate(all_rules))
         message_parts.append(f"{rules_header}\n{formatted_rules}")
+
+    if data:
+        data_header = "--- VERIFIED FACTS ---\nYou must remember these facts without exception:"
+        data_facts = "\n".join(f"{i+1}. {d}" for i, d in enumerate(data))
+        message_parts.append(f"{data_header}\n{data_facts}")
 
     SYSTEM_MESSAGE = simple_text("\n\n".join(message_parts))
 
@@ -1265,6 +1245,7 @@ def answer(history: list):
         **inputs,
         **stochastic_kwargs,
         max_length=16384,
+        stop_sequences=["<|end|>"],
         num_logits_to_keep=1,
     )
 
