@@ -54,28 +54,36 @@ from urllib.parse import quote
 
 collections.MutableSequence = collections.abc.MutableSequence
 
-# Creative mode
 stochastic_kwargs = {
     "do_sample": True,
-    "top_k": 250,
-    "top_p": 0.85,
-    "min_p": 0.15,
-    "typical_p": 0.5,
-    "epsilon_cutoff": 0.25,
-    "repetition_penalty": 1.5,
-    "encoder_repetition_penalty": 1.5,
+    "top_k": 0,
+    "top_p": 0.93,
+    "typical_p": 0.7,
+    "epsilon_cutoff": 0.05,
+    "min_p": 0.01,
+    "repetition_penalty": 1.177,
+    "encoder_repetition_penalty": 1.0,
     "renormalize_logits": True,
 }
 
-# Coherent mode
-beam_kwargs = {
-    "num_beams": 32,
+beam_kwargs_translation = {
+    "num_beams": 5,
     "early_stopping": True,
-    "no_repeat_ngram_size": 2,
-    "encoder_no_repeat_ngram_size": 2,
-    "repetition_penalty": 0.8,
-    "encoder_repetition_penalty": 0.8,
-    "length_penalty": 0.2,
+    "length_penalty": 1.1,
+    "no_repeat_ngram_size": 3,
+    "encoder_no_repeat_ngram_size": 0,
+    "repetition_penalty": 1.15,
+    "encoder_repetition_penalty": 1.0,
+}
+
+beam_kwargs_summarization = {
+    "num_beams": 8,
+    "early_stopping": True,
+    "length_penalty": 2.5,
+    "no_repeat_ngram_size": 3,
+    "encoder_no_repeat_ngram_size": 4,
+    "repetition_penalty": 1.25,
+    "encoder_repetition_penalty": 1.1,
 }
 
 ai_model_extensions = {
@@ -4942,7 +4950,7 @@ def ai_translate(text, lang="en"):
                 forced_bos_token_id=tokenizer.convert_tokens_to_ids(
                     tgt_code
                 ),
-                **beam_kwargs,
+                **beam_kwargs_translation,
             )
             translated_chunk = tokenizer.decode(
                 translated_chunk[0], skip_special_tokens=True
@@ -5370,7 +5378,7 @@ def _summarize(text_to_summarize, is_chunk=False):
         key: tensor.to(device()) for key, tensor in encoded.items()
     }
 
-    gen_kwargs = beam_kwargs
+    gen_kwargs = beam_kwargs_summarization
     if is_chunk:
         gen_kwargs["min_length"] = 40
 
@@ -6867,7 +6875,7 @@ def get_chat_response(message, history: list):
     history.append(
         {
             "role": "user",
-            "content": "and make sure to double-check your conclusions while avoiding any fake data or irrelevant information.",
+            "content": "and make sure to double-check your conclusions while avoiding any fake data or irrelevant information usage.",
         }
     )
 
@@ -6885,6 +6893,7 @@ def get_chat_response(message, history: list):
     )
 
     response = answer(history)
+    log("Chatbot response", response)
 
     response = summary(response, max_words=50)
     if orig_lang and orig_lang != language(response):
