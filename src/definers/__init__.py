@@ -71,7 +71,6 @@ gen_kwargs = {
         "typical_p": 0.85,
         "epsilon_cutoff": 0.5,
         "renormalize_logits": True,
-        "token_healing": True,
         "do_sample": True,
 }
 
