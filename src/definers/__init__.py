@@ -10597,7 +10597,48 @@ def start(proj: str):
 
     proj = proj.strip().lower()
 
-    if proj == "video":
+    if proj == "translate":
+        init_pretrained_model("translate",True)
+
+        def title(image_path, top, middle, bottom):
+            return write_on_image(image_path, top, middle, bottom)
+
+        @spaces.GPU(duration=30)
+        def handle_translate(txt, tgt_lang):
+            return ai_translate(txt, value_to_key(language_codes, tgt_lang))
+
+        with gr.Blocks(theme=theme(), css=css()) as app:
+            gr.Markdown("# AI Translator")
+            gr.Markdown("### An AI-based translation software for the community")
+            with gr.Row():
+                with gr.Column():
+                    txt = gr.Textbox(
+                        placeholder="Some text...",
+                        value="",
+                        lines=4,
+                        label="Input",
+                        container=True,
+                    )
+                    lang = gr.Dropdown(
+                        choices=language_codes.values(),
+                        value="english",
+                    )
+                with gr.Column():
+                    res = gr.Textbox(
+                        label="Results",
+                        container=True,
+                        value="",
+                    )
+            with gr.Row():
+                btn = gr.Button(value="Translate")
+            btn.click(
+                fn=handle_translation,
+                inputs=[txt,lang],
+                outputs=[res],
+            )
+        app.launch(server_name="0.0.0.0", server_port=7860)
+
+    elif proj == "video":
         import torch
         from diffusers.utils import export_to_gif
         from PIL import Image, ImageOps
