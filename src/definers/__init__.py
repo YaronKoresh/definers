@@ -10605,13 +10605,13 @@ def start(proj: str):
         from diffusers.utils import export_to_gif
         from PIL import Image, ImageOps
 
-        init_pretrained_model("video",True)
+        init_pretrained_model("video", True)
 
-        FRAMES_PER_CHUNK = 15
+        FRAMES_PER_CHUNK = 5
         fps = 20
-        steps = 40
+        steps = 30
 
-        @spaces.GPU(duration=60)
+        @spaces.GPU(duration=120)
         def generate_chunk(
             chunks_path,
             txt, img,
