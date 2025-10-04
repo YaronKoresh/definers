@@ -10608,7 +10608,7 @@ def start(proj: str):
         def title(image_path, top, middle, bottom):
             return write_on_image(image_path, top, middle, bottom)
 
-        @spaces.GPU(duration=30)
+        @spaces.GPU(duration=15)
         def handle_translate(txt, tgt_lang):
             return ai_translate(txt, value_to_keys(language_codes, tgt_lang)[0])
 
@@ -10633,6 +10633,8 @@ def start(proj: str):
                         label="Results",
                         container=True,
                         value="",
+                        lines=6,
+                        show_copy_button=True,
                     )
             with gr.Row():
                 btn = gr.Button(value="Translate")
