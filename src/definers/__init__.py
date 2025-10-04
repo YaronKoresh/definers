@@ -10649,7 +10649,7 @@ def start(proj: str):
         from diffusers.utils import export_to_gif
         from PIL import Image, ImageOps
 
-        init_pretrained_model("video")
+        init_pretrained_model("video", True)
         init_pretrained_model("summary", True)
         init_pretrained_model("translate", True)
 
