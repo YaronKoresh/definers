@@ -10588,9 +10588,9 @@ def keep_alive(fn, outputs:int=1):
 
         yld = None
         if outputs >=2:
-            yld = (gr.Update(),) * outputs
+            yld = (gr.update(),) * outputs
         elif outputs == 1:
-            yld = gr.Update()
+            yld = gr.update()
 
         results = [None]
         finished = [False]
