@@ -4729,7 +4729,7 @@ def google_drive_download(id, dest, unzip=True):
 
 
 def save_image(img, path="."):
-    name = os.path.join(path, "img_" + random_string() + ".png")
+    name = full_path(path, "img_" + random_string() + ".png")
     img.save(name)
     return name
 
@@ -5944,15 +5944,14 @@ def pipe(
         elif task == "video":
             outputs = MODELS["image"](**inputs)
 
-    if task in ["image", "video"]:
-        if task == "video":
-            sample = outputs.frames[0]
-            path = tmp("mp4")
-            export_to_video(sample, path, fps=24)
-            return path
-        else:
-            sample = outputs.images[0]
-            return save_image(sample)
+    if task == "video":
+        sample = outputs.frames[0]
+        path = tmp("mp4")
+        export_to_video(sample, path, fps=24)
+        return path
+    elif task == "image":
+        sample = outputs.images[0]
+        return save_image(sample)
     elif task == "answer":
         return outputs
     elif task == "detect":
