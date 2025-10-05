@@ -67,17 +67,17 @@ stochastic_kwargs = {
 }
 
 beam_kwargs_translation = {
-    "num_beams": 8,
+    "num_beams": 10,
     "early_stopping": True,
-    "length_penalty": 1.1,
+    "length_penalty": 1.2,
     "no_repeat_ngram_size": 3,
     "encoder_no_repeat_ngram_size": 0,
-    "repetition_penalty": 1.15,
+    "repetition_penalty": 1.2,
     "encoder_repetition_penalty": 1.0,
 }
 
 beam_kwargs_summarization = {
-    "num_beams": 8,
+    "num_beams": 10,
     "early_stopping": True,
     "length_penalty": 1.4,
     "no_repeat_ngram_size": 3,
@@ -4882,66 +4882,51 @@ def ai_translate(text, lang="en"):
         get_split_algo,
     )
 
-    punct_normalizer = MosesPunctNormalizer(lang="en")
-
-    if text == None or lang == None:
+    if not text or not text.strip():
         return ""
 
-    if text.strip() == "":
-        return ""
+    try:
+        source_lang_code = language(text)
+        src_code = unesco_mapping[source_lang_code]
+        tgt_code = unesco_mapping[target_lang]
+    except (KeyError, Exception) as e:
+        print(f"Language detection or mapping failed: {e}")
+        return text
 
-    lang = lang.strip()
-
-    tgt_code = unesco_mapping[lang]
-
-    from_lang_code = language(text)
-    src_code = unesco_mapping[from_lang_code]
-
-    if from_lang_code == "he":
-        text = strip_nikud(text)
-        
     if src_code == tgt_code:
         return text
 
-    model = MODELS["translate"]
+    if source_lang_code == "he":
+        text = strip_nikud(text)
 
-    tokenizer = TOKENIZERS["translate"]
-    tokenizer.src_lang = src_code
-    tokenizer.tgt_lang = tgt_code
-
+    punct_normalizer = MosesPunctNormalizer(lang=source_lang_code)
     text = punct_normalizer.normalize(text)
 
     paragraphs = text.split("\n")
     translated_paragraphs = []
 
-    short_code = src_code[:3]
-    splitter = get_split_algo(short_code, "default")
+    model = MODELS["translate"]
+    tokenizer = TOKENIZERS["translate"]
 
     for paragraph in paragraphs:
-        sentences = list(splitter(paragraph))
-        translated_sentences = []
+        if not paragraph.strip():
+            translated_paragraphs.append("")
+            continue
 
-        for sentence in sentences:
-            input_tokens = (
-                tokenizer(sentence, return_tensors="pt")
-                .input_ids[0]
-                .cpu()
-                .numpy()
-                .tolist()
-            )
-            translated_chunk = model.generate(
-                input_ids=torch.tensor([input_tokens]).to(device()),
-                forced_bos_token_id=tokenizer.convert_tokens_to_ids(
-                    tgt_code
-                ),
-                **beam_kwargs_translation,
-            )
-            translated_chunk = tokenizer.decode(
-                translated_chunk[0], skip_special_tokens=True
-            )
-            translated_sentences.append(translated_chunk)
+        inputs = tokenizer(paragraph, return_tensors="pt")
+        input_ids = inputs.input_ids.to(device())
 
-        translated_paragraph = " ".join(translated_sentences)
+        forced_token_id = tokenizer.lang_code_to_id[tgt_code]
+
+        translated_ids = model.generate(
+            input_ids=input_ids,
+            forced_bos_token_id=forced_token_id,
+            **beam_kwargs_translation
+        )
+        
+        translated_paragraph = tokenizer.decode(
+            translated_ids[0], skip_special_tokens=True
+        )
         translated_paragraphs.append(translated_paragraph)
 
     return "\n".join(translated_paragraphs)
@@ -5372,7 +5357,7 @@ def _summarize(text_to_summarize, is_chunk=False):
 
 def map_reduce_summary(text, max_words):
     words = text.split()
-    chunk_size = 50
+    chunk_size = 80
     overlap = 10
 
     chunk_summaries = []
@@ -5395,7 +5380,7 @@ def summary(text, max_words=20, min_loops=1):
     text = strip_nikud(text)
     words_count = len(text.split())
     while words_count > max_words or min_loops > 0:
-        if words_count > 60:
+        if words_count > 80:
             text = map_reduce_summary(text, max_words)
         else:
             text = _summarize(text, is_chunk=False)
