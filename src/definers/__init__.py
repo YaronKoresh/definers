@@ -5392,6 +5392,7 @@ def map_reduce_summary(text, max_words):
 
 
 def summary(text, max_words=20, min_loops=1):
+    text = strip_nikud(text)
     words_count = len(text.split())
     while words_count > max_words or min_loops > 0:
         if words_count > 60:
