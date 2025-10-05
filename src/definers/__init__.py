@@ -58,9 +58,8 @@ SYSTEM_MESSAGE = None
 
 stochastic_kwargs = {
     "do_sample": True,
-    "top_k": 0,
-    "top_p": 0.15,
-    "repetition_penalty": 1.1,
+    "top_k": 250,
+    "repetition_penalty": 1.2,
     "renormalize_logits": True,
 }
 
@@ -1228,7 +1227,7 @@ def answer(history: list):
     generate_ids = MODELS["answer"].generate(
         **inputs,
         **stochastic_kwargs,
-        max_length=1024,
+        max_length=4096,
         num_logits_to_keep=1,
     )
 
