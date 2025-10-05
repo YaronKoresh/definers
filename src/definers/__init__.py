@@ -10620,15 +10620,19 @@ def keep_alive(fn, outputs:int=1):
 
         t = thread(thread_target)
 
-        counter = 0
-        while True:
-            sleep(1)
-            counter += 1
-            if finished[0]:
-                break
-            if outputs >= 1:
+        sleep(5)
+        counter = 5
+        if outputs == 0:
+            while t.is_alive() and finished[0] == False:
+                gr.Info(f"Time passed: {str(counter)}s", duration=1.0)
+                sleep(5)
+                counter += 5
+        else:
+            while t.is_alive() and finished[0] == False:
                 yield yld
-            gr.Info(f"Time passed: {str(counter)}s", duration=0.9)
+                gr.Info(f"Time passed: {str(counter)}s", duration=1.0)
+                sleep(5)
+                counter += 5
 
         wait(t)
 
