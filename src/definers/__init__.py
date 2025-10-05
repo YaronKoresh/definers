@@ -10679,7 +10679,7 @@ def start(proj: str):
         from diffusers.utils import export_to_gif
         from PIL import Image, ImageOps
 
-        init_pretrained_model("video")
+        init_pretrained_model("video", True)
         init_pretrained_model("summary")
         init_pretrained_model("translate")
 
@@ -10687,7 +10687,7 @@ def start(proj: str):
         fps = 20
         steps = 30
 
-        @spaces.GPU(duration=180)
+        @spaces.GPU(duration=120)
         def generate_chunk(
             chunks_path,
             txt, img,
