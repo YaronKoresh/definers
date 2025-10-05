@@ -4885,43 +4885,93 @@ def ai_translate(text, lang="en"):
     if not text or not text.strip():
         return ""
 
-    try:
-        source_lang_code = language(text)
-        src_code = unesco_mapping[source_lang_code]
-        tgt_code = unesco_mapping[lang]
-    except (KeyError, Exception) as e:
-        print(f"Language detection or mapping failed: {e}")
-        return text
+    text = strip_nikud(text)
 
-    if src_code == tgt_code:
-        return text
+    long_paragraph_threshold = 500
 
-    if source_lang_code == "he":
-        text = strip_nikud(text)
-
-    punct_normalizer = MosesPunctNormalizer(lang=source_lang_code)
-    text = punct_normalizer.normalize(text)
+    tgt_code = unesco_mapping[lang]
 
     model = MODELS["translate"]
+    
     tokenizer = TOKENIZERS["translate"]
-
-    tokenizer.src_lang = src_code
     tokenizer.tgt_lang = tgt_code
 
-    inputs = tokenizer(text, return_tensors="pt")
-    input_ids = inputs.input_ids.to(device())
+    paragraphs = text.split("\n")
+    translated_paragraphs = []
+    
+    for paragraph in paragraphs:
+        if not paragraph.strip():
+            translated_paragraphs.append("")
+            continue
 
-    forced_token_id = tokenizer.convert_tokens_to_ids(tgt_code)
-
-    translated_ids = model.generate(
-            input_ids=input_ids,
-            forced_bos_token_id=forced_token_id,
-            **beam_kwargs_translation
-    )
+        try:
+            source_lang_code = language(paragraph)
+            src_code = unesco_mapping[source_lang_code]
         
-    return tokenizer.decode(
-            translated_ids[0], skip_special_tokens=True
-    )
+        except (KeyError, Exception) as e:
+            print(f"Language detection or mapping failed: {e}")
+            translated_paragraphs.append(paragraph)
+            continue
+
+        if src_code == tgt_code:
+            translated_paragraphs.append(paragraph)
+            continue
+
+        punct_normalizer = MosesPunctNormalizer(lang=source_lang_code)
+        paragraph = punct_normalizer.normalize(paragraph)
+
+        try:
+            splitter = get_split_algo(source_lang_code, "default")
+        except:
+            splitter = get_split_algo("char", "default")
+
+        tokenizer.src_lang = src_code
+
+        if len(paragraph) < LONG_PARAGRAPH_THRESHOLD:
+            try:
+                inputs = tokenizer(paragraph, return_tensors="pt")
+                input_ids = inputs.input_ids.to(device())
+                forced_token_id = tokenizer.convert_tokens_to_ids(tgt_code)
+
+                translated_ids = model.generate(
+                    input_ids=input_ids,
+                    forced_bos_token_id=forced_token_id,
+                    **beam_kwargs_translation_refined
+                )
+                
+                translated_paragraph = tokenizer.decode(translated_ids[0], skip_special_tokens=True)
+                translated_paragraphs.append(translated_paragraph)
+            except Exception as e:
+                print(f"Error translating short paragraph, skipping: {e}")
+                translated_paragraphs.append(f"[Translation Error: {paragraph[:30]}...]")
+        else:
+            try:
+                sentences = list(splitter(paragraph))
+                translated_sentences = []
+                for sentence in sentences:
+                    if not sentence.strip():
+                        continue
+                    
+                    inputs = tokenizer(sentence, return_tensors="pt")
+                    input_ids = inputs.input_ids.to(device())
+                    forced_token_id = tokenizer.convert_tokens_to_ids(tgt_code)
+
+                    translated_ids = model.generate(
+                        input_ids=input_ids,
+                        forced_bos_token_id=forced_token_id,
+                        **beam_kwargs_translation_refined
+                    )
+                    
+                    translated_chunk = tokenizer.decode(translated_ids[0], skip_special_tokens=True)
+                    translated_sentences.append(translated_chunk)
+                
+                translated_paragraph = " ".join(translated_sentences)
+                translated_paragraphs.append(translated_paragraph)
+            except Exception as e:
+                print(f"Error translating long paragraph chunks, skipping: {e}")
+                translated_paragraphs.append(f"[Translation Error: {paragraph[:30]}...]")
+
+    return "\n".join(translated_paragraphs)
 
 
 def google_translate(text, lang="en"):
