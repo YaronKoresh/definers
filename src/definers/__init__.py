@@ -11078,5 +11078,5 @@ set_system_message(
     verbose = False,
     friendly = True,
     formal = True,
-    creative = False,
+    creative = None,
 )
