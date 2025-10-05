@@ -58,32 +58,21 @@ stochastic_kwargs = {
     "do_sample": True,
     "top_k": 0,
     "top_p": 0.8,
-    "typical_p": 1.0,
-    "epsilon_cutoff": 0.0,
-    "min_p": 0.0,
     "repetition_penalty": 1.1,
-    "encoder_repetition_penalty": 1.0,
     "renormalize_logits": True,
 }
 
 beam_kwargs_translation = {
-    "num_beams": 10,
+    "num_beams": 16,
     "early_stopping": True,
-    "length_penalty": 1.2,
     "no_repeat_ngram_size": 3,
-    "encoder_no_repeat_ngram_size": 0,
-    "repetition_penalty": 1.2,
-    "encoder_repetition_penalty": 1.0,
 }
 
 beam_kwargs_summarization = {
-    "num_beams": 10,
+    "num_beams": 16,
     "early_stopping": True,
-    "length_penalty": 1.4,
     "no_repeat_ngram_size": 3,
-    "encoder_no_repeat_ngram_size": 3,
-    "repetition_penalty": 1.2,
-    "encoder_repetition_penalty": 1.1,
+    "encoder_no_repeat_ngram_size": 2,
 }
 
 ai_model_extensions = {
@@ -5391,7 +5380,7 @@ def _summarize(text_to_summarize, is_chunk=False):
 
     gen_kwargs = beam_kwargs_summarization
     if is_chunk:
-        gen_kwargs["min_length"] = 10
+        gen_kwargs["min_length"] = 30
 
     gen = MODELS["summary"].generate(**encoded, **gen_kwargs, max_length=512)
     return TOKENIZERS["summary"].decode(gen[0], skip_special_tokens=True)
@@ -5399,7 +5388,7 @@ def _summarize(text_to_summarize, is_chunk=False):
 
 def map_reduce_summary(text, max_words):
     words = text.split()
-    chunk_size = 80
+    chunk_size = 50
     overlap = 10
 
     chunk_summaries = []
