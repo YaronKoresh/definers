@@ -1135,7 +1135,7 @@ def split_audio(
         delete(output_dir)
         return []
 
-    res_paths = sorted(paths(full_path(output_dir, "chunk_*.mp3")))
+    res_paths = paths(full_path(output_dir, "chunk_*.mp3"))
 
     print(f"Successfully created {len(res_paths)} chunks in {output_dir}")
     return res_paths
