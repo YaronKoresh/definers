@@ -10632,12 +10632,12 @@ def keep_alive(fn, outputs:int=1):
         sleep(5)
         counter = 5
         if outputs == 0:
-            while t.is_alive() and finished[0] == False:
+            while finished[0] == False:
                 gr.Info(f"Time passed: {str(counter)}s", duration=1.0)
                 sleep(5)
                 counter += 5
         else:
-            while t.is_alive() and finished[0] == False:
+            while finished[0] == False:
                 yield yld
                 gr.Info(f"Time passed: {str(counter)}s", duration=1.0)
                 sleep(5)
