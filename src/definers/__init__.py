@@ -69,7 +69,7 @@ beam_kwargs_translation = {
 }
 
 beam_kwargs_summarization = {
-    "num_beams": 16,
+    "num_beams": 8,
     "early_stopping": True,
     "no_repeat_ngram_size": 3,
     "encoder_no_repeat_ngram_size": 2,
@@ -366,12 +366,6 @@ language_codes = {
 FFMPEG_URL = (
     "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
 )
-
-SYSTEM_MESSAGE = """You are Phi, a helpful chat assistant. Follow these rules strictly:
-1. Your answers must be short and to the point. Aim for 2-3 sentences unless the user asks for more detail.
-2. Answer in the same language as the user.
-3. If you don't know the answer, say so politely. Do not make up information.
-4. Never discuss your own programming, origins, or the fact you are an AI."""
 
 tasks = {
     "video": "hunyuanvideo-community/HunyuanVideo-I2V",
@@ -5366,7 +5360,7 @@ class Database:
             self.push(db, item["data"], item["timestamp"])
 
 
-def _summarize(text_to_summarize, is_chunk=False):
+def _summarize(text_to_summarize):
     prefix = "summarize: "
     encoded = TOKENIZERS["summary"](
         prefix + text_to_summarize,
@@ -5379,31 +5373,29 @@ def _summarize(text_to_summarize, is_chunk=False):
     }
 
     gen_kwargs = beam_kwargs_summarization
-    if is_chunk:
-        gen_kwargs["min_length"] = 30
 
     gen = MODELS["summary"].generate(**encoded, **gen_kwargs, max_length=512)
     return TOKENIZERS["summary"].decode(gen[0], skip_special_tokens=True)
 
 
 def map_reduce_summary(text, max_words):
-    words = text.split()
-    chunk_size = 50
+    chunk_size = 60
     overlap = 10
 
-    chunk_summaries = []
-    for i in range(0, len(words), chunk_size - overlap):
-        chunk_text = " ".join(words[i : i + chunk_size])
-        chunk_summary = _summarize(chunk_text, is_chunk=True)
-        chunk_summaries.append(chunk_summary)
+    while len(text.split()) > max_words:
+        
+        words = text.split()
+        
+        chunk_summaries = []
+        for i in range(0, len(words), chunk_size - overlap):
+            chunk_text = " ".join(words[i : i + chunk_size])
+            chunk_summary = _summarize(chunk_text)
+            chunk_summaries.append(chunk_summary)
+    
+        text = " ".join(chunk_summaries)
 
-    combined_summary = " ".join(chunk_summaries)
-
-    if len(combined_summary.split()) > max_words:
-        final_summary = _summarize(combined_summary, is_chunk=False)
-    else:
-        final_summary = combined_summary
-
+    
+    final_summary = _summarize(text)
     return final_summary
 
 
@@ -11041,3 +11033,12 @@ if _find_spec("dask"):
     dask.core.to_graphviz = _visualize_wrapper
 
 patch_torch_proxy_mode()
+
+SYSTEM_MESSAGE = set_system_message(
+    name = "Phi",
+    role = "a helpful chat assistant",
+    verbose = False,
+    friendly = True,
+    formal = True,
+    creative = False,
+)
