@@ -4916,7 +4916,7 @@ def ai_translate(text, lang="en"):
 
         tokenizer.src_lang = src_code
 
-        if len(paragraph) < LONG_PARAGRAPH_THRESHOLD:
+        if len(paragraph) < long_paragraph_threshold:
             try:
                 inputs = tokenizer(paragraph, return_tensors="pt")
                 input_ids = inputs.input_ids.to(device())
