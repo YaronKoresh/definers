@@ -4242,17 +4242,25 @@ def run(command, silent=False, env={}):
 
 
 def thread(func, *args, **kwargs):
+    results = [None]
+    def _func(_f, _r, *_a, **_kwa):
+        _r[0] = _f(*_a, **_kwa)
+        
     try:
-        t = threading.Thread(target=func, args=args, kwargs=kwargs)
-        t.start()
-        return t
+        results.append(
+            threading.Thread(target=_func, args=[func, results, *args], kwargs=kwargs)
+        )
+        results[1].start()
+        return results
     except Exception as e:
         catch(e)
 
 
 def wait(*threads):
     for t in threads:
-        t.join()
+        t[1].join()
+
+    return [t[0] for t in threads]
 
 
 def permit(path):
@@ -10605,7 +10613,7 @@ def keep_alive(fn, outputs:int=1):
     def worker(*args, **kwargs):
 
         yld = None
-        if outputs >=2:
+        if outputs >= 2:
             yld = (gr.update(),) * outputs
         elif outputs == 1:
             yld = gr.update()
@@ -10613,14 +10621,14 @@ def keep_alive(fn, outputs:int=1):
         results = [None]
         finished = [False]
         
-        def thread_target():
+        def thread_target(*args, **kwargs):
             try:
-                results[0] = fn(*args, **kwargs)
+                return fn(*args, **kwargs)
             except Exception as e:
                 catch(e)
             finished[0] = True
 
-        t = thread(thread_target)
+        t = thread(thread_target, *args, **kwargs)
 
         sleep(5)
         counter = 5
@@ -10636,12 +10644,12 @@ def keep_alive(fn, outputs:int=1):
                 sleep(5)
                 counter += 5
 
-        wait(t)
+        values = wait(t)
 
         if outputs == 0:
             return
 
-        return results[0]
+        return tuple(values)
         
     return worker
 
