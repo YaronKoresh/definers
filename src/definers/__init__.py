@@ -4888,7 +4888,7 @@ def ai_translate(text, lang="en"):
     try:
         source_lang_code = language(text)
         src_code = unesco_mapping[source_lang_code]
-        tgt_code = unesco_mapping[target_lang]
+        tgt_code = unesco_mapping[lang]
     except (KeyError, Exception) as e:
         print(f"Language detection or mapping failed: {e}")
         return text
