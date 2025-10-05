@@ -54,6 +54,8 @@ from urllib.parse import quote
 
 collections.MutableSequence = collections.abc.MutableSequence
 
+SYSTEM_MESSAGE = None
+
 stochastic_kwargs = {
     "do_sample": True,
     "top_k": 0,
@@ -11034,7 +11036,7 @@ if _find_spec("dask"):
 
 patch_torch_proxy_mode()
 
-SYSTEM_MESSAGE = set_system_message(
+set_system_message(
     name = "Phi",
     role = "a helpful chat assistant",
     verbose = False,
