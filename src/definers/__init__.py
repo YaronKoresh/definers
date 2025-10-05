@@ -4916,7 +4916,7 @@ def ai_translate(text, lang="en"):
         inputs = tokenizer(paragraph, return_tensors="pt")
         input_ids = inputs.input_ids.to(device())
 
-        forced_token_id = tokenizer.lang_code_to_id[tgt_code]
+        forced_token_id = tokenizer.convert_tokens_to_ids(tgt_code)
 
         translated_ids = model.generate(
             input_ids=input_ids,
