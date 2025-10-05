@@ -5408,7 +5408,7 @@ def summary(text, max_words=20, min_loops=1):
         if words_count > 80:
             text = map_reduce_summary(text, max_words)
         else:
-            text = _summarize(text, is_chunk=False)
+            text = _summarize(text)
         min_loops = min_loops - 1
         words_count = len(text.split())
 
