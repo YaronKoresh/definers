@@ -67,7 +67,7 @@ stochastic_kwargs = {
 }
 
 beam_kwargs_translation = {
-    "num_beams": 5,
+    "num_beams": 10,
     "early_stopping": True,
     "length_penalty": 1.1,
     "no_repeat_ngram_size": 3,
