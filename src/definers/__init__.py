@@ -65,18 +65,21 @@ stochastic_kwargs = {
     "min_p": 0.015,
     "repetition_penalty": 1.15,
     "renormalize_logits": True,
+    "min_length": 1,
 }
 
 beam_kwargs_translation = {
     "num_beams": 16,
     "early_stopping": True,
     "no_repeat_ngram_size": 3,
+    "min_length": 1,
 }
 
 beam_kwargs_summarization = {
     "num_beams": 16,
     "early_stopping": True,
     "no_repeat_ngram_size": 3,
+    "min_length": 1,
 }
 
 ai_model_extensions = {
