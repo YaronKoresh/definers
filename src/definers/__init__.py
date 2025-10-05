@@ -1029,7 +1029,7 @@ def set_system_message(
         data_facts = "\n".join(f"{i+1}. {d}" for i, d in enumerate(data))
         message_parts.append(f"{data_header}\n{data_facts}")
 
-    SYSTEM_MESSAGE = simple_text("\n\n".join(message_parts))
+    SYSTEM_MESSAGE = "\n\n".join(message_parts)
 
     log("System Message Updated", SYSTEM_MESSAGE)
 
@@ -1229,7 +1229,7 @@ def answer(history: list):
     generate_ids = MODELS["answer"].generate(
         **inputs,
         **stochastic_kwargs,
-        max_length=4096,
+        max_length=16384,
         num_logits_to_keep=1,
     )
 
@@ -6890,13 +6890,34 @@ def get_chat_response(message, history: list):
     response = answer(history)
     log("Chatbot response", response)
 
-    response = summary(response, max_words=50)
     if orig_lang and orig_lang != language(response):
-        response = ai_translate(response, lang=orig_lang)
+        response = translate_with_code(response, lang=orig_lang)
 
     return response
 
 
+def translate_with_code(text_to_translate, lang):
+    if not text_to_translate or not text_to_translate.strip():
+        return text_to_translate
+
+    code_block_pattern = r'(```.*?```)'
+
+    parts = re.split(code_block_pattern, text_to_translate, flags=re.DOTALL)
+
+    processed_parts = []
+    for i, part in enumerate(parts):
+        if i % 2 == 0:
+            if part.strip():
+                translated_text = ai_translate(part, lang=lang)
+                processed_parts.append(translated_text)
+            else:
+                processed_parts.append(part)
+        else:
+            processed_parts.append(part)
+
+    return "".join(processed_parts)
+
+    
 def init_chat(title="Chatbot", handler=get_chat_response):
     import gradio as gr
 
