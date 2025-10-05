@@ -1039,105 +1039,64 @@ def set_system_message(
     log("System Message Updated", SYSTEM_MESSAGE)
 
 
-def get_audio_duration(file_path):
+def get_audio_duration(file_path: str) -> float | None:
+    from pydub import AudioSegment
+    
     file_path = full_path(file_path)
     
-    cmd = [
-        "ffprobe",
-        "-v", "quiet",
-        "-print_format", "json",
-        "-show_format",
-        "-show_streams",
-        file_path,
-    ]
     try:
-        result = subprocess.run(
-            cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-        )
-        data = json.loads(result.stdout)
-        if 'format' in data and 'duration' in data['format']:
-            return float(data['format']['duration'])
-        for stream in data.get('streams', []):
-            if 'duration' in stream:
-                return float(stream['duration'])
-        print("Warning: Could not find duration in ffprobe output.")
-        return None
-    except FileNotFoundError:
-        print("Error: ffprobe command not found. Is FFmpeg (and ffprobe) installed and in your PATH?")
-        return None
-    except (subprocess.CalledProcessError, json.JSONDecodeError) as e:
-        print(f"Error getting audio duration for {file_path}: {e}")
+        audio = AudioSegment.from_file(file_path)
+        return audio.duration_seconds
+    except Exception as e:
+        print(f"Error getting duration for {file_path} with pydub: {e}")
         return None
 
 
 def split_audio(
-    file_path:str, duration:float=5, count:int=None, skip:int=0, resample:int=None
-):
+    file_path: str, duration: float = 5, count: int = None, skip: int = 0, resample: int = None
+) -> list[str]:
+    from pydub import AudioSegment
+    
     file_path = full_path(file_path)
     
     if not exist(file_path):
         print(f"Error: File not found at {file_path}")
         return []
 
-    total_audio_duration = get_audio_duration(file_path)
-    if total_audio_duration is None:
+    try:
+        audio = AudioSegment.from_file(file_path)
+    except Exception as e:
+        print(f"Error loading file {file_path}: {e}")
         return []
 
-    original_skip = skip
-    if count is not None:
-        required_duration = count * duration
-        if (skip * duration) + required_duration > total_audio_duration:
-            latest_start_time = total_audio_duration - required_duration
-            latest_start_time = max(0, latest_start_time)
-            new_skip = math.floor(latest_start_time / duration)
-            
-            if new_skip != skip:
-                print(f"⚠️ Warning: Original skip ({skip}) was too large.")
-                print(f"Adjusting skip to {new_skip} to fit {count} chunks of {duration}s each.")
-                skip = new_skip
+    duration_ms = duration * 1000
+    start_ms = skip * duration_ms
+    
+    if count is None:
+        num_chunks = math.ceil((len(audio) - start_ms) / duration_ms)
+    else:
+        num_chunks = count
 
     output_dir = tmp(dir=True)
-    output_pattern = full_path(output_dir, "chunk_%04d.mp3")
-
-    cmd = [
-        "ffmpeg",
-        "-i", file_path,
-        "-f", "segment",
-        "-segment_time", str(duration),
-    ]
+    res_paths = []
     
-    start_time = skip * duration
-    if start_time > 0:
-        cmd = ["ffmpeg", "-ss", str(start_time)] + cmd[1:]
+    print(f"Splitting audio into chunks of {duration}s...")
+    for i in range(num_chunks):
+        chunk_start = start_ms + (i * duration_ms)
+        chunk_end = chunk_start + duration_ms
+        
+        if chunk_start >= len(audio):
+            break
+            
+        chunk = audio[chunk_start:chunk_end]
+        
+        if resample:
+            chunk = chunk.set_frame_rate(resample)
 
-    if count is not None:
-        processing_duration = count * duration
-        cmd.extend(["-t", str(processing_duration)])
-
-    if resample:
-        cmd.extend(["-ar", str(resample)])
-        cmd.extend(["-c:a", "libmp3lame", "-b:a", "192k"])
-    else:
-        cmd.extend(["-c", "copy"])
-
-    cmd.append(output_pattern)
-
-    print(f"Executing FFmpeg command:\n{' '.join(cmd)}")
-    try:
-        subprocess.run(
-            cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE
-        )
-    except subprocess.CalledProcessError as e:
-        print("Error during FFmpeg execution.")
-        print(f"FFmpeg stderr:\n{e.stderr.decode()}")
-        delete(output_dir)
-        return []
-    except FileNotFoundError:
-        print("Error: ffmpeg command not found. Is FFmpeg installed and in your PATH?")
-        delete(output_dir)
-        return []
-
-    res_paths = paths(full_path(output_dir, "chunk_*.mp3"))
+        chunk_path = full_path(output_dir, f"chunk_{i:04d}.mp3")
+        
+        chunk.export(chunk_path, format="mp3", bitrate="192k")
+        res_paths.append(chunk_path)
 
     print(f"Successfully created {len(res_paths)} chunks in {output_dir}")
     return res_paths
