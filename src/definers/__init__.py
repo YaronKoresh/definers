@@ -9479,8 +9479,8 @@ def autotune_song(
 
         y_vocals, sr = librosa.load(vocals_path, sr=None, mono=True)
 
-        n_fft = 8192
-        hop_length = 64
+        n_fft = 16384
+        hop_length = 8192
 
         processed_vocals_path = vocals_path
 
