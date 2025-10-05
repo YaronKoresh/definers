@@ -67,7 +67,7 @@ stochastic_kwargs = {
 }
 
 beam_kwargs_translation = {
-    "num_beams": 10,
+    "num_beams": 8,
     "early_stopping": True,
     "length_penalty": 1.1,
     "no_repeat_ngram_size": 3,
@@ -77,7 +77,7 @@ beam_kwargs_translation = {
 }
 
 beam_kwargs_summarization = {
-    "num_beams": 10,
+    "num_beams": 8,
     "early_stopping": True,
     "length_penalty": 1.4,
     "no_repeat_ngram_size": 3,
@@ -5369,8 +5369,8 @@ def _summarize(text_to_summarize, is_chunk=False):
 
 def map_reduce_summary(text, max_words):
     words = text.split()
-    chunk_size = 40
-    overlap = 20
+    chunk_size = 50
+    overlap = 10
 
     chunk_summaries = []
     for i in range(0, len(words), chunk_size - overlap):
@@ -5391,7 +5391,7 @@ def map_reduce_summary(text, max_words):
 def summary(text, max_words=20, min_loops=1):
     words_count = len(text.split())
     while words_count > max_words or min_loops > 0:
-        if words_count > 30:
+        if words_count > 60:
             text = map_reduce_summary(text, max_words)
         else:
             text = _summarize(text, is_chunk=False)
