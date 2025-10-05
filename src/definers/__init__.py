@@ -4902,36 +4902,26 @@ def ai_translate(text, lang="en"):
     punct_normalizer = MosesPunctNormalizer(lang=source_lang_code)
     text = punct_normalizer.normalize(text)
 
-    paragraphs = text.split("\n")
-    translated_paragraphs = []
-
     model = MODELS["translate"]
     tokenizer = TOKENIZERS["translate"]
 
     tokenizer.src_lang = src_code
     tokenizer.tgt_lang = tgt_code
 
-    for paragraph in paragraphs:
-        if not paragraph.strip():
-            continue
+    inputs = tokenizer(text, return_tensors="pt")
+    input_ids = inputs.input_ids.to(device())
 
-        inputs = tokenizer(paragraph, return_tensors="pt")
-        input_ids = inputs.input_ids.to(device())
+    forced_token_id = tokenizer.convert_tokens_to_ids(tgt_code)
 
-        forced_token_id = tokenizer.convert_tokens_to_ids(tgt_code)
-
-        translated_ids = model.generate(
+    translated_ids = model.generate(
             input_ids=input_ids,
             forced_bos_token_id=forced_token_id,
             **beam_kwargs_translation
-        )
+    )
         
-        translated_paragraph = tokenizer.decode(
+    return tokenizer.decode(
             translated_ids[0], skip_special_tokens=True
-        )
-        translated_paragraphs.append(translated_paragraph)
-
-    return "\n".join(translated_paragraphs)
+    )
 
 
 def google_translate(text, lang="en"):
