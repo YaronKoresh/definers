@@ -5361,16 +5361,16 @@ def _summarize(text_to_summarize, is_chunk=False):
 
     gen_kwargs = beam_kwargs_summarization
     if is_chunk:
-        gen_kwargs["min_length"] = 40
+        gen_kwargs["min_length"] = 10
 
-    gen = MODELS["summary"].generate(**encoded, **gen_kwargs)
+    gen = MODELS["summary"].generate(**encoded, **gen_kwargs, max_length=512)
     return TOKENIZERS["summary"].decode(gen[0], skip_special_tokens=True)
 
 
-def map_reduce_summary(text, max_words=50):
+def map_reduce_summary(text, max_words):
     words = text.split()
-    chunk_size = 350
-    overlap = 50
+    chunk_size = 40
+    overlap = 20
 
     chunk_summaries = []
     for i in range(0, len(words), chunk_size - overlap):
@@ -5391,7 +5391,7 @@ def map_reduce_summary(text, max_words=50):
 def summary(text, max_words=20, min_loops=1):
     words_count = len(text.split())
     while words_count > max_words or min_loops > 0:
-        if words_count > 350:
+        if words_count > 30:
             text = map_reduce_summary(text, max_words)
         else:
             text = _summarize(text, is_chunk=False)
