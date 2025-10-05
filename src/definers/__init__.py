@@ -71,7 +71,7 @@ beam_kwargs_translation = {
 }
 
 beam_kwargs_summarization = {
-    "num_beams": 8,
+    "num_beams": 16,
     "early_stopping": True,
     "no_repeat_ngram_size": 3,
     "encoder_no_repeat_ngram_size": 2,
@@ -10893,6 +10893,7 @@ def start(proj: str):
                     data = gr.Textbox(
                         placeholder="Input data",
                         value="",
+                        max_length=1000,
                         lines=4,
                         label="Prompt",
                         container=True,
