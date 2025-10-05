@@ -59,7 +59,7 @@ SYSTEM_MESSAGE = None
 stochastic_kwargs = {
     "do_sample": True,
     "top_k": 0,
-    "top_p": 0.8,
+    "top_p": 0.15,
     "repetition_penalty": 1.1,
     "renormalize_logits": True,
 }
