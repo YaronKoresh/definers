@@ -58,9 +58,13 @@ SYSTEM_MESSAGE = None
 
 stochastic_kwargs = {
     "do_sample": True,
-    "top_k": 0.0,
-    "top_p": 0.25,
-    "repetition_penalty": 1.2,
+    "top_k": 0,
+    "top_p": 0.92,
+    "typical_p": 0.8,
+    "epsilon_cutoff": 0.1,
+    "min_p": 0.01,
+    "repetition_penalty": 1.15,
+    "encoder_repetition_penalty": 1.0,
     "renormalize_logits": True,
 }
 
@@ -77,16 +81,16 @@ beam_kwargs_summarization = {
 }
 
 ai_model_extensions = {
-    "safetensors",  # Stable Diffusion, general use
-    "onnx",  # Open Neural Network Exchange
-    "pt",  # PyTorch
-    "pth",  # PyTorch (older convention)
-    "h5",  # Keras / TensorFlow (HDF5 format)
-    "keras",  # Keras
-    "pb",  # TensorFlow Protocol Buffer
-    "tflite",  # TensorFlow Lite
-    "gguf",  # Common format for LLMs like Llama
-    "ckpt",  # Checkpoint (general)
+    "safetensors",
+    "onnx",
+    "pt",
+    "pth",
+    "h5",
+    "keras",
+    "pb",
+    "tflite",
+    "gguf",
+    "ckpt",
 }
 
 
