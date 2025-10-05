@@ -4897,6 +4897,9 @@ def ai_translate(text, lang="en"):
     from_lang_code = language(text)
     src_code = unesco_mapping[from_lang_code]
 
+    if from_lang_code == "he":
+        text = strip_nikud(text)
+        
     if src_code == tgt_code:
         return text
 
