@@ -74,7 +74,6 @@ beam_kwargs_summarization = {
     "num_beams": 16,
     "early_stopping": True,
     "no_repeat_ngram_size": 3,
-    "encoder_no_repeat_ngram_size": 2,
 }
 
 ai_model_extensions = {
