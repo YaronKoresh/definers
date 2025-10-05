@@ -4908,9 +4908,11 @@ def ai_translate(text, lang="en"):
     model = MODELS["translate"]
     tokenizer = TOKENIZERS["translate"]
 
+    tokenizer.src_lang = src_code
+    tokenizer.tgt_lang = tgt_code
+
     for paragraph in paragraphs:
         if not paragraph.strip():
-            translated_paragraphs.append("")
             continue
 
         inputs = tokenizer(paragraph, return_tensors="pt")
