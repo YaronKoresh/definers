@@ -4925,7 +4925,7 @@ def ai_translate(text, lang="en"):
                 translated_ids = model.generate(
                     input_ids=input_ids,
                     forced_bos_token_id=forced_token_id,
-                    **beam_kwargs_translation_refined
+                    **beam_kwargs_translation
                 )
                 
                 translated_paragraph = tokenizer.decode(translated_ids[0], skip_special_tokens=True)
@@ -4948,7 +4948,7 @@ def ai_translate(text, lang="en"):
                     translated_ids = model.generate(
                         input_ids=input_ids,
                         forced_bos_token_id=forced_token_id,
-                        **beam_kwargs_translation_refined
+                        **beam_kwargs_translation
                     )
                     
                     translated_chunk = tokenizer.decode(translated_ids[0], skip_special_tokens=True)
