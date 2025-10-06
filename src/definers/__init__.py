@@ -58,8 +58,8 @@ SYSTEM_MESSAGE = None
 
 stochastic_kwargs = {
     "do_sample": True,
-    "top_k": 250,
-    "top_p": 0.94,
+    "top_k": 200,
+    "top_p": 0.95,
     "typical_p": 0.92,
     "epsilon_cutoff": 0.04,
     "min_p": 0.01,
