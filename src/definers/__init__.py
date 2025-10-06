@@ -60,10 +60,10 @@ stochastic_kwargs = {
     "do_sample": True,
     "top_k": 250,
     "top_p": 0.95,
-    "typical_p": 0.9,
-    "epsilon_cutoff": 0.05,
+    "typical_p": 0.8,
+    "epsilon_cutoff": 0.2,
     "min_p": 0.015,
-    "repetition_penalty": 1.2,
+    "repetition_penalty": 1.25,
     "renormalize_logits": True,
     "min_length": 1,
 }
