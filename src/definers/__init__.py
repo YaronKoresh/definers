@@ -1146,10 +1146,10 @@ def answer(history: list):
                     c["path"] for c in content if isinstance(c, dict)
                 ]
             for p in ps:
-                ext = p.split(".")[-1]
+                ext = get_ext(p)
                 if ext in common_audio_formats:
                     aud = split_audio(
-                        p, duration=12, count=1, skip=4, resample=12000
+                        p, duration=300, count=1, skip=0, resample=12000
                     )[0]
                     audio, samplerate = librosa.load(
                         aud, sr=None, mono=True
@@ -1159,13 +1159,14 @@ def answer(history: list):
                         f" <|audio_{ str(len(snd_list)) }|>"
                     )
                 if ext in iio_formats:
-                    img = iio.imread(p)
-                    w, h = Image.open(p).size
-                    w, h = get_max_resolution(w, h, mega_pixels=0.05)
-                    new_img = resize_image(img, h, w)
-                    new_img = (new_img * 255).astype(np.uint8)
-                    img = Image.fromarray(new_img)
-                    img_list.append(img)
+                    w, h = image_resolution(p)
+                    w2, h2 = get_max_resolution(w, h, mega_pixels=1.5)
+                    if w2 > w:
+                        pth, img = resize_image(p, w, h)
+                        img_list.append(img)
+                    else:
+                        img = Image.open(p)
+                        img_list.append(img)
                     add_content += (
                         f" <|image_{ str(len(img_list)) }|>"
                     )
@@ -1193,7 +1194,7 @@ def answer(history: list):
     generate_ids = MODELS["answer"].generate(
         **inputs,
         **stochastic_kwargs,
-        max_length=4096,
+        max_length=1024,
         num_logits_to_keep=1,
     )
 
@@ -2269,9 +2270,7 @@ def load_as_numpy(path, training=False):
                     return None
             elif last in iio_formats:
                 try:
-                    image_data = iio.imread(path)
-                    data = resize_image(image_data, 1024, 1024)
-                    path_resized = save_image(data)
+                    path_resized, img = resize_image(path, 1024, 1024)
                     return numpy_to_cupy(
                         extract_image_features(path_resized)
                     )
@@ -6211,24 +6210,13 @@ def resize_video(
 
 
 def resize_image(
-    image_data, target_height, target_width, anti_aliasing=True
+    image_path, target_width, target_height, anti_aliasing=True
 ):
-    """
-    Resizes an image using skimage.transform.resize.
-
-    Args:
-        image_data (np.ndarray): The image data as a NumPy array (e.g., from iio.imread).
-        target_height (int): The desired height in pixels.
-        target_width (int): The desired width in pixels.
-        anti_aliasing (bool, optional): Whether to apply anti-aliasing. Defaults to True.
-
-    Returns:
-        np.ndarray: The resized image data.
-    """
-
     import imageio as iio
     from skimage.transform import resize
 
+    image_data = iio.imread(image_path)
+    
     try:
         if image_data.ndim < 2:
             raise ValueError(
@@ -6240,7 +6228,11 @@ def resize_image(
             (target_height, target_width),
             anti_aliasing=anti_aliasing,
         )
-        return resized_image
+
+        img = (resized_image * 255).astype(np.uint8)
+        img = Image.fromarray(img)
+        pth = save_image(img, tmp("png", keep=False))
+        return pth, img
 
     except ValueError as ve:
         print(f"ValueError: {ve}")
@@ -6250,6 +6242,11 @@ def resize_image(
         print(f"An error occurred during resizing: {e}")
         return None
 
+
+def image_resolution(image_path):
+    from PIL import Image
+    return Image.open(image_path).size
+    
 
 def numpy_to_list(np_arr):
     return np.concatenate(np_arr, axis=None).ravel().tolist()
