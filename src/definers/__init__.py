@@ -10571,8 +10571,11 @@ def keep_alive(fn, outputs:int=1):
 
     def worker(*args, **kwargs):
 
-        results = [None]
-        finished = [False]
+        yld = None
+        if outputs >= 2:
+            yld = (gr.update(),) * outputs
+        elif outputs == 1:
+            yld = gr.update()
         
         def thread_target(*args, **kwargs):
             try:
@@ -10585,16 +10588,23 @@ def keep_alive(fn, outputs:int=1):
 
         sleep(5)
         counter = 5
-        while finished[0] == False:
-            gr.Info(f"Time passed: {str(counter)}s", duration=1.0)
-            sleep(5)
-            counter += 5
-        
-        values = wait(t)
+        if outputs == 0:
+            while t[1].is_alive():
+                gr.Info(f"Time passed: {str(counter)}s", duration=1.0)
+                sleep(5)
+                counter += 5
+        else:
+            while t[1].is_alive():
+                yield yld
+                gr.Info(f"Time passed: {str(counter)}s", duration=1.0)
+                sleep(5)
+                counter += 5
 
         if outputs == 0:
+            wait(t)
             return
 
+        values = wait(t)
         return tuple(values)
         
     return worker
