@@ -10907,7 +10907,7 @@ def start(proj: str):
 
         install_ffmpeg()
 
-        @spaces.GPU(duration=60)
+        @spaces.GPU(duration=90)
         def _get_chat_response(message, history):
             return get_chat_response(message, history)
 
