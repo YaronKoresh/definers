@@ -143,6 +143,7 @@ unesco_mapping = {
     "ht": "hat_Latn",
     "ha": "hau_Latn",
     "he": "heb_Hebr",
+    "iw": "heb_Hebr",
     "hi": "hin_Deva",
     "hr": "hrv_Latn",
     "hu": "hun_Latn",
