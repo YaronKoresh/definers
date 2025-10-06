@@ -10612,7 +10612,7 @@ def start(proj: str):
         def title(image_path, top, middle, bottom):
             return write_on_image(image_path, top, middle, bottom)
 
-        @spaces.GPU(duration=15)
+        @spaces.GPU(duration=20)
         def handle_translate(txt, tgt_lang):
             return ai_translate(txt, value_to_keys(language_codes, tgt_lang)[0])
 
@@ -10627,6 +10627,7 @@ def start(proj: str):
                         lines=4,
                         label="Input",
                         container=True,
+                        max_length=2000,
                     )
                     lang = gr.Dropdown(
                         choices=unique(language_codes.values()),
