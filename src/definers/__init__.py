@@ -58,15 +58,15 @@ SYSTEM_MESSAGE = None
 
 stochastic_kwargs = {
     "do_sample": True,
-    "top_k": 40,
-    "top_p": 0.9,
-    "typical_p": 0.92,
-    "epsilon_cutoff": 0.04,
-    "min_p": 0.01,
-    "repetition_penalty": 1.15,
+    "top_k": 250,
+    "top_p": 0.92,
+    "typical_p": 0.95,
+    "epsilon_cutoff": 0.05,
+    "min_p": 0.005,
+    "repetition_penalty": 1.2,
     "renormalize_logits": True,
     "min_length": 1,
-    "temperature": 0.2,
+    "temperature": 0.1,
 }
 
 beam_kwargs_translation = {
@@ -74,7 +74,7 @@ beam_kwargs_translation = {
     "early_stopping": True,
     "no_repeat_ngram_size": 3,
     "min_length": 1,
-    "length_penalty": 0.3,
+    "length_penalty": -0.2,
 }
 
 beam_kwargs_summarization = {
@@ -82,10 +82,10 @@ beam_kwargs_summarization = {
     "early_stopping": True,
     "no_repeat_ngram_size": 3,
     "min_length": 1,
-    "length_penalty": -0.3,
+    "length_penalty": -0.5,
 }
 
-ai_model_extensions = {
+ai_model_extensions = [
     "safetensors",
     "onnx",
     "pt",
@@ -96,7 +96,7 @@ ai_model_extensions = {
     "tflite",
     "gguf",
     "ckpt",
-}
+]
 
 
 unesco_mapping = {
