@@ -1149,7 +1149,7 @@ def answer(history: list):
                 ext = get_ext(p)
                 if ext in common_audio_formats:
                     aud = split_audio(
-                        p, duration=300, count=1, skip=0, resample=12000
+                        p, duration=60, count=1, skip=0, resample=12000
                     )[0]
                     audio, samplerate = librosa.load(
                         aud, sr=None, mono=True
@@ -1160,7 +1160,7 @@ def answer(history: list):
                     )
                 if ext in iio_formats:
                     w, h = image_resolution(p)
-                    w2, h2 = get_max_resolution(w, h, mega_pixels=1.5)
+                    w2, h2 = get_max_resolution(w, h, mega_pixels=0.5)
                     if w2 > w:
                         pth, img = resize_image(p, w, h)
                         img_list.append(img)
@@ -1194,7 +1194,7 @@ def answer(history: list):
     generate_ids = MODELS["answer"].generate(
         **inputs,
         **stochastic_kwargs,
-        max_length=8192,
+        max_length=4096,
         num_logits_to_keep=1,
     )
 
