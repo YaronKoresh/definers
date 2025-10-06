@@ -10610,13 +10610,11 @@ def keep_alive(fn, outputs:int=1):
 
         if outputs == 0:
             wait(t)
-            return
-
-        if outputs == 1:
-            return wait(t)[0]
-
-        values = wait(t)
-        return tuple(values)
+        elif outputs == 1:
+            yield wait(t)[0]
+        else:
+            values = wait(t)
+            yield tuple(values)
         
     return worker
 
