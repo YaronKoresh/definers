@@ -58,15 +58,15 @@ SYSTEM_MESSAGE = None
 
 stochastic_kwargs = {
     "do_sample": True,
-    "top_k": 250,
-    "top_p": 0.92,
-    "typical_p": 0.95,
-    "epsilon_cutoff": 0.05,
-    "min_p": 0.005,
+    "top_k": 1000,
+    "top_p": 0.98,
+    "typical_p": 0.92,
+    "epsilon_cutoff": 0.01,
+    "min_p": 0.001,
     "repetition_penalty": 1.2,
     "renormalize_logits": True,
     "min_length": 1,
-    "temperature": 0.1,
+    "temperature": 2.0,
 }
 
 beam_kwargs_translation = {
