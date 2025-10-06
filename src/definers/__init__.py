@@ -66,6 +66,8 @@ stochastic_kwargs = {
     "repetition_penalty": 1.2,
     "renormalize_logits": True,
     "min_length": 1,
+    "temperature": 2.0,
+    "length_penalty": 0.3,
 }
 
 beam_kwargs_translation = {
@@ -73,6 +75,8 @@ beam_kwargs_translation = {
     "early_stopping": True,
     "no_repeat_ngram_size": 3,
     "min_length": 1,
+    "temperature": 0.3,
+    "length_penalty": 0.3,
 }
 
 beam_kwargs_summarization = {
@@ -80,6 +84,8 @@ beam_kwargs_summarization = {
     "early_stopping": True,
     "no_repeat_ngram_size": 3,
     "min_length": 1,
+    "temperature": 0.7,
+    "length_penalty": -0.3,
 }
 
 ai_model_extensions = {
