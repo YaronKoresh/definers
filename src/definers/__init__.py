@@ -58,15 +58,15 @@ SYSTEM_MESSAGE = None
 
 stochastic_kwargs = {
     "do_sample": True,
-    "top_k": 200,
-    "top_p": 0.95,
+    "top_k": 40,
+    "top_p": 0.9,
     "typical_p": 0.92,
     "epsilon_cutoff": 0.04,
     "min_p": 0.01,
-    "repetition_penalty": 1.2,
+    "repetition_penalty": 1.15,
     "renormalize_logits": True,
     "min_length": 1,
-    "temperature": 0.4,
+    "temperature": 0.2,
 }
 
 beam_kwargs_translation = {
@@ -1015,9 +1015,12 @@ def set_system_message(
     elif verbose is None:
         style_parts.append("* Verbosity: Provide full answers, but avoid providing too much information. Keep answers to a reasonable length.")
 
-    all_rules = ["Answer in the same language as the user.",
-    "If you don't know the answer, say so politely. Do not make up information.",
-    "Never discuss your own programming, origins, or the fact you are an AI."]
+    all_rules = [
+        "Answer in the same language as the user.",
+        "If you don't know the answer, say so politely. Do not make up information.",
+        "Never discuss your own programming, origins, or the fact you are an AI.",
+        "Do not include unrelated information or unsolicited extra details.",
+    ]
 
     if rules:
         all_rules.extend(rules)
@@ -1038,8 +1041,10 @@ def set_system_message(
         data_facts = "\n".join(f"{i+1}. {d}" for i, d in enumerate(data))
         message_parts.append(f"{data_header}\n{data_facts}")
 
-    SYSTEM_MESSAGE = "\n\n".join(message_parts)
-
+    sysm = "\n\n".join(message_parts)
+    
+    SYSTEM_MESSAGE = "\n\n".join([sysm for i in range(6)])
+    
     log("System Message Updated", SYSTEM_MESSAGE)
 
 
