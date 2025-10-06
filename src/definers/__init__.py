@@ -10607,6 +10607,9 @@ def keep_alive(fn, outputs:int=1):
             wait(t)
             return
 
+        if outputs == 1:
+            return wait(t)[0]
+
         values = wait(t)
         return tuple(values)
         
