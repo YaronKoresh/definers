@@ -1150,7 +1150,7 @@ def answer(history: list):
                 ext = get_ext(p)
                 if ext in common_audio_formats:
                     aud = split_audio(
-                        p, duration=60, count=1, skip=0, resample=12000
+                        p, duration=300, count=1, skip=0, resample=16000
                     )[0]
                     audio, samplerate = librosa.load(
                         aud, sr=None, mono=True
@@ -1161,7 +1161,7 @@ def answer(history: list):
                     )
                 if ext in iio_formats:
                     w, h = image_resolution(p)
-                    w2, h2 = get_max_resolution(w, h, mega_pixels=0.5)
+                    w2, h2 = get_max_resolution(w, h, mega_pixels=1.5)
                     if w2 > w:
                         pth, img = resize_image(p, w, h)
                         img_list.append(img)
@@ -10907,7 +10907,7 @@ def start(proj: str):
 
         install_ffmpeg()
 
-        @spaces.GPU(duration=90)
+        @spaces.GPU(duration=120)
         def _get_chat_response(message, history):
             return get_chat_response(message, history)
 
@@ -11023,6 +11023,6 @@ set_system_message(
     role = "a helpful chat assistant",
     verbose = False,
     friendly = True,
-    formal = True,
+    formal = False,
     creative = None,
 )
