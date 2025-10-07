@@ -10968,17 +10968,51 @@ def start(proj: str):
     else:
         catch(f"Error: No project called '{ proj }' !")
 
+try:
+    os.environ["HF_HOME"] = "/opt/ml/checkpoints/"
+except:
+    pass
 
-os.environ["HF_HOME"] = "/opt/ml/checkpoints/"
-os.environ["HF_DATASETS_CACHE"] = "/opt/ml/checkpoints/"
-os.environ["GRADIO_ALLOW_FLAGGING"] = "never"
-os.environ["OMP_NUM_THREADS"] = "4"
-if sys.platform == "darwin":
-    os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
-os.environ["DISPLAY"] = ":0.0"
-os.environ["NUMBA_CACHE_DIR"] = f'{os.environ["HOME"]}/.tmp'
-os.environ["DISABLE_FLASH_ATTENTION"] = "True"
-os.environ["GRADIO_WEBSOCKET_ENABLED"] = "False"
+try:
+    os.environ["HF_DATASETS_CACHE"] = "/opt/ml/checkpoints/"
+except:
+    pass
+
+try:
+    os.environ["GRADIO_ALLOW_FLAGGING"] = "never"
+except:
+    pass
+
+try:
+    os.environ["OMP_NUM_THREADS"] = "4"
+except:
+    pass
+
+try:
+    if sys.platform == "darwin":
+        os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
+except:
+    pass
+
+try:
+    os.environ["DISPLAY"] = ":0.0"
+except:
+    pass
+
+try:
+    os.environ["NUMBA_CACHE_DIR"] = f'{os.environ["HOME"]}/.tmp'
+except:
+    pass
+
+try:
+    os.environ["DISABLE_FLASH_ATTENTION"] = "True"
+except:
+    pass
+
+try:
+    os.environ["GRADIO_WEBSOCKET_ENABLED"] = "False"
+except:
+    pass
 
 import numpy as _np
 
