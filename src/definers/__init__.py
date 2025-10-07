@@ -481,7 +481,7 @@ common_audio_formats = [
 ]
 
 _negative_prompt_ = "glamour or makeup, airbrushed or smooth, retouching or polished, perfect or oversaturated, CGI or 3d, vfx or SFX, rendered or painted, unreal or octane, cinematic or bokeh, blurry or cropped, mutated or duplicated"
-_positive_prompt_ = "realism, journalism, realistic, documentary, minimalism, minimalistic, rough textures, textures roughness, grainy, reality, standard, natural, simple, natural reality, simplicity, simple reality"
+_positive_prompt_ = "realism, journalism, documentary, minimalism, national geographic, rough, grainy, standard, natural, raw style photo"
 
 
 def _init_logger():
