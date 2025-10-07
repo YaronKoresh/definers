@@ -58,22 +58,23 @@ SYSTEM_MESSAGE = None
 
 stochastic_kwargs = {
     "do_sample": True,
-    "top_k": 1000,
-    "top_p": 0.98,
-    "typical_p": 0.92,
-    "epsilon_cutoff": 0.01,
-    "min_p": 0.001,
-    "repetition_penalty": 1.2,
+    "top_k": 60,
+    "top_p": 0.95,
+    "typical_p": 0.95,
+    "epsilon_cutoff": 0.06,
+    "min_p": 0.03,
+    "repetition_penalty": 1.1,
     "renormalize_logits": True,
-    "min_length": 1,
-    "temperature": 2.0,
+    "min_new_tokens": 1,
+    "temperature": 0.7,
+    "no_repeat_ngram_size": 3,
 }
 
 beam_kwargs_translation = {
     "num_beams": 16,
     "early_stopping": True,
     "no_repeat_ngram_size": 3,
-    "min_length": 1,
+    "min_new_tokens": 1,
     "length_penalty": -0.2,
 }
 
@@ -81,7 +82,7 @@ beam_kwargs_summarization = {
     "num_beams": 16,
     "early_stopping": True,
     "no_repeat_ngram_size": 3,
-    "min_length": 1,
+    "min_new_tokens": 1,
     "length_penalty": -0.5,
 }
 
@@ -4855,6 +4856,8 @@ def ai_translate(text, lang="en"):
     long_paragraph_threshold = 500
 
     tgt_code = unesco_mapping[lang]
+    if isinstance(tgt_code, list):
+        tgt_code = tgt_code[0]
 
     model = MODELS["translate"]
     
@@ -4872,6 +4875,8 @@ def ai_translate(text, lang="en"):
         try:
             source_lang_code = language(paragraph)
             src_code = unesco_mapping[source_lang_code]
+            if isinstance(src_code, list):
+                src_code = src_code[0]
         
         except (KeyError, Exception) as e:
             print(f"Language detection or mapping failed: {e}")
