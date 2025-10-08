@@ -6226,6 +6226,7 @@ def resize_video(
 def resize_image(
     image_path, target_width, target_height, anti_aliasing=True
 ):
+    from PIL kmport Image
     import imageio as iio
     from skimage.transform import resize
 
