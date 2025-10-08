@@ -71,11 +71,11 @@ stochastic_kwargs = {
 }
 
 beam_kwargs_translation = {
-    "num_beams": 16,
+    "num_beams": 32,
     "early_stopping": True,
     "no_repeat_ngram_size": 3,
     "min_new_tokens": 1,
-    "length_penalty": -0.2,
+    "length_penalty": 0.0,
 }
 
 beam_kwargs_summarization = {
@@ -83,7 +83,7 @@ beam_kwargs_summarization = {
     "early_stopping": True,
     "no_repeat_ngram_size": 3,
     "min_new_tokens": 1,
-    "length_penalty": -0.5,
+    "length_penalty": -0.2,
 }
 
 ai_model_extensions = [
@@ -481,7 +481,7 @@ common_audio_formats = [
 ]
 
 _negative_prompt_ = "glamour or makeup, airbrushed or smooth, retouching or polished, perfect or oversaturated, CGI or 3d, vfx or SFX, rendered or painted, unreal or octane, cinematic or bokeh, blurry or cropped, mutated or duplicated"
-_positive_prompt_ = "realism, journalism, documentary, minimalism, national geographic, rough, grainy, standard, natural, raw style photo"
+_positive_prompt_ = "rough realism, grainy documentary, standard minimalism, national geographic, imperfectly raw, natural journalism, reasonable scenario, photographed spontaneously, correctly structured"
 
 
 def _init_logger():
