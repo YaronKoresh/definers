@@ -5864,7 +5864,7 @@ def preprocess_prompt(prompt):
     if language(prompt) != "en":
         prompt = ai_translate(prompt)
     prompt = simple_text(prompt)
-    prompt = summary(prompt, max_words=20)
+    prompt = summary(prompt, max_words=14)
     prompt = simple_text(prompt)
     return prompt
 
