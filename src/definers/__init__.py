@@ -60,7 +60,7 @@ stochastic_kwargs = {
     "do_sample": True,
     "top_k": 70,
     "top_p": 0.92,
-    "typical_p": 0.92,
+    "typical_p": 0.95,
     "epsilon_cutoff": 0.04,
     "min_p": 0.02,
     "repetition_penalty": 1.1,
@@ -71,7 +71,7 @@ stochastic_kwargs = {
 }
 
 beam_kwargs_translation = {
-    "num_beams": 32,
+    "num_beams": 24,
     "early_stopping": True,
     "no_repeat_ngram_size": 3,
     "min_new_tokens": 1,
