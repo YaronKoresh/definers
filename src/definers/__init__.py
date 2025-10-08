@@ -58,15 +58,15 @@ SYSTEM_MESSAGE = None
 
 stochastic_kwargs = {
     "do_sample": True,
-    "top_k": 60,
-    "top_p": 0.9,
+    "top_k": 55,
+    "top_p": 0.85,
     "typical_p": 0.95,
     "epsilon_cutoff": 0.07,
     "min_p": 0.03,
     "repetition_penalty": 1.2,
     "renormalize_logits": True,
     "min_new_tokens": 1,
-    "temperature": 0.8,
+    "temperature": 0.75,
     "no_repeat_ngram_size": 3,
 }
 
@@ -3341,17 +3341,17 @@ def init_upscale():
 
 def upscale(
     path,
-    upscale_factor: int = 2,
-    prompt: str = "dark muted colors, rough texture, dark muted colors, rough texture",
-    negative_prompt: str = "burry, airbrushed, burry, airbrushed",
+    upscale_factor: int = 4,
+    prompt: str = _positive_prompt_,
+    negative_prompt: str = _negative_pronpt_,
     seed: int = None,
     controlnet_scale: float = 0.8,
     controlnet_decay: float = 0.8,
-    condition_scale: float = 8.0,
-    tile_width: int = 64,
-    tile_height: int = 768,
-    denoise_strength: float = 0.05,
-    num_inference_steps: int = 50,
+    condition_scale: float = 6.5,
+    tile_width: int = 128,
+    tile_height: int = 384,
+    denoise_strength: float = 0.1,
+    num_inference_steps: int = 100,
     solver: str = "DPMSolver",
 ):
     from PIL import Image
@@ -10852,13 +10852,13 @@ def start(proj: str):
         def title(image_path, top, middle, bottom):
             return write_on_image(image_path, top, middle, bottom)
 
-        @spaces.GPU(duration=90)
+        @spaces.GPU(duration=150)
         def handle_generation(text, w, h):
-            w, h = get_max_resolution(w, h, mega_pixels=1.5)
+            w, h = get_max_resolution(w, h, mega_pixels=2.5)
             text = optimize_prompt_realism(text)
             return pipe("image", prompt=text, resolution=f"{w}x{h}")
 
-        @spaces.GPU(duration=30)
+        @spaces.GPU(duration=150)
         def handle_upscaling(path):
             return upscale(path)
 
