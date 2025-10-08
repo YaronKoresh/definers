@@ -63,10 +63,10 @@ stochastic_kwargs = {
     "typical_p": 0.95,
     "epsilon_cutoff": 0.04,
     "min_p": 0.02,
-    "repetition_penalty": 1.15,
+    "repetition_penalty": 1.1,
     "renormalize_logits": True,
     "min_new_tokens": 1,
-    "temperature": 0.9,
+    "temperature": 0.8,
     "no_repeat_ngram_size": 3,
 }
 
