@@ -5897,14 +5897,14 @@ def pipe(
         params2["prompt"] = prompt
         params2["height"] = height
         params2["width"] = width
-        params2["guidance_scale"] = 5.5
+        params2["guidance_scale"] = 6.5
         if task == "video":
             params2["num_videos_per_prompt"] = 1
             params2["num_frames"] = length
         else:
             # params2["negative_prompt"] = _negative_prompt_
             params2["max_sequence_length"] = 512
-        params2["num_inference_steps"] = 50
+        params2["num_inference_steps"] = 100
         params2["generator"] = torch.Generator(device()).manual_seed(
             random.randint(0, big_number())
         )
@@ -10851,7 +10851,7 @@ def start(proj: str):
         def title(image_path, top, middle, bottom):
             return write_on_image(image_path, top, middle, bottom)
 
-        @spaces.GPU(duration=50)
+        @spaces.GPU(duration=90)
         def handle_generation(text, w, h):
             w, h = get_max_resolution(w, h, mega_pixels=1.5)
             text = optimize_prompt_realism(text)
