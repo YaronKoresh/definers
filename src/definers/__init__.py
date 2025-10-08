@@ -480,8 +480,8 @@ common_audio_formats = [
     "wma",
 ]
 
-_negative_prompt_ = "glamour or makeup, airbrushed or smooth, retouching or polished, perfect or oversaturated, CGI or 3d, vfx or SFX, rendered or painted, unreal or octane, cinematic or bokeh, blurry or cropped, mutated or duplicated"
-_positive_prompt_ = "journalism, realism, national geographic, stark, minimal, rough, sunlit, grainy, imperfect, correctly structured"
+_negative_prompt_ = "glamour, makeup, airbrushed, smooth, retouching, polished, perfect, oversaturated, CGI, 3d, vfx, SFX, rendered, painted, unreal, octane, cinematic, bokeh, blurry, cropped, mutated, duplicated"
+_positive_prompt_ = "journalistic, realistic, nationalgeographic, minimal, rough, grainy, messy, natural, anatomics"
 
 
 def _init_logger():
