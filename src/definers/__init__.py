@@ -58,12 +58,12 @@ SYSTEM_MESSAGE = None
 
 stochastic_kwargs = {
     "do_sample": True,
-    "top_k": 70,
-    "top_p": 0.92,
+    "top_k": 60,
+    "top_p": 0.9,
     "typical_p": 0.95,
-    "epsilon_cutoff": 0.04,
-    "min_p": 0.02,
-    "repetition_penalty": 1.1,
+    "epsilon_cutoff": 0.07,
+    "min_p": 0.03,
+    "repetition_penalty": 1.2,
     "renormalize_logits": True,
     "min_new_tokens": 1,
     "temperature": 0.8,
@@ -74,15 +74,15 @@ beam_kwargs_translation = {
     "num_beams": 24,
     "early_stopping": True,
     "no_repeat_ngram_size": 3,
-    "min_new_tokens": 1,
-    "length_penalty": 0.0,
+    "min_new_tokens": 0,
+    "length_penalty": -0.2,
 }
 
 beam_kwargs_summarization = {
-    "num_beams": 16,
+    "num_beams": 24,
     "early_stopping": True,
     "no_repeat_ngram_size": 3,
-    "min_new_tokens": 1,
+    "min_new_tokens": 0,
     "length_penalty": -0.2,
 }
 
