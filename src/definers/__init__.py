@@ -66,7 +66,7 @@ stochastic_kwargs = {
     "repetition_penalty": 1.15,
     "renormalize_logits": True,
     "min_new_tokens": 1,
-    "temperature": 0.7,
+    "temperature": 0.9,
     "no_repeat_ngram_size": 3,
 }
 
