@@ -3343,7 +3343,7 @@ def upscale(
     path,
     upscale_factor: int = 4,
     prompt: str = _positive_prompt_,
-    negative_prompt: str = _negative_pronpt_,
+    negative_prompt: str = _negative_prompt_,
     seed: int = None,
     controlnet_scale: float = 0.8,
     controlnet_decay: float = 0.8,
