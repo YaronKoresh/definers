@@ -6852,7 +6852,7 @@ def get_chat_response(message, history: list):
     history.append(
         {
             "role": "user",
-            "content": "and make sure to double-check your conclusions while avoiding any fake data or irrelevant information usage.",
+            "content": "and make sure to double-check your conclusions while avoiding any fake data or irrelevant information usage and then format your response with organized and professional manners to make it fully clear and understandable while maintaining a high-quality way of explanation",
         }
     )
 
