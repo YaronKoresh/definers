@@ -56,34 +56,15 @@ collections.MutableSequence = collections.abc.MutableSequence
 
 SYSTEM_MESSAGE = None
 
-stochastic_kwargs = {
-    "do_sample": True,
-    "top_k": 55,
-    "top_p": 0.85,
-    "typical_p": 0.95,
-    "epsilon_cutoff": 0.07,
-    "min_p": 0.03,
+beam_kwargs = {
+    "do_sample": False,
+    "top_k": 3,
+    "temperature": 0.9,
+    "no_repeat_ngram_size": 3,
+    "num_beams": 5,
+    "early_stopping": True,
+    "length_penalty": -0.2,
     "repetition_penalty": 1.2,
-    "renormalize_logits": True,
-    "min_new_tokens": 1,
-    "temperature": 0.75,
-    "no_repeat_ngram_size": 3,
-}
-
-beam_kwargs_translation = {
-    "num_beams": 24,
-    "early_stopping": True,
-    "no_repeat_ngram_size": 3,
-    "min_new_tokens": 0,
-    "length_penalty": -0.2,
-}
-
-beam_kwargs_summarization = {
-    "num_beams": 24,
-    "early_stopping": True,
-    "no_repeat_ngram_size": 3,
-    "min_new_tokens": 0,
-    "length_penalty": -0.2,
 }
 
 ai_model_extensions = [
@@ -1203,7 +1184,7 @@ def answer(history: list):
 
     generate_ids = MODELS["answer"].generate(
         **inputs,
-        **stochastic_kwargs,
+        **beam_kwargs,
         max_length=4096,
         num_logits_to_keep=1,
     )
@@ -4906,7 +4887,7 @@ def ai_translate(text, lang="en"):
                 translated_ids = model.generate(
                     input_ids=input_ids,
                     forced_bos_token_id=forced_token_id,
-                    **beam_kwargs_translation
+                    **beam_kwargs,
                 )
                 
                 translated_paragraph = tokenizer.decode(translated_ids[0], skip_special_tokens=True)
@@ -4929,7 +4910,7 @@ def ai_translate(text, lang="en"):
                     translated_ids = model.generate(
                         input_ids=input_ids,
                         forced_bos_token_id=forced_token_id,
-                        **beam_kwargs_translation
+                        **beam_kwargs,
                     )
                     
                     translated_chunk = tokenizer.decode(translated_ids[0], skip_special_tokens=True)
@@ -5359,7 +5340,7 @@ def _summarize(text_to_summarize):
         key: tensor.to(device()) for key, tensor in encoded.items()
     }
 
-    gen_kwargs = beam_kwargs_summarization
+    gen_kwargs = beam_kwargs
 
     gen = MODELS["summary"].generate(**encoded, **gen_kwargs, max_length=512)
     return TOKENIZERS["summary"].decode(gen[0], skip_special_tokens=True)
