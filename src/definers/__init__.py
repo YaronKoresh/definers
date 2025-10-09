@@ -3341,7 +3341,7 @@ def init_upscale():
 
 def upscale(
     path,
-    upscale_factor: int = 4,
+    upscale_factor: int = 2,
     prompt: str = _positive_prompt_,
     negative_prompt: str = _negative_prompt_,
     seed: int = None,
@@ -3349,7 +3349,7 @@ def upscale(
     controlnet_decay: float = 0.8,
     condition_scale: float = 6.5,
     tile_width: int = 128,
-    tile_height: int = 384,
+    tile_height: int = 192,
     denoise_strength: float = 0.1,
     num_inference_steps: int = 100,
     solver: str = "DPMSolver",
