@@ -10595,8 +10595,7 @@ def keep_alive(fn, outputs:int=1):
             try:
                 return fn(*args, **kwargs)
             except Exception as e:
-                catch(e)
-            finished[0] = True
+                return catch(e)
 
         t = thread(thread_target, *args, **kwargs)
 
