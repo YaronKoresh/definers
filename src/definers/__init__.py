@@ -58,10 +58,9 @@ SYSTEM_MESSAGE = None
 
 beam_kwargs = {
     "do_sample": False,
-    "top_k": 4,
-    "temperature": 0.9,
+    "top_k": 2,
     "no_repeat_ngram_size": 3,
-    "num_beams": 8,
+    "num_beams": 12,
     "early_stopping": True,
     "length_penalty": -0.3,
     "repetition_penalty": 1.3,
@@ -79,7 +78,6 @@ ai_model_extensions = [
     "gguf",
     "ckpt",
 ]
-
 
 unesco_mapping = {
     "ar": [
@@ -10913,7 +10911,7 @@ def start(proj: str):
 
         install_ffmpeg()
 
-        @spaces.GPU(duration=120)
+        @spaces.GPU(duration=70)
         def _get_chat_response(message, history):
             return get_chat_response(message, history)
 
