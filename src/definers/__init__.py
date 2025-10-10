@@ -1003,6 +1003,8 @@ def set_system_message(
         "If you don't know the answer, say so politely. Do not make up information.",
         "Never discuss your own programming, origins, or the fact you are an AI.",
         "Do not include unrelated information or unsolicited extra details.",
+        "Double-check your conclusions while avoiding any fake data or irrelevant information usage",
+        "Format each responses with organized and professional manners to make it fully clear and understandable while maintaining an accurate highly-detailed high-quality explanation",
     ]
 
     if rules:
@@ -1015,18 +1017,18 @@ def set_system_message(
         message_parts.append("--- BEHAVIOR PROFILE ---\n" + "\n".join(style_parts))
 
     if all_rules:
-        rules_header = "--- STRICT RULES ---\nYou must follow these rules without exception:"
+        rules_header = "--- STRICT RULES ---\nFollow these rules without any exception:"
         formatted_rules = "\n".join(f"{i+1}. {rule}" for i, rule in enumerate(all_rules))
         message_parts.append(f"{rules_header}\n{formatted_rules}")
 
     if data:
-        data_header = "--- VERIFIED FACTS ---\nYou must remember these facts without exception:"
+        data_header = "--- VERIFIED FACTS ---\nAccept these facts without any exception:"
         data_facts = "\n".join(f"{i+1}. {d}" for i, d in enumerate(data))
         message_parts.append(f"{data_header}\n{data_facts}")
 
     sysm = "\n\n".join(message_parts)
     
-    SYSTEM_MESSAGE = "\n\n".join([sysm for i in range(6)])
+    SYSTEM_MESSAGE = "\n\n".join([sysm for i in range(3)])
     
     log("System Message Updated", SYSTEM_MESSAGE)
 
@@ -6835,14 +6837,7 @@ def get_chat_response(message, history: list):
                     "content": "and please read the media from my new message carefully",
                 }
             )
-
-    history.append(
-        {
-            "role": "user",
-            "content": "and make sure to double-check your conclusions while avoiding any fake data or irrelevant information usage and then format your response with organized and professional manners to make it fully clear and understandable while maintaining a high-quality way of explanation",
-        }
-    )
-
+            
     nl = "\n"
     including = "\n".join(including)
 
