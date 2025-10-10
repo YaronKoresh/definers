@@ -4839,7 +4839,7 @@ def ai_translate(text, lang="en"):
 
     text = strip_nikud(text)
 
-    long_paragraph_threshold = 500
+    long_paragraph_threshold = 400
 
     tgt_code = unesco_mapping[lang]
     if isinstance(tgt_code, list):
@@ -4885,7 +4885,7 @@ def ai_translate(text, lang="en"):
 
         if len(paragraph) < long_paragraph_threshold:
             try:
-                inputs = tokenizer(paragraph, return_tensors="pt")
+                inputs = tokenizer(paragraph, return_tensors="pt", padding=True, truncation=True)
                 input_ids = inputs.input_ids.to(device())
                 forced_token_id = tokenizer.convert_tokens_to_ids(tgt_code)
 
@@ -4893,6 +4893,7 @@ def ai_translate(text, lang="en"):
                     input_ids=input_ids,
                     forced_bos_token_id=forced_token_id,
                     renormalize_logits=True,
+                    max_length=256,
                     **beam_kwargs,
                 )
                 
@@ -4909,7 +4910,7 @@ def ai_translate(text, lang="en"):
                     if not sentence.strip():
                         continue
                     
-                    inputs = tokenizer(sentence, return_tensors="pt")
+                    inputs = tokenizer(sentence, return_tensors="pt", padding=True, truncation=True)
                     input_ids = inputs.input_ids.to(device())
                     forced_token_id = tokenizer.convert_tokens_to_ids(tgt_code)
 
@@ -4917,6 +4918,7 @@ def ai_translate(text, lang="en"):
                         input_ids=input_ids,
                         forced_bos_token_id=forced_token_id,
                         renormalize_logits=True,
+                        max_length=256,
                         **beam_kwargs,
                     )
                     
