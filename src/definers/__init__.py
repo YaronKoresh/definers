@@ -59,7 +59,7 @@ SYSTEM_MESSAGE = None
 beam_kwargs = {
     "do_sample": False,
     "top_k": 3,
-    "temperature": 0.85,
+    "temperature": 1.1,
     "no_repeat_ngram_size": 2,
     "num_beams": 4,
     "early_stopping": True,
