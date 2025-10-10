@@ -4839,7 +4839,7 @@ def ai_translate(text, lang="en"):
 
     text = strip_nikud(text)
 
-    long_paragraph_threshold = 400
+    long_paragraph_threshold = 800
 
     tgt_code = unesco_mapping[lang]
     if isinstance(tgt_code, list):
