@@ -58,12 +58,13 @@ SYSTEM_MESSAGE = None
 
 beam_kwargs = {
     "do_sample": False,
-    "top_k": 2,
-    "no_repeat_ngram_size": 4,
-    "num_beams": 5,
+    "top_k": 3,
+    "temperature": 0.85,
+    "no_repeat_ngram_size": 2,
+    "num_beams": 4,
     "early_stopping": True,
     "length_penalty": -0.3,
-    "repetition_penalty": 1.3,
+    "repetition_penalty": 1.15,
 }
 
 ai_model_extensions = [
