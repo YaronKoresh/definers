@@ -4890,6 +4890,7 @@ def ai_translate(text, lang="en"):
                 translated_ids = model.generate(
                     input_ids=input_ids,
                     forced_bos_token_id=forced_token_id,
+                    renormalize_logits=True,
                     **beam_kwargs,
                 )
                 
@@ -4913,7 +4914,6 @@ def ai_translate(text, lang="en"):
                     translated_ids = model.generate(
                         input_ids=input_ids,
                         forced_bos_token_id=forced_token_id,
-                        num_return_sequences=1,
                         renormalize_logits=True,
                         **beam_kwargs,
                     )
