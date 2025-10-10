@@ -360,6 +360,7 @@ FFMPEG_URL = (
 )
 
 tasks = {
+    "general-tokenizer": "distilbert-base-uncased",
     "video": "hunyuanvideo-community/HunyuanVideo-I2V",
     "image": "black-forest-labs/FLUX.1-dev",
     "image-spro": "tencent/SRPO",
@@ -392,6 +393,7 @@ MODELS = {
 TOKENIZERS = {
     "summary": None,
     "translate": None,
+    "general-tokenizer": None,
 }
 
 PROCESSORS = {
@@ -1410,10 +1412,12 @@ def tokenize_and_pad(rows, tokenizer=None):
     return two_dim_numpy(tokenized_inputs["input_ids"])
 
 
-def init_tokenizer(tok):
+def init_tokenizer():
     from transformers import AutoTokenizer
 
-    return AutoTokenizer.from_pretrained(tok)
+    if not TOKENIZERS["general-tokenizer"]:
+        TOKENIZERS["general-tokenizer"] = AutoTokenizer.from_pretrained(tasks["general-tokenizer"])
+    return TOKENIZERS["general-tokenizer"]
 
 
 def init_model_file(
