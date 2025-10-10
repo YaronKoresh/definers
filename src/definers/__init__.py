@@ -59,8 +59,8 @@ SYSTEM_MESSAGE = None
 beam_kwargs = {
     "do_sample": False,
     "top_k": 2,
-    "no_repeat_ngram_size": 3,
-    "num_beams": 4,
+    "no_repeat_ngram_size": 4,
+    "num_beams": 5,
     "early_stopping": True,
     "length_penalty": -0.3,
     "repetition_penalty": 1.3,
@@ -4908,6 +4908,8 @@ def ai_translate(text, lang="en"):
                     translated_ids = model.generate(
                         input_ids=input_ids,
                         forced_bos_token_id=forced_token_id,
+                        num_return_sequences=1,
+                        renormalize_logits=True,
                         **beam_kwargs,
                     )
                     
