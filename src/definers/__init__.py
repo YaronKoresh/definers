@@ -60,7 +60,7 @@ beam_kwargs = {
     "do_sample": False,
     "top_k": 2,
     "no_repeat_ngram_size": 3,
-    "num_beams": 12,
+    "num_beams": 4,
     "early_stopping": True,
     "length_penalty": -0.3,
     "repetition_penalty": 1.3,
