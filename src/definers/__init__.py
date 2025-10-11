@@ -1127,7 +1127,7 @@ def answer(history: list):
             content_lang = language(content)
             if content_lang != required_lang:
                 content = ai_translate(content, lang=required_lang)
-            add_content += " " + content
+            add_content += "\n\n" + content
 
         else:
             ps = []
@@ -1150,7 +1150,7 @@ def answer(history: list):
                     add_content += (
                         f" <|audio_{ str(len(snd_list)) }|>"
                     )
-                if ext in iio_formats:
+                elif ext in iio_formats:
                     w, h = image_resolution(p)
                     w2, h2 = get_max_resolution(w, h, mega_pixels=1.5)
                     if w2 > w:
@@ -1162,13 +1162,21 @@ def answer(history: list):
                     add_content += (
                         f" <|image_{ str(len(img_list)) }|>"
                     )
+                else:
+                    content = read(p)
+                    content_lang = language(content)
+                    if content_lang != required_lang:
+                        content = ai_translate(content, lang=required_lang)
+                    add_content += "\n\n" + content
+                    
         if add_role != role:
             add_role = role
             alt_history.append(
                 {"role": add_role, "content": add_content.strip()}
             )
             continue
-        alt_history[-1]["content"] += add_content
+        alt_history[-1]["content"] += "\n\n" + add_content
+        alt_history[-1]["content"] = alt_history[-1]["content"].strip()
 
     prompt = PROCESSORS["answer"].tokenizer.apply_chat_template(
         alt_history, tokenize=False, add_generation_prompt=True
@@ -4829,16 +4837,14 @@ def ai_translate(text, lang="en"):
     import torch
     import pysbd
     from sacremoses import MosesPunctNormalizer
-    from stopes.pipelines.monolingual.utils.sentence_split import (
-        get_split_algo,
-    )
+    from stopes.pipelines.monolingual.utils.sentence_split import get_split_algo
 
     if not text or not text.strip():
         return ""
 
     text = strip_nikud(text)
 
-    long_paragraph_threshold = 800
+    long_paragraph_threshold = 400
 
     tgt_code = unesco_mapping[lang]
     if isinstance(tgt_code, list):
@@ -4876,9 +4882,10 @@ def ai_translate(text, lang="en"):
         paragraph = punct_normalizer.normalize(paragraph)
 
         try:
+            splitter = pysbd.Segmenter(language=source_lang_code, clean=False).segment
+        except Exception as pysbd_e:
+            catch(pysbd_e)
             splitter = get_split_algo(source_lang_code, "default")
-        except:
-            splitter = pysbd.Segmenter(language=source_lang_code, clean=False)
 
         tokenizer.src_lang = src_code
 
