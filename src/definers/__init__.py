@@ -1196,7 +1196,7 @@ def answer(history: list):
     generate_ids = MODELS["answer"].generate(
         **inputs,
         **beam_kwargs,
-        max_length=4096,
+        max_length=16384,
         num_logits_to_keep=1,
     )
 
@@ -6903,7 +6903,6 @@ def init_chat(title="Chatbot", handler=get_chat_response):
         elem_id="chatbot",
         type="messages",
         show_copy_button=True,
-        rtl=True,
     )
 
     return gr.ChatInterface(
