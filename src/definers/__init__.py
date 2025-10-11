@@ -59,11 +59,13 @@ SYSTEM_MESSAGE = None
 beam_kwargs = {
     "do_sample": False,
     "top_k": 2,
-    "temperature": 1.1,
+    "temperature": 1.15,
     "no_repeat_ngram_size": 3,
     "num_beams": 4,
     "early_stopping": True,
 }
+
+higher_beams = 64
 
 ai_model_extensions = [
     "safetensors",
@@ -4844,7 +4846,7 @@ def ai_translate(text, lang="en"):
 
     text = strip_nikud(text)
 
-    long_paragraph_threshold = 400
+    long_paragraph_threshold = 500
 
     tgt_code = unesco_mapping[lang]
     if isinstance(tgt_code, list):
@@ -4889,6 +4891,9 @@ def ai_translate(text, lang="en"):
 
         tokenizer.src_lang = src_code
 
+        _beam_kwargs = beam_kwargs
+        _beam_kwargs["num_beams"] = higher_beams
+
         if len(paragraph) < long_paragraph_threshold:
             try:
                 inputs = tokenizer(paragraph, return_tensors="pt", padding=True, truncation=True)
@@ -4900,7 +4905,7 @@ def ai_translate(text, lang="en"):
                     forced_bos_token_id=forced_token_id,
                     renormalize_logits=True,
                     max_length=128,
-                    **beam_kwargs,
+                    **_beam_kwargs,
                 )
                 
                 translated_paragraph = tokenizer.decode(translated_ids[0], skip_special_tokens=True)
@@ -4925,7 +4930,7 @@ def ai_translate(text, lang="en"):
                         forced_bos_token_id=forced_token_id,
                         renormalize_logits=True,
                         max_length=128,
-                        **beam_kwargs,
+                        **_beam_kwargs,
                     )
                     
                     translated_chunk = tokenizer.decode(translated_ids[0], skip_special_tokens=True)
@@ -5355,9 +5360,10 @@ def _summarize(text_to_summarize):
         key: tensor.to(device()) for key, tensor in encoded.items()
     }
 
-    gen_kwargs = beam_kwargs
+    _beam_kwargs = beam_kwargs
+    _beam_kwargs["num_beams"] = higher_beams
 
-    gen = MODELS["summary"].generate(**encoded, **gen_kwargs, max_length=512)
+    gen = MODELS["summary"].generate(**encoded, **_beam_kwargs, max_length=512)
     return TOKENIZERS["summary"].decode(gen[0], skip_special_tokens=True)
 
 
@@ -6862,8 +6868,8 @@ def get_chat_response(message, history: list):
     response = answer(history)
     log("Chatbot response", response)
 
-    if orig_lang and orig_lang != language(response):
-        response = translate_with_code(response, lang=orig_lang)
+    # if orig_lang and orig_lang != language(response):
+        # response = translate_with_code(response, lang=orig_lang)
 
     return response
 
