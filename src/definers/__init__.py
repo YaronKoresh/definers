@@ -4837,7 +4837,7 @@ def camel_case(txt: str):
 
 def ai_translate(text, lang="en"):
     import torch
-    import pysbd
+    # import pysbd
     from sacremoses import MosesPunctNormalizer
     from stopes.pipelines.monolingual.utils.sentence_split import get_split_algo
 
@@ -4883,11 +4883,7 @@ def ai_translate(text, lang="en"):
         punct_normalizer = MosesPunctNormalizer(lang=source_lang_code)
         paragraph = punct_normalizer.normalize(paragraph)
 
-        try:
-            splitter = pysbd.Segmenter(language=source_lang_code, clean=False).segment
-        except Exception as pysbd_e:
-            catch(pysbd_e)
-            splitter = get_split_algo(source_lang_code, "default")
+        splitter = get_split_algo(src_code[:3], "default")
 
         tokenizer.src_lang = src_code
 
