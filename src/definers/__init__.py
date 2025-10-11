@@ -59,12 +59,10 @@ SYSTEM_MESSAGE = None
 beam_kwargs = {
     "do_sample": False,
     "top_k": 2,
-    "temperature": 1.15,
-    "no_repeat_ngram_size": 2,
-    "num_beams": 8,
+    "temperature": 1.1,
+    "no_repeat_ngram_size": 3,
+    "num_beams": 4,
     "early_stopping": True,
-    "length_penalty": -0.3,
-    "repetition_penalty": 1.3,
 }
 
 ai_model_extensions = [
@@ -4829,6 +4827,7 @@ def camel_case(txt: str):
 
 def ai_translate(text, lang="en"):
     import torch
+    import pysbd
     from sacremoses import MosesPunctNormalizer
     from stopes.pipelines.monolingual.utils.sentence_split import (
         get_split_algo,
@@ -4879,7 +4878,7 @@ def ai_translate(text, lang="en"):
         try:
             splitter = get_split_algo(source_lang_code, "default")
         except:
-            splitter = get_split_algo("char", "default")
+            splitter = pysbd.Segmenter(language=source_lang_code, clean=False)
 
         tokenizer.src_lang = src_code
 
@@ -4893,7 +4892,7 @@ def ai_translate(text, lang="en"):
                     input_ids=input_ids,
                     forced_bos_token_id=forced_token_id,
                     renormalize_logits=True,
-                    max_length=256,
+                    max_length=128,
                     **beam_kwargs,
                 )
                 
@@ -4918,7 +4917,7 @@ def ai_translate(text, lang="en"):
                         input_ids=input_ids,
                         forced_bos_token_id=forced_token_id,
                         renormalize_logits=True,
-                        max_length=256,
+                        max_length=128,
                         **beam_kwargs,
                     )
                     
