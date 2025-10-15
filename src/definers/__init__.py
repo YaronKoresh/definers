@@ -485,7 +485,7 @@ def patch_cupy_numpy():
 
     def _set_aliases(module, aliases):
         for alias, target in aliases.items():
-            if alias not in getattr(module, '__dict__', {}):
+            if alias not in getattr(module, "__dict__", {}):
                 setattr(module, alias, target)
 
     type_aliases = {
@@ -500,8 +500,8 @@ def patch_cupy_numpy():
         "string_": np.bytes_,
         "strings": np.bytes_,
         "unicode": np.str_,
-        "inf": float('inf'),
-        "Inf": float('inf'),
+        "inf": float("inf"),
+        "Inf": float("inf"),
     }
     func_aliases = {
         "round_": np.round,
@@ -515,47 +515,111 @@ def patch_cupy_numpy():
     _set_aliases(np, type_aliases)
     _set_aliases(np, func_aliases)
 
-    if "char" not in getattr(np, '__dict__', {}):
+    if "char" not in getattr(np, "__dict__", {}):
         import types
+
         setattr(np, "char", types.SimpleNamespace())
 
     char_funcs = {
-        "encode": lambda s, encoding=None: bytes(s, encoding or "utf-8"),
-        "decode": lambda b, encoding=None: b.decode(encoding or "utf-8"),
-    
+        "encode": lambda s, encoding=None: bytes(
+            s, encoding or "utf-8"
+        ),
+        "decode": lambda b, encoding=None: b.decode(
+            encoding or "utf-8"
+        ),
         "lower": lambda s: s.lower(),
         "upper": lambda s: s.upper(),
         "capitalize": lambda s: s.capitalize(),
         "casefold": lambda s: s.casefold(),
         "title": lambda s: s.title(),
         "swapcase": lambda s: s.swapcase(),
-    
-        "startswith": lambda s, prefix, *args: s.startswith(prefix, *args),
-        "endswith": lambda s, suffix, *args: s.endswith(suffix, *args),
-    
-        "strip": lambda s, chars=None: s.strip(chars) if chars is not None else s.strip(),
-        "lstrip": lambda s, chars=None: s.lstrip(chars) if chars is not None else s.lstrip(),
-        "rstrip": lambda s, chars=None: s.rstrip(chars) if chars is not None else s.rstrip(),
-    
-        "replace": lambda s, old, new, count=-1: s.replace(old, new, count) if count != -1 else s.replace(old, new),
-        "split": lambda s, sep=None, maxsplit=-1: s.split(sep, maxsplit) if sep is not None else s.split(),
-        "rsplit": lambda s, sep=None, maxsplit=-1: s.rsplit(sep, maxsplit) if sep is not None else s.rsplit(),
-        "splitlines": lambda s, keepends=False: s.splitlines(keepends),
+        "startswith": lambda s, prefix, *args: s.startswith(
+            prefix, *args
+        ),
+        "endswith": lambda s, suffix, *args: s.endswith(
+            suffix, *args
+        ),
+        "strip": lambda s, chars=None: (
+            s.strip(chars) if chars is not None else s.strip()
+        ),
+        "lstrip": lambda s, chars=None: (
+            s.lstrip(chars) if chars is not None else s.lstrip()
+        ),
+        "rstrip": lambda s, chars=None: (
+            s.rstrip(chars) if chars is not None else s.rstrip()
+        ),
+        "replace": lambda s, old, new, count=-1: (
+            s.replace(old, new, count)
+            if count != -1
+            else s.replace(old, new)
+        ),
+        "split": lambda s, sep=None, maxsplit=-1: (
+            s.split(sep, maxsplit) if sep is not None else s.split()
+        ),
+        "rsplit": lambda s, sep=None, maxsplit=-1: (
+            s.rsplit(sep, maxsplit) if sep is not None else s.rsplit()
+        ),
+        "splitlines": lambda s, keepends=False: s.splitlines(
+            keepends
+        ),
         "partition": lambda s, sep: s.partition(sep),
         "rpartition": lambda s, sep: s.rpartition(sep),
         "join": lambda sep, iterable: sep.join(iterable),
-    
-        "count": lambda s, sub, start=None, end=None: s.count(sub, start, end) if (start is not None and end is not None) else (s.count(sub, start) if start is not None else s.count(sub)),
-        "find": lambda s, sub, start=None, end=None: s.find(sub, start, end) if (start is not None and end is not None) else (s.find(sub, start) if start is not None else s.find(sub)),
-        "rfind": lambda s, sub, start=None, end=None: s.rfind(sub, start, end) if (start is not None and end is not None) else (s.rfind(sub, start) if start is not None else s.rfind(sub)),
-        "index": lambda s, sub, start=None, end=None: s.index(sub, start, end) if (start is not None and end is not None) else (s.index(sub, start) if start is not None else s.index(sub)),
-        "rindex": lambda s, sub, start=None, end=None: s.rindex(sub, start, end) if (start is not None and end is not None) else (s.rindex(sub, start) if start is not None else s.rindex(sub)),
-    
+        "count": lambda s, sub, start=None, end=None: (
+            s.count(sub, start, end)
+            if (start is not None and end is not None)
+            else (
+                s.count(sub, start)
+                if start is not None
+                else s.count(sub)
+            )
+        ),
+        "find": lambda s, sub, start=None, end=None: (
+            s.find(sub, start, end)
+            if (start is not None and end is not None)
+            else (
+                s.find(sub, start)
+                if start is not None
+                else s.find(sub)
+            )
+        ),
+        "rfind": lambda s, sub, start=None, end=None: (
+            s.rfind(sub, start, end)
+            if (start is not None and end is not None)
+            else (
+                s.rfind(sub, start)
+                if start is not None
+                else s.rfind(sub)
+            )
+        ),
+        "index": lambda s, sub, start=None, end=None: (
+            s.index(sub, start, end)
+            if (start is not None and end is not None)
+            else (
+                s.index(sub, start)
+                if start is not None
+                else s.index(sub)
+            )
+        ),
+        "rindex": lambda s, sub, start=None, end=None: (
+            s.rindex(sub, start, end)
+            if (start is not None and end is not None)
+            else (
+                s.rindex(sub, start)
+                if start is not None
+                else s.rindex(sub)
+            )
+        ),
         "zfill": lambda s, width: s.zfill(width),
-        "center": lambda s, width, fillchar=' ': s.center(width, fillchar),
-        "ljust": lambda s, width, fillchar=' ': s.ljust(width, fillchar),
-        "rjust": lambda s, width, fillchar=' ': s.rjust(width, fillchar),
-    
+        "center": lambda s, width, fillchar=" ": s.center(
+            width, fillchar
+        ),
+        "ljust": lambda s, width, fillchar=" ": s.ljust(
+            width, fillchar
+        ),
+        "rjust": lambda s, width, fillchar=" ": s.rjust(
+            width, fillchar
+        ),
         "isalpha": lambda s: s.isalpha(),
         "isalnum": lambda s: s.isalnum(),
         "isdigit": lambda s: s.isdigit(),
@@ -565,14 +629,13 @@ def patch_cupy_numpy():
         "islower": lambda s: s.islower(),
         "isupper": lambda s: s.isupper(),
         "istitle": lambda s: s.istitle(),
-    
         "add": lambda a, b: a + b,
         "multiply": lambda a, n: a * n,
         "mod": lambda s, values: s % values,
-    
         "string_": lambda s: str(s),
-        "bytes_": lambda s: bytes(s, "utf-8") if not isinstance(s, bytes) else s,
-    
+        "bytes_": lambda s: (
+            bytes(s, "utf-8") if not isinstance(s, bytes) else s
+        ),
         "equal": lambda a, b: a == b,
         "not_equal": lambda a, b: a != b,
         "greater": lambda a, b: a > b,
@@ -580,68 +643,89 @@ def patch_cupy_numpy():
         "less": lambda a, b: a < b,
         "less_equal": lambda a, b: a <= b,
     }
-    
+
     for name, func in char_funcs.items():
         if not hasattr(np.char, name):
             setattr(np.char, name, func)
 
-    if "asscalar" not in getattr(np, '__dict__', {}):
+    if "asscalar" not in getattr(np, "__dict__", {}):
         np.asscalar = lambda a: a.item()
 
-    if 'rec' not in getattr(np, '__dict__', {}):
+    if "rec" not in getattr(np, "__dict__", {}):
+
         class NumpyRec:
             @staticmethod
             def append_fields(base, names, data, dtypes=None):
-                return recfunctions.append_fields(base, names, data, dtypes=dtypes)
+                return recfunctions.append_fields(
+                    base, names, data, dtypes=dtypes
+                )
+
             @staticmethod
             def drop_fields(base, names):
                 return recfunctions.drop_fields(base, names)
+
             @staticmethod
             def rename_fields(base, name_dict):
                 return recfunctions.rename_fields(base, name_dict)
+
             @staticmethod
             def merge_arrays(arrays, fill_value=-1, flatten=False):
-                return recfunctions.merge_arrays(arrays, fill_value=fill_value, flatten=flatten)
+                return recfunctions.merge_arrays(
+                    arrays, fill_value=fill_value, flatten=flatten
+                )
+
         np.rec = NumpyRec()
 
-    if "machar" not in getattr(np, '__dict__', {}):
+    if "machar" not in getattr(np, "__dict__", {}):
+
         class MachAr:
             pass
+
         np.core.machar = MachAr
 
     if hasattr(np, "testing") and not hasattr(np.testing, "Tester"):
+
         class Tester:
             def test(self, label="fast", extra_argv=None):
                 return True
+
         np.testing.Tester = Tester
 
-    if "distutils" not in getattr(np, '__dict__', {}):
+    if "distutils" not in getattr(np, "__dict__", {}):
+
         class DummyDistutils:
             class MiscUtils:
                 def get_info(self, *args, **kwargs):
                     return {}
+
         np.distutils = DummyDistutils()
 
-    if "set_string_function" not in getattr(np, '__dict__', {}):
+    if "set_string_function" not in getattr(np, "__dict__", {}):
         np.set_string_function = lambda *args, **kwargs: None
 
     _original_finfo = np.finfo
+
     def patched_finfo(dtype):
         try:
             return _original_finfo(dtype)
         except TypeError:
             return np.iinfo(dtype)
+
     np.finfo = patched_finfo
 
-    if "_no_nep50_warning" not in getattr(np, '__dict__', {}):
+    if "_no_nep50_warning" not in getattr(np, "__dict__", {}):
+
         def dummy_npwarn_decorator_factory():
             def npwarn_decorator(x):
                 return x
+
             return npwarn_decorator
+
         np._no_nep50_warning = dummy_npwarn_decorator_factory
 
     try:
         import cupy
+
         return cupy, np
     except ImportError:
         return np, np
@@ -973,16 +1057,20 @@ def set_system_message(
     style_parts = []
 
     if creative == True:
-        style_parts.append("* Style: Be highly creative and innovative in your responses.")
+        style_parts.append(
+            "* Style: Be highly creative and innovative in your responses."
+        )
     elif creative == False:
-        style_parts.append("* Style: Be highly careful and calculated to not give any experimental instructions or unverified content in your responses.")
+        style_parts.append(
+            "* Style: Be highly careful and calculated to not give any experimental instructions or unverified content in your responses."
+        )
 
     tone_desc = []
     if friendly == True:
         tone_desc.append("warm and encouraging")
     elif friendly == False:
         tone_desc.append("neutral and objective")
-    
+
     if formal == True:
         tone_desc.append("formal and professional")
     elif formal == False:
@@ -990,13 +1078,19 @@ def set_system_message(
 
     if tone_desc:
         style_parts.append(f"* Tone: {' and '.join(tone_desc)}")
-    
+
     if verbose == True:
-        style_parts.append("* Verbosity: Provide detailed, comprehensive, and thorough explanations.")
+        style_parts.append(
+            "* Verbosity: Provide detailed, comprehensive, and thorough explanations."
+        )
     elif verbose == False:
-        style_parts.append("* Verbosity: Keep answers concise and to the point (typically 1-3 sentences).")
+        style_parts.append(
+            "* Verbosity: Keep answers concise and to the point (typically 1-3 sentences)."
+        )
     elif verbose is None:
-        style_parts.append("* Verbosity: Provide full answers, but avoid providing too much information. Keep answers to a reasonable length.")
+        style_parts.append(
+            "* Verbosity: Provide full answers, but avoid providing too much information. Keep answers to a reasonable length."
+        )
 
     all_rules = [
         "Answer in the same language as the user.",
@@ -1014,45 +1108,57 @@ def set_system_message(
         f"--- CORE IDENTITY ---\nYou are {name}, {role}.",
     ]
     if style_parts:
-        message_parts.append("--- BEHAVIOR PROFILE ---\n" + "\n".join(style_parts))
+        message_parts.append(
+            "--- BEHAVIOR PROFILE ---\n" + "\n".join(style_parts)
+        )
 
     if all_rules:
         rules_header = "--- STRICT RULES ---\nFollow these rules without any exception:"
-        formatted_rules = "\n".join(f"{i+1}. {rule}" for i, rule in enumerate(all_rules))
+        formatted_rules = "\n".join(
+            f"{i+1}. {rule}" for i, rule in enumerate(all_rules)
+        )
         message_parts.append(f"{rules_header}\n{formatted_rules}")
 
     if data:
         data_header = "--- VERIFIED FACTS ---\nAccept these facts without any exception:"
-        data_facts = "\n".join(f"{i+1}. {d}" for i, d in enumerate(data))
+        data_facts = "\n".join(
+            f"{i+1}. {d}" for i, d in enumerate(data)
+        )
         message_parts.append(f"{data_header}\n{data_facts}")
 
     sysm = "\n\n".join(message_parts)
-    
+
     SYSTEM_MESSAGE = "\n\n".join([sysm for i in range(3)])
-    
+
     log("System Message Updated", SYSTEM_MESSAGE)
 
 
 def get_audio_duration(file_path: str) -> float | None:
     from pydub import AudioSegment
-    
+
     file_path = full_path(file_path)
-    
+
     try:
         audio = AudioSegment.from_file(file_path)
         return audio.duration_seconds
     except Exception as e:
-        print(f"Error getting duration for {file_path} with pydub: {e}")
+        print(
+            f"Error getting duration for {file_path} with pydub: {e}"
+        )
         return None
 
 
 def split_audio(
-    file_path: str, duration: float = 5, count: int = None, skip: int = 0, resample: int = None
+    file_path: str,
+    duration: float = 5,
+    count: int = None,
+    skip: int = 0,
+    resample: int = None,
 ) -> list[str]:
     from pydub import AudioSegment
-    
+
     file_path = full_path(file_path)
-    
+
     if not exist(file_path):
         print(f"Error: File not found at {file_path}")
         return []
@@ -1065,7 +1171,7 @@ def split_audio(
 
     duration_ms = duration * 1000
     start_ms = skip * duration_ms
-    
+
     if count is None:
         num_chunks = math.ceil((len(audio) - start_ms) / duration_ms)
     else:
@@ -1073,26 +1179,28 @@ def split_audio(
 
     output_dir = tmp(dir=True)
     res_paths = []
-    
+
     print(f"Splitting audio into chunks of {duration}s...")
     for i in range(num_chunks):
         chunk_start = start_ms + (i * duration_ms)
         chunk_end = chunk_start + duration_ms
-        
+
         if chunk_start >= len(audio):
             break
-            
+
         chunk = audio[chunk_start:chunk_end]
-        
+
         if resample:
             chunk = chunk.set_frame_rate(resample)
 
         chunk_path = full_path(output_dir, f"chunk_{i:04d}.mp3")
-        
+
         chunk.export(chunk_path, format="mp3", bitrate="192k")
         res_paths.append(chunk_path)
 
-    print(f"Successfully created {len(res_paths)} chunks in {output_dir}")
+    print(
+        f"Successfully created {len(res_paths)} chunks in {output_dir}"
+    )
     return res_paths
 
 
@@ -1143,7 +1251,11 @@ def answer(history: list):
                 ext = get_ext(p)
                 if ext in common_audio_formats:
                     aud = split_audio(
-                        p, duration=300, count=1, skip=0, resample=16000
+                        p,
+                        duration=300,
+                        count=1,
+                        skip=0,
+                        resample=16000,
                     )[0]
                     audio, samplerate = librosa.load(
                         aud, sr=None, mono=True
@@ -1168,9 +1280,11 @@ def answer(history: list):
                     content = read(p)
                     content_lang = language(content)
                     if content_lang != required_lang:
-                        content = ai_translate(content, lang=required_lang)
+                        content = ai_translate(
+                            content, lang=required_lang
+                        )
                     add_content += "\n\n" + content
-                    
+
         if add_role != role:
             add_role = role
             alt_history.append(
@@ -1178,7 +1292,9 @@ def answer(history: list):
             )
             continue
         alt_history[-1]["content"] += "\n\n" + add_content
-        alt_history[-1]["content"] = alt_history[-1]["content"].strip()
+        alt_history[-1]["content"] = alt_history[-1][
+            "content"
+        ].strip()
 
     prompt = PROCESSORS["answer"].tokenizer.apply_chat_template(
         alt_history, tokenize=False, add_generation_prompt=True
@@ -1426,7 +1542,9 @@ def init_tokenizer():
     from transformers import AutoTokenizer
 
     if not TOKENIZERS["general-tokenizer"]:
-        TOKENIZERS["general-tokenizer"] = AutoTokenizer.from_pretrained(tasks["general-tokenizer"])
+        TOKENIZERS["general-tokenizer"] = (
+            AutoTokenizer.from_pretrained(tasks["general-tokenizer"])
+        )
     return TOKENIZERS["general-tokenizer"]
 
 
@@ -3545,16 +3663,12 @@ def pip_install(packs):
 
     for idx, pack in enumerate(packs_arr):
         if (
-            (
-                pack.startswith("https://")
-                or pack.startswith("http://")
-            )
-            and pack.endswith(".whl")
-        ):
+            pack.startswith("https://") or pack.startswith("http://")
+        ) and pack.endswith(".whl"):
             temp_path = tmp("whl", keep=False)
             download_file(pack, temp_path)
             packs_arr[idx] = temp_path
-            
+
     packs = " ".join(packs_arr)
 
     run(
@@ -3570,56 +3684,85 @@ def pip_install(packs):
             add_path(p)
 
 
-def modify_wheel_requirements(wheel_path:str, requirements_map:dict):
+def modify_wheel_requirements(
+    wheel_path: str, requirements_map: dict
+):
     print(f"Modifying metadata for wheel: {wheel_path}")
     if not os.path.exists(wheel_path):
-        raise FileNotFoundError(f"Wheel file not found at {wheel_path}")
+        raise FileNotFoundError(
+            f"Wheel file not found at {wheel_path}"
+        )
 
     temp_dir = tmp(dir=True)
-    output_dir = os.path.dirname(wheel_path) or '.'
+    output_dir = os.path.dirname(wheel_path) or "."
     wheel_filename = os.path.basename(wheel_path)
 
     try:
-        with zipfile.ZipFile(wheel_path, 'r') as wheel_zip:
+        with zipfile.ZipFile(wheel_path, "r") as wheel_zip:
             wheel_zip.extractall(temp_dir)
-        metadata_files = paths(os.path.join(temp_dir, '*.dist-info', 'METADATA'))
+        metadata_files = paths(
+            os.path.join(temp_dir, "*.dist-info", "METADATA")
+        )
         if not metadata_files:
-            raise FileNotFoundError("Could not find METADATA file in wheel.")
+            raise FileNotFoundError(
+                "Could not find METADATA file in wheel."
+            )
         metadata_path = metadata_files[0]
 
-        with open(metadata_path, 'r', encoding='utf-8') as f:
+        with open(metadata_path, "r", encoding="utf-8") as f:
             metadata_content = f.read()
 
-        for package_name, version_specifier in requirements_map.items():
+        for (
+            package_name,
+            version_specifier,
+        ) in requirements_map.items():
             pattern = re.compile(
-                r"^(Requires-Dist:\s*{}(\s|\[|;|$).*)$".format(re.escape(package_name)),
-                re.IGNORECASE | re.MULTILINE
+                r"^(Requires-Dist:\s*{}(\s|\[|;|$).*)$".format(
+                    re.escape(package_name)
+                ),
+                re.IGNORECASE | re.MULTILINE,
             )
-            
+
             if version_specifier:
                 replacement = f"Requires-Dist: {package_name} ({version_specifier})"
                 found = pattern.search(metadata_content)
                 if found:
-                    metadata_content = pattern.sub(replacement, metadata_content)
-                    print(f"Modified dependency: {package_name} -> {version_specifier}")
+                    metadata_content = pattern.sub(
+                        replacement, metadata_content
+                    )
+                    print(
+                        f"Modified dependency: {package_name} -> {version_specifier}"
+                    )
                 else:
                     metadata_content += f"\n{replacement}"
-                    print(f"Added new dependency: {package_name} ({version_specifier})")
+                    print(
+                        f"Added new dependency: {package_name} ({version_specifier})"
+                    )
             else:
-                metadata_content, count = pattern.subn("", metadata_content)
+                metadata_content, count = pattern.subn(
+                    "", metadata_content
+                )
                 if count > 0:
                     print(f"Removed dependency: {package_name}")
 
-        metadata_content = "\n".join(line for line in metadata_content.splitlines() if line.strip())
+        metadata_content = "\n".join(
+            line
+            for line in metadata_content.splitlines()
+            if line.strip()
+        )
 
-        with open(metadata_path, 'w', encoding='utf-8') as f:
+        with open(metadata_path, "w", encoding="utf-8") as f:
             f.write(metadata_content)
 
         new_wheel_path = os.path.join(output_dir, wheel_filename)
-        if os.path.abspath(wheel_path) == os.path.abspath(new_wheel_path):
+        if os.path.abspath(wheel_path) == os.path.abspath(
+            new_wheel_path
+        ):
             os.remove(wheel_path)
 
-        with zipfile.ZipFile(new_wheel_path, 'w', zipfile.ZIP_DEFLATED) as new_wheel_zip:
+        with zipfile.ZipFile(
+            new_wheel_path, "w", zipfile.ZIP_DEFLATED
+        ) as new_wheel_zip:
             for root, _, files in os.walk(temp_dir):
                 for file in files:
                     file_path = os.path.join(root, file)
@@ -3705,16 +3848,20 @@ def build_faiss():
             f"{sys.executable} -m auditwheel repair {any_wheel_path} -w {repaired_wheel_dir}"
         )
 
-        required_wheel_path = paths(f"{repaired_wheel_dir}/faiss-*.whl")[0]
-        
-        print("faiss - stage 6: Modifying final wheel metadata for runtime constraints")
-        dependency_constraints = {
-            'numpy': '==1.26.4'
-        }
-        final_wheel_path = modify_wheel_requirements(repaired_wheel_path, dependency_constraints)
+        required_wheel_path = paths(
+            f"{repaired_wheel_dir}/faiss-*.whl"
+        )[0]
+
+        print(
+            "faiss - stage 6: Modifying final wheel metadata for runtime constraints"
+        )
+        dependency_constraints = {"numpy": "==1.26.4"}
+        final_wheel_path = modify_wheel_requirements(
+            repaired_wheel_path, dependency_constraints
+        )
 
         return final_wheel_path
-        
+
     except subprocess.CalledProcessError as e:
         catch(f"Error during installation: {e}")
     except FileNotFoundError as e:
@@ -3829,22 +3976,16 @@ def find_package_paths(package_name):
 
     site_packages_dirs = site.getsitepackages()
     for site_packages_dir in site_packages_dirs:
-        package_path = full_path(
-            site_packages_dir, package_dir_name
-        )
-        if exist(package_path) and is_directory(
-            package_path
-        ):
+        package_path = full_path(site_packages_dir, package_dir_name)
+        if exist(package_path) and is_directory(package_path):
             package_paths_found.append(package_path)
 
     for path in sys.path:
         if path:
-            potential_package_path = full_path(
-                path, package_dir_name
-            )
-            if exist(
+            potential_package_path = full_path(path, package_dir_name)
+            if exist(potential_package_path) and is_directory(
                 potential_package_path
-            ) and is_directory(potential_package_path):
+            ):
                 package_paths_found.append(potential_package_path)
 
     for site_packages_dir in site_packages_dirs:
@@ -3855,9 +3996,7 @@ def find_package_paths(package_name):
             package_path = full_path(
                 dist_packages_dir, package_dir_name
             )
-            if exist(package_path) and is_directory(
-                package_path
-            ):
+            if exist(package_path) and is_directory(package_path):
                 package_paths_found.append(package_path)
 
     unique_paths = unique(package_paths_found)
@@ -4207,12 +4346,17 @@ def run(command, silent=False, env={}):
 
 def thread(func, *args, **kwargs):
     results = [None]
+
     def _func(_f, _r, *_a, **_kwa):
         _r[0] = _f(*_a, **_kwa)
-        
+
     try:
         results.append(
-            threading.Thread(target=_func, args=[func, results, *args], kwargs=kwargs)
+            threading.Thread(
+                target=_func,
+                args=[func, results, *args],
+                kwargs=kwargs,
+            )
         )
         results[1].start()
         return results
@@ -4837,9 +4981,12 @@ def camel_case(txt: str):
 
 def ai_translate(text, lang="en"):
     import torch
+
     # import pysbd
     from sacremoses import MosesPunctNormalizer
-    from stopes.pipelines.monolingual.utils.sentence_split import get_split_algo
+    from stopes.pipelines.monolingual.utils.sentence_split import (
+        get_split_algo,
+    )
 
     if not text or not text.strip():
         return ""
@@ -4853,13 +5000,13 @@ def ai_translate(text, lang="en"):
         tgt_code = tgt_code[0]
 
     model = MODELS["translate"]
-    
+
     tokenizer = TOKENIZERS["translate"]
     tokenizer.tgt_lang = tgt_code
 
     paragraphs = text.split("\n")
     translated_paragraphs = []
-    
+
     for paragraph in paragraphs:
         if not paragraph.strip():
             translated_paragraphs.append("")
@@ -4870,7 +5017,7 @@ def ai_translate(text, lang="en"):
             src_code = unesco_mapping[source_lang_code]
             if isinstance(src_code, list):
                 src_code = src_code[0]
-        
+
         except (KeyError, Exception) as e:
             print(f"Language detection or mapping failed: {e}")
             translated_paragraphs.append(paragraph)
@@ -4892,9 +5039,16 @@ def ai_translate(text, lang="en"):
 
         if len(paragraph) < long_paragraph_threshold:
             try:
-                inputs = tokenizer(paragraph, return_tensors="pt", padding=True, truncation=True)
+                inputs = tokenizer(
+                    paragraph,
+                    return_tensors="pt",
+                    padding=True,
+                    truncation=True,
+                )
                 input_ids = inputs.input_ids.to(device())
-                forced_token_id = tokenizer.convert_tokens_to_ids(tgt_code)
+                forced_token_id = tokenizer.convert_tokens_to_ids(
+                    tgt_code
+                )
 
                 translated_ids = model.generate(
                     input_ids=input_ids,
@@ -4903,12 +5057,18 @@ def ai_translate(text, lang="en"):
                     max_length=128,
                     **_beam_kwargs,
                 )
-                
-                translated_paragraph = tokenizer.decode(translated_ids[0], skip_special_tokens=True)
+
+                translated_paragraph = tokenizer.decode(
+                    translated_ids[0], skip_special_tokens=True
+                )
                 translated_paragraphs.append(translated_paragraph)
             except Exception as e:
-                print(f"Error translating short paragraph, skipping: {e}")
-                translated_paragraphs.append(f"[Translation Error: {paragraph[:30]}...]")
+                print(
+                    f"Error translating short paragraph, skipping: {e}"
+                )
+                translated_paragraphs.append(
+                    f"[Translation Error: {paragraph[:30]}...]"
+                )
         else:
             try:
                 sentences = list(splitter(paragraph))
@@ -4916,10 +5076,17 @@ def ai_translate(text, lang="en"):
                 for sentence in sentences:
                     if not sentence.strip():
                         continue
-                    
-                    inputs = tokenizer(sentence, return_tensors="pt", padding=True, truncation=True)
+
+                    inputs = tokenizer(
+                        sentence,
+                        return_tensors="pt",
+                        padding=True,
+                        truncation=True,
+                    )
                     input_ids = inputs.input_ids.to(device())
-                    forced_token_id = tokenizer.convert_tokens_to_ids(tgt_code)
+                    forced_token_id = tokenizer.convert_tokens_to_ids(
+                        tgt_code
+                    )
 
                     translated_ids = model.generate(
                         input_ids=input_ids,
@@ -4928,15 +5095,21 @@ def ai_translate(text, lang="en"):
                         max_length=128,
                         **_beam_kwargs,
                     )
-                    
-                    translated_chunk = tokenizer.decode(translated_ids[0], skip_special_tokens=True)
+
+                    translated_chunk = tokenizer.decode(
+                        translated_ids[0], skip_special_tokens=True
+                    )
                     translated_sentences.append(translated_chunk)
-                
+
                 translated_paragraph = " ".join(translated_sentences)
                 translated_paragraphs.append(translated_paragraph)
             except Exception as e:
-                print(f"Error translating long paragraph chunks, skipping: {e}")
-                translated_paragraphs.append(f"[Translation Error: {paragraph[:30]}...]")
+                print(
+                    f"Error translating long paragraph chunks, skipping: {e}"
+                )
+                translated_paragraphs.append(
+                    f"[Translation Error: {paragraph[:30]}...]"
+                )
 
     return "\n".join(translated_paragraphs)
 
@@ -5359,8 +5532,12 @@ def _summarize(text_to_summarize):
     _beam_kwargs = beam_kwargs
     _beam_kwargs["num_beams"] = higher_beams
 
-    gen = MODELS["summary"].generate(**encoded, **_beam_kwargs, max_length=512)
-    return TOKENIZERS["summary"].decode(gen[0], skip_special_tokens=True)
+    gen = MODELS["summary"].generate(
+        **encoded, **_beam_kwargs, max_length=512
+    )
+    return TOKENIZERS["summary"].decode(
+        gen[0], skip_special_tokens=True
+    )
 
 
 def map_reduce_summary(text, max_words):
@@ -5368,18 +5545,17 @@ def map_reduce_summary(text, max_words):
     overlap = 10
 
     while len(text.split()) > max_words:
-        
+
         words = text.split()
-        
+
         chunk_summaries = []
         for i in range(0, len(words), chunk_size - overlap):
             chunk_text = " ".join(words[i : i + chunk_size])
             chunk_summary = _summarize(chunk_text)
             chunk_summaries.append(chunk_summary)
-    
+
         text = " ".join(chunk_summaries)
 
-    
     final_summary = _summarize(text)
     return final_summary
 
@@ -5741,7 +5917,10 @@ py-modules = {py_modules}
     elif task in ["video"]:
 
         import torch
-        from diffusers import HunyuanVideoImageToVideoPipeline, HunyuanVideoTransformer3DModel
+        from diffusers import (
+            HunyuanVideoImageToVideoPipeline,
+            HunyuanVideoTransformer3DModel,
+        )
 
         transformer = HunyuanVideoTransformer3DModel.from_pretrained(
             tasks[task], subfolder="transformer", torch_dtype=dtype()
@@ -5790,11 +5969,11 @@ py-modules = {py_modules}
             pass
 
         optimizations = [
-                "enable_vae_slicing",
-                "enable_vae_tiling",
-                "enable_model_cpu_offload",
-                "enable_sequential_cpu_offload",
-                "enable_attention_slicing",
+            "enable_vae_slicing",
+            "enable_vae_tiling",
+            "enable_model_cpu_offload",
+            "enable_sequential_cpu_offload",
+            "enable_attention_slicing",
         ]
         for opt in optimizations:
             try:
@@ -6224,12 +6403,12 @@ def resize_video(
 def resize_image(
     image_path, target_width, target_height, anti_aliasing=True
 ):
-    from PIL import Image
     import imageio as iio
+    from PIL import Image
     from skimage.transform import resize
 
     image_data = iio.imread(image_path)
-    
+
     try:
         if image_data.ndim < 2:
             raise ValueError(
@@ -6258,8 +6437,9 @@ def resize_image(
 
 def image_resolution(image_path):
     from PIL import Image
+
     return Image.open(image_path).size
-    
+
 
 def numpy_to_list(np_arr):
     return np.concatenate(np_arr, axis=None).ravel().tolist()
@@ -6847,7 +7027,7 @@ def get_chat_response(message, history: list):
                     "content": "and please read the media from my new message carefully",
                 }
             )
-            
+
     nl = "\n"
     including = "\n".join(including)
 
@@ -6865,7 +7045,7 @@ def get_chat_response(message, history: list):
     log("Chatbot response", response)
 
     # if orig_lang and orig_lang != language(response):
-        # response = translate_with_code(response, lang=orig_lang)
+    # response = translate_with_code(response, lang=orig_lang)
 
     return response
 
@@ -6874,9 +7054,11 @@ def translate_with_code(text_to_translate, lang):
     if not text_to_translate or not text_to_translate.strip():
         return text_to_translate
 
-    code_block_pattern = r'(```.*?```)'
+    code_block_pattern = r"(```.*?```)"
 
-    parts = re.split(code_block_pattern, text_to_translate, flags=re.DOTALL)
+    parts = re.split(
+        code_block_pattern, text_to_translate, flags=re.DOTALL
+    )
 
     processed_parts = []
     for i, part in enumerate(parts):
@@ -6891,7 +7073,7 @@ def translate_with_code(text_to_translate, lang):
 
     return "".join(processed_parts)
 
-    
+
 def init_chat(title="Chatbot", handler=get_chat_response):
     import gradio as gr
 
@@ -8201,7 +8383,9 @@ def music_video(audio_path, width=1920, height=1080, fps=30):
             ISRAEL_BLUE
         )
 
-        frame = cv2.addWeighted(frame, 0.7, frame_rgb.astype(np.uint8), 0.3, 0)
+        frame = cv2.addWeighted(
+            frame, 0.7, frame_rgb.astype(np.uint8), 0.3, 0
+        )
 
         rotation_angle = t * 15 + centroid_val * 70
 
@@ -8209,7 +8393,11 @@ def music_video(audio_path, width=1920, height=1080, fps=30):
             shockwave_radius = int(radius * 1.5)
             shockwave_color = (200, 200, 200)
             cv2.circle(
-                frame, (center_x, center_y), shockwave_radius, shockwave_color, 4
+                frame,
+                (center_x, center_y),
+                shockwave_radius,
+                shockwave_color,
+                4,
             )
 
         draw_star_of_david(
@@ -8224,7 +8412,9 @@ def music_video(audio_path, width=1920, height=1080, fps=30):
         distortion_strength = 50 * rms_val
         distortion = final_pattern * distortion_strength
         distortion_3d = distortion[..., np.newaxis]
-        frame = np.clip(frame.astype(np.int16) + distortion_3d, 0, 255).astype(np.uint8)
+        frame = np.clip(
+            frame.astype(np.int16) + distortion_3d, 0, 255
+        ).astype(np.uint8)
 
         scanline_intensity = 0.9 * rms_val
         scanline_effect = (
@@ -9165,9 +9355,7 @@ def identify_instruments(audio_path):
     return detected_instruments
 
 
-def extend_audio(
-    audio_path, extend_duration_s, format_choice
-):
+def extend_audio(audio_path, extend_duration_s, format_choice):
     import librosa
     import pydub
     import soundfile as sf
@@ -10501,21 +10689,26 @@ def infer(task: str, inference_file: str, model_type: str = None):
 
 
 def compile_model(model_or_pipeline):
-    import torch
-    import warnings
-    import types
     import inspect
+    import types
+    import warnings
+
+    import torch
 
     try:
         from diffusers import DiffusionPipeline
         from diffusers.models.modeling_utils import ModelMixin
         from transformers import PreTrainedModel
     except ImportError:
-        warnings.warn("Please install `diffusers` and `transformers` for full functionality.")
+        warnings.warn(
+            "Please install `diffusers` and `transformers` for full functionality."
+        )
         return model_or_pipeline
 
     if not hasattr(torch, "compile"):
-        warnings.warn("torch.compile() is not available. Please use PyTorch 2.0 or newer.")
+        warnings.warn(
+            "torch.compile() is not available. Please use PyTorch 2.0 or newer."
+        )
         return model_or_pipeline
 
     compile_kwargs = {
@@ -10530,17 +10723,26 @@ def compile_model(model_or_pipeline):
         orig_forward = obj.forward
         src = inspect.getsource(orig_forward)
         if ".to(sample.device)" in src:
-            patched_src = src.replace(".to(sample.device)", ".to(sample.device.type)")
+            patched_src = src.replace(
+                ".to(sample.device)", ".to(sample.device.type)"
+            )
             globals_dict = orig_forward.__globals__.copy()
             exec(patched_src, globals_dict)
             new_forward = globals_dict[orig_forward.__name__]
             obj.forward = types.MethodType(new_forward, obj)
-            print(f"⚡️ Patched {type(obj).__name__}.forward to avoid .to(sample.device) bug for torch.compile.")
+            print(
+                f"⚡️ Patched {type(obj).__name__}.forward to avoid .to(sample.device) bug for torch.compile."
+            )
         return obj
 
     if isinstance(model_or_pipeline, DiffusionPipeline):
-        print("✅ Detected a Diffusers pipeline. Dynamically compiling submodels...")
-        for attr_name, attr_value in model_or_pipeline.__dict__.items():
+        print(
+            "✅ Detected a Diffusers pipeline. Dynamically compiling submodels..."
+        )
+        for (
+            attr_name,
+            attr_value,
+        ) in model_or_pipeline.__dict__.items():
             if isinstance(attr_value, ModelMixin):
                 try:
                     attr_value = patch_forward(attr_value)
@@ -10550,15 +10752,23 @@ def compile_model(model_or_pipeline):
                             attr_value.decode, **compile_kwargs
                         )
                     else:
-                        setattr(model_or_pipeline, attr_name, torch.compile(
-                            attr_value, **compile_kwargs
-                        ))
+                        setattr(
+                            model_or_pipeline,
+                            attr_name,
+                            torch.compile(
+                                attr_value, **compile_kwargs
+                            ),
+                        )
                 except Exception as e:
-                    warnings.warn(f"Could not compile submodel '{attr_name}'. Reason: {e}")
+                    warnings.warn(
+                        f"Could not compile submodel '{attr_name}'. Reason: {e}"
+                    )
         return model_or_pipeline
 
     elif isinstance(model_or_pipeline, PreTrainedModel):
-        print("✅ Detected a Transformers model. Compiling the model...")
+        print(
+            "✅ Detected a Transformers model. Compiling the model..."
+        )
         try:
             return torch.compile(model_or_pipeline, **compile_kwargs)
         except Exception as e:
@@ -10566,11 +10776,13 @@ def compile_model(model_or_pipeline):
             return model_or_pipeline
 
     else:
-        warnings.warn("Object is not a recognized Diffusers pipeline or Transformers model. No action taken.")
+        warnings.warn(
+            "Object is not a recognized Diffusers pipeline or Transformers model. No action taken."
+        )
         return model_or_pipeline
 
 
-def keep_alive(fn, outputs:int=1):
+def keep_alive(fn, outputs: int = 1):
     import gradio as gr
 
     def worker(*args, **kwargs):
@@ -10580,7 +10792,7 @@ def keep_alive(fn, outputs:int=1):
             yld = (gr.update(),) * outputs
         elif outputs == 1:
             yld = gr.update()
-        
+
         def thread_target(*args, **kwargs):
             try:
                 return fn(*args, **kwargs)
@@ -10610,7 +10822,7 @@ def keep_alive(fn, outputs:int=1):
         else:
             values = wait(t)
             yield tuple(values)
-        
+
     return worker
 
 
@@ -10621,18 +10833,22 @@ def start(proj: str):
     proj = proj.strip().lower()
 
     if proj == "translate":
-        init_pretrained_model("translate",True)
+        init_pretrained_model("translate", True)
 
         def title(image_path, top, middle, bottom):
             return write_on_image(image_path, top, middle, bottom)
 
         @spaces.GPU(duration=20)
         def handle_translate(txt, tgt_lang):
-            return ai_translate(txt, value_to_keys(language_codes, tgt_lang)[0])
+            return ai_translate(
+                txt, value_to_keys(language_codes, tgt_lang)[0]
+            )
 
         with gr.Blocks(theme=theme(), css=css()) as app:
             gr.Markdown("# AI Translator")
-            gr.Markdown("### An AI-based translation software for the community")
+            gr.Markdown(
+                "### An AI-based translation software for the community"
+            )
             with gr.Row():
                 with gr.Column():
                     txt = gr.Textbox(
@@ -10659,7 +10875,7 @@ def start(proj: str):
                 btn = gr.Button(value="Translate")
             btn.click(
                 fn=handle_translate,
-                inputs=[txt,lang],
+                inputs=[txt, lang],
                 outputs=[res],
             )
         app.launch(server_name="0.0.0.0", server_port=7860)
@@ -10680,31 +10896,41 @@ def start(proj: str):
         @spaces.GPU(duration=120)
         def generate_chunk(
             chunks_path,
-            txt, img,
-            dur, seed,
+            txt,
+            img,
+            dur,
+            seed,
             chunk_state,
-            progress=gr.Progress()
+            progress=gr.Progress(),
         ):
             txt = optimize_prompt_realism(txt)
-            
+
             total_frames = int(dur * fps)
             total_chunks = math.ceil(total_frames / FRAMES_PER_CHUNK)
-    
+
             current_chunk_index = chunk_state["current_chunk"]
-    
+
             if current_chunk_index > total_chunks:
-                raise gr.Error("All chunks have been generated. Please combine them now.") 
-    
+                raise gr.Error(
+                    "All chunks have been generated. Please combine them now."
+                )
+
             if current_chunk_index == 1:
-                input_image = ImageOps.fit(img, (1024, 576), Image.Resampling.LANCZOS)
-                gr.Info("Generating first chunk using the initial image...")
+                input_image = ImageOps.fit(
+                    img, (1024, 576), Image.Resampling.LANCZOS
+                )
+                gr.Info(
+                    "Generating first chunk using the initial image..."
+                )
             else:
                 previous_chunk_path = chunk_state["chunk_paths"][-1]
                 with Image.open(previous_chunk_path) as gif:
                     gif.seek(gif.n_frames - 1)
                     last_frame = gif.copy()
                 input_image = last_frame
-                gr.Info(f"Generating chunk {current_chunk_index}/{total_chunks} using context from previous chunk...")
+                gr.Info(
+                    f"Generating chunk {current_chunk_index}/{total_chunks} using context from previous chunk..."
+                )
 
             if input_image.mode == "RGBA":
                 input_image = input_image.convert("RGB")
@@ -10712,7 +10938,9 @@ def start(proj: str):
             if seed == -1:
                 seed = random.randint(0, 2**32 - 1)
 
-            generator = torch.Generator(device()).manual_seed(int(seed) + current_chunk_index)
+            generator = torch.Generator(device()).manual_seed(
+                int(seed) + current_chunk_index
+            )
 
             output = MODELS["video"](
                 prompt=txt,
@@ -10721,33 +10949,44 @@ def start(proj: str):
                 num_inference_steps=steps,
                 num_frames=FRAMES_PER_CHUNK,
             )
-    
-            chunk_path = full_path(chunks_path, f"chunk_{current_chunk_index}.gif")
+
+            chunk_path = full_path(
+                chunks_path, f"chunk_{current_chunk_index}.gif"
+            )
             export_to_gif(output.frames[0], chunk_path, fps=fps)
-    
+
             chunk_state["chunk_paths"].append(chunk_path)
             chunk_state["current_chunk"] += 1
-    
+
             progress_text = f"Finished chunk {current_chunk_index-1}/{total_chunks}. Ready for next chunk."
             if (current_chunk_index - 1) == total_chunks:
-                progress_text = "All chunks generated! You can now combine them."
-        
-            return chunk_path, chunk_state, gr.update(value=progress_text), gr.update(visible=True)
+                progress_text = (
+                    "All chunks generated! You can now combine them."
+                )
+
+            return (
+                chunk_path,
+                chunk_state,
+                gr.update(value=progress_text),
+                gr.update(visible=True),
+            )
 
         def combine_chunks(chunk_state):
 
             if not chunk_state["chunk_paths"]:
                 raise gr.Error("No chunks to combine.")
-        
-            gr.Info(f"Combining {len(chunk_state['chunk_paths'])} chunks into final GIF...")
-    
+
+            gr.Info(
+                f"Combining {len(chunk_state['chunk_paths'])} chunks into final GIF..."
+            )
+
             all_frames = []
             for chunk_path in chunk_state["chunk_paths"]:
                 with Image.open(chunk_path) as gif:
                     for i in range(gif.n_frames):
                         gif.seek(i)
                         all_frames.append(gif.copy().convert("RGBA"))
-    
+
             final_gif_path = "final_animation.gif"
             all_frames[0].save(
                 final_gif_path,
@@ -10755,7 +10994,7 @@ def start(proj: str):
                 append_images=all_frames[1:],
                 loop=0,
                 duration=int(1000 / fps),
-                optimize=True
+                optimize=True,
             )
             return final_gif_path, gr.update(visible=False)
 
@@ -10763,30 +11002,35 @@ def start(proj: str):
 
             delete(chunks_path)
             chunks_path = tmp(dir=True)
-    
-            initial_state = { "current_chunk": 1, "chunk_paths": [] }
+
+            initial_state = {"current_chunk": 1, "chunk_paths": []}
             return (
                 chunks_path,
                 initial_state,
                 None,
                 "Ready to generate the first chunk.",
                 gr.update(visible=False),
-                gr.update(interactive=True)
+                gr.update(interactive=True),
             )
 
-        with gr.Blocks(
-            theme=theme(),
-            css=css()
-        ) as app:
-            chunk_state = gr.State({ "current_chunk": 1, "chunk_paths": [] })
+        with gr.Blocks(theme=theme(), css=css()) as app:
+            chunk_state = gr.State(
+                {"current_chunk": 1, "chunk_paths": []}
+            )
 
-            gr.Markdown("# Image to Animation: Manual Chunking Method")
-            gr.Markdown("This app generates long animations piece-by-piece to avoid timeouts on free services. **You must click 'Generate Next Chunk' repeatedly** until all chunks are created, then click 'Combine'.")
+            gr.Markdown(
+                "# Image to Animation: Manual Chunking Method"
+            )
+            gr.Markdown(
+                "This app generates long animations piece-by-piece to avoid timeouts on free services. **You must click 'Generate Next Chunk' repeatedly** until all chunks are created, then click 'Combine'."
+            )
 
             with gr.Row():
                 with gr.Column(scale=1):
 
-                    img = gr.Image(label="Input Image", type="pil", height=420)
+                    img = gr.Image(
+                        label="Input Image", type="pil", height=420
+                    )
                     txt = gr.Textbox(
                         placeholder="Describe the scene",
                         value="",
@@ -10795,18 +11039,42 @@ def start(proj: str):
                         container=True,
                     )
 
-                    dur = gr.Slider(minimum=1, maximum=30, value=3, step=1, label="Total Duration (s)")
-            
-                    with gr.Accordion("Advanced Settings", open=False):
-                        seed = gr.Number(label="Seed (-1 for random)", minimum=-1, value=-1)
-        
+                    dur = gr.Slider(
+                        minimum=1,
+                        maximum=30,
+                        value=3,
+                        step=1,
+                        label="Total Duration (s)",
+                    )
+
+                    with gr.Accordion(
+                        "Advanced Settings", open=False
+                    ):
+                        seed = gr.Number(
+                            label="Seed (-1 for random)",
+                            minimum=-1,
+                            value=-1,
+                        )
+
                 with gr.Column(scale=1):
-                    out = gr.Image(label="Latest Generated Chunk / Final Animation", interactive=False, height=420)
-                    prog = gr.Markdown("Ready to generate the first chunk.")
-            
+                    out = gr.Image(
+                        label="Latest Generated Chunk / Final Animation",
+                        interactive=False,
+                        height=420,
+                    )
+                    prog = gr.Markdown(
+                        "Ready to generate the first chunk."
+                    )
+
             with gr.Row():
-                generate_button = gr.Button("Generate Next Chunk", variant="primary")
-                combine_button = gr.Button("Combine Chunks into Final GIF", variant="stop", visible=False)
+                generate_button = gr.Button(
+                    "Generate Next Chunk", variant="primary"
+                )
+                combine_button = gr.Button(
+                    "Combine Chunks into Final GIF",
+                    variant="stop",
+                    visible=False,
+                )
                 reset_button = gr.Button("Start Over")
 
             with gr.Row(visible=False):
@@ -10814,28 +11082,42 @@ def start(proj: str):
 
             generate_button.click(
                 fn=keep_alive(generate_chunk, 4),
-                inputs=[chunks_path, txt, img, dur, seed, chunk_state],
-                outputs=[out, chunk_state, prog, combine_button]
+                inputs=[
+                    chunks_path,
+                    txt,
+                    img,
+                    dur,
+                    seed,
+                    chunk_state,
+                ],
+                outputs=[out, chunk_state, prog, combine_button],
             )
 
             combine_button.click(
                 fn=combine_chunks,
                 inputs=[chunk_state],
-                outputs=[out, combine_button]
+                outputs=[out, combine_button],
             )
-    
+
             reset_button.click(
                 fn=reset_state,
                 inputs=[chunks_path],
-                outputs=[chunks_path, chunk_state, out, prog, combine_button, generate_button]
+                outputs=[
+                    chunks_path,
+                    chunk_state,
+                    out,
+                    prog,
+                    combine_button,
+                    generate_button,
+                ],
             )
 
         app.launch(server_name="0.0.0.0", server_port=7860)
 
     elif proj == "image":
-        init_pretrained_model("translate",True)
-        init_pretrained_model("summary",True)
-        init_pretrained_model("image",True)
+        init_pretrained_model("translate", True)
+        init_pretrained_model("summary", True)
+        init_pretrained_model("image", True)
         init_upscale()
 
         def title(image_path, top, middle, bottom):
@@ -10906,7 +11188,9 @@ def start(proj: str):
                 outputs=[cover],
             )
             upscale_now.click(
-                fn=keep_alive(handle_upscaling), inputs=[cover], outputs=[cover]
+                fn=keep_alive(handle_upscaling),
+                inputs=[cover],
+                outputs=[cover],
             )
             add_titles.click(
                 fn=keep_alive(title),
@@ -10916,9 +11200,9 @@ def start(proj: str):
         app.launch(server_name="0.0.0.0", server_port=7860)
 
     elif proj == "chat":
-        init_pretrained_model("summary",True)
-        init_pretrained_model("answer",True)
-        init_pretrained_model("translate",True)
+        init_pretrained_model("summary", True)
+        init_pretrained_model("answer", True)
+        init_pretrained_model("translate", True)
 
         install_ffmpeg()
 
@@ -10931,9 +11215,7 @@ def start(proj: str):
             title="AI Chatbot",
             css=css(),
         ) as app:
-            chat = init_chat(
-                "AI Chatbot", _get_chat_response
-            )
+            chat = init_chat("AI Chatbot", _get_chat_response)
         app.launch(server_name="0.0.0.0", server_port=7860)
 
     elif proj == "faiss":
@@ -10948,15 +11230,20 @@ def start(proj: str):
         app.launch(server_name="0.0.0.0", server_port=7860)
 
     elif proj == "audio":
-        pip_install("git+https://github.com/YaronKoresh/audio-studio-pro.git")
+        pip_install(
+            "git+https://github.com/YaronKoresh/audio-studio-pro.git"
+        )
         run("audio-studio-pro")
 
     elif proj == "train":
-        pip_install("git+https://github.com/YaronKoresh/teachless.git")
+        pip_install(
+            "git+https://github.com/YaronKoresh/teachless.git"
+        )
         run("teachless")
 
     else:
         catch(f"Error: No project called '{ proj }' !")
+
 
 try:
     os.environ["HF_HOME"] = "/opt/ml/checkpoints/"
@@ -11017,7 +11304,7 @@ importlib.util.find_spec = _find_spec
 
 if get_os_name() == "linux":
     apt_install()
-    
+
 if _find_spec("dask"):
     import dask
     import dask.array
@@ -11032,46 +11319,46 @@ if _find_spec("dask"):
     )
     from dask.optimization import cull, fuse, inline, inline_functions
     from dask.utils import key_split
-    
+
     dask.dataframe.core = dask.dataframe
     dask.diagnostics.core = dask.diagnostics
     dask.array.core = dask.array
-    
+
     sys.modules["dask.dataframe.core"] = sys.modules["dask.dataframe"]
     sys.modules["dask.diagnostics.core"] = sys.modules[
         "dask.diagnostics"
     ]
     sys.modules["dask.array.core"] = sys.modules["dask.array"]
-    
+
     dask.core = base
-    
+
     dask.core.fuse = fuse
     dask.core.cull = cull
     dask.core.inline = inline
     dask.core.inline_functions = inline_functions
-    
+
     dask.core.key_split = key_split
-    
+
     dask.core.checkpoint = checkpoint
     dask.core.bind = bind
     dask.core.wait_on = wait_on
     dask.core.clone = clone
-    
+
     dask.core.get = dask.get
-    
+
     def _visualize_wrapper(dsk, **kwargs):
         return dask.visualize(dsk, **kwargs)
-    
+
     dask.core.visualize = _visualize_wrapper
     dask.core.to_graphviz = _visualize_wrapper
 
 patch_torch_proxy_mode()
 
 set_system_message(
-    name = "Phi",
-    role = "a helpful chat assistant",
-    verbose = False,
-    friendly = True,
-    formal = False,
-    creative = None,
+    name="Phi",
+    role="a helpful chat assistant",
+    verbose=False,
+    friendly=True,
+    formal=False,
+    creative=None,
 )
