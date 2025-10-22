@@ -4993,7 +4993,7 @@ def ai_translate(text, lang="en"):
 
     text = strip_nikud(text)
 
-    long_paragraph_threshold = 500
+    long_paragraph_threshold = 800
 
     tgt_code = unesco_mapping[lang]
     if isinstance(tgt_code, list):
@@ -5054,7 +5054,7 @@ def ai_translate(text, lang="en"):
                     input_ids=input_ids,
                     forced_bos_token_id=forced_token_id,
                     renormalize_logits=True,
-                    max_length=128,
+                    max_length=512,
                     **_beam_kwargs,
                 )
 
@@ -5092,7 +5092,7 @@ def ai_translate(text, lang="en"):
                         input_ids=input_ids,
                         forced_bos_token_id=forced_token_id,
                         renormalize_logits=True,
-                        max_length=128,
+                        max_length=512,
                         **_beam_kwargs,
                     )
 
