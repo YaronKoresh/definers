@@ -1252,13 +1252,13 @@ def answer(history: list):
                 if ext in common_audio_formats:
                     aud = split_audio(
                         p,
-                        duration=60,
+                        duration=30,
                         count=1,
-                        skip=0,
+                        skip=30,
                         resample=16000,
                     )[0]
                     audio, samplerate = librosa.load(
-                        aud, sr=None, mono=True
+                        aud, sr=16000, mono=True
                     )
                     snd_list.append((audio, samplerate))
                     add_content += (
@@ -1266,7 +1266,7 @@ def answer(history: list):
                     )
                 elif ext in iio_formats:
                     w, h = image_resolution(p)
-                    w2, h2 = get_max_resolution(w, h, mega_pixels=1.0)
+                    w2, h2 = get_max_resolution(w, h, mega_pixels=0.5)
                     if w2 > w:
                         pth, img = resize_image(p, w, h)
                         img_list.append(img)
