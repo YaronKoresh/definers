@@ -1675,10 +1675,10 @@ def files_to_dataset(features_paths: list, labels_paths: list = None):
             if loaded is None:
                 print(f"Error loading feature file: {feature_path}")
                 return None
-            if isinstance(loaded, np.ndarray) and (_np.issubdtype(loaded.dtype, _np.str_) or _np.issubdtype(loaded.dtype, _np.object_)):
+            if isinstance(loaded, _np.ndarray) and (_np.issubdtype(loaded.dtype, _np.str_) or _np.issubdtype(loaded.dtype, _np.object_)):
                 features_have_strings = True
             elif isinstance(loaded, list):
-                    if any(isinstance(l, np.ndarray) and (_np.issubdtype(l.dtype, _np.str_) or _np.issubdtype(l.dtype, _np.object_)) for l in loaded if l is not None):
+                    if any(isinstance(l, _np.ndarray) and (_np.issubdtype(l.dtype, _np.str_) or _np.issubdtype(l.dtype, _np.object_)) for l in loaded if l is not None):
                         features_have_strings = True
 
             if isinstance(loaded, list):
@@ -1698,10 +1698,10 @@ def files_to_dataset(features_paths: list, labels_paths: list = None):
                 if loaded is None:
                     print(f"Error loading label file: {label_path}")
                     return None
-                if isinstance(loaded, np.ndarray) and (_np.issubdtype(loaded.dtype, _np.str_) or _np.issubdtype(loaded.dtype, _np.object_)):
+                if isinstance(loaded, _np.ndarray) and (_np.issubdtype(loaded.dtype, _np.str_) or _np.issubdtype(loaded.dtype, _np.object_)):
                     labels_have_strings = True
                 elif isinstance(loaded, list):
-                    if any(isinstance(l, np.ndarray) and (_np.issubdtype(l.dtype, _np.str_) or _np.issubdtype(l.dtype, _np.object_)) for l in loaded if l is not None):
+                    if any(isinstance(l, _np.ndarray) and (_np.issubdtype(l.dtype, _np.str_) or _np.issubdtype(l.dtype, _np.object_)) for l in loaded if l is not None):
                         labels_have_strings = True
 
                 if isinstance(loaded, list):
@@ -1725,12 +1725,13 @@ def files_to_dataset(features_paths: list, labels_paths: list = None):
 
     tokenizer = None
     if features_have_strings:
+        print("features_have_strings")
         if not tokenizer:
             tokenizer = init_tokenizer()
         
         features_as_strings = []
         for f in features:
-            if isinstance(f, np.ndarray):
+            if isinstance(f, _np.ndarray):
                 features_as_strings.append(" ".join(f.astype(str).flatten()))
             else:
                 features_as_strings.append(str(f))
@@ -1739,12 +1740,13 @@ def files_to_dataset(features_paths: list, labels_paths: list = None):
         features = [cupy_to_numpy(row) for row in tokenized_features]
 
     if labels_paths and labels_have_strings:
+        print("labels_have_strings")
         if not tokenizer:
             tokenizer = init_tokenizer()
         
         labels_as_strings = []
         for l in labels:
-            if isinstance(l, np.ndarray):
+            if isinstance(l, _np.ndarray):
                 labels_as_strings.append(" ".join(l.astype(str).flatten()))
             else:
                 labels_as_strings.append(str(l))
