@@ -1252,7 +1252,7 @@ def answer(history: list):
                 if ext in common_audio_formats:
                     aud = split_audio(
                         p,
-                        duration=300,
+                        duration=60,
                         count=1,
                         skip=0,
                         resample=16000,
@@ -1266,7 +1266,7 @@ def answer(history: list):
                     )
                 elif ext in iio_formats:
                     w, h = image_resolution(p)
-                    w2, h2 = get_max_resolution(w, h, mega_pixels=1.5)
+                    w2, h2 = get_max_resolution(w, h, mega_pixels=1.0)
                     if w2 > w:
                         pth, img = resize_image(p, w, h)
                         img_list.append(img)
