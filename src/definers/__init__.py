@@ -1312,7 +1312,7 @@ def answer(history: list):
     generate_ids = MODELS["answer"].generate(
         **inputs,
         **beam_kwargs,
-        max_length=16384,
+        max_length=4096,
         num_logits_to_keep=1,
     )
 
