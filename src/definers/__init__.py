@@ -1148,6 +1148,73 @@ def get_audio_duration(file_path: str) -> float | None:
         return None
 
 
+def audio_preview(file_path: str, max_duration: float = 30) -> str | None:
+    from pydub import AudioSegment
+    
+    file_path = full_path(file_path)
+
+    if not exist(file_path):
+        catch(f"Error: Audio file not found at {file_path}")
+        return None
+
+    if max_duration <= 0:
+        catch("Error: max_duration must be positive.")
+        return None
+
+    try:
+        total_duration = get_audio_duration(file_path)
+        if total_duration is None:
+            catch(f"Error: Could not get duration for {file_path}")
+            return None
+
+        log("Total audio duration", f"{total_duration:.2f} seconds")
+
+        if total_duration <= max_duration:
+            log("Audio duration <= max_duration", "Returning copy of original.")
+            preview_paths = split_audio(file_path, duration=total_duration, count=1, skip=0)
+            return preview_paths[0] if preview_paths else None
+
+        start_time = 0.0
+        timeline = get_active_audio_timeline(file_path, threshold_db=-25, min_silence_len=0.5)
+
+        if timeline:
+            longest_segment_duration = 0.0
+            longest_segment_center = 0.0
+            for start, end in timeline:
+                duration = end - start
+                if duration > longest_segment_duration:
+                    longest_segment_duration = duration
+                    longest_segment_center = start + duration / 2.0
+
+            log("Longest active segment", f"Duration: {longest_segment_duration:.2f}s, Center: {longest_segment_center:.2f}s")
+
+            ideal_start = longest_segment_center - (max_duration / 2.0)
+
+            start_time = max(0.0, ideal_start)
+            start_time = min(start_time, total_duration - max_duration)
+
+            log("Calculated preview start time", f"{start_time:.2f} seconds")
+
+        else:
+            start_time = min(total_duration * 0.1, total_duration - max_duration)
+            start_time = max(0.0, start_time)
+            log("No significant active segments found", f"Defaulting preview start time to {start_time:.2f} seconds")
+
+        log("Extracting preview chunk", f"Start: {start_time:.2f}s, Duration: {max_duration:.2f}s")
+        preview_paths = split_audio(file_path, duration=max_duration, count=1, skip=start_time)
+
+        if preview_paths:
+            log("Preview extraction successful", preview_paths[0])
+            return preview_paths[0]
+        else:
+            catch("Error: split_audio did not return any paths for the preview.")
+            return None
+
+    except Exception as e:
+        catch(f"An unexpected error occurred in audio_preview: {e}")
+        return None
+
+
 def split_audio(
     file_path: str,
     duration: float = 5,
@@ -1262,13 +1329,7 @@ def answer(history: list):
             for p in ps:
                 ext = get_ext(p)
                 if ext in common_audio_formats:
-                    aud = split_audio(
-                        p,
-                        duration=30,
-                        count=1,
-                        skip=30,
-                        resample=16000,
-                    )[0]
+                    aud = audio_preview(file_path=p, max_duration=16)
                     audio, samplerate = librosa.load(
                         aud, sr=16000, mono=True
                     )
@@ -1278,7 +1339,7 @@ def answer(history: list):
                     )
                 elif ext in iio_formats:
                     w, h = image_resolution(p)
-                    w2, h2 = get_max_resolution(w, h, mega_pixels=0.5)
+                    w2, h2 = get_max_resolution(w, h, mega_pixels=0.25)
                     if w2 > w:
                         pth, img = resize_image(p, w, h)
                         img_list.append(img)
