@@ -10866,8 +10866,7 @@ def keep_alive(fn, outputs: int = 1):
         elif outputs == 1:
             yield wait(t)[0]
         else:
-            values = wait(t)
-            yield tuple(values)
+            yield tuple(wait(t))
 
     return worker
 
