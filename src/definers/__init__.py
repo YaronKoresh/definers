@@ -1152,7 +1152,7 @@ def split_audio(
     file_path: str,
     duration: float = 5,
     count: int = None,
-    skip: int = 0,
+    skip: float = 0,
     resample: int = None,
 ) -> list[str]:
     from pydub import AudioSegment
@@ -1170,33 +1170,45 @@ def split_audio(
         return []
 
     duration_ms = duration * 1000
-    start_ms = skip * duration_ms
+    skip_ms = skip * 1000
+
+    if skip_ms >= len(audio):
+        print(f"Warning: Skip time ({skip}s) exceeds audio duration ({len(audio)/1000.0:.2f}s). No chunks will be created.")
+        return []
+
+    max_possible_chunks = math.ceil((len(audio) - skip_ms) / duration_ms)
 
     if count is None:
-        num_chunks = math.ceil((len(audio) - start_ms) / duration_ms)
+        num_chunks_to_process = max_possible_chunks
     else:
-        num_chunks = count
+        num_chunks_to_process = min(count, max_possible_chunks)
 
     output_dir = tmp(dir=True)
     res_paths = []
 
-    print(f"Splitting audio into chunks of {duration}s...")
-    for i in range(num_chunks):
-        chunk_start = start_ms + (i * duration_ms)
+    print(f"Splitting audio into chunks of {duration}s, starting after {skip}s...")
+    for i in range(num_chunks_to_process):
+        chunk_start = skip_ms + (i * duration_ms)
         chunk_end = chunk_start + duration_ms
 
         if chunk_start >= len(audio):
             break
 
+        chunk_end = min(chunk_end, len(audio))
+
         chunk = audio[chunk_start:chunk_end]
 
-        if resample:
-            chunk = chunk.set_frame_rate(resample)
+        if len(chunk) > 0:
+            if resample:
+                chunk = chunk.set_frame_rate(resample)
 
-        chunk_path = full_path(output_dir, f"chunk_{i:04d}.mp3")
+            chunk_path = full_path(output_dir, f"chunk_{i:04d}.mp3")
 
-        chunk.export(chunk_path, format="mp3", bitrate="192k")
-        res_paths.append(chunk_path)
+            chunk.export(chunk_path, format="mp3", bitrate="192k")
+            res_paths.append(chunk_path)
+        else:
+             print(f"Skipping zero-length chunk at index {i}")
+
 
     print(
         f"Successfully created {len(res_paths)} chunks in {output_dir}"
