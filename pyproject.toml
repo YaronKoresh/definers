@@ -197,7 +197,7 @@ dependencies = [
     "pytz==2025.2",
     "pyyaml==6.0.3",
     "raft-dask-cu12==24.8.1",
-    "rapids-dask-dependency==24.8.0",
+    "rapids-dask-dependency==24.7.1",
     "rdflib==7.2.1",
     "regex==2025.10.23",
     "requests==2.32.5",
