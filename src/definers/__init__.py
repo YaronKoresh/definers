@@ -1148,9 +1148,11 @@ def get_audio_duration(file_path: str) -> float | None:
         return None
 
 
-def audio_preview(file_path: str, max_duration: float = 30) -> str | None:
+def audio_preview(
+    file_path: str, max_duration: float = 30
+) -> str | None:
     from pydub import AudioSegment
-    
+
     file_path = full_path(file_path)
 
     if not exist(file_path):
@@ -1170,12 +1172,19 @@ def audio_preview(file_path: str, max_duration: float = 30) -> str | None:
         log("Total audio duration", f"{total_duration:.2f} seconds")
 
         if total_duration <= max_duration:
-            log("Audio duration <= max_duration", "Returning copy of original.")
-            preview_paths = split_audio(file_path, duration=total_duration, count=1, skip=0)
+            log(
+                "Audio duration <= max_duration",
+                "Returning copy of original.",
+            )
+            preview_paths = split_audio(
+                file_path, duration=total_duration, count=1, skip=0
+            )
             return preview_paths[0] if preview_paths else None
 
         start_time = 0.0
-        timeline = get_active_audio_timeline(file_path, threshold_db=-25, min_silence_len=0.5)
+        timeline = get_active_audio_timeline(
+            file_path, threshold_db=-25, min_silence_len=0.5
+        )
 
         if timeline:
             longest_segment_duration = 0.0
@@ -1186,28 +1195,50 @@ def audio_preview(file_path: str, max_duration: float = 30) -> str | None:
                     longest_segment_duration = duration
                     longest_segment_center = start + duration / 2.0
 
-            log("Longest active segment", f"Duration: {longest_segment_duration:.2f}s, Center: {longest_segment_center:.2f}s")
+            log(
+                "Longest active segment",
+                f"Duration: {longest_segment_duration:.2f}s, Center: {longest_segment_center:.2f}s",
+            )
 
-            ideal_start = longest_segment_center - (max_duration / 2.0)
+            ideal_start = longest_segment_center - (
+                max_duration / 2.0
+            )
 
             start_time = max(0.0, ideal_start)
-            start_time = min(start_time, total_duration - max_duration)
+            start_time = min(
+                start_time, total_duration - max_duration
+            )
 
-            log("Calculated preview start time", f"{start_time:.2f} seconds")
+            log(
+                "Calculated preview start time",
+                f"{start_time:.2f} seconds",
+            )
 
         else:
-            start_time = min(total_duration * 0.1, total_duration - max_duration)
+            start_time = min(
+                total_duration * 0.1, total_duration - max_duration
+            )
             start_time = max(0.0, start_time)
-            log("No significant active segments found", f"Defaulting preview start time to {start_time:.2f} seconds")
+            log(
+                "No significant active segments found",
+                f"Defaulting preview start time to {start_time:.2f} seconds",
+            )
 
-        log("Extracting preview chunk", f"Start: {start_time:.2f}s, Duration: {max_duration:.2f}s")
-        preview_paths = split_audio(file_path, duration=max_duration, count=1, skip=start_time)
+        log(
+            "Extracting preview chunk",
+            f"Start: {start_time:.2f}s, Duration: {max_duration:.2f}s",
+        )
+        preview_paths = split_audio(
+            file_path, duration=max_duration, count=1, skip=start_time
+        )
 
         if preview_paths:
             log("Preview extraction successful", preview_paths[0])
             return preview_paths[0]
         else:
-            catch("Error: split_audio did not return any paths for the preview.")
+            catch(
+                "Error: split_audio did not return any paths for the preview."
+            )
             return None
 
     except Exception as e:
@@ -1240,10 +1271,14 @@ def split_audio(
     skip_ms = skip * 1000
 
     if skip_ms >= len(audio):
-        print(f"Warning: Skip time ({skip}s) exceeds audio duration ({len(audio)/1000.0:.2f}s). No chunks will be created.")
+        print(
+            f"Warning: Skip time ({skip}s) exceeds audio duration ({len(audio)/1000.0:.2f}s). No chunks will be created."
+        )
         return []
 
-    max_possible_chunks = math.ceil((len(audio) - skip_ms) / duration_ms)
+    max_possible_chunks = math.ceil(
+        (len(audio) - skip_ms) / duration_ms
+    )
 
     if count is None:
         num_chunks_to_process = max_possible_chunks
@@ -1253,7 +1288,9 @@ def split_audio(
     output_dir = tmp(dir=True)
     res_paths = []
 
-    print(f"Splitting audio into chunks of {duration}s, starting after {skip}s...")
+    print(
+        f"Splitting audio into chunks of {duration}s, starting after {skip}s..."
+    )
     for i in range(num_chunks_to_process):
         chunk_start = skip_ms + (i * duration_ms)
         chunk_end = chunk_start + duration_ms
@@ -1274,8 +1311,7 @@ def split_audio(
             chunk.export(chunk_path, format="mp3", bitrate="192k")
             res_paths.append(chunk_path)
         else:
-             print(f"Skipping zero-length chunk at index {i}")
-
+            print(f"Skipping zero-length chunk at index {i}")
 
     print(
         f"Successfully created {len(res_paths)} chunks in {output_dir}"
@@ -1339,7 +1375,9 @@ def answer(history: list):
                     )
                 elif ext in iio_formats:
                     w, h = image_resolution(p)
-                    w2, h2 = get_max_resolution(w, h, mega_pixels=0.25)
+                    w2, h2 = get_max_resolution(
+                        w, h, mega_pixels=0.25
+                    )
                     if w2 > w:
                         pth, img = resize_image(p, w, h)
                         img_list.append(img)
@@ -1748,11 +1786,22 @@ def files_to_dataset(features_paths: list, labels_paths: list = None):
             if loaded is None:
                 print(f"Error loading feature file: {feature_path}")
                 return None
-            if isinstance(loaded, _np.ndarray) and (_np.issubdtype(loaded.dtype, _np.str_) or _np.issubdtype(loaded.dtype, _np.object_)):
+            if isinstance(loaded, _np.ndarray) and (
+                _np.issubdtype(loaded.dtype, _np.str_)
+                or _np.issubdtype(loaded.dtype, _np.object_)
+            ):
                 features_have_strings = True
             elif isinstance(loaded, list):
-                    if any(isinstance(l, _np.ndarray) and (_np.issubdtype(l.dtype, _np.str_) or _np.issubdtype(l.dtype, _np.object_)) for l in loaded if l is not None):
-                        features_have_strings = True
+                if any(
+                    isinstance(l, _np.ndarray)
+                    and (
+                        _np.issubdtype(l.dtype, _np.str_)
+                        or _np.issubdtype(l.dtype, _np.object_)
+                    )
+                    for l in loaded
+                    if l is not None
+                ):
+                    features_have_strings = True
 
             if isinstance(loaded, list):
                 features.extend(
@@ -1771,10 +1820,21 @@ def files_to_dataset(features_paths: list, labels_paths: list = None):
                 if loaded is None:
                     print(f"Error loading label file: {label_path}")
                     return None
-                if isinstance(loaded, _np.ndarray) and (_np.issubdtype(loaded.dtype, _np.str_) or _np.issubdtype(loaded.dtype, _np.object_)):
+                if isinstance(loaded, _np.ndarray) and (
+                    _np.issubdtype(loaded.dtype, _np.str_)
+                    or _np.issubdtype(loaded.dtype, _np.object_)
+                ):
                     labels_have_strings = True
                 elif isinstance(loaded, list):
-                    if any(isinstance(l, _np.ndarray) and (_np.issubdtype(l.dtype, _np.str_) or _np.issubdtype(l.dtype, _np.object_)) for l in loaded if l is not None):
+                    if any(
+                        isinstance(l, _np.ndarray)
+                        and (
+                            _np.issubdtype(l.dtype, _np.str_)
+                            or _np.issubdtype(l.dtype, _np.object_)
+                        )
+                        for l in loaded
+                        if l is not None
+                    ):
                         labels_have_strings = True
 
                 if isinstance(loaded, list):
@@ -1801,30 +1861,38 @@ def files_to_dataset(features_paths: list, labels_paths: list = None):
         print("features_have_strings")
         if not tokenizer:
             tokenizer = init_tokenizer()
-        
+
         features_as_strings = []
         for f in features:
             if isinstance(f, _np.ndarray):
-                features_as_strings.append(" ".join(f.astype(str).flatten()))
+                features_as_strings.append(
+                    " ".join(f.astype(str).flatten())
+                )
             else:
                 features_as_strings.append(str(f))
-        
-        tokenized_features = tokenize_and_pad(features_as_strings, tokenizer)
+
+        tokenized_features = tokenize_and_pad(
+            features_as_strings, tokenizer
+        )
         features = [cupy_to_numpy(row) for row in tokenized_features]
 
     if labels_paths and labels_have_strings:
         print("labels_have_strings")
         if not tokenizer:
             tokenizer = init_tokenizer()
-        
+
         labels_as_strings = []
         for l in labels:
             if isinstance(l, _np.ndarray):
-                labels_as_strings.append(" ".join(l.astype(str).flatten()))
+                labels_as_strings.append(
+                    " ".join(l.astype(str).flatten())
+                )
             else:
                 labels_as_strings.append(str(l))
-        
-        tokenized_labels = tokenize_and_pad(labels_as_strings, tokenizer)
+
+        tokenized_labels = tokenize_and_pad(
+            labels_as_strings, tokenizer
+        )
         labels = [cupy_to_numpy(row) for row in tokenized_labels]
 
     all_data = features + labels if labels else features
