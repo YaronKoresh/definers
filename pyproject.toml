@@ -281,7 +281,7 @@ dependencies = [
     "ucxx-cu12==0.39.1",
     "unidecode==1.4.0",
     "uritemplate==4.2.0",
-    "urllib3==2.5.0",
+    "urllib3==2.6.0",
     "uvicorn==0.37.0",
     "virtualenv==20.35.3",
     "wadler-lindig==0.1.7",
