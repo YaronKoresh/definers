@@ -1,0 +1,8 @@
+services:
+  audio:
+    container_name: animation
+    image: yaronkoresh/animation:latest
+    build:
+      context: .
+      dockerfile: animation.docker
+      no_cache: true

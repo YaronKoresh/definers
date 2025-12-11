@@ -1,0 +1,8 @@
+services:
+  train:
+    container_name: train
+    image: yaronkoresh/train:latest
+    build:
+      context: .
+      dockerfile: train.docker
+      no_cache: true

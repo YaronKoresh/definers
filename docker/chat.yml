@@ -1,0 +1,8 @@
+services:
+  chat:
+    container_name: chat
+    image: yaronkoresh/chat:latest
+    build:
+      context: .
+      dockerfile: chat.docker
+      no_cache: true

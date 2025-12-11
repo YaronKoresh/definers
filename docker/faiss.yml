@@ -1,0 +1,8 @@
+services:
+  faiss:
+    container_name: faiss
+    image: yaronkoresh/faiss:latest
+    build:
+      context: .
+      dockerfile: faiss.docker
+      no_cache: true

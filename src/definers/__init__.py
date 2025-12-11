@@ -448,6 +448,22 @@ user_agents = {
     ],
 }
 
+try:
+    import madmom
+    MADMOM_AVAILABLE = True
+except ImportError:
+    MADMOM_AVAILABLE = False
+
+STYLES_DB = {
+    "Psychedelic Geometry": {"tags": ["Abstract", "Trippy", "Geometry"], "desc": "Twisting geometric shapes responding to audio"},
+    "Image Pulse": {"tags": ["Simple", "Image", "Beat"], "desc": "Background image pulsing to the beat"},
+    "Spectrum Bars": {"tags": ["Classic", "Equalizer", "Retro"], "desc": "Classic bottom-up frequency bars"},
+    "Particle Tunnel": {"tags": ["Sci-Fi", "Space", "3D"], "desc": "3D particle tunnel accelerating on beats"},
+    "Glitch Art": {"tags": ["Cyberpunk", "Distortion", "Noise"], "desc": "Digital distortion and chromatic aberration"},
+    "Neon City": {"tags": ["Cyberpunk", "Synthwave", "Retro"], "desc": "Glowing outlines in 80s synthwave style"},
+    "Liquid Bass": {"tags": ["Abstract", "Fluid", "Smooth"], "desc": "Fluid motion reacting to low frequencies"}
+}
+
 iio_formats = ["png", "jpg", "jpeg", "gif", "bmp", "tiff", "tif"]
 
 common_audio_formats = [
@@ -2537,6 +2553,7 @@ def load_as_numpy(path, training=False):
                             x.append(_x)
                         delete(temp_name)
                         delete(temp_2)
+                        delete(dir)
 
                     else:
                         temp_name = tmp("mp3")
@@ -4890,11 +4907,25 @@ def get_python_version():
 def get_linux_distribution():
     try:
         try:
-            subprocess.run(["apt-get", "update"], check=True)
-            subprocess.run(
-                ["apt-get", "install", "-y", "lsb_release"],
-                check=True,
+            with open("/etc/os-release", "r") as f:
+                os_release_content = f.read()
+
+            name_match = re.search(
+                r'NAME="([^"]+)"', os_release_content
             )
+            version_match = re.search(
+                r'VERSION_ID="([^"]+)"', os_release_content
+            )
+
+            if name_match and version_match:
+                distro = name_match.group(1).strip()
+                release = version_match.group(1).strip()
+                return distro, release
+
+        except FileNotFoundError:
+            pass
+
+        try:
             result = subprocess.run(
                 ["lsb_release", "-a"],
                 capture_output=True,
@@ -5130,9 +5161,10 @@ def extract_text(url, selector):
     html_string = None
 
     with sync_playwright() as playwright:
-        browser = playwright.firefox.launch(
+        browser_app = playwright.firefox.launch(
             headless=True
-        ).new_context(
+        )
+        browser = browser_app.new_context(
             locale="en-US",
             timezone_id="America/New_York",
             user_agent=random.choice(user_agents["firefox"]),
@@ -5146,6 +5178,7 @@ def extract_text(url, selector):
         page.wait_for_timeout(2000)
         html_string = page.content()
         browser.close()
+        browser_app.close()
 
     if html_string == None:
         return None
@@ -7066,7 +7099,8 @@ class HybridModel:
             # Training
             start_train = time()
             self.model.fit(X, y)
-            np.cuda.runtime.deviceSynchronize()
+            if hasattr(np, "cuda"):
+                np.cuda.runtime.deviceSynchronize()
             end_train = time()
             train_time = end_train - start_train
 
@@ -7081,7 +7115,8 @@ class HybridModel:
             # Training
             start_train = time()
             self.model.fit(X)
-            np.cuda.runtime.deviceSynchronize()
+            if hasattr(np, "cuda"):
+                np.cuda.runtime.deviceSynchronize()
             end_train = time()
             train_time = end_train - start_train
 
@@ -7101,7 +7136,8 @@ class HybridModel:
 
         predictions = self.model.predict(X)
 
-        np.cuda.runtime.deviceSynchronize()
+        if hasattr(np, "cuda"):
+            np.cuda.runtime.deviceSynchronize()
         end_predict = time()
         predict_time = end_predict - start_predict
         predictions = cupy_to_numpy(predictions)
@@ -8401,6 +8437,411 @@ def cores():
     return os.cpu_count()
 
 
+def analyze_audio(audio_path, hop_length=1024, duration=None, offset=0.0):
+    import librosa
+    
+    y, sr = librosa.load(audio_path, sr=None, duration=duration, offset=offset)
+    actual_duration = librosa.get_duration(y=y, sr=sr)
+    
+    stft = librosa.stft(y, hop_length=hop_length)
+    mag, _ = librosa.magphase(stft)
+    stft_db = librosa.amplitude_to_db(mag, ref=np.max)
+    
+    freqs = librosa.fft_frequencies(sr=sr, n_fft=2048)
+    low_mask = (freqs >= 20) & (freqs < 250)
+    mid_mask = (freqs >= 250) & (freqs < 4000)
+    high_mask = (freqs >= 4000)
+    
+    rms_all = librosa.feature.rms(y=y, hop_length=hop_length)[0]
+    
+    rms_low = np.mean(mag[low_mask, :], axis=0) if np.any(low_mask) else rms_all
+    rms_mid = np.mean(mag[mid_mask, :], axis=0) if np.any(mid_mask) else rms_all
+    rms_high = np.mean(mag[high_mask, :], axis=0) if np.any(high_mask) else rms_all
+    
+    spectral_centroid = librosa.feature.spectral_centroid(y=y, sr=sr, hop_length=hop_length)[0]
+    
+    def normalize(v):
+        v_min, v_max = np.min(v), np.max(v)
+        if v_max - v_min == 0: return np.zeros_like(v)
+        return (v - v_min) / (v_max - v_min)
+    
+    beat_frames = []
+    bpm = 120
+    if MADMOM_AVAILABLE and (duration is None or duration > 10): 
+        try:
+            import madmom
+            proc = madmom.features.beats.DBNBeatTrackingProcessor(fps=100)
+            act = madmom.features.beats.RNNBeatProcessor()(audio_path)
+            beat_times = proc(act)
+            beat_frames = librosa.time_to_frames(beat_times, sr=sr, hop_length=hop_length)
+            if len(beat_times) > 1:
+                bpm = int(round(float(60.0 / np.mean(np.diff(beat_times)))))
+        except:
+            tempo, beat_frames = librosa.beat.beat_track(y=y, sr=sr, hop_length=hop_length)
+            bpm = tempo
+    else:
+        tempo, beat_frames = librosa.beat.beat_track(y=y, sr=sr, hop_length=hop_length)
+        bpm = tempo
+        
+    return {
+        "y": y, "sr": sr, "duration": actual_duration, "bpm": bpm,
+        "rms": normalize(rms_all),
+        "rms_low": normalize(rms_low),
+        "rms_mid": normalize(rms_mid),
+        "rms_high": normalize(rms_high),
+        "centroid": normalize(spectral_centroid), 
+        "stft": (stft_db - np.min(stft_db)) / (np.max(stft_db) - np.min(stft_db) + 1e-6),
+        "beat_frames": beat_frames, "hop_length": hop_length
+    }
+
+def get_color_palette(name):
+    palettes = {
+        "Cyberpunk": [(0, 255, 255), (255, 0, 128), (128, 0, 255)], 
+        "Sunset": [(255, 94, 77), (255, 195, 0), (199, 0, 57)],
+        "Ocean": [(0, 105, 148), (0, 168, 107), (72, 209, 204)],
+        "Toxic": [(57, 255, 20), (170, 255, 0), (20, 20, 20)],
+        "Gold": [(255, 215, 0), (218, 165, 32), (50, 50, 50)],
+        "Israel": [(0, 56, 184), (255, 255, 255), (200, 200, 255)],
+        "Matrix": [(0, 255, 0), (0, 128, 0), (0, 50, 0)],
+        "Neon Red": [(255, 0, 0), (100, 0, 0), (20, 0, 0)],
+        "Deep Space": [(10, 10, 30), (138, 43, 226), (75, 0, 130)]
+    }
+    return palettes.get(name, palettes["Cyberpunk"])
+
+def render_frame_base(style, t, width, height, audio_data, params, rms, is_beat, img_array=None):
+    import cv2
+    colors = get_color_palette(params["palette"])
+    cx, cy = width // 2, height // 2
+    frame = np.zeros((height, width, 3), dtype=np.uint8)
+
+    if style == "Psychedelic Geometry":
+        bg_color = np.array(colors[0]) * (0.1 + 0.1 * np.sin(t * 0.5))
+        frame[:] = bg_color
+        grid_x, grid_y = np.meshgrid(np.arange(width), np.arange(height))
+        dist = np.sqrt((grid_x - cx)**2 + (grid_y - cy)**2)
+        angle = np.arctan2(grid_y - cy, grid_x - cx)
+        
+        num_arms = int(5 + 10 * rms)
+        pattern = np.sin(dist / (30 - 10*rms) + angle * num_arms - t * (5 + 10*rms))
+        
+        pattern_rgb = np.zeros_like(frame)
+        mask = pattern > 0
+        pattern_rgb[mask] = colors[1]
+        pattern_rgb[~mask] = np.array(colors[2]) * rms
+        
+        frame = cv2.addWeighted(frame, 0.6, pattern_rgb.astype(np.uint8), 0.4 * rms, 0)
+        
+        radius = int(height * 0.15 + rms * (height * 0.25))
+        if is_beat: cv2.circle(frame, (cx, cy), int(radius * 1.4), (255, 255, 255), 2, cv2.LINE_AA)
+        cv2.circle(frame, (cx, cy), radius, colors[2], 4)
+
+    elif style == "Spectrum Bars":
+        frame[:] = (10, 10, 15)
+        total_frames = audio_data["stft"].shape[1]
+        frame_idx = int(t * audio_data["sr"] / audio_data["hop_length"])
+        safe_idx = min(frame_idx, total_frames - 1)
+        stft_col = audio_data["stft"][:, safe_idx]
+        
+        num_bars = 64
+        bar_w = width // num_bars
+        for i in range(num_bars):
+            val = np.mean(stft_col[i*2:(i+1)*2]) * params["sensitivity"]
+            bar_h = int(val * height * 0.8)
+            c = colors[i % len(colors)]
+            if is_beat and i % 4 == 0: c = (200, 200, 255)
+            cv2.rectangle(frame, (i*bar_w, height), ((i+1)*bar_w-2, height-bar_h), c, -1)
+
+    elif style == "Particle Tunnel":
+        for i in range(60):
+            seed = i * 13
+            speed_boost = 3.0 if is_beat else 1.0
+            dist_base = (t * 200 * speed_boost + seed * 10) % (max(width, height) / 1.1)
+            angle = i * (360 / 60) + t * 20
+            rad = np.deg2rad(angle)
+            px = int(cx + dist_base * np.cos(rad))
+            py = int(cy + dist_base * np.sin(rad))
+            c = colors[i % len(colors)]
+            size = int(3 + (dist_base / (width/2)) * 10 * rms)
+            cv2.circle(frame, (px, py), size, c, -1)
+
+    elif style == "Glitch Art":
+        noise = np.random.randint(0, 50 + int(100*rms), (height, width, 3), dtype=np.uint8)
+        frame = noise
+        if rms > 0.2:
+            x, y = np.random.randint(0, width), np.random.randint(0, height)
+            w, h = np.random.randint(50, 400), np.random.randint(10, 100)
+            cv2.rectangle(frame, (x, y), (x+w, y+h), colors[0], -1)
+
+    elif style == "Liquid Bass":
+        frame[:] = (0, 0, 20)
+        for i in range(10):
+            y_off = np.sin(t * 2 + i) * 50 * rms
+            pts = []
+            for x in range(0, width, 20):
+                y = cy + np.sin(x * 0.01 + t * (1 + i * 0.2)) * (100 + rms * 200) + y_off
+                pts.append((x, int(y)))
+            cv2.polylines(frame, [np.array(pts)], False, colors[i % 3], 2 + int(rms*5))
+
+    elif style == "Image Pulse" and img_array is not None:
+        scale = 1.0 + (0.2 if is_beat else 0.0) + (rms * 0.15)
+        h, w_img = img_array.shape[:2]
+        new_w, new_h = int(w_img / scale), int(h / scale)
+        sx, sy = max(0, (w_img - new_w)//2), max(0, (h - new_h)//2)
+        crop = img_array[sy:sy+new_h, sx:sx+new_w]
+        if crop.size > 0:
+            frame = cv2.resize(crop, (width, height))
+        if is_beat:
+            frame = cv2.addWeighted(frame, 0.7, np.full_like(frame, 255), 0.3, 0)
+            
+    return frame
+
+def draw_custom_element(frame, element_type, config, t, width, height, rms):
+    import cv2
+    if element_type == "None":
+        return frame
+        
+    pos_x = int(config.get("x", 0.5) * width)
+    pos_y = int(config.get("y", 0.5) * height)
+    scale = config.get("scale", 1.0)
+    opacity = config.get("opacity", 1.0)
+    
+    overlay = frame.copy()
+    
+    if element_type == "Custom Text":
+        text = config.get("text_content", "AI VIDEO")
+        font_scale = 2 * scale + (rms * 0.5)
+        color = (255, 255, 255)
+        thickness = 2
+        text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, font_scale, thickness)[0]
+        tx = pos_x - text_size[0] // 2
+        ty = pos_y + text_size[1] // 2
+        cv2.putText(overlay, text, (tx, ty), cv2.FONT_HERSHEY_SIMPLEX, font_scale, color, thickness)
+        
+    elif element_type == "Logo Image" and config.get("logo_path"):
+        try:
+            logo = cv2.imread(config["logo_path"], cv2.IMREAD_UNCHANGED)
+            if logo is not None:
+                target_h = int(height * 0.2 * scale)
+                ratio = target_h / logo.shape[0]
+                target_w = int(logo.shape[1] * ratio)
+                logo = cv2.resize(logo, (target_w, target_h))
+                
+                y1 = pos_y - target_h // 2
+                x1 = pos_x - target_w // 2
+                
+                if x1 >= 0 and y1 >= 0 and x1 + target_w <= width and y1 + target_h <= height:
+                    if logo.shape[2] == 4:
+                        alpha = logo[:, :, 3] / 255.0
+                        bg_patch = frame[y1:y1+target_h, x1:x1+target_w]
+                        for c in range(3):
+                            bg_patch[:, :, c] = (1.0 - alpha) * bg_patch[:, :, c] + alpha * logo[:, :, c] * opacity
+                        frame[y1:y1+target_h, x1:x1+target_w] = bg_patch
+                        return frame 
+                    else:
+                        frame[y1:y1+target_h, x1:x1+target_w] = logo
+        except Exception as e:
+            print(f"Error drawing logo: {e}")
+
+    elif element_type == "Spectrum Circle":
+        radius = int(100 * scale * (1 + rms))
+        color = (0, 255, 255)
+        cv2.circle(overlay, (pos_x, pos_y), radius, color, 2)
+        cv2.circle(overlay, (pos_x, pos_y), int(radius*0.8), (255,0,255), 1)
+
+    if element_type != "Logo Image":
+        cv2.addWeighted(overlay, opacity, frame, 1 - opacity, 0, frame)
+        
+    return frame
+
+def apply_global_overlays(frame, t, width, height, active_features, rms, is_beat, duration):
+    import cv2
+    if "Neon Border" in active_features:
+        thickness = int(10 + 20 * rms)
+        color = (int(255*abs(np.sin(t))), 50, 255)
+        cv2.rectangle(frame, (0,0), (width, height), color, thickness)
+        
+    if "Progress Bar" in active_features and duration > 0:
+        bar_height = 10
+        progress = t / duration
+        bar_width = int(width * progress)
+        cv2.rectangle(frame, (0, height-bar_height), (width, height), (50,50,50), -1)
+        cv2.rectangle(frame, (0, height-bar_height), (bar_width, height), (0, 255, 0), -1)
+
+    if "Audio Waveform" in active_features:
+        center_y = height - 100
+        pts = []
+        for x in range(0, width, 5):
+            amp = rms * 50 * np.sin(x * 0.1 + t * 10)
+            pts.append((x, int(center_y + amp)))
+        cv2.polylines(frame, [np.array(pts)], False, (255, 255, 255), 2)
+        
+    if "Timer" in active_features:
+        m, s = int(t // 60), int(t % 60)
+        cv2.putText(frame, f"{m:02d}:{s:02d}", (30, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,255), 2)
+
+    return frame
+
+def normalize_arr(a):
+    return (a - np.min(a))/np.ptp(a)
+
+def apply_post_fx(frame, effects, rms):
+    import cv2
+    if "Vignette" in effects:
+        rows, cols = frame.shape[:2]
+        Y, X = np.ogrid[:rows, :cols]
+        center_y, center_x = rows/2, cols/2
+        dist_from_center = np.sqrt((X - center_x)**2 + (Y-center_y)**2)
+        mask = 1 - normalize_arr(dist_from_center) 
+        mask = np.clip(mask * 1.5, 0, 1)
+        mask = np.dstack([mask]*3)
+        frame = (frame * mask).astype(np.uint8)
+
+    if "Scanlines" in effects:
+        frame[::4, :] = (frame[::4, :] * 0.7).astype(np.uint8)
+
+    if "Noise" in effects:
+        noise = np.random.normal(0, 10 + 20*rms, frame.shape).astype(np.uint8)
+        frame = cv2.addWeighted(frame, 0.9, noise, 0.1, 0)
+        
+    return frame
+
+def get_rms_and_beat(t, adata, reactivity_band, sensitivity):
+    total_frames = adata["stft"].shape[1]
+    frame_idx = int(t * adata["sr"] / adata["hop_length"])
+    safe_idx = min(frame_idx, total_frames - 1)
+    
+    if reactivity_band == "Low": raw_rms = adata["rms_low"][safe_idx]
+    elif reactivity_band == "Mid": raw_rms = adata["rms_mid"][safe_idx]
+    elif reactivity_band == "High": raw_rms = adata["rms_high"][safe_idx]
+    else: raw_rms = adata["rms"][safe_idx]
+    
+    rms = raw_rms * sensitivity
+    is_beat = any(abs(frame_idx - bf) < 3 for bf in adata["beat_frames"])
+    return rms, is_beat
+
+def prepare_common_resources(audio, image, resolution):
+    from PIL import Image, ImageOps
+    import cv2
+    if not audio:
+        return None, None, None, "Error: No Audio File"
+        
+    res_map = {"Square (1:1)": (720, 720), "Portrait (9:16)": (720, 1280), "Landscape (16:9)": (1280, 720)}
+    w, h = res_map.get(resolution, (1280, 720))
+    
+    img_array = None
+    if image:
+        try:
+            pil = Image.open(image).convert("RGB")
+            pil = ImageOps.fit(pil, (w, h), Image.Resampling.LANCZOS)
+            img_array = cv2.cvtColor(np.array(pil), cv2.COLOR_RGB2BGR)
+        except:
+            print("Failed to load background image")
+            
+    return w, h, img_array, None
+
+def generate_preview_handler(audio, image, style, resolution, sensitivity, reactivity_band, palette, 
+                             active_overlays, post_effects, 
+                             custom_elem_type, ce_x, ce_y, ce_scale, ce_opacity, ce_text, ce_logo):
+    import cv2
+    w, h, img_array, error = prepare_common_resources(audio, image, resolution)
+    if error: return None, error
+    
+    try:
+        adata = analyze_audio(audio, duration=10) 
+        preview_t = 3.0 if adata["duration"] > 3 else adata["duration"] / 2
+    except Exception as e:
+        return None, f"Audio Analysis Failed: {e}"
+        
+    params = {"sensitivity": sensitivity, "palette": palette}
+    rms, is_beat = get_rms_and_beat(preview_t, adata, reactivity_band, sensitivity)
+    
+    custom_config = {
+        "x": ce_x, "y": ce_y, "scale": ce_scale, "opacity": ce_opacity,
+        "text_content": ce_text, "logo_path": ce_logo
+    }
+    
+    frame = render_frame_base(style, preview_t, w, h, adata, params, rms, is_beat, img_array)
+    frame = draw_custom_element(frame, custom_elem_type, custom_config, preview_t, w, h, rms)
+    frame = apply_global_overlays(frame, preview_t, w, h, active_overlays, rms, is_beat, adata["duration"])
+    frame = apply_post_fx(frame, post_effects, rms)
+    
+    return cv2.cvtColor(frame, cv2.COLOR_BGR2RGB), f"Preview at {preview_t:.2f}s | BPM: {adata['bpm']}"
+
+def calculate_gpu_duration(audio, image, style, resolution, fps, sensitivity, reactivity_band, palette, 
+                          active_overlays, post_effects, 
+                          custom_elem_type, ce_x, ce_y, ce_scale, ce_opacity, ce_text, ce_logo):
+    from moviepy import AudioFileClip
+    try:
+        if not audio:
+            return False
+        
+        clip = AudioFileClip(audio)
+        audio_dur = clip.duration
+        clip.close()
+        
+        res_factor = 1.0
+        if resolution != "Square (1:1)":
+            res_factor = 1.5
+            
+        fps_factor = fps / 20.0
+        
+        estimated_time = (audio_dur * res_factor * fps_factor) + 20
+        
+        final_duration = int(max(60, min(int(estimated_time), 360)))
+        
+        print(f"ZeroGPU Timeout: {final_duration}s (Audio: {audio_dur}s, FPS: {fps}, Res: {resolution})")
+        return final_duration
+        
+    except Exception as e:
+        print(f"Error calculating duration: {e}")
+        return False
+
+def generate_video_handler(audio, image, style, resolution, fps, sensitivity, reactivity_band, palette, 
+                          active_overlays, post_effects, 
+                          custom_elem_type, ce_x, ce_y, ce_scale, ce_opacity, ce_text, ce_logo):
+    import cv2
+    from moviepy import VideoClip, AudioFileClip
+    
+    w, h, img_array, error = prepare_common_resources(audio, image, resolution)
+    if error: return None, error
+    
+    print("Analyzing full audio...")
+    adata = analyze_audio(audio)
+    
+    params = {"sensitivity": sensitivity, "palette": palette}
+    custom_config = {
+        "x": ce_x, "y": ce_y, "scale": ce_scale, "opacity": ce_opacity,
+        "text_content": ce_text, "logo_path": ce_logo
+    }
+    
+    def make_frame(t):
+        rms, is_beat = get_rms_and_beat(t, adata, reactivity_band, sensitivity)
+        
+        frame = render_frame_base(style, t, w, h, adata, params, rms, is_beat, img_array)
+        frame = draw_custom_element(frame, custom_elem_type, custom_config, t, w, h, rms)
+        frame = apply_global_overlays(frame, t, w, h, active_overlays, rms, is_beat, adata["duration"])
+        frame = apply_post_fx(frame, post_effects, rms)
+        
+        return cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+    output = tempfile.mktemp(suffix=".mp4")
+    clip = VideoClip(make_frame, duration=adata["duration"])
+    clip = clip.with_audio(AudioFileClip(audio))
+    
+    print("Rendering...")
+    clip.write_videofile(output, fps=fps, codec="libx264", audio_codec="aac", preset="ultrafast", logger=None)
+    
+    return output, f"Render Complete! Duration: {adata['duration']:.2f}s"
+
+def filter_styles(query, category):
+    filtered = []
+    for name, data in STYLES_DB.items():
+        text_match = query.lower() in name.lower() or query.lower() in data["desc"].lower()
+        tag_match = category == "All" or category in data["tags"]
+        if text_match and tag_match:
+            filtered.append(name)
+    return gr.update(choices=filtered, value=filtered[0] if filtered else None)
+
 def draw_star_of_david(
     frame, center, radius, angle, color, thickness
 ):
@@ -9171,7 +9612,7 @@ def analyze_audio_features(audio_path, txt=True):
                 detected_mode = "minor"
 
         if txt:
-            return f"{key} {detected_mode}, {bpm:.2f} BPM"
+            return f"{detected_key} {detected_mode}, {bpm:.2f} BPM"
         return detected_key, detected_mode, bpm
 
     except Exception as e:
@@ -11064,7 +11505,7 @@ def start(proj: str):
             )
         app.launch(server_name="0.0.0.0", server_port=7860)
 
-    elif proj == "video":
+    elif proj == "animation":
         import torch
         from diffusers.utils import export_to_gif
         from PIL import Image, ImageOps
@@ -11411,6 +11852,105 @@ def start(proj: str):
 
         with gr.Blocks() as app:
             f = gr.File(label="Download faiss wheel", value=whl)
+        app.launch(server_name="0.0.0.0", server_port=7860)
+
+    elif proj == "video":
+        import gradio as gr
+        import spaces
+
+        custom_css = """
+        body { color: #00ff41; font-family: monospace; }
+        .gr-button.primary { background: #00f3ff; color: black; font-weight: bold; box-shadow: 0 0 10px #00f3ff; }
+        .gr-button.secondary { background: #222; color: white; border: 1px solid #444; }
+        .section-header { color: #ff003c; font-weight: bold; margin-bottom: 5px; border-bottom: 1px solid #333; padding-bottom: 5px; }
+        textarea { overflow-y: auto !important; }
+        """
+
+        theme = gr.themes.Base(primary_hue="cyan", neutral_hue="slate")
+
+        @spaces.GPU(duration=calculate_gpu_duration)
+        def _generate_video_handler_gpu(*args):
+            return generate_video_handler(*args)
+
+        with gr.Blocks(title="AI VIDEO ARCHITECT", css=custom_css, theme=theme) as app:
+            
+            gr.Markdown("# 🏗️ AI VIDEO ARCHITECT")
+            gr.Markdown("### Advanced Composition & Layout Engine")
+
+            with gr.Row():
+                with gr.Column(scale=2):
+                    
+                    with gr.Group():
+                        gr.Markdown("### 📂 Media & Style", elem_classes="section-header")
+                        audio_in = gr.Audio(label="Audio File", type="filepath")
+                        
+                        with gr.Row():
+                            search_txt = gr.Textbox(placeholder="Search styles...", label="Search", scale=2)
+                            cat_filter = gr.Dropdown(["All", "Abstract", "Cyberpunk", "Retro", "Simple", "Sci-Fi"], value="All", label="Category Filter", scale=1)
+                        
+                        style_dd = gr.Dropdown(choices=list(STYLES_DB.keys()), value="Psychedelic Geometry", label="Select Style (Base Layer)")
+                        
+                        search_txt.change(filter_styles, [search_txt, cat_filter], style_dd)
+                        cat_filter.change(filter_styles, [search_txt, cat_filter], style_dd)
+
+                    with gr.Tabs():
+                        with gr.TabItem("✨ Custom Element"):
+                            gr.Markdown("Add a single element with full transform control")
+                            with gr.Row():
+                                ce_type = gr.Dropdown(["None", "Custom Text", "Logo Image", "Spectrum Circle"], value="None", label="Element Type")
+                                ce_text = gr.Textbox(value="MY MUSIC", label="Text Content")
+                                                    
+                            gr.Markdown("Transform")
+                            with gr.Row():
+                                ce_x = gr.Slider(0, 1, 0.5, 0.05, label="Position X")
+                                ce_y = gr.Slider(0, 1, 0.5, 0.05, label="Position Y")
+                            with gr.Row():
+                                ce_scale = gr.Slider(0.1, 5.0, 1.0, 0.1, label="Scale")
+                                ce_opacity = gr.Slider(0.1, 1.0, 1.0, 0.1, label="Opacity")
+
+                        with gr.TabItem("🌐 Global"):
+                            active_overlays = gr.CheckboxGroup(
+                                ["Neon Border", "Progress Bar", "Audio Waveform", "Timer"], 
+                                label="Persistent Elements"
+                            )
+                            post_fx = gr.CheckboxGroup(["Vignette", "Scanlines", "Noise"], label="Post-Processing FX")
+                            
+                        with gr.TabItem("⚙️ Settings"):
+                            res_dd = gr.Dropdown(["Square (1:1)", "Portrait (9:16)", "Landscape (16:9)"], value="Square (1:1)", label="Aspect Ratio")
+                            fps_sl = gr.Slider(14, 20, 20, 1, label="FPS")
+                            sens_sl = gr.Slider(0.5, 3.0, 1.5, 1.0, label="Audio Reactivity")
+                            band_dd = gr.Dropdown(["All", "Low", "Mid", "High"], value="All", label="Frequency Band")
+                            palette_dd = gr.Dropdown(["Cyberpunk", "Sunset", "Israel", "Gold", "Matrix"], value="Cyberpunk", label="Color Palette")
+                            bg_img = gr.Image(label="Background Image (for Image Pulse)", type="filepath")
+
+                    with gr.Row():
+                        preview_btn = gr.Button("📸 Generate Preview (Frame)", elem_classes="secondary")
+                        render_btn = gr.Button("🚀 Render Full Video", elem_classes="primary")
+
+                with gr.Column(scale=1):
+                    ce_logo = gr.Image(label="Logo File", type="filepath", height=300)
+                    preview_out = gr.Image(label="Preview Snapshot", height=300)
+                    out_vid = gr.Video(label="Final Output", height=400)
+
+            with gr.Row():
+                out_stat = gr.Textbox(label="System Log")
+
+            preview_btn.click(
+                fn=generate_preview_handler,
+                inputs=[audio_in, bg_img, style_dd, res_dd, sens_sl, band_dd, palette_dd,
+                        active_overlays, post_fx,
+                        ce_type, ce_x, ce_y, ce_scale, ce_opacity, ce_text, ce_logo],
+                outputs=[preview_out, out_stat]
+            )
+
+            render_btn.click(
+                fn=_generate_video_handler_gpu, 
+                inputs=[audio_in, bg_img, style_dd, res_dd, fps_sl, sens_sl, band_dd, palette_dd,
+                        active_overlays, post_fx,
+                        ce_type, ce_x, ce_y, ce_scale, ce_opacity, ce_text, ce_logo],
+                outputs=[out_vid, out_stat]
+            )
+        
         app.launch(server_name="0.0.0.0", server_port=7860)
 
     elif proj == "audio":
