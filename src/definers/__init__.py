@@ -11866,13 +11866,13 @@ def start(proj: str):
         textarea { overflow-y: auto !important; }
         """
 
-        theme = gr.themes.Base(primary_hue="cyan", neutral_hue="slate")
+        video_theme = gr.themes.Base(primary_hue="cyan", neutral_hue="slate")
 
         @spaces.GPU(duration=calculate_gpu_duration)
         def _generate_video_handler_gpu(*args):
             return generate_video_handler(*args)
 
-        with gr.Blocks(title="AI VIDEO ARCHITECT", css=custom_css, theme=theme) as app:
+        with gr.Blocks(title="AI VIDEO ARCHITECT", css=custom_css, theme=video_theme) as app:
             
             gr.Markdown("# 🏗️ AI VIDEO ARCHITECT")
             gr.Markdown("### Advanced Composition & Layout Engine")
