@@ -80,7 +80,7 @@ dependencies = [
     "ffmpy==0.6.4",
     "filelock==3.19.1",
     "flatbuffers==25.9.23",
-    "fonttools==4.59.2",
+    "fonttools==4.61.0",
     "frozenlist==1.8.0",
     "fsspec==2024.12.0",
     "func_argparse==1.1.1",
