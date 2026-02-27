@@ -20,7 +20,7 @@ class TestSendSignalToProcess(unittest.TestCase):
     @patch("os.kill", side_effect=OSError("Test OSError"))
     def test_send_signal_failure_os_error(self, mock_os_kill):
         pid = 54321
-        sig = signal.SIGKILL
+        sig = getattr(signal, "SIGKILL", 9)
 
         with patch("builtins.print") as mock_print:
             result = send_signal_to_process(pid, sig)
@@ -33,7 +33,7 @@ class TestSendSignalToProcess(unittest.TestCase):
     @patch("os.kill")
     def test_send_signal_with_zero_pid(self, mock_os_kill):
         pid = 0
-        sig = signal.SIGUSR1
+        sig = getattr(signal, "SIGUSR1", 10)
 
         result = send_signal_to_process(pid, sig)
 
@@ -43,7 +43,7 @@ class TestSendSignalToProcess(unittest.TestCase):
     @patch("os.kill", side_effect=ProcessLookupError)
     def test_send_signal_process_not_found(self, mock_os_kill):
         pid = 99999
-        sig = signal.SIGHUP
+        sig = getattr(signal, "SIGHUP", 1)
 
         with patch("builtins.print"):
             result = send_signal_to_process(pid, sig)

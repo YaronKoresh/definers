@@ -524,7 +524,7 @@ def normalize_path(p):
 def full_path(*p):
     joined = os.path.join(*[str(_p).strip() for _p in p])
     expanded = os.path.expanduser(joined)
-    return normalize_path(str(Path(expanded).resolve()))
+    return os.path.abspath(expanded)
 
 
 def paths(*patterns):
@@ -755,7 +755,7 @@ def load(path):
         if b"\x00" in raw or not _is_text(raw):
             return raw
         try:
-            return raw.decode("utf-8")
+            return raw.decode("utf-8").replace("\r\n", "\n")
         except (UnicodeDecodeError, ValueError):
             return raw
 
@@ -779,7 +779,7 @@ def parent_directory(p, levels: int = 1):
     path = Path(str(p))
     for _ in range(levels):
         path = path.parent
-    return str(path.resolve())
+    return os.path.normpath(str(path))
 
 
 def save(path, text=""):
@@ -887,6 +887,7 @@ def run_windows(command, silent=False, env={}):
     try:
         if isinstance(command, list):
             cmds = command
+            command_to_run = " && ".join([c.strip() for c in cmds if c.strip()])
         else:
             cmds = command.strip().splitlines()
             if len(cmds) > 1:
@@ -963,6 +964,8 @@ def wait(*threads):
 
 def permit(path):
     try:
+        if not exist(path):
+            return False
         if get_os_name() == "linux":
             subprocess.run(["chmod", "-R", "a+xrw", path], check=True)
             return True
@@ -1241,7 +1244,7 @@ def extract(arcv, dest=None, format=None):
 
 
 def path_end(p: str):
-    return full_path(p).strip("/").split("/")[-1]
+    return Path(p.rstrip("/").rstrip("\\")).name
 
 
 def path_ext(p):

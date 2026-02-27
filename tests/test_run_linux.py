@@ -7,11 +7,12 @@ from definers import run_linux
 
 
 class TestRunLinux(unittest.TestCase):
+    @unittest.skipIf(sys.platform.startswith("win"), "Linux-specific test")
     @patch("definers.write")
     @patch("definers.permit")
     @patch("definers.delete")
     @patch("pty.openpty")
-    @patch("os.fork")
+    @patch("os.fork", create=True)
     @patch("os.waitpid")
     @patch("select.select")
     @patch("os.read")
@@ -26,8 +27,6 @@ class TestRunLinux(unittest.TestCase):
         mock_permit,
         mock_write,
     ):
-        if sys.platform.startswith("win"):
-            self.skipTest("Linux-specific test")
 
         mock_openpty.return_value = (10, 20)
         mock_fork.return_value = 1234
@@ -45,11 +44,12 @@ class TestRunLinux(unittest.TestCase):
         mock_permit.assert_called_once()
         mock_delete.assert_called_once()
 
+    @unittest.skipIf(sys.platform.startswith("win"), "Linux-specific test")
     @patch("definers.write")
     @patch("definers.permit")
     @patch("definers.delete")
     @patch("pty.openpty")
-    @patch("os.fork")
+    @patch("os.fork", create=True)
     @patch("os.waitpid")
     def test_run_linux_failure(
         self,
@@ -60,8 +60,6 @@ class TestRunLinux(unittest.TestCase):
         mock_permit,
         mock_write,
     ):
-        if sys.platform.startswith("win"):
-            self.skipTest("Linux-specific test")
 
         mock_openpty.return_value = (10, 20)
         mock_fork.return_value = 1234

@@ -6,10 +6,11 @@ from definers import set_cuda_env
 
 
 class TestSetCudaEnv(unittest.TestCase):
+    @patch("definers._cuda.get_os_name", return_value="linux")
     @patch("definers.log")
     @patch("definers.paths")
     @patch.dict(os.environ, {}, clear=True)
-    def test_cuda_paths_found(self, mock_paths, mock_log):
+    def test_cuda_paths_found(self, mock_paths, mock_log, mock_get_os_name):
         mock_paths.side_effect = [
             ["/usr/local/cuda-12.2/"],
             ["/usr/local/cuda-12.2/lib64/"],
@@ -30,10 +31,11 @@ class TestSetCudaEnv(unittest.TestCase):
         ]
         mock_log.assert_has_calls(expected_calls)
 
+    @patch("definers._cuda.get_os_name", return_value="linux")
     @patch("definers.log")
     @patch("definers.paths")
     @patch.dict(os.environ, {}, clear=True)
-    def test_no_cuda_paths_found(self, mock_paths, mock_log):
+    def test_no_cuda_paths_found(self, mock_paths, mock_log, mock_get_os_name):
         mock_paths.return_value = []
         set_cuda_env()
         self.assertNotIn("CUDA_PATH", os.environ)
@@ -44,10 +46,11 @@ class TestSetCudaEnv(unittest.TestCase):
             status=False,
         )
 
+    @patch("definers._cuda.get_os_name", return_value="linux")
     @patch("definers.log")
     @patch("definers.paths")
     @patch.dict(os.environ, {}, clear=True)
-    def test_only_cuda_path_found(self, mock_paths, mock_log):
+    def test_only_cuda_path_found(self, mock_paths, mock_log, mock_get_os_name):
         mock_paths.side_effect = [["/opt/cuda/"], []]
         set_cuda_env()
         self.assertNotIn("CUDA_PATH", os.environ)
@@ -58,10 +61,13 @@ class TestSetCudaEnv(unittest.TestCase):
             status=False,
         )
 
+    @patch("definers._cuda.get_os_name", return_value="linux")
     @patch("definers.log")
     @patch("definers.paths")
     @patch.dict(os.environ, {}, clear=True)
-    def test_only_ld_library_path_found(self, mock_paths, mock_log):
+    def test_only_ld_library_path_found(
+        self, mock_paths, mock_log, mock_get_os_name
+    ):
         mock_paths.side_effect = [[], ["/opt/cuda/lib/"]]
         set_cuda_env()
         self.assertNotIn("CUDA_PATH", os.environ)

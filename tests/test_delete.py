@@ -57,7 +57,10 @@ class TestDelete(unittest.TestCase):
             f.write("target")
 
         if hasattr(os, "symlink"):
-            os.symlink(target_file, link_path)
+            try:
+                os.symlink(target_file, link_path)
+            except (OSError, NotImplementedError):
+                self.skipTest("Symlinks require elevated privileges on this platform")
             self.assertTrue(os.path.islink(link_path))
             self.assertTrue(exist(target_file))
 
@@ -72,7 +75,10 @@ class TestDelete(unittest.TestCase):
         link_path = os.path.join(self.test_dir, "link_dir")
 
         if hasattr(os, "symlink"):
-            os.symlink(target_dir, link_path, target_is_directory=True)
+            try:
+                os.symlink(target_dir, link_path, target_is_directory=True)
+            except (OSError, NotImplementedError):
+                self.skipTest("Symlinks require elevated privileges on this platform")
             self.assertTrue(os.path.islink(link_path))
             self.assertTrue(exist(target_dir))
 

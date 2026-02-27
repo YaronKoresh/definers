@@ -11,21 +11,21 @@ class TestFeed(unittest.TestCase):
         self.X_new_np = np.array([[1, 2], [3, 4]])
         self.y_new_np = np.array([1, 0])
 
-    @patch("definers.log")
+    @patch("definers._ml.log")
     def test_feed_unsupervised_initial(self, mock_log):
         model = feed(None, self.X_new_np)
         self.assertIsInstance(model, HybridModel)
         np.testing.assert_array_equal(model.X_all, self.X_new_np)
         self.assertFalse(hasattr(model, "y_all"))
 
-    @patch("definers.log")
+    @patch("definers._ml.log")
     def test_feed_supervised_initial(self, mock_log):
         model = feed(None, self.X_new_np, self.y_new_np)
         self.assertIsInstance(model, HybridModel)
         np.testing.assert_array_equal(model.X_all, self.X_new_np)
         np.testing.assert_array_equal(model.y_all, self.y_new_np)
 
-    @patch("definers.log")
+    @patch("definers._ml.log")
     @patch("definers.np.concatenate", wraps=np.concatenate)
     def test_feed_unsupervised_append(self, mock_concatenate, mock_log):
         initial_model = HybridModel()
@@ -35,7 +35,7 @@ class TestFeed(unittest.TestCase):
         expected_X = np.array([[0, 0], [1, 2], [3, 4]])
         np.testing.assert_array_equal(model.X_all, expected_X)
 
-    @patch("definers.log")
+    @patch("definers._ml.log")
     @patch("definers.np.concatenate", wraps=np.concatenate)
     def test_feed_supervised_append(self, mock_concatenate, mock_log):
         initial_model = HybridModel()
@@ -48,7 +48,7 @@ class TestFeed(unittest.TestCase):
         np.testing.assert_array_equal(model.X_all, expected_X)
         np.testing.assert_array_equal(model.y_all, expected_y)
 
-    @patch("definers.log")
+    @patch("definers._ml.log")
     @patch("definers.np.concatenate", wraps=np.concatenate)
     def test_feed_with_epochs(self, mock_concatenate, mock_log):
         epochs = 3

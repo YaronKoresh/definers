@@ -13,8 +13,8 @@ class TestIsAdminWindows(unittest.TestCase):
     def test_is_not_admin_returns_false(self, mock_is_admin):
         self.assertFalse(is_admin_windows())
 
-    @patch("ctypes.windll", side_effect=AttributeError)
-    def test_not_on_windows_returns_false(self, mock_windll):
+    @patch("ctypes.windll", None)
+    def test_not_on_windows_returns_false(self):
         self.assertFalse(is_admin_windows())
 
     @patch("ctypes.windll.shell32.IsUserAnAdmin", side_effect=Exception)

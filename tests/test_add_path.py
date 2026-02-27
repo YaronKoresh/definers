@@ -1,3 +1,4 @@
+import os
 import site
 import sys
 import unittest
@@ -6,37 +7,44 @@ from unittest.mock import patch
 from definers import add_path
 
 
+def _norm(p):
+    """Compute path as add_path/full_path would: expanduser then abspath."""
+    return os.path.abspath(os.path.expanduser(p))
+
+
 class TestAddPath(unittest.TestCase):
     @patch("definers.permit")
     @patch("site.addsitedir")
     def test_add_new_path(self, mock_addsitedir, mock_permit):
-        test_path = "/new/test/path"
+        raw_path = "/new/test/path"
+        expected_path = _norm(raw_path)
         original_sys_path = sys.path[:]
 
         try:
-            sys.path = [p for p in original_sys_path if p != test_path]
+            sys.path = [p for p in original_sys_path if p != expected_path]
 
-            add_path(test_path)
+            add_path(raw_path)
 
-            mock_permit.assert_called_once_with(test_path)
-            self.assertIn(test_path, sys.path)
-            mock_addsitedir.assert_called_once_with(test_path)
+            mock_permit.assert_called_once_with(expected_path)
+            self.assertIn(expected_path, sys.path)
+            mock_addsitedir.assert_called_once_with(expected_path)
         finally:
             sys.path = original_sys_path
 
     @patch("definers.permit")
     @patch("site.addsitedir")
     def test_add_existing_path(self, mock_addsitedir, mock_permit):
-        test_path = "/existing/test/path"
+        raw_path = "/existing/test/path"
+        expected_path = _norm(raw_path)
         original_sys_path = sys.path[:]
 
         try:
-            if test_path not in sys.path:
-                sys.path.append(test_path)
+            if expected_path not in sys.path:
+                sys.path.append(expected_path)
 
             initial_path_length = len(sys.path)
 
-            add_path(test_path)
+            add_path(raw_path)
 
             mock_permit.assert_not_called()
             mock_addsitedir.assert_not_called()

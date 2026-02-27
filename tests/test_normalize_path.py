@@ -11,7 +11,7 @@ class TestNormalizePath(unittest.TestCase):
 
     def test_simple_path(self):
         result = normalize_path("/home/user/file.txt")
-        self.assertEqual(result, "/home/user/file.txt")
+        self.assertEqual(result, os.path.normpath("/home/user/file.txt"))
 
     def test_relative_path(self):
         result = normalize_path("foo/bar")

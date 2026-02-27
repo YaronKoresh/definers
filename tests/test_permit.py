@@ -18,8 +18,9 @@ class TestPermit(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.test_dir)
 
+    @patch("definers._system.get_os_name", return_value="linux")
     @patch("definers.subprocess.run")
-    def test_permit_calls_chmod(self, mock_subprocess_run):
+    def test_permit_calls_chmod(self, mock_subprocess_run, mock_get_os_name):
         path = self.test_file
         permit(path)
         mock_subprocess_run.assert_called_once_with(

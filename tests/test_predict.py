@@ -60,8 +60,10 @@ class TestPredict(unittest.TestCase):
         self.assertEqual(result_path, "random.txt")
         mock_joblib_load.assert_called_with(self.model_path)
         mock_read.assert_called_with(self.prediction_file_txt)
-        self.mock_model.predict.assert_called_with(
-            mock_extracted_features.flatten()
+        self.mock_model.predict.assert_called_once()
+        np.testing.assert_array_equal(
+            self.mock_model.predict.call_args[0][0],
+            mock_extracted_features.flatten(),
         )
         mock_features_to_text.assert_called_once()
         mock_file_open.assert_called_with("random.txt", "w")
@@ -125,7 +127,11 @@ class TestPredict(unittest.TestCase):
 
         self.assertEqual(result_path, "random_img.png")
         mock_load_numpy.assert_called_with(self.prediction_file_image)
-        self.mock_model.predict.assert_called_with(mock_input_data.flatten())
+        self.mock_model.predict.assert_called_once()
+        np.testing.assert_array_equal(
+            self.mock_model.predict.call_args[0][0],
+            mock_input_data.flatten(),
+        )
         mock_features_to_image.assert_called_once()
         mock_imwrite.assert_called_once()
 

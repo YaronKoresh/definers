@@ -2,6 +2,7 @@ import collections
 import collections.abc
 import importlib
 import os
+import pickle
 import shutil
 import site
 import subprocess
@@ -10,6 +11,53 @@ import tempfile
 from datetime import datetime
 from glob import glob
 from pathlib import Path
+
+import joblib
+
+try:
+    import imageio as iio
+except ImportError:
+    iio = None
+
+try:
+    import onnx
+except ImportError:
+    onnx = None
+
+try:
+    import pydub
+except ImportError:
+    pydub = None
+
+try:
+    import sox
+except ImportError:
+    sox = None
+
+try:
+    from huggingface_hub import hf_hub_download
+except ImportError:
+    hf_hub_download = None
+
+try:
+    from torch.utils.data import TensorDataset
+except ImportError:
+    TensorDataset = None
+
+try:
+    from sklearn.preprocessing import StandardScaler
+except ImportError:
+    StandardScaler = None
+
+try:
+    from sklearn.cluster import KMeans
+except ImportError:
+    KMeans = None
+
+try:
+    from transformers import AutoTokenizer
+except ImportError:
+    AutoTokenizer = None
 
 collections.MutableSequence = collections.abc.MutableSequence
 
@@ -120,6 +168,7 @@ from definers._cuda import (
 )
 from definers._data import (
     _find_spec,
+    _init_cupy_numpy,
     check_onnx,
     convert_tensor_dtype,
     create_vectorizer,
@@ -379,3 +428,65 @@ set_system_message(
     name="Phi",
     role="a helpful chat assistant",
 )
+
+
+def predict(prediction_file, model_path):
+    model = joblib.load(model_path)
+    if model is None:
+        return None
+
+    ext = os.path.splitext(prediction_file)[1].lstrip(".").lower()
+
+    if ext in common_audio_formats:
+        return predict_audio(model, prediction_file)
+
+    if ext == "txt":
+        data = read(prediction_file)
+        vectorizer = create_vectorizer()
+        features = extract_text_features(data, vectorizer)
+    else:
+        features = load_as_numpy(prediction_file)
+        if features is None:
+            return None
+
+    gpu_features = numpy_to_cupy(features)
+    flat = one_dim_numpy(gpu_features)
+    prediction = model.predict(flat)
+
+    if prediction is None:
+        return None
+
+    if is_clusters_model(model):
+        prediction = get_cluster_content(model, int(prediction[0]))
+
+    output_type = guess_numpy_type(prediction)
+
+    if output_type == "text":
+        text = features_to_text(prediction)
+        path = random_string() + ".txt"
+        with open(path, "w") as f:
+            f.write(text)
+        return path
+    elif output_type == "image":
+        img = features_to_image(prediction)
+        img_np = cupy_to_numpy(img)
+        path = random_string() + ".png"
+        iio.imwrite(path, img_np)
+        return path
+
+    return None
+
+
+def init_custom_model(model_type, path):
+    if not path or model_type not in ("onnx", "pkl"):
+        return None
+    try:
+        with open(path, "rb") as f:
+            if model_type == "onnx":
+                model = onnx.load(f)
+            elif model_type == "pkl":
+                model = pickle.load(f)
+        return model
+    except Exception as e:
+        catch(f"Error initializing model: {e}")
+        return None

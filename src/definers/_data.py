@@ -55,6 +55,8 @@ from time import sleep, time
 from typing import Any, Optional, Union
 from urllib.parse import quote
 
+import numpy as _np
+
 from definers._constants import TOKENIZERS, iio_formats, tasks
 from definers._system import (
     catch,
@@ -288,6 +290,25 @@ def _find_spec(mod_name):
         return None
 
 
+def _init_cupy_numpy():
+    import numpy as _numpy_module
+
+    np_module = None
+    cupy_in_sys = sys.modules.get("cupy")
+    if cupy_in_sys is not None and importlib.util.find_spec("cupy"):
+        np_module = cupy_in_sys
+
+    if np_module is None:
+        np_module = _numpy_module
+
+    if "float" not in getattr(np_module, "__dict__", {}):
+        np_module.float = np_module.float64
+    if "int" not in getattr(np_module, "__dict__", {}):
+        np_module.int = np_module.int64
+
+    return np_module, _numpy_module
+
+
 def patch_torch_proxy_mode():
     import torch
     from torch.fx.experimental import proxy_tensor
@@ -360,7 +381,9 @@ def fetch_dataset(src, url_type=None, revision=None):
 
 
 def drop_columns(dataset, drop_list):
-    if not check_parameter(drop_list):
+    import definers as _d
+
+    if not _d.check_parameter(drop_list):
         return dataset
     columns_to_delete = [
         col for col in dataset.column_names if col in drop_list
@@ -825,8 +848,6 @@ def process_rows(batch):
 
 
 def tensor_length(tensor):
-    from torch import tensor
-
     nums = list(tensor.size())
 
     ret = 1

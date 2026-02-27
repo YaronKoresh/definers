@@ -55,6 +55,9 @@ from time import sleep, time
 from typing import Any, Optional, Union
 from urllib.parse import quote
 
+import numpy as _np
+import numpy as np
+
 from definers._constants import (
     MODELS,
     PROCESSORS,
@@ -68,6 +71,11 @@ from definers._constants import (
     language_codes,
     tasks,
 )
+from definers._audio import audio_preview
+from definers._cuda import device
+from definers._image import image_resolution
+from definers._logger import _init_logger
+from definers._text import language
 from definers._system import (
     add_path,
     big_number,
@@ -100,6 +108,8 @@ from definers._system import (
     wait,
     write,
 )
+
+logger = _init_logger()
 
 
 def answer(history: list):
@@ -584,11 +594,11 @@ def train(
         return None
 
     if _d.check_parameter(remote_src):
-        dataset = fetch_dataset(remote_src, url_type, revision)
+        dataset = _d.fetch_dataset(remote_src, url_type, revision)
     else:
-        dataset = files_to_dataset(features, labels)
+        dataset = _d.files_to_dataset(features, labels)
 
-    dataset = drop_columns(dataset, drop_list)
+    dataset = _d.drop_columns(dataset, drop_list)
 
     _d.log("Full dataset length", len(dataset))
 
@@ -599,8 +609,8 @@ def train(
             if "-" in part:
                 start_end = part.split("-")
                 loaders.append(
-                    to_loader(
-                        select_rows(
+                    _d.to_loader(
+                        _d.select_rows(
                             dataset,
                             int(start_end[0]) - 1,
                             int(start_end[-1]),
@@ -609,10 +619,10 @@ def train(
                 )
             else:
                 loaders.append(
-                    to_loader(select_rows(dataset, int(part) - 1, int(part)))
+                    _d.to_loader(_d.select_rows(dataset, int(part) - 1, int(part)))
                 )
     else:
-        loaders.append(to_loader(dataset))
+        loaders.append(_d.to_loader(dataset))
 
     if is_supv:
         for l, loader in enumerate(loaders):
@@ -620,15 +630,15 @@ def train(
             for i, b in enumerate(loader):
                 print(f"Batch {i + 1}: {b}")
 
-                X, y = split_columns(b, dataset_label_columns, is_batch=True)
+                X, y = _d.split_columns(b, dataset_label_columns, is_batch=True)
 
-                X = tokenize_and_pad(X, tokenizer)
-                y = tokenize_and_pad(y, tokenizer)
+                X = _d.tokenize_and_pad(X, tokenizer)
+                y = _d.tokenize_and_pad(y, tokenizer)
 
-                X = pad_sequences(X)
+                X = _d.pad_sequences(X)
 
-                X = numpy_to_cupy(X)
-                y = numpy_to_cupy(y)
+                X = _d.numpy_to_cupy(X)
+                y = _d.numpy_to_cupy(y)
 
                 print("Feeding model")
                 model = feed(model, X, y)
@@ -639,11 +649,11 @@ def train(
             for i, b in enumerate(loader):
                 print(f"Batch {i + 1}: {b}")
 
-                X = tokenize_and_pad(b, tokenizer)
+                X = _d.tokenize_and_pad(b, tokenizer)
 
-                X = pad_sequences(X)
+                X = _d.pad_sequences(X)
 
-                X = numpy_to_cupy(X)
+                X = _d.numpy_to_cupy(X)
 
                 print("Feeding model")
                 model = feed(model, X)

@@ -1,3 +1,4 @@
+import os
 import sys
 import unittest
 from unittest.mock import patch
@@ -29,10 +30,11 @@ class TestFindPackagePaths(unittest.TestCase):
     ):
         mock_getsitepackages.return_value = []
         package_name = "my_package"
-        fake_path = f"/fake/sys/path/{package_name}"
+        fake_base = "/fake/sys/path"
+        fake_path = os.path.join(fake_base, package_name)
 
         original_sys_path = sys.path[:]
-        sys.path.append("/fake/sys/path")
+        sys.path.append(fake_base)
 
         def exists_side_effect(path):
             return path == fake_path
@@ -55,8 +57,9 @@ class TestFindPackagePaths(unittest.TestCase):
         self, mock_isdir, mock_exists, mock_getsitepackages
     ):
         package_name = "my_package"
-        site_packages_path = f"/fake/site-packages/{package_name}"
-        mock_getsitepackages.return_value = ["/fake/site-packages"]
+        site_base = "/fake/site-packages"
+        site_packages_path = os.path.join(site_base, package_name)
+        mock_getsitepackages.return_value = [site_base]
 
         mock_exists.return_value = True
         mock_isdir.return_value = True
@@ -71,7 +74,8 @@ class TestFindPackagePaths(unittest.TestCase):
         self, mock_isdir, mock_exists, mock_getsitepackages
     ):
         package_name = "my_package"
-        dist_packages_path = f"/fake/dist-packages/{package_name}"
+        dist_base = "/fake/dist-packages"
+        dist_packages_path = os.path.join(dist_base, package_name)
         mock_getsitepackages.return_value = ["/fake/site-packages"]
 
         def exists_side_effect(path):
