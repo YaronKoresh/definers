@@ -67,9 +67,7 @@ class TestAnswer(unittest.TestCase):
             },
         ):
             definers.MODELS["answer"] = self.mock_model
-            history = [
-                {"role": "user", "content": {"path": "test.jpg"}}
-            ]
+            history = [{"role": "user", "content": {"path": "test.jpg"}}]
             answer(history)
             self.mock_image.open.assert_called_once_with("test.jpg")
             self.mock_model.generate.assert_called_once()
@@ -88,9 +86,7 @@ class TestAnswer(unittest.TestCase):
             },
         ):
             definers.MODELS["answer"] = self.mock_model
-            history = [
-                {"role": "user", "content": {"path": "test.wav"}}
-            ]
+            history = [{"role": "user", "content": {"path": "test.wav"}}]
             answer(history)
             self.mock_sf.read.assert_called_once_with("test.wav")
             self.mock_model.generate.assert_called_once()

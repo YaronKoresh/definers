@@ -5,7 +5,6 @@ from definers import runnable
 
 
 class TestRunnable(unittest.TestCase):
-
     @patch("definers.get_os_name", return_value="linux")
     @patch("definers.run")
     def test_runnable_linux_true(self, mock_run, mock_os):
@@ -52,9 +51,7 @@ class TestRunnable(unittest.TestCase):
     @patch("definers.run")
     def test_runnable_windows_with_args(self, mock_run, mock_os):
         mock_run.return_value = True
-        self.assertTrue(
-            runnable("powershell.exe -Command Get-ChildItem")
-        )
+        self.assertTrue(runnable("powershell.exe -Command Get-ChildItem"))
         mock_run.assert_called_once_with(
             "powershell.exe -Command 'powershell.exe' -WhatIf",
             silent=True,

@@ -8,13 +8,10 @@ from definers import pad_sequences
 
 
 class TestPadSequences(unittest.TestCase):
-
     def test_pad_sequences_with_numpy_arrays(self):
         X = [np.array([[1, 2], [3, 4]]), np.array([[5, 6]])]
 
-        with patch(
-            "definers.cupy_to_numpy", side_effect=lambda x: x
-        ) as mock_cupy_to_numpy:
+        with patch("definers.cupy_to_numpy", side_effect=lambda x: x):
             padded_X = pad_sequences(X)
 
             self.assertIsInstance(padded_X, torch.Tensor)
@@ -54,9 +51,7 @@ class TestPadSequences(unittest.TestCase):
     )
     @patch(
         "definers.cupy_to_numpy",
-        side_effect=lambda x: np.array(
-            [[[1.0], [2.0]], [[3.0]]], dtype=object
-        ),
+        side_effect=lambda x: np.array([[[1.0], [2.0]], [[3.0]]], dtype=object),
     )
     def test_pad_sequences_calls_dependencies(
         self, mock_cupy_to_numpy, mock_three_dim_numpy

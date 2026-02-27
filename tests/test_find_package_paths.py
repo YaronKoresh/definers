@@ -30,7 +30,7 @@ class TestFindPackagePaths(unittest.TestCase):
         mock_getsitepackages.return_value = []
         package_name = "my_package"
         fake_path = f"/fake/sys/path/{package_name}"
-        # Temporarily add to sys.path for the test
+
         original_sys_path = sys.path[:]
         sys.path.append("/fake/sys/path")
 
@@ -46,7 +46,6 @@ class TestFindPackagePaths(unittest.TestCase):
         paths = find_package_paths(package_name)
         self.assertIn(fake_path, paths)
 
-        # Clean up sys.path
         sys.path[:] = original_sys_path
 
     @patch("definers.site.getsitepackages")

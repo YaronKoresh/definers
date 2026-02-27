@@ -55,9 +55,7 @@ class TestFilesToDataset(unittest.TestCase):
         labels_paths = ["bad_label.npy"]
         result = files_to_dataset(features_paths, labels_paths)
         self.assertIsNone(result)
-        mock_print.assert_any_call(
-            "Error loading label file: bad_label.npy"
-        )
+        mock_print.assert_any_call("Error loading label file: bad_label.npy")
 
     def test_empty_input_lists(self):
         result = files_to_dataset([], [])
@@ -73,14 +71,10 @@ class TestFilesToDataset(unittest.TestCase):
         self.assertIsInstance(dataset, TensorDataset)
         self.assertEqual(len(dataset), 2)
 
-    @patch(
-        "torch.stack", side_effect=Exception("Tensor creation failed")
-    )
+    @patch("torch.stack", side_effect=Exception("Tensor creation failed"))
     @patch("definers.catch")
     @patch("definers.load_as_numpy", return_value=np.array([1]))
-    def test_tensor_creation_fails(
-        self, mock_load, mock_catch, mock_stack
-    ):
+    def test_tensor_creation_fails(self, mock_load, mock_catch, mock_stack):
         features_paths = ["feature.npy"]
         result = files_to_dataset(features_paths)
         self.assertIsNone(result)

@@ -6,7 +6,6 @@ from definers import install_ffmpeg
 
 
 class TestInstallFfmpeg(unittest.TestCase):
-
     @patch("definers.installed", return_value=True)
     def test_ffmpeg_already_installed(self, mock_installed):
         self.assertTrue(install_ffmpeg())

@@ -5,7 +5,6 @@ from definers import apt_install
 
 
 class TestAptInstall(unittest.TestCase):
-
     @patch("definers.run")
     @patch("definers.post_install")
     @patch("definers.pre_install")
@@ -20,7 +19,9 @@ class TestAptInstall(unittest.TestCase):
         audio_apt = "libportaudio2 libasound2-dev sox libsox-fmt-all praat ffmpeg libavcodec-extra libavif-dev"
         visual_apt = "libopenblas-dev libgflags-dev libgles2 libgtk-3-0 libgtk-4-1 libatk1.0-0 libatk-bridge2.0-0 libcups2 libxcomposite1 libxdamage1 libatspi2.0-0 libgstreamer1.0-0 gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-tools gstreamer1.0-gl"
 
-        expected_install_command = f"apt-get install -y { basic_apt } { audio_apt } { visual_apt }"
+        expected_install_command = (
+            f"apt-get install -y {basic_apt} {audio_apt} {visual_apt}"
+        )
 
         expected_run_calls = [
             call("apt-get update"),

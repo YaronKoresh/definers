@@ -7,7 +7,6 @@ from definers import check_parameter, simple_text, train
 
 
 class TestTrain(unittest.TestCase):
-
     def setUp(self):
         self.mock_tokenizer = MagicMock()
         self.mock_tokenizer.return_value = {
@@ -66,9 +65,7 @@ class TestTrain(unittest.TestCase):
             dataset_label_columns=["label_1"],
         )
 
-        mock_fetch_dataset.assert_called_with(
-            "remote_data", "parquet", None
-        )
+        mock_fetch_dataset.assert_called_with("remote_data", "parquet", None)
         mock_model_instance.fit.assert_called()
         mock_dump.assert_called()
         self.assertRegex(result, r"model_.*\.joblib")
@@ -85,17 +82,13 @@ class TestTrain(unittest.TestCase):
         mock_files_to_dataset,
     ):
         mock_init_tokenizer.return_value = self.mock_tokenizer
-        mock_files_to_dataset.return_value = [
-            {"feature": "local data"}
-        ]
+        mock_files_to_dataset.return_value = [{"feature": "local data"}]
         mock_model_instance = MagicMock()
         mock_hybrid_model.return_value = mock_model_instance
 
         result = train(features=["local_file.txt"])
 
-        mock_files_to_dataset.assert_called_with(
-            ["local_file.txt"], None
-        )
+        mock_files_to_dataset.assert_called_with(["local_file.txt"], None)
         mock_model_instance.fit.assert_called()
         mock_dump.assert_called()
         self.assertTrue(result.endswith(".joblib"))

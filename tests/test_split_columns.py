@@ -7,7 +7,6 @@ from definers import split_columns
 
 
 class TestSplitColumns(unittest.TestCase):
-
     @patch("definers.select_columns")
     @patch("definers.drop_columns")
     def test_split_columns_dataset_mode(
@@ -23,12 +22,8 @@ class TestSplitColumns(unittest.TestCase):
             mock_dataset, labels, is_batch=False
         )
 
-        mock_drop_columns.assert_called_once_with(
-            mock_dataset, labels
-        )
-        mock_select_columns.assert_called_once_with(
-            mock_dataset, labels
-        )
+        mock_drop_columns.assert_called_once_with(mock_dataset, labels)
+        mock_select_columns.assert_called_once_with(mock_dataset, labels)
         self.assertEqual(features, "features_dataset")
         self.assertEqual(labels_data, "labels_dataset")
 

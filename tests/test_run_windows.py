@@ -7,7 +7,6 @@ from definers import run_windows
 
 
 class TestRunWindows(unittest.TestCase):
-
     def setUp(self):
         if not sys.platform.startswith("win"):
             self.skipTest("Windows-specific tests")
@@ -44,9 +43,7 @@ class TestRunWindows(unittest.TestCase):
         mock_process.returncode = 0
         mock_popen.return_value = mock_process
 
-        result = run_windows(
-            ["echo line1", "echo line2"], silent=True
-        )
+        result = run_windows(["echo line1", "echo line2"], silent=True)
         self.assertEqual(result, ["line1", "line2"])
         mock_popen.assert_called_once_with(
             "echo line1 && echo line2",

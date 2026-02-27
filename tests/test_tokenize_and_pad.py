@@ -7,7 +7,6 @@ from definers import tokenize_and_pad
 
 
 class TestTokenizeAndPad(unittest.TestCase):
-
     def setUp(self):
         self.mock_tokenizer_instance = MagicMock()
         self.mock_tokenizer_instance.return_value = {
@@ -62,9 +61,7 @@ class TestTokenizeAndPad(unittest.TestCase):
 
     def test_returns_original_for_unsupported_type(self):
         rows = [1, 2, 3]
-        result = tokenize_and_pad(
-            rows, tokenizer=self.mock_tokenizer_instance
-        )
+        result = tokenize_and_pad(rows, tokenizer=self.mock_tokenizer_instance)
         self.assertEqual(result, [1, 2, 3])
         self.mock_tokenizer_instance.assert_not_called()
 
@@ -73,9 +70,7 @@ class TestTokenizeAndPad(unittest.TestCase):
     def test_initializes_tokenizer_if_not_provided(
         self, mock_init_tokenizer, mock_two_dim_numpy
     ):
-        mock_init_tokenizer.return_value = (
-            self.mock_tokenizer_instance
-        )
+        mock_init_tokenizer.return_value = self.mock_tokenizer_instance
         mock_two_dim_numpy.side_effect = lambda x: np.array(x)
 
         rows = ["some text"]
@@ -91,9 +86,7 @@ class TestTokenizeAndPad(unittest.TestCase):
 
     def test_handles_empty_input(self):
         rows = []
-        result = tokenize_and_pad(
-            rows, tokenizer=self.mock_tokenizer_instance
-        )
+        tokenize_and_pad(rows, tokenizer=self.mock_tokenizer_instance)
 
         self.mock_tokenizer_instance.assert_called_once_with(
             [], padding=True, truncation=True, return_tensors="pt"

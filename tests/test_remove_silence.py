@@ -6,7 +6,6 @@ from definers import remove_silence
 
 
 class TestRemoveSilence(unittest.TestCase):
-
     @patch("subprocess.run")
     def test_remove_silence_success(self, mock_run):
         input_file = "input.wav"
@@ -33,9 +32,7 @@ class TestRemoveSilence(unittest.TestCase):
     @patch("subprocess.run")
     @patch("definers.catch")
     def test_remove_silence_failure(self, mock_catch, mock_run):
-        mock_run.side_effect = subprocess.CalledProcessError(
-            1, "ffmpeg"
-        )
+        mock_run.side_effect = subprocess.CalledProcessError(1, "ffmpeg")
 
         input_file = "input.wav"
         output_file = "output.wav"
@@ -44,7 +41,6 @@ class TestRemoveSilence(unittest.TestCase):
 
         self.assertTrue(mock_catch.called)
 
-        # Check that the exception passed to catch is of the correct type
         args, kwargs = mock_catch.call_args
         self.assertIsInstance(args[0], subprocess.CalledProcessError)
 

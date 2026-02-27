@@ -32,14 +32,10 @@ class TestExtractAudioFeatures(unittest.TestCase):
             self.dummy_audio_data,
             self.sample_rate,
         )
-        mock_librosa.feature.mfcc.return_value = np.random.rand(
-            n_mfcc, 10
-        )
+        mock_librosa.feature.mfcc.return_value = np.random.rand(n_mfcc, 10)
 
         with patch.dict("sys.modules", {"librosa": mock_librosa}):
-            features = extract_audio_features(
-                self.audio_path, n_mfcc=n_mfcc
-            )
+            features = extract_audio_features(self.audio_path, n_mfcc=n_mfcc)
 
         self.assertIsNotNone(features)
         mock_librosa.feature.mfcc.assert_called_with(
@@ -78,9 +74,7 @@ class TestExtractAudioFeatures(unittest.TestCase):
             self.dummy_audio_data,
             self.sample_rate,
         )
-        mock_librosa.feature.mfcc.side_effect = Exception(
-            "Feature error"
-        )
+        mock_librosa.feature.mfcc.side_effect = Exception("Feature error")
 
         with patch.dict("sys.modules", {"librosa": mock_librosa}):
             features = extract_audio_features(self.audio_path)

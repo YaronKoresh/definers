@@ -6,7 +6,6 @@ from definers import cuda_version
 
 
 class TestCudaVersion(unittest.TestCase):
-
     @patch("subprocess.run")
     def test_cuda_version_present(self, mock_subprocess_run):
         mock_process = Mock()
@@ -36,9 +35,7 @@ class TestCudaVersion(unittest.TestCase):
     @patch("subprocess.run")
     def test_no_cuda_version_in_output(self, mock_subprocess_run):
         mock_process = Mock()
-        mock_process.stdout = (
-            "Some other command output without version info"
-        )
+        mock_process.stdout = "Some other command output without version info"
         mock_process.check_returncode.return_value = None
         mock_subprocess_run.return_value = mock_process
 

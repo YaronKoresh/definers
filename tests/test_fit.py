@@ -7,16 +7,13 @@ from definers import fit
 
 
 class TestFit(unittest.TestCase):
-
     def setUp(self):
         self.mock_model_supervised = MagicMock()
         self.mock_model_supervised.X_all = np.array([[1, 2], [3, 4]])
         self.mock_model_supervised.y_all = np.array([1, 2])
 
         self.mock_model_unsupervised = MagicMock()
-        self.mock_model_unsupervised.X_all = np.array(
-            [[5, 6], [7, 8]]
-        )
+        self.mock_model_unsupervised.X_all = np.array([[5, 6], [7, 8]])
         del self.mock_model_unsupervised.y_all
 
     @patch("definers.log")
@@ -34,12 +31,8 @@ class TestFit(unittest.TestCase):
     ):
         returned_model = fit(self.mock_model_supervised)
 
-        mock_log.assert_any_call(
-            "Features", self.mock_model_supervised.X_all
-        )
-        mock_log.assert_any_call(
-            "Labels", self.mock_model_supervised.y_all
-        )
+        mock_log.assert_any_call("Features", self.mock_model_supervised.X_all)
+        mock_log.assert_any_call("Labels", self.mock_model_supervised.y_all)
         mock_get_max_shapes.assert_called_once_with(
             self.mock_model_supervised.X_all,
             self.mock_model_supervised.y_all,
@@ -65,9 +58,7 @@ class TestFit(unittest.TestCase):
     ):
         returned_model = fit(self.mock_model_unsupervised)
 
-        mock_log.assert_any_call(
-            "Features", self.mock_model_unsupervised.X_all
-        )
+        mock_log.assert_any_call("Features", self.mock_model_unsupervised.X_all)
         mock_get_max_shapes.assert_called_once_with(
             self.mock_model_unsupervised.X_all
         )

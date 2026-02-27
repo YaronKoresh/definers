@@ -6,12 +6,9 @@ from definers import cwd
 
 
 class TestCwd(unittest.TestCase):
-
     @patch("definers.os.getcwd", return_value="/original/path")
     @patch("definers.os.chdir")
-    def test_cwd_with_directory_provided(
-        self, mock_chdir, mock_getcwd
-    ):
+    def test_cwd_with_directory_provided(self, mock_chdir, mock_getcwd):
         new_dir = "/new/test/dir"
 
         with cwd(new_dir):

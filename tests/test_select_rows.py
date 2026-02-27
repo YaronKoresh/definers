@@ -7,7 +7,6 @@ from definers import select_rows
 
 
 class TestSelectRows(unittest.TestCase):
-
     def setUp(self):
         self.data = {
             "col1": [1, 2, 3, 4, 5],

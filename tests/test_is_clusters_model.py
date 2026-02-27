@@ -5,7 +5,6 @@ from definers import is_clusters_model
 
 
 class TestIsClustersModel(unittest.TestCase):
-
     def test_returns_true_for_model_with_cluster_centers(self):
         mock_model = MagicMock()
         mock_model.cluster_centers_ = [[1, 2], [3, 4]]

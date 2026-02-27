@@ -4,7 +4,6 @@ from definers import lang_code_to_name
 
 
 class TestLangCodeToName(unittest.TestCase):
-
     def test_valid_common_code(self):
         self.assertEqual(lang_code_to_name("en"), "english")
 
@@ -15,9 +14,7 @@ class TestLangCodeToName(unittest.TestCase):
         self.assertEqual(lang_code_to_name("zu"), "zulu")
 
     def test_valid_code_with_hyphen(self):
-        self.assertEqual(
-            lang_code_to_name("zh-CN"), "chinese (simplified)"
-        )
+        self.assertEqual(lang_code_to_name("zh-CN"), "chinese (simplified)")
 
     def test_invalid_code(self):
         with self.assertRaises(KeyError):

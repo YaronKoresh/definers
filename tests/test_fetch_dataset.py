@@ -12,9 +12,7 @@ class TestFetchDataset(unittest.TestCase):
 
         dataset = fetch_dataset("some_dataset")
         self.assertEqual(dataset, mock_dataset)
-        mock_load_dataset.assert_called_once_with(
-            "some_dataset", split="train"
-        )
+        mock_load_dataset.assert_called_once_with("some_dataset", split="train")
 
     @patch("datasets.load_dataset")
     def test_successful_load_with_revision(self, mock_load_dataset):
@@ -57,9 +55,7 @@ class TestFetchDataset(unittest.TestCase):
             Exception("Initial error"),
             mock_dataset,
         ]
-        dataset = fetch_dataset(
-            "some_url", url_type="json", revision="v2"
-        )
+        dataset = fetch_dataset("some_url", url_type="json", revision="v2")
         self.assertEqual(dataset, mock_dataset)
         mock_load_dataset.assert_any_call(
             "json",

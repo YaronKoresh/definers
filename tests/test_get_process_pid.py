@@ -6,15 +6,12 @@ from definers import get_process_pid
 
 
 class TestGetProcessPid(unittest.TestCase):
-
     @patch("subprocess.check_output")
     def test_get_process_pid_success(self, mock_check_output):
         mock_check_output.return_value = b"12345\n"
         pid = get_process_pid("some_process")
         self.assertEqual(pid, 12345)
-        mock_check_output.assert_called_once_with(
-            ["pidof", "some_process"]
-        )
+        mock_check_output.assert_called_once_with(["pidof", "some_process"])
 
     @patch("subprocess.check_output")
     def test_get_process_pid_not_found(self, mock_check_output):

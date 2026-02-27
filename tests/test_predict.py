@@ -8,7 +8,6 @@ from definers import predict
 
 
 class TestPredict(unittest.TestCase):
-
     def setUp(self):
         self.model_path = "test_model.joblib"
         self.prediction_file_txt = "test_input.txt"
@@ -56,9 +55,7 @@ class TestPredict(unittest.TestCase):
 
         mock_features_to_text.return_value = "predicted text"
 
-        result_path = predict(
-            self.prediction_file_txt, self.model_path
-        )
+        result_path = predict(self.prediction_file_txt, self.model_path)
 
         self.assertEqual(result_path, "random.txt")
         mock_joblib_load.assert_called_with(self.model_path)
@@ -78,9 +75,7 @@ class TestPredict(unittest.TestCase):
         mock_joblib_load.return_value = self.mock_model
         mock_predict_audio.return_value = "predicted_audio.wav"
 
-        result_path = predict(
-            self.prediction_file_audio, self.model_path
-        )
+        result_path = predict(self.prediction_file_audio, self.model_path)
 
         self.assertEqual(result_path, "predicted_audio.wav")
         mock_joblib_load.assert_called_with(self.model_path)
@@ -120,23 +115,17 @@ class TestPredict(unittest.TestCase):
         mock_prediction_result = np.random.rand(100 * 100 * 3)
         self.mock_model.predict.return_value = mock_prediction_result
 
-        mock_reconstructed_image = np.zeros(
-            (50, 50, 3), dtype=np.uint8
-        )
+        mock_reconstructed_image = np.zeros((50, 50, 3), dtype=np.uint8)
         mock_features_to_image.return_value = mock_reconstructed_image
         mock_cupy_to_numpy.side_effect = lambda x: (
             x if isinstance(x, np.ndarray) else np.array(x)
         )
 
-        result_path = predict(
-            self.prediction_file_image, self.model_path
-        )
+        result_path = predict(self.prediction_file_image, self.model_path)
 
         self.assertEqual(result_path, "random_img.png")
         mock_load_numpy.assert_called_with(self.prediction_file_image)
-        self.mock_model.predict.assert_called_with(
-            mock_input_data.flatten()
-        )
+        self.mock_model.predict.assert_called_with(mock_input_data.flatten())
         mock_features_to_image.assert_called_once()
         mock_imwrite.assert_called_once()
 
@@ -147,9 +136,7 @@ class TestPredict(unittest.TestCase):
 
     @patch("definers.joblib.load")
     @patch("definers.load_as_numpy", return_value=None)
-    def test_predict_input_load_fail(
-        self, mock_load_numpy, mock_joblib_load
-    ):
+    def test_predict_input_load_fail(self, mock_load_numpy, mock_joblib_load):
         mock_joblib_load.return_value = self.mock_model
         result = predict("some_other_file.data", self.model_path)
         self.assertIsNone(result)

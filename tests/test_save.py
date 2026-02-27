@@ -7,7 +7,6 @@ from definers import read, save
 
 
 class TestSave(unittest.TestCase):
-
     def setUp(self):
         self.test_dir = tempfile.mkdtemp()
         self.file_path = os.path.join(self.test_dir, "test_file.txt")

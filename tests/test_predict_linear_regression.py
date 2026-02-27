@@ -10,12 +10,9 @@ from definers import LinearRegressionTorch, predict_linear_regression
 
 
 class TestPredictLinearRegression(unittest.TestCase):
-
     def setUp(self):
         self.test_dir = tempfile.mkdtemp()
-        self.model_path = os.path.join(
-            self.test_dir, "test_model.pth"
-        )
+        self.model_path = os.path.join(self.test_dir, "test_model.pth")
         self.input_dim = 2
 
         self.model = LinearRegressionTorch(self.input_dim)
@@ -26,41 +23,31 @@ class TestPredictLinearRegression(unittest.TestCase):
 
     def test_successful_prediction(self):
         X_new = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32)
-        predictions = predict_linear_regression(
-            X_new, self.model_path
-        )
+        predictions = predict_linear_regression(X_new, self.model_path)
 
         self.assertIsNotNone(predictions)
         self.assertIsInstance(predictions, np.ndarray)
         self.assertEqual(predictions.shape, (2,))
 
     def test_model_file_not_found(self):
-        non_existent_path = os.path.join(
-            self.test_dir, "non_existent.pth"
-        )
+        non_existent_path = os.path.join(self.test_dir, "non_existent.pth")
         X_new = np.array([[1.0, 2.0]], dtype=np.float32)
 
-        predictions = predict_linear_regression(
-            X_new, non_existent_path
-        )
+        predictions = predict_linear_regression(X_new, non_existent_path)
 
         self.assertIsNone(predictions)
 
     def test_input_dimension_mismatch(self):
         X_new = np.array([[1.0, 2.0, 3.0]], dtype=np.float32)
 
-        predictions = predict_linear_regression(
-            X_new, self.model_path
-        )
+        predictions = predict_linear_regression(X_new, self.model_path)
 
         self.assertIsNone(predictions)
 
     def test_empty_input(self):
         X_new = np.empty((0, self.input_dim), dtype=np.float32)
 
-        predictions = predict_linear_regression(
-            X_new, self.model_path
-        )
+        predictions = predict_linear_regression(X_new, self.model_path)
 
         self.assertIsNotNone(predictions)
         self.assertEqual(predictions.shape, (0,))
@@ -68,9 +55,7 @@ class TestPredictLinearRegression(unittest.TestCase):
     def test_single_prediction(self):
         X_new = np.array([[5.0, 6.0]], dtype=np.float32)
 
-        predictions = predict_linear_regression(
-            X_new, self.model_path
-        )
+        predictions = predict_linear_regression(X_new, self.model_path)
 
         self.assertIsNotNone(predictions)
         self.assertIsInstance(predictions, np.ndarray)

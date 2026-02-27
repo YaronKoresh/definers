@@ -8,15 +8,12 @@ from definers import MODELS, _negative_prompt_, upscale
 
 
 class TestUpscale(unittest.TestCase):
-
     def setUp(self):
         self.image_path = "dummy_image.png"
         Image.new("RGB", (100, 100)).save(self.image_path)
 
         self.mock_upscaler = MagicMock()
-        self.mock_upscaler.upscale.return_value = Image.new(
-            "RGB", (200, 200)
-        )
+        self.mock_upscaler.upscale.return_value = Image.new("RGB", (200, 200))
         MODELS["upscale"] = self.mock_upscaler
 
     def tearDown(self):

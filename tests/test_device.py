@@ -5,11 +5,8 @@ from definers import device
 
 
 class TestDevice(unittest.TestCase):
-
     @patch("accelerate.Accelerator")
-    def test_device_returns_cuda_when_available(
-        self, mock_accelerator
-    ):
+    def test_device_returns_cuda_when_available(self, mock_accelerator):
         mock_instance = MagicMock()
         mock_instance.device = "cuda"
         mock_accelerator.return_value = mock_instance
@@ -20,9 +17,7 @@ class TestDevice(unittest.TestCase):
         mock_accelerator.assert_called_once()
 
     @patch("accelerate.Accelerator")
-    def test_device_returns_cpu_when_cuda_not_available(
-        self, mock_accelerator
-    ):
+    def test_device_returns_cpu_when_cuda_not_available(self, mock_accelerator):
         mock_instance = MagicMock()
         mock_instance.device = "cpu"
         mock_accelerator.return_value = mock_instance

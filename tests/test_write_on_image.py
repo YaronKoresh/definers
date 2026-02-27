@@ -7,7 +7,6 @@ from definers import write_on_image
 
 
 class TestWriteOnImage(unittest.TestCase):
-
     @patch("definers.save_image")
     @patch("definers.google_drive_download")
     @patch("definers.read")
@@ -59,9 +58,7 @@ class TestWriteOnImage(unittest.TestCase):
 
         self.assertEqual(mock_draw_instance.text.call_count, 3)
 
-        args_list = [
-            c[0] for c in mock_draw_instance.text.call_args_list
-        ]
+        args_list = [c[0] for c in mock_draw_instance.text.call_args_list]
         self.assertTrue(any(top in arg for arg in args_list))
         self.assertTrue(any(middle in arg for arg in args_list))
         self.assertTrue(any(bottom in arg for arg in args_list))
@@ -98,16 +95,12 @@ class TestWriteOnImage(unittest.TestCase):
         top = "Hello"
         bottom = "World"
 
-        write_on_image(
-            "another_input.jpg", top_title=top, bottom_title=bottom
-        )
+        write_on_image("another_input.jpg", top_title=top, bottom_title=bottom)
 
         mock_download.assert_not_called()
         self.assertEqual(mock_draw_instance.text.call_count, 2)
 
-        args_list = [
-            c[0] for c in mock_draw_instance.text.call_args_list
-        ]
+        args_list = [c[0] for c in mock_draw_instance.text.call_args_list]
         self.assertTrue(any(top in arg for arg in args_list))
         self.assertTrue(any(bottom in arg for arg in args_list))
 
@@ -168,9 +161,7 @@ class TestWriteOnImage(unittest.TestCase):
         write_on_image("multiline.gif", middle_title=middle_text)
 
         mock_draw_instance.text.assert_called_once()
-        self.assertIn(
-            middle_text, mock_draw_instance.text.call_args[0]
-        )
+        self.assertIn(middle_text, mock_draw_instance.text.call_args[0])
 
 
 if __name__ == "__main__":

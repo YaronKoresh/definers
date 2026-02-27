@@ -7,13 +7,10 @@ from definers import load
 
 
 class TestLoad(unittest.TestCase):
-
     def setUp(self):
         self.test_dir = tempfile.mkdtemp()
         self.file_path = os.path.join(self.test_dir, "test_file.txt")
-        self.binary_file_path = os.path.join(
-            self.test_dir, "test_binary.dat"
-        )
+        self.binary_file_path = os.path.join(self.test_dir, "test_binary.dat")
         self.dir_path = os.path.join(self.test_dir, "test_dir")
         os.makedirs(self.dir_path)
 
@@ -48,13 +45,11 @@ class TestLoad(unittest.TestCase):
         self.assertEqual(len(dir_content), 2)
 
     def test_load_non_existent_file(self):
-        non_existent_path = os.path.join(
-            self.test_dir, "non_existent.txt"
-        )
+        non_existent_path = os.path.join(self.test_dir, "non_existent.txt")
         self.assertIsNone(load(non_existent_path))
 
     def test_load_empty_file(self):
-        with open(self.file_path, "w") as f:
+        with open(self.file_path, "w"):
             pass
         self.assertEqual(load(self.file_path), "")
 

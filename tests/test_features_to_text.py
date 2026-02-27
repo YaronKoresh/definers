@@ -12,9 +12,7 @@ class TestFeaturesToText(unittest.TestCase):
         self.texts = ["hello world", "python is fun"]
         self.vectorizer = TfidfVectorizer()
         self.vectorizer.fit(self.texts)
-        self.features = self.vectorizer.transform(
-            self.texts
-        ).toarray()[0]
+        self.features = self.vectorizer.transform(self.texts).toarray()[0]
 
     def test_successful_reconstruction(self):
         reconstructed_text = features_to_text(

@@ -8,12 +8,9 @@ from definers import read_as_numpy
 
 
 class TestReadAsNumpy(unittest.TestCase):
-
     def setUp(self):
         self.test_dir = tempfile.mkdtemp()
-        self.dummy_path = os.path.join(
-            self.test_dir, "dummy_file.txt"
-        )
+        self.dummy_path = os.path.join(self.test_dir, "dummy_file.txt")
         with open(self.dummy_path, "w") as f:
             f.write("data")
 
@@ -21,9 +18,7 @@ class TestReadAsNumpy(unittest.TestCase):
         shutil.rmtree(self.test_dir)
 
     @patch("definers.load_as_numpy")
-    def test_read_as_numpy_calls_load_as_numpy(
-        self, mock_load_as_numpy
-    ):
+    def test_read_as_numpy_calls_load_as_numpy(self, mock_load_as_numpy):
         expected_result = "mocked_numpy_array"
         mock_load_as_numpy.return_value = expected_result
 

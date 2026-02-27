@@ -1,8 +1,0 @@
-services:
-  translate:
-    container_name: translate
-    image: yaronkoresh/translate:latest
-    build:
-      context: .
-      dockerfile: translate.docker
-      no_cache: true

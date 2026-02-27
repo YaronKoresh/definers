@@ -1,0 +1,29 @@
+name: PR Size Check
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  check-size:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Warn if Huge
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const additions = context.payload.pull_request.additions;
+            const deletions = context.payload.pull_request.deletions;
+            const total = additions + deletions;
+
+            if (total > 500) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: `⚠️ **Large PR Warning**\n\nThis PR changes **${total} lines**. Consider breaking it into smaller PRs for easier review.`
+              });
+            }

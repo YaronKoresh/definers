@@ -11,12 +11,9 @@ from definers import extract_image_features
 
 
 class TestExtractImageFeatures(unittest.TestCase):
-
     def setUp(self):
         self.test_dir = tempfile.mkdtemp()
-        self.image_path = os.path.join(
-            self.test_dir, "test_image.png"
-        )
+        self.image_path = os.path.join(self.test_dir, "test_image.png")
         self.width, self.height = 64, 48
         self.image = np.random.randint(
             0, 256, (self.height, self.width, 3), dtype=np.uint8
@@ -30,9 +27,7 @@ class TestExtractImageFeatures(unittest.TestCase):
         features = extract_image_features(self.image_path)
         self.assertIsNotNone(features)
         self.assertIsInstance(features, np.ndarray)
-        expected_feature_length = (256 * 3) + (
-            self.width * self.height
-        ) * 2
+        expected_feature_length = (256 * 3) + (self.width * self.height) * 2
         self.assertEqual(features.shape[0], expected_feature_length)
 
     def test_invalid_image_path(self):

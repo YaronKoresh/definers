@@ -6,7 +6,6 @@ from definers import create_vectorizer
 
 
 class TestCreateVectorizer(unittest.TestCase):
-
     def test_create_vectorizer_basic(self):
         texts = ["hello world", "this is a test"]
         vectorizer = create_vectorizer(texts)

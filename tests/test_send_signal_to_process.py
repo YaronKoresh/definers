@@ -7,7 +7,6 @@ from definers import send_signal_to_process
 
 
 class TestSendSignalToProcess(unittest.TestCase):
-
     @patch("os.kill")
     def test_send_signal_successfully(self, mock_os_kill):
         pid = 12345
@@ -29,9 +28,7 @@ class TestSendSignalToProcess(unittest.TestCase):
         self.assertFalse(result)
         mock_os_kill.assert_called_once_with(pid, sig)
         mock_print.assert_called_once()
-        self.assertIn(
-            "Error sending signal", mock_print.call_args[0][0]
-        )
+        self.assertIn("Error sending signal", mock_print.call_args[0][0])
 
     @patch("os.kill")
     def test_send_signal_with_zero_pid(self, mock_os_kill):

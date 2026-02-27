@@ -7,7 +7,6 @@ from definers import run_linux
 
 
 class TestRunLinux(unittest.TestCase):
-
     @patch("definers.write")
     @patch("definers.permit")
     @patch("definers.delete")
@@ -39,9 +38,7 @@ class TestRunLinux(unittest.TestCase):
 
         mock_select.return_value = ([10], [], [])
 
-        result = run_linux(
-            "echo 'line 1' && echo 'line 2'", silent=True
-        )
+        result = run_linux("echo 'line 1' && echo 'line 2'", silent=True)
 
         self.assertEqual(result, ["line 1", "line 2"])
         mock_write.assert_called_once()

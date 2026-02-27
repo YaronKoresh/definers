@@ -1,0 +1,59 @@
+name: Enforce Semantic Title
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  check-title:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify Title Keywords
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const title = context.payload.pull_request.title.toLowerCase();
+
+            // Exact same keywords as Autobot to ensure consistency
+            const patterns = {
+              'Bug': ['fix', 'fixed', 'fixing', 'bug', 'bugs', 'hotfix', 'patch', 'issue', 'issues', 'error', 'errors', 'defect', 'crash', 'crashes', 'fail', 'fails', 'broken'],
+              'Feature': ['feat', 'feature', 'features', 'add', 'added', 'adding', 'new', 'improve', 'improved', 'improving', 'implement', 'expose'],
+              'Docs': ['docs', 'doc', 'document', 'documentation', 'readme', 'license', 'typo', 'typos', 'grammar', 'copy', 'edit', 'editor'],
+              'Breaking': ['breaking', 'major', 'rewrite', 'overhaul', 'migration', 'drop support', 'remove api', 'change api', 'api change'],
+              'UI': ['ui', 'ux', 'style', 'styles', 'css', 'scss', 'design', 'theme', 'dark mode', 'responsive', 'layout', 'asset', 'font'],
+              'Perf': ['perf', 'performance', 'speed', 'fast', 'slow', 'optimize', 'optimization', 'memory', 'leak', 'compress'],
+              'Security': ['sec', 'security', 'secure', 'insecure', 'vuln', 'vulnerability', 'cve', 'auth', 'authorize', 'token', 'secret'],
+              'Refactor': ['refactor', 'clean', 'cleanup', 'structure', 'reorganize', 'simplify', 'format', 'lint', 'prettier'],
+              'Test': ['test', 'tests', 'testing', 'spec', 'specs', 'jest', 'mocha', 'cypress', 'e2e', 'unit', 'coverage'],
+              'CI': ['ci', 'cd', 'workflow', 'pipeline', 'action', 'actions', 'deploy', 'release', 'bot'],
+              'Deps': ['deps', 'dependency', 'dependencies', 'bump', 'upgrade', 'downgrade', 'npm', 'yarn', 'package'],
+              'DB': ['db', 'database', 'sql', 'mysql', 'postgres', 'mongo', 'schema', 'migration', 'query', 'model']
+            };
+
+            const allKeywords = Object.values(patterns).flat();
+            const regex = new RegExp(`\\b(${allKeywords.join('|')})\\b`, 'i');
+
+            if (!regex.test(title)) {
+              const categoryList = Object.keys(patterns).map(cat => `* **${cat}**`).join('\n');
+
+              const errMsg = `
+              ### ⚠️ Title is too vague for Autobot
+              Your PR title **"${context.payload.pull_request.title}"** does not contain any keywords that trigger automation.
+
+              **Please include at least one keyword from these categories in your title:**
+              ${categoryList}
+
+              *Example: "Optimized database queries" (Perf/DB) or "Fixed login crash" (Bug)*
+              `;
+
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: errMsg
+              });
+              core.setFailed("Title must contain a meaningful keyword for automation.");
+            }

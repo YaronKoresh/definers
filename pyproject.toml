@@ -1,12 +1,12 @@
 [build-system]
-requires = ["setuptools>=61.0.0,<81", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
 name = "definers"
 version = "0.1.0"
 authors = [
-  { name = "Yaron Koresh", email = "aharonkoresh1@gmail.com" },
+  { name = "Yaron Koresh" },
 ]
 description = "A comprehensive Python toolkit for AI, data processing, media manipulation, and system utilities."
 readme = "README.md"
@@ -18,77 +18,102 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "accelerate>=1.10.0",
-    "beautifulsoup4>=4.12.0",
-    "cuda-python>=12.0.0",
-    "datasets>=2.14.0",
-    "demucs>=4.0.0",
-    "diffusers>=0.35.0",
-    "faiss-cpu>=1.7.4",
-    "fastapi>=0.100.0",
-    "googledrivedownloader>=0.4",
-    "gradio>=5.0.0",
-    "gradio-client>=1.0.0",
-    "huggingface-hub>=0.20.0",
-    "hydra-core>=1.3.0",
-    "imageio>=2.30.0",
-    "imageio-ffmpeg>=0.4.0",
-    "joblib>=1.3.0",
-    "langdetect>=1.0.9",
-    "librosa>=0.10.0",
-    "lxml[html_clean]>=5.2.0",
-    "matplotlib>=3.7.0",
-    "moviepy>=1.0.3",
-    "nltk>=3.8.0",
-    "numba>=0.57.0",
     "numpy>=1.26.0",
-    "onnx>=1.14.0",
-    "openai-whisper>=20231117",
-    "opencv-contrib-python-headless>=4.8.0",
+    "requests>=2.31.0",
+    "joblib>=1.3.0",
     "pandas>=2.0.0",
     "pillow>=10.0.0",
-    "pillow-heif>=0.13.0",
-    "playwright>=1.40.0",
-    "pydub>=0.25.1",
-    "pynvml>=11.4.0",
-    "requests>=2.31.0",
-    "sacremoses>=0.0.53",
-    "safetensors>=0.4.0",
-    "scikit-image>=0.21.0",
-    "scikit-learn>=1.3.0",
     "scipy>=1.11.0",
-    "sentencepiece>=0.1.99",
-    "soundfile>=0.12.0",
-    "sox>=1.4.1",
-    "tensorflow>=2.15.0",
-    "tf-keras>=2.15.0",
-    "tokenizers>=0.15.0",
-    "torchvision>=0.16.0",
-    "torchaudio>=2.1.0",
-    "transformers>=4.36.0",
-    "basic-pitch @ git+https://github.com/YaronKoresh/basic-pitch.git",
-    "chatterbox-tts @ git+https://github.com/YaronKoresh/chatterbox.git",
-    "fairseq @ git+https://github.com/YaronKoresh/fairseq.git",
-    "faiss @ https://github.com/YaronKoresh/faiss/releases/download/3b14dad/faiss-1.12.0-py3-none-manylinux_2_35_x86_64.whl ; platform_system == 'Linux' and platform_machine == 'x86_64'",
-    "madmom @ git+https://github.com/CPJKU/madmom@0551aa8f48d71a367d92b5d3a347a0cf7cd97cc9",
-    "refiners @ git+https://github.com/finegrain-ai/refiners@d288e94fa8eed1386bd28cd0d5ceb8109c3ff398",
-    "stable-ts @ git+https://github.com/jianfch/stable-ts@d89c6250fd4745115b44b83a8a3f7ebfd0e2a1f1",
-    "stopes[inference-cpu] @ git+https://github.com/YaronKoresh/stopes.git",
 ]
 
 [project.urls]
 Homepage = "https://github.com/YaronKoresh/definers"
 Repository = "https://github.com/YaronKoresh/definers"
+Issues = "https://github.com/YaronKoresh/definers/issues"
 
 [project.optional-dependencies]
+audio = [
+    "demucs>=4.0.0",
+    "librosa>=0.10.0",
+    "numba>=0.57.0",
+    "openai-whisper>=20231117",
+    "pydub>=0.25.1",
+    "soundfile>=0.12.0",
+    "sox>=1.4.1",
+    "torchaudio>=2.1.0",
+    "basic-pitch @ git+https://github.com/YaronKoresh/basic-pitch.git",
+    "chatterbox-tts @ git+https://github.com/YaronKoresh/chatterbox.git",
+    "madmom @ git+https://github.com/CPJKU/madmom@0551aa8f48d71a367d92b5d3a347a0cf7cd97cc9",
+    "stable-ts @ git+https://github.com/jianfch/stable-ts@d89c6250fd4745115b44b83a8a3f7ebfd0e2a1f1",
+]
+image = [
+    "diffusers>=0.35.0",
+    "imageio>=2.30.0",
+    "imageio-ffmpeg>=0.4.0",
+    "opencv-contrib-python-headless>=4.8.0",
+    "pillow-heif>=0.13.0",
+    "scikit-image>=0.21.0",
+    "refiners @ git+https://github.com/finegrain-ai/refiners@d288e94fa8eed1386bd28cd0d5ceb8109c3ff398",
+]
+video = [
+    "imageio>=2.30.0",
+    "imageio-ffmpeg>=0.4.0",
+    "moviepy>=1.0.3",
+    "opencv-contrib-python-headless>=4.8.0",
+    "scikit-image>=0.21.0",
+]
+ml = [
+    "accelerate>=1.10.0",
+    "datasets>=2.14.0",
+    "faiss-cpu>=1.7.4",
+    "huggingface-hub>=0.20.0",
+    "hydra-core>=1.3.0",
+    "onnx>=1.14.0",
+    "safetensors>=0.4.0",
+    "scikit-learn>=1.3.0",
+    "sentencepiece>=0.1.99",
+    "tensorflow>=2.15.0",
+    "tf-keras>=2.15.0",
+    "tokenizers>=0.15.0",
+    "torchvision>=0.16.0",
+    "transformers>=4.36.0",
+    "fairseq @ git+https://github.com/YaronKoresh/fairseq.git",
+    "faiss @ https://github.com/YaronKoresh/faiss/releases/download/3b14dad/faiss-1.12.0-py3-none-manylinux_2_35_x86_64.whl ; platform_system == 'Linux' and platform_machine == 'x86_64'",
+]
+nlp = [
+    "langdetect>=1.0.9",
+    "nltk>=3.8.0",
+    "sacremoses>=0.0.53",
+    "stopes[inference-cpu] @ git+https://github.com/YaronKoresh/stopes.git",
+]
+web = [
+    "beautifulsoup4>=4.12.0",
+    "fastapi>=0.100.0",
+    "googledrivedownloader>=0.4",
+    "gradio>=5.0.0",
+    "gradio-client>=1.0.0",
+    "lxml[html_clean]>=5.2.0",
+    "matplotlib>=3.7.0",
+    "playwright>=1.40.0",
+]
+gpu = [
+    "cuda-python>=12.0.0",
+    "pynvml>=11.4.0",
+]
+all = [
+    "definers[audio,image,video,ml,nlp,web,gpu]",
+]
 dev = [
-    "autoflake>=2.3.0,<2.4.0",
-    "pytest>=8.4.0,<8.5.0",
-    "pytest-cov>=6.3.0,<6.4.0",
-    "black>=25.1.0,<25.2.0",
-    "isort>=6.0.0,<6.1.0",
-    "hypothesis>=6.138.0,<6.139.0",
+    "pytest>=7.4.0",
+    "pytest-asyncio",
+    "pytest-cov>=4.1.0",
+    "pytest-mock>=3.12.0",
+    "hypothesis>=6.90.0",
     "expecttest>=0.3.0,<0.4.0",
+    "ruff",
+    "poethepoet",
+    "pre-commit",
+    "build"
 ]
 cuda = [
     "distributed-ucxx-cu12==0.39.1",
@@ -120,36 +145,106 @@ cuda = [
     "nvidia-nvtx-cu12>=12.8.0,<12.9.0",
 ]
 
-[tool.autoflake]
-check = true
+[tool.hatch.build.targets.wheel]
+packages = ["src/definers"]
 
-[tool.isort]
-profile = "black"
+[tool.hatch.metadata]
+allow-direct-references = true
 
-[tool.black]
-line-length = 70
-target-version = ["py310", "py311"]
-exclude = '''
-/(
-    \.eggs
-  | \.git
-  | \.hg
-  | \.mypy_cache
-  | \.tox
-  | \.venv
-  | _build
-  | buck-out
-  | build
-  | dist
-)/
-'''
-extend-exclude = '''
-/(
-  | \.git
-  | \__pycache__
-  | build
-  | dist
-  | \.venv
-)/
-'''
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
+# --- RUFF CONFIGURATION ---
+[tool.ruff]
+target-version = "py310"
+line-length = 80
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "UP"]
+ignore = [
+    "E501",
+    "E402",
+    "E722",
+    "E741",
+    "F401"
+]
+
+[tool.ruff.lint.extend-per-file-ignores]
+"tests/**/*" = ["E731"]
+
+[tool.ruff.lint.isort]
+force-single-line = false
+combine-as-imports = true
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+# --- POE TASKS ---
+[tool.poe.tasks]
+# Quality Assurance
+test = "pytest tests/"
+compile = { cmd = "python -m compileall -q ." }
+pre-commit = { cmd = "pre-commit run --all-files", env = { SKIP = "no-commit-to-branch" } }
+clean = { cmd = '''python -Bc "
+import pathlib, shutil;
+targets = {
+        'directories': {
+            '__pycache__', '.pytest_cache', '.ruff_cache', '.mypy_cache',
+            '.tox', '.nox', '.cache', '.ipynb_checkpoints', 'htmlcov',
+            'build', 'dist', '.eggs', '*.egg-info', '.coverage.reports'
+        },
+        'files': {
+            '.coverage', '.coverage.*', '.sqlite', 'nosetests.xml',
+            'coverage.xml', '*.pyc', '*.pyo', '*.pyd', '.DS_Store'
+        }
+};
+for p in pathlib.Path('.').rglob('*'):
+        if p.name in targets['directories'] or any(p.match(pat) for pat in targets['directories']):
+            if p.is_dir(): shutil.rmtree(p, ignore_errors=True)
+        elif p.name in targets['files'] or any(p.match(pat) for pat in targets['files']):
+            if p.is_file(): p.unlink(missing_ok=True)
+"''' }
+strip-comments = { cmd = '''python -c "
+import tokenize
+import io
+import pathlib
+
+def strip_comments_and_format(file_path):
+    try:
+        with open(file_path, 'r', encoding='utf-8', newline='') as f:
+            source = f.read()
+
+        tokens = tokenize.generate_tokens(io.StringIO(source).readline)
+        result = []
+        last_lineno = -1
+        last_col = 0
+
+        for toktype, tokval, start, end, line in tokens:
+            if toktype == tokenize.COMMENT:
+                continue
+
+            if toktype == tokenize.NL or toktype == tokenize.NEWLINE:
+                pass
+
+            result.append((toktype, tokval, start, end, line))
+        cleaned = tokenize.untokenize(result)
+
+        with open(file_path, 'w', encoding='utf-8', newline='') as f:
+            f.write(cleaned)
+
+        print(f'Stripped and cleaned: {file_path}')
+
+    except Exception as e:
+        print(f'Failed to process {file_path}: {e}')
+
+for p in pathlib.Path('.').rglob('*.py'):
+    strip_comments_and_format(p)
+"''' }
+check = ["clean", "compile", "strip-comments", "pre-commit", "test", "clean"]
+
+# Build Pipeline
+build = { cmd = "python -m build" }
+
+# Setup Task
+hook = { cmd = "pre-commit install" }

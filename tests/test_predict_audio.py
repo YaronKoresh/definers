@@ -10,7 +10,6 @@ from definers import predict_audio
 
 
 class TestPredictAudio(unittest.TestCase):
-
     def setUp(self):
         self.test_dir = tempfile.mkdtemp()
         self.audio_path = os.path.join(self.test_dir, "test.wav")
@@ -42,9 +41,7 @@ class TestPredictAudio(unittest.TestCase):
         )
 
         self.mock_timeline = self.patcher_timeline.start()
-        self.mock_features_to_audio = (
-            self.patcher_features_to_audio.start()
-        )
+        self.mock_features_to_audio = self.patcher_features_to_audio.start()
         self.mock_tmp = self.patcher_tmp.start()
         self.mock_is_clusters = self.patcher_is_clusters.start()
         self.mock_get_cluster = self.patcher_get_cluster.start()
@@ -81,9 +78,7 @@ class TestPredictAudio(unittest.TestCase):
         self.mock_features_to_audio.assert_called()
 
     def test_audio_file_not_found(self):
-        result = predict_audio(
-            self.mock_model, "non_existent_file.wav"
-        )
+        result = predict_audio(self.mock_model, "non_existent_file.wav")
         self.assertIsNone(result)
 
     def test_silent_audio_file(self):
@@ -105,9 +100,7 @@ class TestPredictAudio(unittest.TestCase):
         self.assertTrue(np.all(output_data == 0))
 
     def test_model_prediction_raises_exception(self):
-        self.mock_model.predict.side_effect = Exception(
-            "Prediction failed"
-        )
+        self.mock_model.predict.side_effect = Exception("Prediction failed")
         result = predict_audio(self.mock_model, self.audio_path)
         self.assertIsNone(result)
 

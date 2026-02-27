@@ -8,7 +8,6 @@ from definers import thread, wait
 
 
 class TestWait(unittest.TestCase):
-
     def test_wait_joins_single_thread(self):
         mock_thread = Mock(spec=threading.Thread)
         wait(mock_thread)
@@ -54,9 +53,7 @@ class TestWait(unittest.TestCase):
         try:
             wait()
         except Exception as e:
-            self.fail(
-                f"wait() raised an exception with no arguments: {e}"
-            )
+            self.fail(f"wait() raised an exception with no arguments: {e}")
 
 
 if __name__ == "__main__":

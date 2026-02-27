@@ -5,7 +5,6 @@ from definers import select_columns
 
 
 class TestSelectColumns(unittest.TestCase):
-
     def setUp(self):
         self.mock_dataset = MagicMock()
         self.mock_dataset.column_names = [
@@ -34,9 +33,7 @@ class TestSelectColumns(unittest.TestCase):
 
         result = select_columns(self.mock_dataset, cols_to_select)
 
-        mock_drop_columns.assert_called_once_with(
-            self.mock_dataset, []
-        )
+        mock_drop_columns.assert_called_once_with(self.mock_dataset, [])
         self.assertEqual(result, self.mock_dataset)
 
     @patch("definers.drop_columns")
@@ -44,9 +41,7 @@ class TestSelectColumns(unittest.TestCase):
         test_cases = [None, [], [""]]
         for cols_to_select in test_cases:
             with self.subTest(cols_to_select=cols_to_select):
-                result = select_columns(
-                    self.mock_dataset, cols_to_select
-                )
+                result = select_columns(self.mock_dataset, cols_to_select)
 
                 mock_drop_columns.assert_not_called()
                 self.assertIs(result, self.mock_dataset)

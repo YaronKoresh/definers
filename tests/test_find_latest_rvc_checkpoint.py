@@ -5,13 +5,10 @@ from definers import find_latest_rvc_checkpoint
 
 
 class TestFindLatestRvcCheckpoint(unittest.TestCase):
-
     @patch("os.path.isdir", return_value=False)
     @patch("definers.logger")
     def test_folder_not_found(self, mock_logger, mock_isdir):
-        result = find_latest_rvc_checkpoint(
-            "/non/existent/path", "my_model"
-        )
+        result = find_latest_rvc_checkpoint("/non/existent/path", "my_model")
         self.assertIsNone(result)
         mock_isdir.assert_called_once_with("/non/existent/path")
         mock_logger.error.assert_called_once_with(
@@ -75,9 +72,7 @@ class TestFindLatestRvcCheckpoint(unittest.TestCase):
     @patch("os.path.isdir", return_value=True)
     @patch("os.listdir", return_value=[])
     @patch("definers.logger")
-    def test_empty_directory(
-        self, mock_logger, mock_listdir, mock_isdir
-    ):
+    def test_empty_directory(self, mock_logger, mock_listdir, mock_isdir):
         result = find_latest_rvc_checkpoint("/fake/path", "my_model")
         self.assertIsNone(result)
         mock_logger.warning.assert_called_once_with(

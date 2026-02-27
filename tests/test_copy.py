@@ -47,7 +47,7 @@ class TestCopy(unittest.TestCase):
         dst = "/test/dst_dir"
         resolved_path = "/test/resolved_dir"
         mock_resolve.return_value = resolved_path
-        # When checking the resolved path of the symlink, it is a directory
+
         mock_isdir.side_effect = lambda path: path in [resolved_path]
 
         copy(src, dst)

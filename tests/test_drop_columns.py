@@ -5,7 +5,6 @@ from definers import drop_columns
 
 
 class TestDropColumns(unittest.TestCase):
-
     def setUp(self):
         self.mock_dataset = MagicMock()
         self.mock_dataset.column_names = [

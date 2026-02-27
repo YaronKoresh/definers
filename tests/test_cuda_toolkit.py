@@ -5,7 +5,6 @@ from definers import cuda_toolkit
 
 
 class TestCudaToolkit(unittest.TestCase):
-
     @patch("definers.run")
     @patch("definers.permit")
     @patch("definers.directory")
@@ -30,9 +29,7 @@ class TestCudaToolkit(unittest.TestCase):
             call("/usr/share/keyrings/cuda-archive-keyring.gpg"),
             call("/etc/apt/sources.list.d/CUDA.list"),
         ]
-        mock_permit.assert_has_calls(
-            expected_permit_calls, any_order=True
-        )
+        mock_permit.assert_has_calls(expected_permit_calls, any_order=True)
 
         expected_run_calls = [
             call("apt-get update"),

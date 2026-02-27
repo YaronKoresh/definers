@@ -1,0 +1,136 @@
+name: Smart Auto-Linker
+
+on:
+  pull_request:
+    types: [opened, edited]
+
+permissions:
+  issues: read
+  pull-requests: write
+
+jobs:
+  link-relationships:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Analyze and Link
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const pr = context.payload.pull_request;
+            const branch = pr.head.ref;
+            const title = pr.title.toLowerCase();
+            const body = pr.body ? pr.body.toLowerCase() : "";
+
+            const unique = (arr) => [...new Set(arr)];
+            const explicitCloses = [];
+            const strongConnects = [];
+            const relatedPrs = [];
+
+            const branchIds = branch.match(/(?:^|\/|[a-z]-)(\d+)/g);
+            if (branchIds) {
+              branchIds.forEach(id => {
+                const num = id.replace(/\D/g, '');
+                if (num) explicitCloses.push(num);
+              });
+            }
+
+            const stopWords = [
+              'fix', 'fixed', 'fixes', 'fixing', 'bug', 'bugs', 'issue', 'issues',
+              'feat', 'feature', 'features', 'add', 'added', 'adding', 'new',
+              'chore', 'docs', 'doc', 'documentation', 'style', 'refactor', 'perf',
+              'test', 'tests', 'update', 'updated', 'updating', 'upgrade',
+              'change', 'changed', 'changing', 'improve', 'improved', 'improving',
+              'optimize', 'optimized', 'optimizing', 'bump', 'deploy', 'release',
+              'merge', 'revert', 'build', 'ci', 'cd', 'remove', 'removed', 'delete',
+              'and', 'or', 'for', 'to', 'in', 'at', 'on', 'with', 'by', 'the', 'a', 'an',
+              'is', 'it', 'as', 'be', 'of', 'that', 'this', 'from', 'which'
+            ];
+
+            const tokenizer = (text) => text.replace(/[^\w\s-]/g, '').split(/\s+/).filter(w => !stopWords.includes(w) && w.length > 2);
+            const prKeywords = tokenizer(title);
+
+            if (prKeywords.length > 0) {
+              const query = `repo:${owner}/${repo} state:open ${prKeywords.slice(0, 4).join(' ')}`;
+
+              try {
+                const issues = await github.rest.search.issuesAndPullRequests({
+                  q: `${query} is:issue`,
+                  sort: 'relevance',
+                  per_page: 5
+                });
+
+                issues.data.items.forEach(issue => {
+                  const issueWords = tokenizer(issue.title.toLowerCase());
+                  const intersection = prKeywords.filter(w => issueWords.includes(w));
+
+                  const score = intersection.length;
+                  const isVeryRelevant = score >= 2 || (prKeywords.length < 3 && score >= 1);
+
+                  if (isVeryRelevant) {
+                    strongConnects.push(issue.number);
+                  }
+                });
+
+                const prs = await github.rest.search.issuesAndPullRequests({
+                  q: `${query} is:pr -id:${pr.id}`,
+                  sort: 'relevance',
+                  per_page: 5
+                });
+
+                prs.data.items.forEach(p => {
+                  if (p.number === pr.number) return;
+                  const pWords = tokenizer(p.title.toLowerCase());
+                  const intersection = prKeywords.filter(w => pWords.includes(w));
+                  if (intersection.length >= 2) {
+                    relatedPrs.push(p.number);
+                  }
+                });
+
+              } catch (e) {}
+            }
+
+            const finalCloses = unique(explicitCloses);
+            const finalConnects = unique(strongConnects.filter(id => !finalCloses.includes(id.toString())));
+            const finalRelatedPrs = unique(relatedPrs);
+
+            if (finalCloses.length === 0 && finalConnects.length === 0 && finalRelatedPrs.length === 0) return;
+
+            let newBody = context.payload.pull_request.body || "";
+            let hasUpdates = false;
+
+            if (finalCloses.length > 0) {
+               const links = finalCloses.map(id => `Closes #${id}`);
+               const missing = links.filter(l => !newBody.includes(l));
+               if (missing.length > 0) {
+                 newBody += `\n\n${missing.join(', ')}`;
+                 hasUpdates = true;
+               }
+            }
+
+            if (finalConnects.length > 0) {
+               const links = finalConnects.map(id => `#${id}`);
+               const missing = links.filter(l => !newBody.includes(l));
+               if (missing.length > 0) {
+                 newBody += `\nConnects to ${missing.join(', ')}`;
+                 hasUpdates = true;
+               }
+            }
+
+            if (finalRelatedPrs.length > 0) {
+               const links = finalRelatedPrs.map(id => `#${id}`);
+               const missing = links.filter(l => !newBody.includes(l));
+               if (missing.length > 0) {
+                 newBody += `\nRelated Work: ${missing.join(', ')}`;
+                 hasUpdates = true;
+               }
+            }
+
+            if (hasUpdates) {
+              await github.rest.pulls.update({
+                owner,
+                repo,
+                pull_number: pr.number,
+                body: newBody
+              });
+            }

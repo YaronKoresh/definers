@@ -4,7 +4,6 @@ from definers import big_number
 
 
 class TestBigNumber(unittest.TestCase):
-
     def test_default_zeros(self):
         self.assertEqual(big_number(), 10000000000)
 

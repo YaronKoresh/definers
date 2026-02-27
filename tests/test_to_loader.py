@@ -7,7 +7,6 @@ from definers import to_loader
 
 
 class TestToLoader(unittest.TestCase):
-
     def test_loader_properties(self):
         X = torch.randn(10, 5)
         y = torch.randn(10)

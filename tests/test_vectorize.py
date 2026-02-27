@@ -7,7 +7,6 @@ from definers import create_vectorizer, vectorize
 
 
 class TestVectorize(unittest.TestCase):
-
     def test_vectorize_basic(self):
         texts = ["hello world", "hello definers"]
         vectorizer = create_vectorizer(texts)
@@ -25,9 +24,7 @@ class TestVectorize(unittest.TestCase):
 
     def test_vectorize_empty_texts_list(self):
         texts = []
-        vectorizer = create_vectorizer(
-            ["some content to build vocab"]
-        )
+        vectorizer = create_vectorizer(["some content to build vocab"])
         vectorized_data = vectorize(vectorizer, texts)
 
         self.assertEqual(vectorized_data.shape, (0, 5))

@@ -2,7 +2,6 @@ import sys
 import unittest
 from unittest.mock import MagicMock, patch
 
-# Temporarily remove cupy from sys.modules to test fallback
 if "cupy" in sys.modules:
     del sys.modules["cupy"]
 
@@ -10,7 +9,6 @@ from definers import _init_cupy_numpy
 
 
 class TestInitCupyNumpy(unittest.TestCase):
-
     @patch.dict("sys.modules", {"cupy": None})
     def test_fallback_to_numpy_when_cupy_not_installed(self):
         import numpy
@@ -21,7 +19,7 @@ class TestInitCupyNumpy(unittest.TestCase):
 
     @patch("importlib.util.find_spec")
     def test_uses_cupy_when_installed(self, mock_find_spec):
-        # We can't actually install cupy, so we mock its presence
+
         mock_find_spec.return_value = True
         mock_cupy = MagicMock()
         mock_cupy.float64 = "float64_val"
@@ -49,7 +47,7 @@ class TestInitCupyNumpy(unittest.TestCase):
         mock_find_spec.return_value = True
         mock_cupy = MagicMock()
         mock_cupy.float64 = "float64_val"
-        # Simulate that 'float' is not present
+
         del mock_cupy.float
         with patch.dict("sys.modules", {"cupy": mock_cupy}):
             np, _ = _init_cupy_numpy()
@@ -61,7 +59,7 @@ class TestInitCupyNumpy(unittest.TestCase):
         mock_find_spec.return_value = True
         mock_cupy = MagicMock()
         mock_cupy.int64 = "int64_val"
-        # Simulate that 'int' is not present
+
         del mock_cupy.int
         with patch.dict("sys.modules", {"cupy": mock_cupy}):
             np, _ = _init_cupy_numpy()

@@ -3,7 +3,6 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 
-# Mock cupy if not available
 try:
     import cupy
 except ImportError:
@@ -18,7 +17,6 @@ class MockPreprocessor:
 
 
 class TestProcessRows(unittest.TestCase):
-
     def setUp(self):
         self.mock_scaler = MockPreprocessor()
         self.mock_normalizer = MockPreprocessor()

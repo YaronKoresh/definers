@@ -7,7 +7,6 @@ from definers import extract_text_features
 
 
 class TestExtractTextFeatures(unittest.TestCase):
-
     def test_successful_extraction_no_vectorizer(self):
         text = "this is a test sentence"
         features = extract_text_features(text)

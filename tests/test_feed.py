@@ -27,9 +27,7 @@ class TestFeed(unittest.TestCase):
 
     @patch("definers.log")
     @patch("definers.np.concatenate", wraps=np.concatenate)
-    def test_feed_unsupervised_append(
-        self, mock_concatenate, mock_log
-    ):
+    def test_feed_unsupervised_append(self, mock_concatenate, mock_log):
         initial_model = HybridModel()
         initial_model.X_all = np.array([[0, 0]])
         model = feed(initial_model, self.X_new_np)

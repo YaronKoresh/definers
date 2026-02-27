@@ -7,7 +7,6 @@ from definers import get_cluster_content
 
 
 class TestGetClusterContent(unittest.TestCase):
-
     def setUp(self):
         self.mock_model = MagicMock()
         self.mock_model.labels_ = np.array([0, 1, 0, 2, 1, 0])
@@ -48,7 +47,7 @@ class TestGetClusterContent(unittest.TestCase):
 
     def test_raises_value_error_if_no_labels_attribute(self):
         invalid_model = MagicMock()
-        # Remove the 'labels_' attribute if it exists from a previous mock run
+
         if hasattr(invalid_model, "labels_"):
             del invalid_model.labels_
 
@@ -63,9 +62,7 @@ class TestGetClusterContent(unittest.TestCase):
         self.mock_model.labels_ = np.array([0, 0, 0])
         self.mock_model.x_all = np.array([[1], [2], [3]])
 
-        result = get_cluster_content(
-            self.mock_model, 1
-        )  # Cluster 1 is empty
+        result = get_cluster_content(self.mock_model, 1)
         self.assertIsNone(result)
 
 

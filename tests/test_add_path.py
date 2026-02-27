@@ -7,7 +7,6 @@ from definers import add_path
 
 
 class TestAddPath(unittest.TestCase):
-
     @patch("definers.permit")
     @patch("site.addsitedir")
     def test_add_new_path(self, mock_addsitedir, mock_permit):
@@ -15,9 +14,7 @@ class TestAddPath(unittest.TestCase):
         original_sys_path = sys.path[:]
 
         try:
-            sys.path = [
-                p for p in original_sys_path if p != test_path
-            ]
+            sys.path = [p for p in original_sys_path if p != test_path]
 
             add_path(test_path)
 
@@ -54,9 +51,7 @@ class TestAddPath(unittest.TestCase):
         original_sys_path = sys.path[:]
 
         try:
-            sys.path = [
-                p for p in original_sys_path if p != test_path
-            ]
+            sys.path = [p for p in original_sys_path if p != test_path]
 
             add_path(test_path)
 

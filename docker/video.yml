@@ -1,8 +1,0 @@
-services:
-  video:
-    container_name: video
-    image: yaronkoresh/video:latest
-    build:
-      context: .
-      dockerfile: video.docker
-      no_cache: true

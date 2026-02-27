@@ -8,7 +8,6 @@ from definers import delete, exist
 
 
 class TestDelete(unittest.TestCase):
-
     def setUp(self):
         self.test_dir = tempfile.mkdtemp()
 
@@ -34,9 +33,7 @@ class TestDelete(unittest.TestCase):
         self.assertFalse(exist(dir_to_delete))
 
     def test_delete_non_existent_path(self):
-        non_existent_path = os.path.join(
-            self.test_dir, "does_not_exist"
-        )
+        non_existent_path = os.path.join(self.test_dir, "does_not_exist")
         self.assertFalse(exist(non_existent_path))
         try:
             delete(non_existent_path)
@@ -75,9 +72,7 @@ class TestDelete(unittest.TestCase):
         link_path = os.path.join(self.test_dir, "link_dir")
 
         if hasattr(os, "symlink"):
-            os.symlink(
-                target_dir, link_path, target_is_directory=True
-            )
+            os.symlink(target_dir, link_path, target_is_directory=True)
             self.assertTrue(os.path.islink(link_path))
             self.assertTrue(exist(target_dir))
 

@@ -5,21 +5,14 @@ from definers import importable
 
 
 class TestImportable(unittest.TestCase):
-
     @patch("definers.run")
-    def test_importable_returns_true_for_successful_import(
-        self, mock_run
-    ):
+    def test_importable_returns_true_for_successful_import(self, mock_run):
         mock_run.return_value = []
         self.assertTrue(importable("os"))
-        mock_run.assert_called_once_with(
-            'python -c "import os"', silent=True
-        )
+        mock_run.assert_called_once_with('python -c "import os"', silent=True)
 
     @patch("definers.run")
-    def test_importable_returns_false_for_failed_import(
-        self, mock_run
-    ):
+    def test_importable_returns_false_for_failed_import(self, mock_run):
         mock_run.return_value = False
         self.assertFalse(importable("non_existent_package"))
         mock_run.assert_called_once_with(

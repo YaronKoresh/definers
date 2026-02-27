@@ -9,9 +9,7 @@ class TestExist(unittest.TestCase):
     @patch("os.path.exists")
     @patch("os.path.expanduser")
     @patch("os.path.abspath")
-    def test_existing_path(
-        self, mock_abspath, mock_expanduser, mock_exists
-    ):
+    def test_existing_path(self, mock_abspath, mock_expanduser, mock_exists):
         mock_exists.return_value = True
         self.assertTrue(exist("/path/to/existing_file"))
 
@@ -33,9 +31,7 @@ class TestExist(unittest.TestCase):
     @patch("os.path.exists")
     @patch("os.path.expanduser")
     @patch("os.path.abspath")
-    def test_path_expansion(
-        self, mock_abspath, mock_expanduser, mock_exists
-    ):
+    def test_path_expansion(self, mock_abspath, mock_expanduser, mock_exists):
         mock_expanduser.return_value = "/home/user/some_file"
         mock_abspath.return_value = "/home/user/some_file"
         mock_exists.return_value = True

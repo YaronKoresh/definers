@@ -11,12 +11,9 @@ from definers import extract_video_features
 
 
 class TestExtractVideoFeatures(unittest.TestCase):
-
     def setUp(self):
         self.test_dir = tempfile.mkdtemp()
-        self.video_path = os.path.join(
-            self.test_dir, "test_video.mp4"
-        )
+        self.video_path = os.path.join(self.test_dir, "test_video.mp4")
         self.width, self.height = 64, 48
         self.frame_count = 30
         self.fps = 10
@@ -43,9 +40,7 @@ class TestExtractVideoFeatures(unittest.TestCase):
         self.assertIsNotNone(features)
         self.assertIsInstance(features, np.ndarray)
         self.assertEqual(features.shape[0], 3)
-        expected_feature_length = (256 * 3) + (
-            self.width * self.height
-        ) * 2
+        expected_feature_length = (256 * 3) + (self.width * self.height) * 2
         self.assertEqual(features.shape[1], expected_feature_length)
 
     @patch("definers.catch", lambda e: None)

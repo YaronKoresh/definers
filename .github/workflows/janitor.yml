@@ -1,0 +1,44 @@
+name: Repository Janitor
+
+on:
+  schedule:
+    - cron: '0 0 * * 0'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete Old Runs
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const daysToKeep = 30;
+            const msToKeep = daysToKeep * 24 * 60 * 60 * 1000;
+            const thresholdDate = new Date(Date.now() - msToKeep).toISOString();
+
+            console.log(`🗑️ Deleting runs older than ${thresholdDate}`);
+
+            const runs = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              status: 'completed'
+            });
+
+            for (const run of runs) {
+              if (run.created_at < thresholdDate) {
+                try {
+                  await github.rest.actions.deleteWorkflowRun({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    run_id: run.id
+                  });
+                  console.log(`Deleted run ${run.id} (${run.name})`);
+                } catch (error) {
+                  console.log(`Failed to delete run ${run.id}: ${error.message}`);
+                }
+              }
+            }

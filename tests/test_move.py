@@ -8,7 +8,6 @@ from definers import move
 
 
 class TestMove(unittest.TestCase):
-
     def setUp(self):
         self.test_dir = tempfile.mkdtemp()
         self.src_path = os.path.join(self.test_dir, "source")
@@ -32,7 +31,7 @@ class TestMove(unittest.TestCase):
 
         self.assertFalse(os.path.exists(src_file))
         self.assertTrue(os.path.exists(dest_file))
-        with open(dest_file, "r") as f:
+        with open(dest_file) as f:
             self.assertEqual(f.read(), "test content")
 
     def test_move_directory(self):
@@ -73,7 +72,7 @@ class TestMove(unittest.TestCase):
 
         self.assertFalse(os.path.exists(src_file))
         self.assertTrue(os.path.exists(dest_file))
-        with open(dest_file, "r") as f:
+        with open(dest_file) as f:
             self.assertEqual(f.read(), "source")
 
     def test_move_directory_to_existing_non_empty_directory(self):
@@ -81,9 +80,7 @@ class TestMove(unittest.TestCase):
         os.makedirs(self.dest_path)
         with open(os.path.join(self.src_path, "file1.txt"), "w") as f:
             f.write("1")
-        with open(
-            os.path.join(self.dest_path, "file2.txt"), "w"
-        ) as f:
+        with open(os.path.join(self.dest_path, "file2.txt"), "w") as f:
             f.write("2")
 
         dest_for_move = os.path.join(self.dest_path, "source_moved")

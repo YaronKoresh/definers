@@ -6,7 +6,6 @@ from definers import read, save_temp_text
 
 
 class TestSaveTempText(unittest.TestCase):
-
     def setUp(self):
         self.temp_files = []
 
@@ -49,9 +48,7 @@ class TestSaveTempText(unittest.TestCase):
         self.assertIsNotNone(temp_path)
         self.temp_files.append(temp_path)
         self.assertTrue(
-            os.path.basename(temp_path).startswith(
-                tempfile.gettempprefix()
-            )
+            os.path.basename(temp_path).startswith(tempfile.gettempprefix())
         )
 
     def test_file_has_correct_extension(self):

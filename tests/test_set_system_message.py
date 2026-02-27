@@ -5,7 +5,6 @@ import definers
 
 
 class TestSetSystemMessage(unittest.TestCase):
-
     def setUp(self):
         self.original_system_message = definers.SYSTEM_MESSAGE
 
@@ -19,15 +18,9 @@ class TestSetSystemMessage(unittest.TestCase):
         )
 
     def test_with_role_and_name(self):
-        definers.set_system_message(
-            role="a code assistant", name="Definer"
-        )
-        self.assertIn(
-            "You are a code assistant.", definers.SYSTEM_MESSAGE
-        )
-        self.assertIn(
-            "Your name is Definer.", definers.SYSTEM_MESSAGE
-        )
+        definers.set_system_message(role="a code assistant", name="Definer")
+        self.assertIn("You are a code assistant.", definers.SYSTEM_MESSAGE)
+        self.assertIn("Your name is Definer.", definers.SYSTEM_MESSAGE)
 
     def test_with_style_instructions(self):
         definers.set_system_message(
@@ -35,9 +28,7 @@ class TestSetSystemMessage(unittest.TestCase):
             chattiness="concise",
             interaction_style="ask questions",
         )
-        self.assertIn(
-            "Your tone should be friendly.", definers.SYSTEM_MESSAGE
-        )
+        self.assertIn("Your tone should be friendly.", definers.SYSTEM_MESSAGE)
         self.assertIn(
             "In terms of verbosity, concise.", definers.SYSTEM_MESSAGE
         )
@@ -55,9 +46,7 @@ class TestSetSystemMessage(unittest.TestCase):
     def test_with_goals(self):
         goals = ["answer questions", "be helpful"]
         definers.set_system_message(goals=goals)
-        self.assertIn(
-            "answer questions; be helpful.", definers.SYSTEM_MESSAGE
-        )
+        self.assertIn("answer questions; be helpful.", definers.SYSTEM_MESSAGE)
 
     def test_with_task_rules_and_output_format(self):
         rules = ["Do not mention you are an AI."]
@@ -97,12 +86,8 @@ class TestSetSystemMessage(unittest.TestCase):
             interaction_style="offer examples",
             output_format="Markdown",
         )
-        self.assertIn(
-            "You are a friendly guide.", definers.SYSTEM_MESSAGE
-        )
-        self.assertIn(
-            "Your name is ChatBot.", definers.SYSTEM_MESSAGE
-        )
+        self.assertIn("You are a friendly guide.", definers.SYSTEM_MESSAGE)
+        self.assertIn("Your name is ChatBot.", definers.SYSTEM_MESSAGE)
         self.assertIn(
             "Your tone should be encouraging.",
             definers.SYSTEM_MESSAGE,
@@ -113,9 +98,7 @@ class TestSetSystemMessage(unittest.TestCase):
             definers.SYSTEM_MESSAGE,
         )
         self.assertIn("language is Python", definers.SYSTEM_MESSAGE)
-        self.assertIn(
-            "1. Always be positive", definers.SYSTEM_MESSAGE
-        )
+        self.assertIn("1. Always be positive", definers.SYSTEM_MESSAGE)
         self.assertIn(
             "When interacting, offer examples.",
             definers.SYSTEM_MESSAGE,

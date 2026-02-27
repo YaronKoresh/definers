@@ -7,21 +7,16 @@ from definers import install_audio_effects
 
 
 class TestInstallAudioEffects(unittest.TestCase):
-
     @patch("definers.get_os_name", return_value="linux")
     @patch("definers.run")
     @patch("builtins.print")
-    def test_install_on_linux(
-        self, mock_print, mock_run, mock_get_os
-    ):
+    def test_install_on_linux(self, mock_print, mock_run, mock_get_os):
         install_audio_effects()
         mock_run.assert_any_call("apt-get update -y")
         mock_run.assert_any_call(
             "apt-get install -y rubberband-cli fluidsynth fluid-soundfont-gm build-essential"
         )
-        mock_print.assert_any_call(
-            "\nInstalling Python packages with pip..."
-        )
+        mock_print.assert_any_call("\nInstalling Python packages with pip...")
 
     @patch("definers.get_os_name", return_value="windows")
     @patch("os.path.exists", return_value=False)
@@ -48,9 +43,7 @@ class TestInstallAudioEffects(unittest.TestCase):
     ):
         install_audio_effects()
 
-        install_dir = os.path.join(
-            os.path.expanduser("~"), "app_dependencies"
-        )
+        install_dir = os.path.join(os.path.expanduser("~"), "app_dependencies")
 
         mock_download_unzip.assert_any_call(
             "https://breakfastquay.com/files/releases/rubberband-3.3.0-gpl-executable-windows.zip",
@@ -81,9 +74,7 @@ class TestInstallAudioEffects(unittest.TestCase):
         self, mock_print, mock_exists, mock_get_os
     ):
         install_audio_effects()
-        mock_print.assert_any_call(
-            "\nInstalling Python packages with pip..."
-        )
+        mock_print.assert_any_call("\nInstalling Python packages with pip...")
 
     @patch("definers.get_os_name", return_value="darwin")
     @patch("builtins.print")

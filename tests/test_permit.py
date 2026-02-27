@@ -9,7 +9,6 @@ from definers import permit
 
 
 class TestPermit(unittest.TestCase):
-
     def setUp(self):
         self.test_dir = tempfile.mkdtemp()
         self.test_file = tempfile.NamedTemporaryFile(
@@ -53,9 +52,7 @@ class TestPermit(unittest.TestCase):
             self.assertEqual(mode, 0o777)
 
     def test_permit_non_existent_path(self):
-        non_existent_path = os.path.join(
-            self.test_dir, "non_existent"
-        )
+        non_existent_path = os.path.join(self.test_dir, "non_existent")
         self.assertFalse(permit(non_existent_path))
 
 

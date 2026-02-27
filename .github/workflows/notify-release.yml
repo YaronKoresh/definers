@@ -1,0 +1,40 @@
+name: Notify on Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comment on Linked Issues
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const release = context.payload.release;
+            const version = release.tag_name;
+            const body = release.body || "";
+
+            const regex = /#(\d+)/g;
+            const matches = [...body.matchAll(regex)].map(m => m[1]);
+            const uniqueIssues = [...new Set(matches)];
+
+            console.log(`Found linked items: ${uniqueIssues.join(', ')}`);
+
+            for (const number of uniqueIssues) {
+              try {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: parseInt(number),
+                  body: `🚀 **Good news!** This has been released in [${version}](${release.html_url}).`
+                });
+              } catch (e) {
+                console.log(`Could not comment on #${number}`);
+              }
+            }

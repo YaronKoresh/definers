@@ -5,13 +5,10 @@ from definers import paths
 
 
 class TestPaths(unittest.TestCase):
-
     @patch("definers.glob")
     @patch("os.path.abspath")
     @patch("os.path.expanduser")
-    def test_single_pattern(
-        self, mock_expanduser, mock_abspath, mock_glob
-    ):
+    def test_single_pattern(self, mock_expanduser, mock_abspath, mock_glob):
         mock_abspath.side_effect = lambda p: p
         mock_expanduser.side_effect = lambda p: p
         mock_glob.return_value = ["/tmp/file1.txt", "/tmp/file2.log"]
@@ -19,16 +16,12 @@ class TestPaths(unittest.TestCase):
         result = paths("/tmp/*")
 
         mock_glob.assert_called_once_with("/tmp/*", recursive=True)
-        self.assertCountEqual(
-            result, ["/tmp/file1.txt", "/tmp/file2.log"]
-        )
+        self.assertCountEqual(result, ["/tmp/file1.txt", "/tmp/file2.log"])
 
     @patch("definers.glob")
     @patch("os.path.abspath")
     @patch("os.path.expanduser")
-    def test_multiple_patterns(
-        self, mock_expanduser, mock_abspath, mock_glob
-    ):
+    def test_multiple_patterns(self, mock_expanduser, mock_abspath, mock_glob):
         mock_abspath.side_effect = lambda p: p
         mock_expanduser.side_effect = lambda p: p
         mock_glob.side_effect = [
@@ -57,18 +50,14 @@ class TestPaths(unittest.TestCase):
     @patch("definers.glob")
     @patch("os.path.abspath")
     @patch("os.path.expanduser")
-    def test_no_matches(
-        self, mock_expanduser, mock_abspath, mock_glob
-    ):
+    def test_no_matches(self, mock_expanduser, mock_abspath, mock_glob):
         mock_abspath.side_effect = lambda p: p
         mock_expanduser.side_effect = lambda p: p
         mock_glob.return_value = []
 
         result = paths("/nonexistent/path/*")
 
-        mock_glob.assert_called_once_with(
-            "/nonexistent/path/*", recursive=True
-        )
+        mock_glob.assert_called_once_with("/nonexistent/path/*", recursive=True)
         self.assertEqual(result, [])
 
     def test_no_patterns_provided(self):
@@ -113,16 +102,12 @@ class TestPaths(unittest.TestCase):
 
         result = paths("/data/file.csv", "/data/*.csv")
 
-        self.assertCountEqual(
-            result, ["/data/file.csv", "/data/another.csv"]
-        )
+        self.assertCountEqual(result, ["/data/file.csv", "/data/another.csv"])
 
     @patch("definers.glob")
     @patch("os.path.abspath")
     @patch("os.path.expanduser")
-    def test_glob_exception(
-        self, mock_expanduser, mock_abspath, mock_glob
-    ):
+    def test_glob_exception(self, mock_expanduser, mock_abspath, mock_glob):
         mock_abspath.side_effect = lambda p: p
         mock_expanduser.side_effect = lambda p: p
         mock_glob.side_effect = Exception("Test exception")

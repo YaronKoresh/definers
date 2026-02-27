@@ -1,0 +1,47 @@
+name: Check
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Dev Tools
+        run: pip install -e ".[dev]"
+
+      - name: Execute Checks And Fixes
+        run: poe check
+
+      - name: Check For Changes
+        id: check_changes
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          git config core.fileMode false
+          git add . --renormalize
+
+          if ! git diff --exit-code -w --ignore-submodules; then
+            echo "❌ Changes detected in the following files:"
+            git status --porcelain
+
+            echo -e "\n--- Detailed Diff ---"
+            git diff -w
+
+            exit 1
+          else
+            echo "✅ No changes detected."
+            exit 0
+          fi

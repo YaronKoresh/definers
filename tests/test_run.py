@@ -6,7 +6,6 @@ from definers import run
 
 
 class TestRun(unittest.TestCase):
-
     @patch("definers.run_windows")
     def test_run_on_windows(self, mock_run_windows):
         with patch.object(sys, "platform", "win32"):

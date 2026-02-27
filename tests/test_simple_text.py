@@ -4,7 +4,6 @@ from definers import simple_text
 
 
 class TestSimpleText(unittest.TestCase):
-
     def test_with_extra_spaces_and_tabs(self):
         prompt = "this   is a  \t test"
         expected = "this is a test"
@@ -46,9 +45,7 @@ class TestSimpleText(unittest.TestCase):
         self.assertEqual(simple_text(prompt), expected)
 
     def test_complex_string(self):
-        prompt = (
-            "  Here IS --- a COMPLEX,,, \t text!!\n\nTo test...  "
-        )
+        prompt = "  Here IS --- a COMPLEX,,, \t text!!\n\nTo test...  "
         expected = "here is-a complex text\nto test"
         self.assertEqual(simple_text(prompt), expected)
 

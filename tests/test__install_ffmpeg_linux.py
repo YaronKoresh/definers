@@ -1,3 +1,4 @@
+import subprocess
 import unittest
 from unittest.mock import call, patch
 
@@ -16,29 +17,21 @@ class TestInstallFfmpegLinux(unittest.TestCase):
         mock_run.assert_has_calls(
             [
                 call(["apt-get", "update"], check=True),
-                call(
-                    ["apt-get", "install", "ffmpeg", "-y"], check=True
-                ),
+                call(["apt-get", "install", "ffmpeg", "-y"], check=True),
             ]
         )
-        mock_print.assert_any_call(
-            "\n[SUCCESS] FFmpeg installed successfully."
-        )
+        mock_print.assert_any_call("\n[SUCCESS] FFmpeg installed successfully.")
 
     @patch("os.geteuid", return_value=0)
     @patch("definers.subprocess.run")
     @patch("shutil.which", side_effect=[None, "dnf", None])
     @patch("builtins.print")
-    def test_dnf_install(
-        self, mock_print, mock_which, mock_run, mock_geteuid
-    ):
+    def test_dnf_install(self, mock_print, mock_which, mock_run, mock_geteuid):
         _install_ffmpeg_linux()
         mock_run.assert_called_once_with(
             ["dnf", "install", "ffmpeg", "-y"], check=True
         )
-        mock_print.assert_any_call(
-            "\n[SUCCESS] FFmpeg installed successfully."
-        )
+        mock_print.assert_any_call("\n[SUCCESS] FFmpeg installed successfully.")
 
     @patch("os.geteuid", return_value=0)
     @patch("definers.subprocess.run")
@@ -51,9 +44,7 @@ class TestInstallFfmpegLinux(unittest.TestCase):
         mock_run.assert_called_once_with(
             ["pacman", "-S", "ffmpeg", "--noconfirm"], check=True
         )
-        mock_print.assert_any_call(
-            "\n[SUCCESS] FFmpeg installed successfully."
-        )
+        mock_print.assert_any_call("\n[SUCCESS] FFmpeg installed successfully.")
 
     @patch("os.geteuid", return_value=1000)
     @patch("definers.sys.exit", side_effect=SystemExit)
@@ -100,9 +91,7 @@ class TestInstallFfmpegLinux(unittest.TestCase):
 
     @patch("os.geteuid", return_value=0)
     @patch("shutil.which", return_value="apt-get")
-    @patch(
-        "definers.subprocess.run", side_effect=Exception("Test error")
-    )
+    @patch("definers.subprocess.run", side_effect=Exception("Test error"))
     @patch("definers.sys.exit", side_effect=SystemExit)
     @patch("builtins.print")
     def test_unexpected_error(

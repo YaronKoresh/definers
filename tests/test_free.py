@@ -5,7 +5,6 @@ from definers import free
 
 
 class TestFree(unittest.TestCase):
-
     @patch("definers.run")
     @patch("torch.cuda.empty_cache")
     @patch("os.path.exists", return_value=True)
@@ -44,9 +43,7 @@ class TestFree(unittest.TestCase):
         with patch("definers.catch") as mock_catch:
             free()
             mock_empty_cache.assert_called_once()
-            mock_catch.assert_called_once_with(
-                mock_empty_cache.side_effect
-            )
+            mock_catch.assert_called_once_with(mock_empty_cache.side_effect)
             self.assertIn(
                 call("pip cache purge", silent=True),
                 mock_run.call_args_list,

@@ -7,7 +7,6 @@ from definers import merge_columns
 
 
 class TestMergeColumns(unittest.TestCase):
-
     @patch("definers.TensorDataset")
     def test_merge_columns_with_x_and_y(self, mock_tensor_dataset):
         mock_tensor_x = torch.randn(5, 2)

@@ -5,7 +5,6 @@ from definers import install_faiss
 
 
 class TestInstallFaiss(unittest.TestCase):
-
     @patch("definers.importable", return_value=True)
     def test_faiss_already_installed(self, mock_importable):
         result = install_faiss()
@@ -49,10 +48,10 @@ class TestInstallFaiss(unittest.TestCase):
                     "-DFAISS_ENABLE_C_API=ON",
                     "-DFAISS_ENABLE_GPU=ON",
                     "-DFAISS_ENABLE_PYTHON=ON",
-                    f"-DPython_EXECUTABLE=/path/to/python",
-                    f"-DPython_INCLUDE_DIR=/path/to/prefix/include/python3.10",
-                    f"-DPython_LIBRARY=/path/to/prefix/lib/libpython3.10.so",
-                    f"-DPython_NumPy_INCLUDE_DIRS=/path/to/prefix/lib/python3.10/site-packages/numpy/core/include",
+                    "-DPython_EXECUTABLE=/path/to/python",
+                    "-DPython_INCLUDE_DIR=/path/to/prefix/include/python3.10",
+                    "-DPython_LIBRARY=/path/to/prefix/lib/libpython3.10.so",
+                    "-DPython_NumPy_INCLUDE_DIRS=/path/to/prefix/lib/python3.10/site-packages/numpy/core/include",
                     ".",
                 ],
                 check=True,
@@ -97,9 +96,7 @@ class TestInstallFaiss(unittest.TestCase):
         self, mock_print, mock_subprocess_run, mock_importable
     ):
         install_faiss()
-        mock_print.assert_any_call(
-            "File not found error: git not found"
-        )
+        mock_print.assert_any_call("File not found error: git not found")
 
 
 if __name__ == "__main__":

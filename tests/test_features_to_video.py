@@ -28,9 +28,9 @@ class TestFeaturesToVideo(unittest.TestCase):
         self.mock_writer = MagicMock()
         self.mock_cv2.VideoWriter.return_value = self.mock_writer
         self.mock_cv2.normalize.side_effect = (
-            lambda src, dst, alpha, beta, norm_type, dtype: (
-                src * 255
-            ).astype(np.uint8)
+            lambda src, dst, alpha, beta, norm_type, dtype: (src * 255).astype(
+                np.uint8
+            )
         )
         self.mock_cv2.addWeighted.side_effect = (
             lambda src1, alpha, src2, beta, gamma: src1
@@ -48,9 +48,7 @@ class TestFeaturesToVideo(unittest.TestCase):
         self.mock_cv2.VideoWriter.assert_called_with(
             "/fake/video.mp4", "mp4v", 24, (self.width, self.height)
         )
-        self.assertEqual(
-            self.mock_writer.write.call_count, self.num_frames
-        )
+        self.assertEqual(self.mock_writer.write.call_count, self.num_frames)
         self.mock_writer.release.assert_called_once()
 
     @patch("definers.tmp", return_value="/fake/video.mp4")

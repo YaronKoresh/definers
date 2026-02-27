@@ -5,8 +5,6 @@ from unittest.mock import MagicMock, patch
 import torch
 
 
-# Since LinearRegressionTorch is in the same file, we need to ensure it's available
-# for mocking. We can define a dummy class for the purpose of these tests.
 class DummyModel(torch.nn.Module):
     def __init__(self, input_dim):
         super().__init__()
@@ -22,14 +20,12 @@ class DummyModel(torch.nn.Module):
         pass
 
 
-# We patch the actual class within the definers module
 patch_target = "definers.LinearRegressionTorch"
 
 from definers import initialize_linear_regression
 
 
 class TestInitializeLinearRegression(unittest.TestCase):
-
     @patch("os.path.exists", return_value=False)
     @patch(patch_target, return_value=DummyModel(10))
     def test_creates_new_model_if_not_exists(

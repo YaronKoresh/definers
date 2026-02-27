@@ -7,7 +7,6 @@ from definers import create_vectorizer, unvectorize, vectorize
 
 
 class TestUnvectorize(unittest.TestCase):
-
     def setUp(self):
         self.texts = [
             "alpha bravo charlie",
@@ -18,9 +17,7 @@ class TestUnvectorize(unittest.TestCase):
         self.vectorized_data = vectorize(self.vectorizer, self.texts)
 
     def test_unvectorize_basic(self):
-        unvectorized_texts = unvectorize(
-            self.vectorizer, self.vectorized_data
-        )
+        unvectorized_texts = unvectorize(self.vectorizer, self.vectorized_data)
         self.assertIsInstance(unvectorized_texts, list)
         self.assertEqual(len(unvectorized_texts), 3)
         self.assertIn("alpha", unvectorized_texts[0])
@@ -42,15 +39,10 @@ class TestUnvectorize(unittest.TestCase):
 
     def test_unvectorize_single_document(self):
         single_vector = vectorize(self.vectorizer, ["alpha golf"])
-        unvectorized_text = unvectorize(
-            self.vectorizer, single_vector
-        )
+        unvectorized_text = unvectorize(self.vectorizer, single_vector)
         self.assertEqual(len(unvectorized_text), 1)
         self.assertTrue(
-            all(
-                word in unvectorized_text[0]
-                for word in ["alpha", "golf"]
-            )
+            all(word in unvectorized_text[0] for word in ["alpha", "golf"])
         )
 
     def test_unvectorize_zeros_vector(self):

@@ -13,7 +13,6 @@ from definers import load_as_numpy
 
 
 class TestLoadAsNumpy(unittest.TestCase):
-
     def setUp(self):
         self.test_dir = tempfile.mkdtemp()
         self.mock_features = np.array([0.1, 0.2, 0.3])
@@ -52,9 +51,7 @@ class TestLoadAsNumpy(unittest.TestCase):
     def test_load_audio_wav_no_training(self, mock_sox, mock_extract):
         mock_transformer = MagicMock()
         mock_sox.return_value = mock_transformer
-        wav_path = self._create_dummy_file(
-            "test.wav", self._write_wav
-        )
+        wav_path = self._create_dummy_file("test.wav", self._write_wav)
         result = load_as_numpy(wav_path, training=False)
         self.assertIsInstance(result, np.ndarray)
         mock_transformer.build_file.assert_called_once()
@@ -72,9 +69,7 @@ class TestLoadAsNumpy(unittest.TestCase):
     ):
         mock_transformer = MagicMock()
         mock_sox.return_value = mock_transformer
-        mp3_path = self._create_dummy_file(
-            "test.mp3", self._write_wav
-        )
+        mp3_path = self._create_dummy_file("test.mp3", self._write_wav)
         result = load_as_numpy(mp3_path, training=True)
         self.assertIsInstance(result, list)
         self.assertIsInstance(result[0], np.ndarray)
@@ -83,9 +78,7 @@ class TestLoadAsNumpy(unittest.TestCase):
         mock_split.assert_called_once()
 
     def test_load_csv(self):
-        csv_path = self._create_dummy_file(
-            "test.csv", self._write_csv
-        )
+        csv_path = self._create_dummy_file("test.csv", self._write_csv)
         result = load_as_numpy(csv_path)
         self.assertIsInstance(result, np.ndarray)
         self.assertEqual(result.shape, (1, 2))
@@ -104,9 +97,7 @@ class TestLoadAsNumpy(unittest.TestCase):
     @patch("definers.extract_text_features")
     def test_load_txt(self, mock_extract_text):
         mock_extract_text.return_value = self.mock_features
-        txt_path = self._create_dummy_file(
-            "test.txt", self._write_txt
-        )
+        txt_path = self._create_dummy_file("test.txt", self._write_txt)
         result = load_as_numpy(txt_path)
         mock_extract_text.assert_called_with("test")
         np.testing.assert_array_equal(result, self.mock_features)
@@ -116,9 +107,7 @@ class TestLoadAsNumpy(unittest.TestCase):
     def test_load_image(self, mock_resize, mock_extract):
         mock_resize.return_value = np.zeros((1024, 1024, 3))
         mock_extract.return_value = self.mock_features
-        img_path = self._create_dummy_file(
-            "test.png", self._write_png
-        )
+        img_path = self._create_dummy_file("test.png", self._write_png)
         result = load_as_numpy(img_path)
         mock_resize.assert_called_once()
         mock_extract.assert_called_once()
@@ -131,9 +120,7 @@ class TestLoadAsNumpy(unittest.TestCase):
         mock_resize.return_value = "resized.mp4"
         mock_fps.return_value = "resized_fps.mp4"
         mock_extract.return_value = self.mock_features
-        vid_path = self._create_dummy_file(
-            "test.mov", self._write_mp4
-        )
+        vid_path = self._create_dummy_file("test.mov", self._write_mp4)
         result = load_as_numpy(vid_path)
         mock_resize.assert_called_with(vid_path, 1024, 1024)
         mock_fps.assert_called_with("resized.mp4", 24)

@@ -6,7 +6,6 @@ from definers import set_cuda_env
 
 
 class TestSetCudaEnv(unittest.TestCase):
-
     @patch("definers.log")
     @patch("definers.paths")
     @patch.dict(os.environ, {}, clear=True)
@@ -16,9 +15,7 @@ class TestSetCudaEnv(unittest.TestCase):
             ["/usr/local/cuda-12.2/lib64/"],
         ]
         set_cuda_env()
-        self.assertEqual(
-            os.environ["CUDA_PATH"], "/usr/local/cuda-12.2/"
-        )
+        self.assertEqual(os.environ["CUDA_PATH"], "/usr/local/cuda-12.2/")
         self.assertEqual(
             os.environ["LD_LIBRARY_PATH"],
             "/usr/local/cuda-12.2/lib64/",

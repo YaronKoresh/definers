@@ -5,13 +5,10 @@ from definers import tmp
 
 
 class TestTmp(unittest.TestCase):
-
     @patch("tempfile.TemporaryDirectory")
     @patch("definers.delete")
     def test_tmp_directory_keep(self, mock_delete, mock_tempdir):
-        mock_tempdir.return_value.__enter__.return_value = (
-            "/tmp/test_dir"
-        )
+        mock_tempdir.return_value.__enter__.return_value = "/tmp/test_dir"
         result = tmp(dir=True, keep=True)
         self.assertEqual(result, "/tmp/test_dir")
         mock_delete.assert_not_called()
@@ -46,9 +43,7 @@ class TestTmp(unittest.TestCase):
         result = tmp(keep=False)
         self.assertEqual(result, "/tmp/test_file_to_delete.data")
         mock_tempfile.assert_called_with(suffix=".data", delete=False)
-        mock_delete.assert_called_once_with(
-            "/tmp/test_file_to_delete.data"
-        )
+        mock_delete.assert_called_once_with("/tmp/test_file_to_delete.data")
 
     @patch("tempfile.NamedTemporaryFile")
     def test_tmp_file_custom_suffix_with_dot(self, mock_tempfile):

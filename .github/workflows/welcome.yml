@@ -1,0 +1,21 @@
+name: Welcome New Contributors
+
+on:
+  pull_request:
+    types: [opened]
+  issues:
+    types: [opened]
+
+permissions:
+  pull-requests: write
+  issues: write
+
+jobs:
+  welcome:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/first-interaction@v3
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          issue_message: "👋 Hi there! Thanks for opening an issue. We will look into it soon."
+          pr_message: "🎉 Congrats for opening a Pull Request! Please make sure you have run `ruff check . && ruff format` before submitting."

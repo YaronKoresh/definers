@@ -6,7 +6,6 @@ from definers import installed
 
 
 class TestInstalled(unittest.TestCase):
-
     @patch("definers.get_os_name", return_value="linux")
     @patch("definers.run")
     @patch("definers.shutil.which")
@@ -20,11 +19,9 @@ class TestInstalled(unittest.TestCase):
 
     @patch("definers.get_os_name", return_value="linux")
     @patch("definers.shutil.which")
-    def test_installed_linux_command_not_exists(
-        self, mock_which, mock_os
-    ):
+    def test_installed_linux_command_not_exists(self, mock_which, mock_os):
         mock_which.return_value = None
-        # Fallback to pip check
+
         with patch("definers.run") as mock_run:
             mock_run.return_value = ["packageA 1.0", "packageB 2.0"]
             self.assertFalse(installed("nonexistent"))
@@ -68,9 +65,7 @@ class TestInstalled(unittest.TestCase):
 
     @patch("definers.get_os_name", return_value="windows")
     @patch("definers.run")
-    def test_installed_windows_program_version_match(
-        self, mock_run, mock_os
-    ):
+    def test_installed_windows_program_version_match(self, mock_run, mock_os):
         mock_run.return_value = [
             "Microsoft Visual C++ 2015-2022 Redistributable (x64)  14.32.31332",
             "Git  2.37.1",
@@ -79,9 +74,7 @@ class TestInstalled(unittest.TestCase):
 
     @patch("definers.get_os_name", return_value="windows")
     @patch("definers.run")
-    def test_installed_windows_program_not_found(
-        self, mock_run, mock_os
-    ):
+    def test_installed_windows_program_not_found(self, mock_run, mock_os):
         mock_run.side_effect = [
             ["Some Other Program 1.0"],
             ["pip-package 1.0"],
@@ -92,9 +85,7 @@ class TestInstalled(unittest.TestCase):
     @patch("definers.get_os_name", return_value="linux")
     @patch("definers.shutil.which", return_value=None)
     @patch("definers.run")
-    def test_installed_pip_package_exists(
-        self, mock_run, mock_which, mock_os
-    ):
+    def test_installed_pip_package_exists(self, mock_run, mock_which, mock_os):
         mock_run.return_value = [
             "requests          2.28.1",
             "numpy             1.21.5",
@@ -115,8 +106,6 @@ class TestInstalled(unittest.TestCase):
     )
     def test_installed_pip_fails(self, mock_run):
         with self.assertRaises(subprocess.CalledProcessError):
-            # Depending on implementation, you might want to check it returns False
-            # self.assertFalse(installed('anypackage'))
             installed("anypackage")
 
 

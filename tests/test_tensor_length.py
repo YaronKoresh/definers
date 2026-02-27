@@ -6,7 +6,6 @@ from definers import tensor_length
 
 
 class TestTensorLength(unittest.TestCase):
-
     def test_scalar_tensor(self):
         tensor = torch.tensor(5)
         self.assertEqual(tensor_length(tensor), 1)

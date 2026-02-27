@@ -7,7 +7,6 @@ from definers import dtype
 
 
 class TestDtype(unittest.TestCase):
-
     @patch("torch.cuda.is_bf16_supported", return_value=True)
     def test_bf16_supported(self, mock_is_bf16_supported):
         self.assertEqual(dtype(), torch.bfloat16)

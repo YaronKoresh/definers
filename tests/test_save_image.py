@@ -6,11 +6,8 @@ from definers import save_image
 
 
 class TestSaveImage(unittest.TestCase):
-
     @patch("definers.random_string", return_value="random123")
-    def test_save_image_returns_correct_path(
-        self, mock_random_string
-    ):
+    def test_save_image_returns_correct_path(self, mock_random_string):
         mock_img = MagicMock()
 
         result_path = save_image(mock_img, path=".")

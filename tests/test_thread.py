@@ -6,7 +6,6 @@ from definers import thread
 
 
 class TestThread(unittest.TestCase):
-
     def test_thread_starts_and_runs(self):
         func = MagicMock()
         t = thread(func)

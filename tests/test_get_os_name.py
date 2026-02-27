@@ -5,7 +5,6 @@ from definers import get_os_name
 
 
 class TestGetOsName(unittest.TestCase):
-
     @patch("platform.system", return_value="Linux")
     def test_linux_os(self, mock_system):
         self.assertEqual(get_os_name(), "linux")
