@@ -5,6 +5,7 @@ import os
 import platform
 import re
 import select
+import shlex
 import shutil
 import site
 import subprocess

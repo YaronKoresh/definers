@@ -15,6 +15,9 @@ from definers._constants import (
     PROCESSORS,
     language_codes,
 )
+from definers._cuda import device
+from definers._data import cupy_to_numpy, numpy_to_cupy
+from definers._image import get_max_resolution
 from definers._system import (
     catch,
     cores,
@@ -26,6 +29,8 @@ from definers._system import (
     run,
     tmp,
 )
+from definers._text import random_string
+from definers._web import google_drive_download
 
 try:
     import cupy as np
@@ -318,6 +323,8 @@ def features_to_audio(
 def predict_audio(model, audio_file):
     import librosa
     import soundfile as sf
+
+    from definers._ml import get_cluster_content, is_clusters_model
 
     try:
         (audio_data, sr) = librosa.load(audio_file, sr=32000, mono=True)
@@ -731,6 +738,8 @@ def value_to_keys(dictionary, target_value):
 
 
 def transcribe_audio(audio_path, language):
+    from definers._ml import init_pretrained_model
+
     if MODELS["speech-recognition"] is None:
         init_pretrained_model("speech-recognition")
     audio_path = normalize_audio_to_peak(audio_path)
@@ -745,6 +754,8 @@ def transcribe_audio(audio_path, language):
 def generate_voice(text, reference_audio, format_choice):
     import pydub
     import soundfile as sf
+
+    from definers._ml import init_pretrained_model
 
     if not MODELS["tts"]:
         init_pretrained_model("tts")

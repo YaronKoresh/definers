@@ -4,7 +4,23 @@ import random
 import re
 import tempfile
 
+from definers._audio import analyze_audio, get_color_palette, value_to_keys
 from definers._constants import MODELS, STYLES_DB, language_codes
+from definers._cuda import device
+from definers._image import (
+    get_max_resolution,
+    init_upscale,
+    upscale,
+    write_on_image,
+)
+from definers._ml import (
+    answer,
+    build_faiss,
+    init_pretrained_model,
+    keep_alive,
+    optimize_prompt_realism,
+    pipe,
+)
 from definers._system import (
     catch,
     cores,
@@ -17,6 +33,7 @@ from definers._system import (
     tmp,
     unique,
 )
+from definers._text import ai_translate, language, simple_text
 
 try:
     import cupy as np

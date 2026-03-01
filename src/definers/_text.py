@@ -5,6 +5,7 @@ import re
 import shutil
 import string
 import sys
+import unicodedata
 from datetime import datetime
 from functools import lru_cache
 from time import time
@@ -18,7 +19,9 @@ from definers._constants import (
     language_codes,
     unesco_mapping,
 )
+from definers._cuda import device
 from definers._system import read
+from definers._web import extract_text
 
 
 def set_system_message(
@@ -77,6 +80,41 @@ def language(text):
     from langdetect import detect
 
     return detect(text).lower()
+
+
+def strip_nikud(text: str) -> str:
+    if text is None:
+        return ""
+    normalized = unicodedata.normalize("NFKD", text)
+    return "".join(ch for ch in normalized if not unicodedata.combining(ch))
+
+
+def simple_text(prompt: str) -> str:
+    if prompt is None:
+        return ""
+    punc = "[\"\\'!#$%&()*+,/:;<=>?@\\[\\\\\\]^_`\\{\\|\\}~]"
+    prompt = re.sub("[\t]", " ", str(prompt))
+    prompt = re.sub("(\n){2,}", "\n", prompt)
+    prompt = re.sub("( ){2,}", " ", prompt)
+    prompt = re.sub("[\\. ]+\\.[\\.]*|[\\. ]*\\.[\\.]+", ".", prompt)
+    prompt = re.sub("(-){2,}", "-", prompt)
+    prompt = prompt.replace("|", " or ")
+    prompt = re.sub("([ !]){1,}\\?([ !?]){1,}", " I wonder ", prompt)
+    prompt = re.sub("(?<=[a-zA-Z0-9])\\/(?=[a-zA-Z0-9])", " ", prompt)
+    prompt = re.sub(punc, "", prompt)
+    prompt = prompt.strip().strip(".")
+    prompt = re.sub(
+        "\\s*(?:(?<!\\d)(?<!\x08[a-zA-Z])\\.)+\\s*", " and ", prompt
+    )
+    prompt = re.sub("(\n){2,}", "\n", prompt)
+    prompt = re.sub("( ){2,}", " ", prompt)
+    lines = prompt.split("\n")
+    lines = [
+        line.lower().strip().replace(" -", "-").replace("- ", "-")
+        for line in lines
+    ]
+    lines = [line for line in lines if line]
+    return "\n".join(lines)
 
 
 @lru_cache(maxsize=1024)

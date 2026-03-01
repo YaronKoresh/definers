@@ -154,7 +154,7 @@ def with_retry(
     max_retries: int = 3,
     delay: float = 1.0,
     retry_on: ExceptionType = Exception,
-    delay_strategy: RetryDelayStrategy | None = None,
+    delay_strategy=None,
 ) -> Callable[[Callable[..., Awaitable[T]]], Callable[..., Awaitable[T]]]:
     if max_retries < 1:
         raise ValueError("max_retries must be at least 1")

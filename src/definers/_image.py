@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Any
 
 from definers._constants import MODELS, _negative_prompt_, _positive_prompt_
+from definers._cuda import device
+from definers._data import dtype
 from definers._system import exist, full_path, tmp
 
 try:

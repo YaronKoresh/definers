@@ -18,7 +18,14 @@ from time import sleep, time
 import numpy as _np
 import numpy as np
 
-from definers._audio import audio_preview
+from definers._audio import (
+    audio_preview,
+    features_to_audio,
+    normalize_audio_to_peak,
+    predict_audio,
+    separate_stems,
+    stem_mixer,
+)
 from definers._constants import (
     MODELS,
     PROCESSORS,
@@ -32,8 +39,24 @@ from definers._constants import (
     language_codes,
     tasks,
 )
-from definers._cuda import device
-from definers._image import image_resolution
+from definers._cuda import device, free, set_cuda_env
+from definers._data import (
+    create_vectorizer,
+    cupy_to_numpy,
+    dtype,
+    get_prediction_file_extension,
+    guess_numpy_type,
+    load_as_numpy,
+    numpy_to_cupy,
+    one_dim_numpy,
+)
+from definers._image import (
+    features_to_image,
+    get_max_resolution,
+    image_resolution,
+    resize_image,
+    save_image,
+)
 from definers._logger import _init_logger
 from definers._system import (
     add_path,
@@ -62,7 +85,9 @@ from definers._system import (
     wait,
     write,
 )
-from definers._text import language
+from definers._text import ai_translate, language, random_string, strip_nikud
+from definers._video import features_to_video, write_video
+from definers._web import download_file, google_drive_download
 
 logger = _init_logger()
 

@@ -613,6 +613,19 @@ def load_as_numpy(path, training=False):
     import sox
     from scipy.io import wavfile
 
+    from definers._audio import (
+        extract_audio_features,
+        remove_silence,
+        split_mp3,
+    )
+    from definers._image import extract_image_features, resize_image
+    from definers._ml import extract_text_features
+    from definers._video import (
+        convert_video_fps,
+        extract_video_features,
+        resize_video,
+    )
+
     try:
         parts = path.split(".")
         if len(parts) >= 2:
