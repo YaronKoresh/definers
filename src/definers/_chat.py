@@ -18,6 +18,11 @@ from definers._system import (
     unique,
 )
 
+try:
+    import cupy as np
+except Exception:
+    import numpy as np
+
 
 def theme():
     import gradio as gr

@@ -117,10 +117,6 @@ class CircuitBreaker:
             raise
 
 
-class RetryDelayStrategy(Protocol):
-    def delay_for_attempt(self, attempt_index: int) -> float: ...
-
-
 @dataclass(slots=True)
 class ExponentialBackoffDelay:
     base_delay: float = 1.0

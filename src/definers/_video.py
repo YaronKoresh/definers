@@ -1,5 +1,12 @@
 from definers._system import catch, tmp
 
+try:
+    import cupy as np
+except Exception:
+    import numpy as np
+
+import numpy as _np
+
 
 def extract_video_features(video_path, frame_interval=10):
     import cv2

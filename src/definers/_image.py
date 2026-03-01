@@ -8,6 +8,13 @@ from typing import Any
 from definers._constants import MODELS, _negative_prompt_, _positive_prompt_
 from definers._system import exist, full_path, tmp
 
+try:
+    import cupy as np
+except Exception:
+    import numpy as np
+
+import numpy as _np
+
 
 def extract_image_features(image_path):
     import cv2

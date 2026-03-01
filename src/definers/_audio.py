@@ -7,6 +7,8 @@ import tempfile
 from pathlib import Path
 from urllib.parse import quote
 
+import numpy as _np
+
 from definers._constants import (
     MADMOM_AVAILABLE,
     MODELS,
@@ -24,6 +26,11 @@ from definers._system import (
     run,
     tmp,
 )
+
+try:
+    import cupy as np
+except Exception:
+    import numpy as np
 
 
 def get_audio_duration(file_path: str) -> float | None:

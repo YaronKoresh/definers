@@ -8,6 +8,11 @@ import numpy as _np
 from definers._constants import TOKENIZERS, iio_formats, tasks
 from definers._system import catch, delete, log, read, tmp
 
+try:
+    import cupy as np
+except Exception:
+    import numpy as np
+
 
 def patch_cupy_numpy():
     import numpy as np
