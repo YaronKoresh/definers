@@ -1,56 +1,10 @@
-import argparse
-import asyncio
-import base64
-import collections
-import collections.abc
-import concurrent
-import ctypes
-import gc
-import getpass
-import hashlib
-import importlib
-import inspect
-import io
-import json
-import logging
 import math
-import multiprocessing
 import os
-import pathlib
-import platform
-import queue
 import random
-import re
-import select
-import shlex
-import shutil
-import signal
-import site
-import string
 import subprocess
 import sys
-import sysconfig
-import tarfile
 import tempfile
-import threading
-import traceback
-import urllib.request
-import warnings
-import zipfile
-from collections import Counter, OrderedDict, namedtuple
-from collections.abc import Callable
-from concurrent.futures import ProcessPoolExecutor
-from contextlib import contextmanager
-from ctypes.util import find_library
-from dataclasses import dataclass
-from datetime import datetime
-from enum import Enum
-from functools import lru_cache, partial
-from glob import glob
 from pathlib import Path
-from string import ascii_letters, digits, punctuation
-from time import sleep, time
-from typing import Any, Optional, Union
 from urllib.parse import quote
 
 from definers._constants import (
@@ -61,19 +15,14 @@ from definers._constants import (
 )
 from definers._system import (
     catch,
-    copy,
     cores,
     delete,
     exist,
     full_path,
     get_ext,
-    load,
     log,
-    paths,
-    read,
     run,
     tmp,
-    write,
 )
 
 
@@ -1134,7 +1083,6 @@ def get_audio_feedback(audio_path):
         return feedback
     except Exception as e:
         raise catch(f"Analysis failed: {e}")
-        return None
 
 
 def analyze_audio_features(audio_path, txt=True):
@@ -1334,7 +1282,6 @@ def pitch_shift_vocals(
 def create_spectrum_visualization(audio_path):
     import librosa
     import matplotlib.pyplot as plt
-    import matplotlib.ticker as ticker
 
     try:
         (y, sr) = librosa.load(audio_path, sr=None)
@@ -1548,8 +1495,7 @@ def extend_audio(audio_path, extend_duration_s, format_choice):
 
 def audio_to_midi(audio_path):
     import madmom
-    from basic_pitch import ICASSP_2022_MODEL_PATH
-    from basic_pitch.inference import Model, predict
+    from basic_pitch.inference import predict
 
     proc = madmom.features.beats.DBNBeatTrackingProcessor(fps=100)
     act = madmom.features.beats.RNNBeatProcessor()(audio_path)
@@ -2090,7 +2036,7 @@ def create_sample_audio(
 def riaa_filter(input_filename, bass_factor=1.0):
     import librosa
     from scipy.io import wavfile
-    from scipy.signal import bilinear, filtfilt, freqs, lfilter
+    from scipy.signal import bilinear, freqs, lfilter
 
     output_filename = tmp("wav")
     try:

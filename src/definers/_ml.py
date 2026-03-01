@@ -1,57 +1,19 @@
-import argparse
-import asyncio
-import base64
-import collections
-import collections.abc
-import concurrent
-import ctypes
-import gc
-import getpass
-import hashlib
-import importlib
 import inspect
-import io
 import json
 import logging
 import math
-import multiprocessing
 import os
-import pathlib
 import platform
-import queue
 import random
 import re
-import select
-import shlex
 import shutil
-import signal
-import site
-import string
 import subprocess
 import sys
-import sysconfig
-import tarfile
 import tempfile
-import threading
-import traceback
-import urllib.request
 import warnings
-import zipfile
-from collections import Counter, OrderedDict, namedtuple
-from collections.abc import Callable
-from concurrent.futures import ProcessPoolExecutor
-from contextlib import contextmanager
-from ctypes.util import find_library
-from dataclasses import dataclass
-from datetime import datetime
-from enum import Enum
-from functools import lru_cache, partial
-from glob import glob
+from collections import Counter, OrderedDict
 from pathlib import Path
-from string import ascii_letters, digits, punctuation
 from time import sleep, time
-from typing import Any, Optional, Union
-from urllib.parse import quote
 
 import numpy as _np
 import numpy as np
@@ -83,12 +45,9 @@ from definers._system import (
     delete,
     directory,
     exist,
-    extract,
     full_path,
     get_ext,
-    installed,
     is_directory,
-    load,
     log,
     modify_wheel_requirements,
     move,
@@ -97,9 +56,7 @@ from definers._system import (
     path_ext,
     paths,
     read,
-    remove,
     run,
-    save,
     thread,
     tmp,
     wait,
@@ -917,8 +874,6 @@ def init_model_repo(task: str, turbo: bool = False):
             AutoModelForCausalLM,
             AutoProcessor,
             AutoTokenizer,
-            BitsAndBytesConfig,
-            GenerationConfig,
             T5ForConditionalGeneration,
             T5Tokenizer,
             TFAutoModel,
@@ -953,7 +908,6 @@ def init_model_repo(task: str, turbo: bool = False):
         import torch
         from huggingface_hub import snapshot_download
         from transformers import (
-            TRANSFORMERS_CACHE,
             AutoConfig,
             AutoModelForCausalLM,
             AutoProcessor,
@@ -1310,6 +1264,7 @@ def SklearnWrapper(sklearn_model, is_classification=False):
             self.is_classification = is_classification
 
         def forward(self, x, y=None, y_mask=None):
+            del y_mask
             x_numpy = self._to_numpy(x)
             if (
                 hasattr(self.sklearn_model, "predict_proba")
@@ -1461,7 +1416,6 @@ def train_model_rvc(
     import torch
 
     from .configs.config import Config
-    from .i18n.i18n import I18nAuto
 
     path = normalize_audio_to_peak(path)
     (path, music) = separate_stems(path)
@@ -1856,7 +1810,6 @@ def get_model_instructions(task: str, model_type: str) -> str:
 
     try:
         from sklearn.feature_extraction.text import (
-            CountVectorizer,
             TfidfVectorizer,
         )
         from sklearn.pipeline import Pipeline
@@ -2170,7 +2123,7 @@ def get_model_instructions(task: str, model_type: str) -> str:
     log(f"Deep Dive Analysis for '{task}'", final_report)
 
 
-def generate_song(arg1, arg):
+def generate_song(_arg1, _arg):
     print("songs generation is not implemented yet...")
 
 

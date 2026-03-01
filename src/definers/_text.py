@@ -1,57 +1,13 @@
-import argparse
-import asyncio
-import base64
-import collections
-import collections.abc
-import concurrent
-import ctypes
-import gc
-import getpass
 import hashlib
-import importlib
-import inspect
-import io
-import json
-import logging
-import math
-import multiprocessing
 import os
-import pathlib
-import platform
-import queue
 import random
 import re
-import select
-import shlex
 import shutil
-import signal
-import site
 import string
-import subprocess
 import sys
-import sysconfig
-import tarfile
-import tempfile
-import threading
-import traceback
-import urllib.request
-import warnings
-import zipfile
-from collections import Counter, OrderedDict, namedtuple
-from collections.abc import Callable
-from concurrent.futures import ProcessPoolExecutor
-from contextlib import contextmanager
-from ctypes.util import find_library
-from dataclasses import dataclass
 from datetime import datetime
-from enum import Enum
-from functools import lru_cache, partial
-from glob import glob
-from pathlib import Path
-from string import ascii_letters, digits, punctuation
-from time import sleep, time
-from typing import Any, Optional, Union
-from urllib.parse import quote
+from functools import lru_cache
+from time import time
 
 from definers._constants import (
     MODELS,
@@ -62,7 +18,7 @@ from definers._constants import (
     language_codes,
     unesco_mapping,
 )
-from definers._system import log, read, write
+from definers._system import read
 
 
 def set_system_message(
@@ -83,6 +39,7 @@ def set_system_message(
     creative: bool = None,
 ):
     global SYSTEM_MESSAGE
+    _ = (rules, verbose, friendly, formal, creative)
     parts = []
     parts.append(f"You are {role}.")
     if name:

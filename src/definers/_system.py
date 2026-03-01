@@ -1168,7 +1168,7 @@ def post_install():
     except Exception:
         pass
     if not hasattr(_np, "_no_nep50_warning"):
-        _np._no_nep50_warning = lambda *a, **kw: None
+        _np._no_nep50_warning = lambda *a, **_kw: None
     definers.free()
 
 

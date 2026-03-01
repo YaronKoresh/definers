@@ -1,62 +1,12 @@
-import argparse
-import asyncio
-import base64
-import collections
-import collections.abc
-import concurrent
-import ctypes
-import gc
-import getpass
-import hashlib
 import importlib
-import inspect
-import io
-import json
 import logging
-import math
-import multiprocessing
-import os
-import pathlib
-import platform
-import queue
-import random
-import re
-import select
-import shlex
-import shutil
-import signal
-import site
-import string
-import subprocess
 import sys
-import sysconfig
-import tarfile
-import tempfile
-import threading
-import traceback
-import urllib.request
-import warnings
-import zipfile
-from collections import Counter, OrderedDict, namedtuple
-from collections.abc import Callable
-from concurrent.futures import ProcessPoolExecutor
-from contextlib import contextmanager
-from ctypes.util import find_library
-from dataclasses import dataclass
-from datetime import datetime
-from enum import Enum
-from functools import lru_cache, partial
-from glob import glob
-from pathlib import Path
-from string import ascii_letters, digits, punctuation
-from time import sleep, time
-from typing import Any, Optional, Union
-from urllib.parse import quote
+from typing import Any
 
 import numpy as _np
 
 from definers._constants import TOKENIZERS, iio_formats, tasks
-from definers._system import catch, delete, load, log, read, tmp
+from definers._system import catch, delete, log, read, tmp
 
 
 def patch_cupy_numpy():
@@ -230,7 +180,7 @@ def patch_cupy_numpy():
     if hasattr(np, "testing") and (not hasattr(np.testing, "Tester")):
 
         class Tester:
-            def test(self, label="fast", extra_argv=None):
+            def test(self, label="fast", _extra_argv=None):
                 return True
 
         np.testing.Tester = Tester
