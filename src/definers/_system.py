@@ -1,5 +1,6 @@
 """System utilities for the definers package."""
 
+from pathlib import Path
 import ctypes
 import importlib
 import logging
@@ -253,14 +254,14 @@ def install_audio_effects():
         os.makedirs(install_dir, exist_ok=True)
         print("Detected Windows. Automating dependency installation...")
         print(f"Dependencies will be installed in: {install_dir}")
-        rubberband_url = "https://breakfastquay.com/files/releases/rubberband-3.3.0-gpl-executable-windows.zip"
+        rubberband_url = "https://breakfastquay.com/files/releases/rubberband-4.0.0-gpl-executable-windows.zip"
         fluidsynth_url = "https://github.com/FluidSynth/fluidsynth/releases/download/v2.3.5/fluidsynth-2.3.5-win64.zip"
         soundfont_url = "https://github.com/FluidSynth/fluidsynth/raw/master/sf2/FluidR3_GM.sf2"
         soundfont_path = os.path.join(
             install_dir, "soundfonts", "FluidR3_GM.sf2"
         )
         rubberband_extract_path = os.path.join(install_dir, "rubberband")
-        if not any("rubberband" in s for s in os.environ.get("PATH", "")):
+        if not "rubberband" in os.environ.get("PATH", ""):
             if _d.download_and_unzip(rubberband_url, rubberband_extract_path):
                 extracted_dirs = [
                     d

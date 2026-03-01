@@ -1,5 +1,8 @@
 """Web utilities for the definers package."""
 
+import ctypes
+from ctypes import wintypes
+import winreg
 import argparse
 import asyncio
 import base64
@@ -181,14 +184,35 @@ def download_and_unzip(url, extract_to):
         print(f"An unexpected error occurred: {e}")
     return False
 
+def broadcast_path_change():
+    SendMessageTimeout = ctypes.windll.user32.SendMessageTimeoutW
+    SendMessageTimeout(
+        0xFFFF, 0x001A, 0, u"Environment", 
+        0x0002, 5000, ctypes.byref(wintypes.DWORD())
+    )
 
 def add_to_path_windows(folder_path):
-    print(f"Adding {folder_path} to user PATH...")
-    command = f'setx PATH "{folder_path};%PATH%"'
-    result = run(command)
-    if result:
-        print(
-            f"Successfully added {folder_path} to PATH. Please restart your terminal for changes to take effect."
-        )
-    else:
-        print(f"Failed to add {folder_path} to PATH.")
+    
+    folder_path = os.path.normpath(folder_path).strip('"')
+    
+    try:
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, 'Environment', 0, winreg.KEY_ALL_ACCESS)
+        
+        try:
+            current_path, _ = winreg.QueryValueEx(key, 'PATH')
+        except FileNotFoundError:
+            current_path = ""
+
+        parts = [p.strip('"') for p in current_path.split(';') if p.strip()]
+        
+        if folder_path not in parts:
+            parts.insert(0, folder_path)
+            new_path = ";".join(parts)
+            winreg.SetValueEx(key, 'PATH', 0, winreg.REG_EXPAND_SZ, new_path)
+            os.environ["PATH"] = folder_path + os.pathsep + os.environ["PATH"]
+            broadcast_path_change()
+            print(f"Added to PATH: {folder_path}")
+
+        winreg.CloseKey(key)
+    except Exception as e:
+        print(f"Error updating PATH: {e}")
