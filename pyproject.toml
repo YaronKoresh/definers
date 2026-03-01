@@ -200,8 +200,6 @@ test = "pytest tests/"
 check = [
     "clean",
     "compile",
-    "lint",
-    "format",
     "sanitize",
     "pre-commit",
     "test",

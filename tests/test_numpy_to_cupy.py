@@ -1,5 +1,7 @@
 import unittest
+
 import numpy as np
+
 from definers import numpy_to_cupy
 
 

@@ -22,14 +22,7 @@ set /p "INSTALL_GROUP= Enter groups to install (default: dev): "
 
 if "%INSTALL_GROUP%"=="" set "INSTALL_GROUP=dev"
 
-set "CUDA_INSTALLATION_GROUP="
-set /p "CUDA_INSTALLATION_GROUP= Also install CUDA optional dependencies? Y or N: "
-
-if /I "%CUDA_INSTALLATION_GROUP%"=="Y" (
-    call pip install -e ".[%INSTALL_GROUP%,cuda]" --extra-index-url https://pypi.nvidia.com
-) else (
-    call pip install -e ".[%INSTALL_GROUP%]"
-)
+call pip install -e ".[%INSTALL_GROUP%]" --extra-index-url https://pypi.nvidia.com
 call poe hook
 
 pause

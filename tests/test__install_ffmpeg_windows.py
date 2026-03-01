@@ -1,5 +1,6 @@
 import unittest
 from unittest.mock import MagicMock, patch
+
 from definers import _install_ffmpeg_windows, is_admin_windows
 
 

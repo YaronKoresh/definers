@@ -54,6 +54,7 @@ from string import ascii_letters, digits, punctuation
 from time import sleep, time
 from typing import Any, Optional, Union
 from urllib.parse import quote
+
 from definers._capabilities import (
     CircuitBreaker,
     CircuitBreakerOpenException,
@@ -138,9 +139,7 @@ class NetworkTransferStrategy(Protocol):
 
 class HttpChunkedTransferStrategy:
     def __init__(
-        self,
-        chunk_size_bytes: int = 8192,
-        request_timeout_seconds: float = 30,
+        self, chunk_size_bytes: int = 8192, request_timeout_seconds: float = 30
     ):
         self.chunk_size_bytes = chunk_size_bytes
         self.request_timeout_seconds = request_timeout_seconds
@@ -153,20 +152,16 @@ class HttpChunkedTransferStrategy:
             import aiohttp
         except ImportError:
             await asyncio.to_thread(
-                self._execute_transfer_sync,
-                source_uri,
-                target_node,
+                self._execute_transfer_sync, source_uri, target_node
             )
             return True
-
         target_node.parent.mkdir(parents=True, exist_ok=True)
         request_timeout = aiohttp.ClientTimeout(
             total=self.request_timeout_seconds
         )
         async with aiohttp.ClientSession() as session:
             async with session.get(
-                source_uri,
-                timeout=request_timeout,
+                source_uri, timeout=request_timeout
             ) as network_response:
                 network_response.raise_for_status()
                 async with aiofiles.open(
@@ -181,12 +176,12 @@ class HttpChunkedTransferStrategy:
         return True
 
     def _execute_transfer_sync(
-        self,
-        source_uri: str,
-        target_node: Path,
+        self, source_uri: str, target_node: Path
     ) -> None:
         target_node.parent.mkdir(parents=True, exist_ok=True)
-        with urllib.request.urlopen(source_uri, timeout=self.request_timeout_seconds) as response:
+        with urllib.request.urlopen(
+            source_uri, timeout=self.request_timeout_seconds
+        ) as response:
             with open(target_node, "wb") as persistent_storage:
                 while True:
                     data_chunk = response.read(self.chunk_size_bytes)
@@ -197,9 +192,7 @@ class HttpChunkedTransferStrategy:
 
 class ZipExtractTransferStrategy:
     def __init__(
-        self,
-        chunk_size_bytes: int = 8192,
-        request_timeout_seconds: float = 60,
+        self, chunk_size_bytes: int = 8192, request_timeout_seconds: float = 60
     ):
         self.chunk_size_bytes = chunk_size_bytes
         self.request_timeout_seconds = request_timeout_seconds
@@ -211,20 +204,16 @@ class ZipExtractTransferStrategy:
             import aiohttp
         except ImportError:
             await asyncio.to_thread(
-                self._execute_transfer_sync,
-                source_uri,
-                target_node,
+                self._execute_transfer_sync, source_uri, target_node
             )
             return True
-
         target_node.mkdir(parents=True, exist_ok=True)
         request_timeout = aiohttp.ClientTimeout(
             total=self.request_timeout_seconds
         )
         async with aiohttp.ClientSession() as session:
             async with session.get(
-                source_uri,
-                timeout=request_timeout,
+                source_uri, timeout=request_timeout
             ) as network_response:
                 network_response.raise_for_status()
                 memory_buffer = io.BytesIO(await network_response.read())
@@ -233,12 +222,12 @@ class ZipExtractTransferStrategy:
         return True
 
     def _execute_transfer_sync(
-        self,
-        source_uri: str,
-        target_node: Path,
+        self, source_uri: str, target_node: Path
     ) -> None:
         target_node.mkdir(parents=True, exist_ok=True)
-        with urllib.request.urlopen(source_uri, timeout=self.request_timeout_seconds) as response:
+        with urllib.request.urlopen(
+            source_uri, timeout=self.request_timeout_seconds
+        ) as response:
             payload = response.read()
         memory_buffer = io.BytesIO(payload)
         with zipfile.ZipFile(memory_buffer) as archive_context:
@@ -255,8 +244,7 @@ class ResourceRetrievalOrchestrator:
     ):
         self.strategy = strategy
         self.circuit_breaker = circuit_breaker or CircuitBreaker(
-            failure_threshold=3,
-            recovery_timeout=30,
+            failure_threshold=3, recovery_timeout=30
         )
         self.max_retries = max_retries
         self.base_delay_seconds = base_delay_seconds
@@ -264,24 +252,17 @@ class ResourceRetrievalOrchestrator:
     async def process(self, source_uri: str, target_node: str | Path) -> bool:
         target_path_object = Path(target_node)
 
-        @with_retry(
-            max_retries=self.max_retries,
-            delay=self.base_delay_seconds,
-        )
+        @with_retry(max_retries=self.max_retries, delay=self.base_delay_seconds)
         async def transfer_operation() -> bool:
             return await self.strategy.execute_transfer(
-                source_uri,
-                target_path_object,
+                source_uri, target_path_object
             )
 
         try:
-            return await self.circuit_breaker.execute_async(
-                transfer_operation
-            )
+            return await self.circuit_breaker.execute_async(transfer_operation)
         except CircuitBreakerOpenException as circuit_open_fault:
             logging.getLogger(__name__).error(
-                "Transfer blocked by open circuit: %s",
-                str(circuit_open_fault),
+                "Transfer blocked by open circuit: %s", str(circuit_open_fault)
             )
             return False
         except Exception as execution_fault:
@@ -296,7 +277,6 @@ def _execute_async_operation(coroutine: Any) -> Any:
         asyncio.get_running_loop()
     except RuntimeError:
         return asyncio.run(coroutine)
-
     operation_outcome: dict[str, Any] = {"result": None, "error": None}
 
     def runner() -> None:

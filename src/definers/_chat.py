@@ -52,6 +52,7 @@ from string import ascii_letters, digits, punctuation
 from time import sleep, time
 from typing import Any, Optional, Union
 from urllib.parse import quote
+
 from definers._constants import MODELS, STYLES_DB, language_codes
 from definers._system import (
     apt_install,
@@ -417,7 +418,7 @@ def get_rms_and_beat(t, adata, reactivity_band, sensitivity):
     else:
         raw_rms = adata["rms"][safe_idx]
     rms = raw_rms * sensitivity
-    is_beat = any((abs(frame_idx - bf) < 3 for bf in adata["beat_frames"]))
+    is_beat = any(abs(frame_idx - bf) < 3 for bf in adata["beat_frames"])
     return (rms, is_beat)
 
 
@@ -700,7 +701,7 @@ def music_video(audio_path, width=1920, height=1080, fps=30):
         frame = np.zeros((h, w, 3), dtype=np.uint8)
         base_radius = h * 0.12
         radius = int(base_radius + rms_val * (h * 0.2))
-        is_beat = any((abs(frame_idx - bf) < 3 for bf in beat_frames))
+        is_beat = any(abs(frame_idx - bf) < 3 for bf in beat_frames)
         if is_beat:
             radius = int(radius / rms_val / centroid_val)
             frame += random.randint(32, 192)
@@ -867,7 +868,7 @@ def music_video(audio_path, width=1920, height=1080, fps=30):
 
 
 def strip_nikud(text: str) -> str:
-    return "".join((char for char in text if not "֑" <= char <= "ׇ"))
+    return "".join(char for char in text if not "֑" <= char <= "ׇ")
 
 
 def init_stable_whisper():

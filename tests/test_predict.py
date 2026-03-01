@@ -1,7 +1,9 @@
 import os
 import unittest
 from unittest.mock import MagicMock, call, mock_open, patch
+
 import numpy as np
+
 from definers import predict
 
 

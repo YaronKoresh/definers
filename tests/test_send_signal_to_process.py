@@ -2,6 +2,7 @@ import os
 import signal
 import unittest
 from unittest.mock import call, patch
+
 from definers import send_signal_to_process
 
 

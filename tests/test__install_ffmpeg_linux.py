@@ -1,6 +1,7 @@
 import subprocess
 import unittest
 from unittest.mock import call, patch
+
 from definers import _install_ffmpeg_linux
 
 

@@ -3,6 +3,7 @@ import shutil
 import tempfile
 import unittest
 from unittest.mock import patch
+
 from definers import read_as_numpy
 
 

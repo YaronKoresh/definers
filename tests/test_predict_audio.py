@@ -2,8 +2,10 @@ import os
 import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
+
 import numpy as np
 import soundfile as sf
+
 from definers import predict_audio
 
 

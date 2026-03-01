@@ -52,8 +52,10 @@ from string import ascii_letters, digits, punctuation
 from time import sleep, time
 from typing import Any, Optional, Union
 from urllib.parse import quote
+
 import numpy as _np
 import numpy as np
+
 from definers._audio import audio_preview
 from definers._constants import (
     MODELS,
@@ -240,6 +242,7 @@ def train_linear_regression(X, y, model_path, learning_rate=0.01):
 
 def init_model_file(task: str, turbo: bool = False, model_type: str = None):
     import pickle
+
     import joblib
     import onnxruntime
     import torch
@@ -483,6 +486,7 @@ def train(
     selected_rows=None,
 ):
     import joblib
+
     import definers as _d
 
     tokenizer = _d.init_tokenizer()
@@ -972,10 +976,8 @@ def init_model_repo(task: str, turbo: bool = False):
         print(f"Preparing to inject patch into {target_file}...")
         original_code_lines = target_file.read_text().splitlines()
         if any(
-            (
-                "dynamically injected to fix a compatibility issue" in line
-                for line in original_code_lines
-            )
+            "dynamically injected to fix a compatibility issue" in line
+            for line in original_code_lines
         ):
             print(
                 "✅ Source code appears to be already patched. Skipping injection."
@@ -1457,6 +1459,7 @@ def train_model_rvc(
     logger.info(f"Starting RVC training for experiment: {experiment}")
     import pydub
     import torch
+
     from .configs.config import Config
     from .i18n.i18n import I18nAuto
 
@@ -1881,7 +1884,7 @@ def get_model_instructions(task: str, model_type: str) -> str:
         if not isinstance(model_obj, nn.Module):
             return
         layer_counts = Counter(
-            (layer.__class__.__name__ for layer in model_obj.modules())
+            layer.__class__.__name__ for layer in model_obj.modules()
         )
         if (
             layer_counts["TransformerEncoderLayer"] > 0
@@ -1934,10 +1937,7 @@ def get_model_instructions(task: str, model_type: str) -> str:
                 if not input_spec:
                     continue
                 shape = tuple(
-                    (
-                        d if isinstance(d, int) else 2
-                        for d in input_spec["shape"]
-                    )
+                    d if isinstance(d, int) else 2 for d in input_spec["shape"]
                 )
                 dtype_str = input_spec["dtype"]
                 if "float" in dtype_str:
@@ -2129,7 +2129,7 @@ def get_model_instructions(task: str, model_type: str) -> str:
                 for (name, step) in model_object.steps
             ]
             profile["architecture"]["details"] = steps
-            if any(("TfidfVectorizer" in s for s in steps)):
+            if any("TfidfVectorizer" in s for s in steps):
                 profile["modalities"].add("Text")
                 profile["inputs"].append(
                     {
@@ -2270,6 +2270,7 @@ def infer(task: str, inference_file: str, model_type: str = None):
 def compile_model(model_or_pipeline):
     import inspect
     import types
+
     import torch
 
     try:

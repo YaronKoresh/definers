@@ -1,7 +1,9 @@
 import unittest
 from unittest.mock import MagicMock, patch
+
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
+
 from definers import features_to_text
 
 

@@ -102,10 +102,7 @@ class CircuitBreaker:
             raise
 
     async def execute_async(
-        self,
-        func: Callable[..., Awaitable[T]],
-        *args: Any,
-        **kwargs: Any,
+        self, func: Callable[..., Awaitable[T]], *args: Any, **kwargs: Any
     ) -> T:
         with self._state_lock:
             self._allow_call()
@@ -146,7 +143,7 @@ class ExponentialBackoffDelay:
     def delay_for_attempt(self, attempt_index: int) -> float:
         if attempt_index < 0:
             raise ValueError("attempt_index must be non-negative")
-        raw_delay = self.base_delay * (self.multiplier**attempt_index)
+        raw_delay = self.base_delay * self.multiplier**attempt_index
         bounded_delay = min(raw_delay, self.max_delay)
         if self.jitter_ratio == 0:
             return bounded_delay
@@ -165,7 +162,6 @@ def with_retry(
 ) -> Callable[[Callable[..., Awaitable[T]]], Callable[..., Awaitable[T]]]:
     if max_retries < 1:
         raise ValueError("max_retries must be at least 1")
-
     active_delay_strategy = delay_strategy or ExponentialBackoffDelay(
         base_delay=delay
     )
@@ -173,6 +169,7 @@ def with_retry(
     def decorator(
         func: Callable[..., Awaitable[T]],
     ) -> Callable[..., Awaitable[T]]:
+
         @functools.wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> T:
             last_exception: BaseException | None = None

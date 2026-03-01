@@ -16,6 +16,7 @@ from contextlib import contextmanager
 from datetime import datetime
 from glob import glob
 from pathlib import Path
+
 from definers._constants import FFMPEG_URL, ai_model_extensions
 
 
@@ -248,7 +249,7 @@ def install_audio_effects():
                     )
                     _d.add_to_path_windows(rubberband_bin_path)
         fluidsynth_extract_path = os.path.join(install_dir, "fluidsynth")
-        if not any(("fluidsynth" in s for s in os.environ.get("PATH", ""))):
+        if not any("fluidsynth" in s for s in os.environ.get("PATH", "")):
             if _d.download_and_unzip(fluidsynth_url, fluidsynth_extract_path):
                 fluidsynth_bin_path = os.path.join(
                     fluidsynth_extract_path, "bin"
@@ -332,7 +333,7 @@ def modify_wheel_requirements(wheel_path: str, requirements_map: dict):
                 if count > 0:
                     print(f"Removed dependency: {package_name}")
         metadata_content = "\n".join(
-            (line for line in metadata_content.splitlines() if line.strip())
+            line for line in metadata_content.splitlines() if line.strip()
         )
         with open(metadata_path, "w", encoding="utf-8") as f:
             f.write(metadata_content)
@@ -677,7 +678,7 @@ def _is_text(data):
     if not data:
         return True
     text_chars = set(range(32, 127)) | {9, 10, 13} | set(range(128, 256))
-    return all((b in text_chars for b in data[:8192]))
+    return all(b in text_chars for b in data[:8192])
 
 
 def read(path):
@@ -843,7 +844,6 @@ def run(command, silent=False, env=None):
 
     if env is None:
         env = {}
-
     if sys.platform.startswith("win"):
         return _d.run_windows(command, silent=silent, env=env)
     else:
@@ -1157,6 +1157,7 @@ def pre_install():
 
 def post_install():
     import numpy as _np
+
     import definers
 
     try:

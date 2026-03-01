@@ -52,6 +52,7 @@ from string import ascii_letters, digits, punctuation
 from time import sleep, time
 from typing import Any, Optional, Union
 from urllib.parse import quote
+
 from definers._constants import (
     MADMOM_AVAILABLE,
     MODELS,
@@ -1485,7 +1486,7 @@ def identify_instruments(audio_path):
     found = False
     for p in predictions:
         label = p["label"].lower()
-        if any((instrument in label for instrument in instrument_list)):
+        if any(instrument in label for instrument in instrument_list):
             detected_instruments += (
                 f"- **{p['label'].title()}** (Score: {p['score']:.2f})\n"
             )

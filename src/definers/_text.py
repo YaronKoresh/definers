@@ -52,6 +52,7 @@ from string import ascii_letters, digits, punctuation
 from time import sleep, time
 from typing import Any, Optional, Union
 from urllib.parse import quote
+
 from definers._constants import (
     MODELS,
     SYSTEM_MESSAGE,
@@ -121,10 +122,6 @@ def language(text):
     return detect(text).lower()
 
 
-import re
-from functools import lru_cache
-
-
 @lru_cache(maxsize=1024)
 def camel_case(txt: str) -> str:
     if not txt:
@@ -132,7 +129,7 @@ def camel_case(txt: str) -> str:
     words = re.sub("[^a-zA-Z0-9]+", " ", txt).split()
     if not words:
         return ""
-    return words[0].lower() + "".join((word.capitalize() for word in words[1:]))
+    return words[0].lower() + "".join(word.capitalize() for word in words[1:])
 
 
 def ai_translate(text, lang="en"):
@@ -278,7 +275,7 @@ def duck_translate(text, lang="en"):
 def random_string(min_len=50, max_len=60):
     characters = string.ascii_letters + string.digits + "_"
     length = random.randint(min_len, max_len)
-    return "".join((random.choice(characters) for _ in range(length)))
+    return "".join(random.choice(characters) for _ in range(length))
 
 
 def random_salt(size):

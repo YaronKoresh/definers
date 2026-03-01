@@ -11,6 +11,7 @@ import tempfile
 from datetime import datetime
 from glob import glob
 from pathlib import Path
+
 import joblib
 
 try:
@@ -51,6 +52,7 @@ except ImportError:
     AutoTokenizer = None
 collections.MutableSequence = collections.abc.MutableSequence
 import numpy as _np
+
 from definers._audio import (
     analyze_audio,
     analyze_audio_features,

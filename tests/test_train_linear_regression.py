@@ -1,7 +1,9 @@
 import unittest
 from unittest.mock import MagicMock, patch
+
 import numpy as np
 import torch
+
 from definers import (
     LinearRegressionTorch,
     initialize_linear_regression,

@@ -19,7 +19,6 @@ DIRECTORY_PATTERNS = {
     "*.egg-info",
     ".coverage.reports",
 }
-
 FILE_PATTERNS = {
     ".coverage",
     ".coverage.*",

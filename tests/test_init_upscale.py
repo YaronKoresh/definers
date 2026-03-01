@@ -1,6 +1,8 @@
 import unittest
 from unittest.mock import MagicMock, patch
+
 import torch
+
 from definers import MODELS, init_upscale
 
 

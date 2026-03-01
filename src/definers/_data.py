@@ -52,7 +52,9 @@ from string import ascii_letters, digits, punctuation
 from time import sleep, time
 from typing import Any, Optional, Union
 from urllib.parse import quote
+
 import numpy as _np
+
 from definers._constants import TOKENIZERS, iio_formats, tasks
 from definers._system import catch, delete, load, log, read, tmp
 
@@ -428,6 +430,7 @@ def split_columns(data, labels, is_batch=False):
 
 def tokenize_and_pad(rows, tokenizer=None):
     import numpy as np
+
     import definers as _d
 
     if not tokenizer:
@@ -483,15 +486,13 @@ def files_to_dataset(features_paths: list, labels_paths: list = None):
                 features_have_strings = True
             elif isinstance(loaded, list):
                 if any(
-                    (
-                        isinstance(l, _np.ndarray)
-                        and (
-                            _np.issubdtype(l.dtype, _np.str_)
-                            or _np.issubdtype(l.dtype, _np.object_)
-                        )
-                        for l in loaded
-                        if l is not None
+                    isinstance(l, _np.ndarray)
+                    and (
+                        _np.issubdtype(l.dtype, _np.str_)
+                        or _np.issubdtype(l.dtype, _np.object_)
                     )
+                    for l in loaded
+                    if l is not None
                 ):
                     features_have_strings = True
             if isinstance(loaded, list):
@@ -513,15 +514,13 @@ def files_to_dataset(features_paths: list, labels_paths: list = None):
                     labels_have_strings = True
                 elif isinstance(loaded, list):
                     if any(
-                        (
-                            isinstance(l, _np.ndarray)
-                            and (
-                                _np.issubdtype(l.dtype, _np.str_)
-                                or _np.issubdtype(l.dtype, _np.object_)
-                            )
-                            for l in loaded
-                            if l is not None
+                        isinstance(l, _np.ndarray)
+                        and (
+                            _np.issubdtype(l.dtype, _np.str_)
+                            or _np.issubdtype(l.dtype, _np.object_)
                         )
+                        for l in loaded
+                        if l is not None
                     ):
                         labels_have_strings = True
                 if isinstance(loaded, list):

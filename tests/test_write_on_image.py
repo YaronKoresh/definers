@@ -1,6 +1,8 @@
 import unittest
 from unittest.mock import MagicMock, call, patch
+
 from PIL import Image, ImageDraw, ImageFont
+
 from definers import write_on_image
 
 
@@ -44,9 +46,9 @@ class TestWriteOnImage(unittest.TestCase):
         )
         self.assertEqual(mock_draw_instance.text.call_count, 3)
         args_list = [c[0] for c in mock_draw_instance.text.call_args_list]
-        self.assertTrue(any((top in arg for arg in args_list)))
-        self.assertTrue(any((middle in arg for arg in args_list)))
-        self.assertTrue(any((bottom in arg for arg in args_list)))
+        self.assertTrue(any(top in arg for arg in args_list))
+        self.assertTrue(any(middle in arg for arg in args_list))
+        self.assertTrue(any(bottom in arg for arg in args_list))
         mock_save.assert_called_once_with(mock_img)
         self.assertEqual(result, "output_path.png")
 
@@ -78,8 +80,8 @@ class TestWriteOnImage(unittest.TestCase):
         mock_download.assert_not_called()
         self.assertEqual(mock_draw_instance.text.call_count, 2)
         args_list = [c[0] for c in mock_draw_instance.text.call_args_list]
-        self.assertTrue(any((top in arg for arg in args_list)))
-        self.assertTrue(any((bottom in arg for arg in args_list)))
+        self.assertTrue(any(top in arg for arg in args_list))
+        self.assertTrue(any(bottom in arg for arg in args_list))
 
     @patch("definers.save_image")
     @patch("definers.google_drive_download")

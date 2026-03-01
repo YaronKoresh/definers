@@ -1,4 +1,5 @@
 import unittest
+
 from definers import get_max_resolution
 
 

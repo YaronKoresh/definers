@@ -1,11 +1,14 @@
 import unittest
 from unittest.mock import patch
+
 from definers import importable
 
 
 class TestImportable(unittest.TestCase):
     @patch("importlib.util.find_spec")
-    def test_importable_returns_true_for_successful_import(self, mock_find_spec):
+    def test_importable_returns_true_for_successful_import(
+        self, mock_find_spec
+    ):
         mock_find_spec.return_value = object()
         self.assertTrue(importable("os"))
         mock_find_spec.assert_called_once_with("os")

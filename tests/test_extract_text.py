@@ -1,6 +1,8 @@
 import unittest
 from unittest.mock import MagicMock, patch
+
 import playwright
+
 import definers
 from definers import extract_text
 

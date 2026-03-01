@@ -1,4 +1,5 @@
 import pytest
+
 from definers._text import camel_case
 
 

@@ -3,8 +3,10 @@ import shutil
 import tempfile
 import unittest
 from unittest.mock import patch
+
 import cv2
 import numpy as np
+
 from definers import extract_image_features
 
 

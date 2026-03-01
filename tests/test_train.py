@@ -1,6 +1,8 @@
 import unittest
 from unittest.mock import MagicMock, patch
+
 import numpy as np
+
 from definers import check_parameter, simple_text, train
 
 

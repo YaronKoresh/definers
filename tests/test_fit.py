@@ -1,6 +1,8 @@
 import unittest
 from unittest.mock import MagicMock, call, patch
+
 import numpy as np
+
 from definers import fit
 
 

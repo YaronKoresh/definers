@@ -47,9 +47,7 @@ def test_circuit_breaker_half_open_then_close() -> None:
         return clock_samples.pop(0)
 
     breaker = CircuitBreaker(
-        failure_threshold=1,
-        recovery_timeout=2,
-        clock=monotonic_clock,
+        failure_threshold=1, recovery_timeout=2, clock=monotonic_clock
     )
 
     def failing_operation() -> str:
@@ -74,9 +72,7 @@ def test_circuit_breaker_half_open_failure_reopens_immediately() -> None:
         return clock_samples.pop(0)
 
     breaker = CircuitBreaker(
-        failure_threshold=5,
-        recovery_timeout=2,
-        clock=monotonic_clock,
+        failure_threshold=5, recovery_timeout=2, clock=monotonic_clock
     )
 
     def failing_operation() -> str:
@@ -85,7 +81,6 @@ def test_circuit_breaker_half_open_failure_reopens_immediately() -> None:
     with pytest.raises(RuntimeError):
         breaker.execute(failing_operation)
     assert breaker.snapshot().state == CircuitState.OPEN
-
     with pytest.raises(RuntimeError):
         breaker.execute(failing_operation)
     assert breaker.snapshot().state == CircuitState.OPEN
@@ -121,6 +116,7 @@ def test_with_retry_eventual_success() -> None:
 
 
 def test_with_retry_rethrows_unhandled_exception() -> None:
+
     @with_retry(max_retries=3, delay=0, retry_on=ValueError)
     async def non_retryable_failure() -> None:
         raise TypeError("fatal")
@@ -131,12 +127,8 @@ def test_with_retry_rethrows_unhandled_exception() -> None:
 
 def test_exponential_backoff_delay_with_zero_jitter() -> None:
     policy = ExponentialBackoffDelay(
-        base_delay=0.5,
-        multiplier=2,
-        max_delay=3,
-        jitter_ratio=0,
+        base_delay=0.5, multiplier=2, max_delay=3, jitter_ratio=0
     )
-
     assert policy.delay_for_attempt(0) == 0.5
     assert policy.delay_for_attempt(1) == 1.0
     assert policy.delay_for_attempt(2) == 2.0

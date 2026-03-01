@@ -45,8 +45,7 @@ def enforce_error_boundary(func: T) -> T:
 
         @functools.wraps(func)
         async def async_boundary_execution_wrapper(
-            *args: Any,
-            **kwargs: Any,
+            *args: Any, **kwargs: Any
         ) -> Any:
             try:
                 return await func(*args, **kwargs)

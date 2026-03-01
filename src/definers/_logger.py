@@ -1,6 +1,7 @@
 import logging
 import warnings
 from typing import ClassVar, Final
+
 from definers._core import enforce_error_boundary
 
 

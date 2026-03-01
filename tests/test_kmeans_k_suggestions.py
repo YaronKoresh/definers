@@ -1,6 +1,8 @@
 import unittest
 from unittest.mock import MagicMock, mock_open, patch
+
 import numpy as np
+
 from definers import kmeans_k_suggestions
 
 

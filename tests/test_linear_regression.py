@@ -1,5 +1,7 @@
 import unittest
+
 import numpy as np
+
 from definers import linear_regression
 
 

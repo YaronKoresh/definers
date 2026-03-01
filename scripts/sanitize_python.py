@@ -5,12 +5,7 @@ import io
 import tokenize
 from pathlib import Path
 
-INCLUDE_DIRECTORIES = {
-    "src",
-    "tests",
-    "scripts",
-}
-
+INCLUDE_DIRECTORIES = {"src", "tests", "scripts"}
 EXCLUDE_DIRECTORIES = {
     ".git",
     ".venv",

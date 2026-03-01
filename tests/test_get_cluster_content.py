@@ -1,6 +1,8 @@
 import unittest
 from unittest.mock import MagicMock
+
 import numpy as np
+
 from definers import get_cluster_content
 
 
