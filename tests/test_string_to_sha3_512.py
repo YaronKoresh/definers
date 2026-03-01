@@ -1,5 +1,4 @@
 import unittest
-
 from definers import string_to_sha3_512
 
 

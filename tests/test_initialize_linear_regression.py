@@ -1,7 +1,6 @@
 import os
 import unittest
 from unittest.mock import MagicMock, patch
-
 import torch
 
 
@@ -21,7 +20,6 @@ class DummyModel(torch.nn.Module):
 
 
 patch_target = "definers.LinearRegressionTorch"
-
 from definers import initialize_linear_regression
 
 
@@ -33,13 +31,10 @@ class TestInitializeLinearRegression(unittest.TestCase):
     ):
         input_dim = 10
         model_path = "non_existent_model.pth"
-
         mock_model_instance = mock_model_class.return_value
         mock_model_instance.cuda = MagicMock()
         mock_model_instance.load_state_dict = MagicMock()
-
         model = initialize_linear_regression(input_dim, model_path)
-
         mock_exists.assert_called_once_with(model_path)
         mock_model_class.assert_called_once_with(input_dim)
         mock_model_instance.cuda.assert_called_once()
@@ -59,13 +54,10 @@ class TestInitializeLinearRegression(unittest.TestCase):
             "linear.bias": torch.randn(1),
         }
         mock_torch_load.return_value = mock_state_dict
-
         mock_model_instance = mock_model_class.return_value
         mock_model_instance.cuda = MagicMock()
         mock_model_instance.load_state_dict = MagicMock()
-
         model = initialize_linear_regression(input_dim, model_path)
-
         mock_exists.assert_called_once_with(model_path)
         mock_model_class.assert_called_once_with(input_dim)
         mock_torch_load.assert_called_once_with(model_path)

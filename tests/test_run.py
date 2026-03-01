@@ -1,7 +1,6 @@
 import sys
 import unittest
 from unittest.mock import patch
-
 from definers import run
 
 

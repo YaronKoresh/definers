@@ -1,8 +1,6 @@
 import unittest
-
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
-
 from definers import create_vectorizer, unvectorize, vectorize
 
 
@@ -42,7 +40,7 @@ class TestUnvectorize(unittest.TestCase):
         unvectorized_text = unvectorize(self.vectorizer, single_vector)
         self.assertEqual(len(unvectorized_text), 1)
         self.assertTrue(
-            all(word in unvectorized_text[0] for word in ["alpha", "golf"])
+            all((word in unvectorized_text[0] for word in ["alpha", "golf"]))
         )
 
     def test_unvectorize_zeros_vector(self):

@@ -3,7 +3,6 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
-
 from definers import delete, exist
 
 
@@ -55,17 +54,16 @@ class TestDelete(unittest.TestCase):
         link_path = os.path.join(self.test_dir, "link.txt")
         with open(target_file, "w") as f:
             f.write("target")
-
         if hasattr(os, "symlink"):
             try:
                 os.symlink(target_file, link_path)
             except (OSError, NotImplementedError):
-                self.skipTest("Symlinks require elevated privileges on this platform")
+                self.skipTest(
+                    "Symlinks require elevated privileges on this platform"
+                )
             self.assertTrue(os.path.islink(link_path))
             self.assertTrue(exist(target_file))
-
             delete(link_path)
-
             self.assertFalse(exist(link_path))
             self.assertTrue(exist(target_file))
 
@@ -73,17 +71,16 @@ class TestDelete(unittest.TestCase):
         target_dir = os.path.join(self.test_dir, "target_dir")
         os.makedirs(target_dir)
         link_path = os.path.join(self.test_dir, "link_dir")
-
         if hasattr(os, "symlink"):
             try:
                 os.symlink(target_dir, link_path, target_is_directory=True)
             except (OSError, NotImplementedError):
-                self.skipTest("Symlinks require elevated privileges on this platform")
+                self.skipTest(
+                    "Symlinks require elevated privileges on this platform"
+                )
             self.assertTrue(os.path.islink(link_path))
             self.assertTrue(exist(target_dir))
-
             delete(link_path)
-
             self.assertFalse(exist(link_path))
             self.assertTrue(exist(target_dir))
 

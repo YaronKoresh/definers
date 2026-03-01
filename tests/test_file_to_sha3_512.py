@@ -1,12 +1,13 @@
 import tempfile
 import unittest
-
 from definers import file_to_sha3_512, string_to_sha3_512
 
 
 class TestFileToSha3512(unittest.TestCase):
     def test_returns_hash_of_file_contents(self):
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".txt", delete=False
+        ) as f:
             f.write("hello")
             path = f.name
         result = file_to_sha3_512(path)
@@ -18,7 +19,9 @@ class TestFileToSha3512(unittest.TestCase):
         self.assertIsNone(result)
 
     def test_deterministic(self):
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".txt", delete=False
+        ) as f:
             f.write("consistent content")
             path = f.name
         r1 = file_to_sha3_512(path)
@@ -26,7 +29,9 @@ class TestFileToSha3512(unittest.TestCase):
         self.assertEqual(r1, r2)
 
     def test_salt_changes_result(self):
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".txt", delete=False
+        ) as f:
             f.write("salted content")
             path = f.name
         r1 = file_to_sha3_512(path)
@@ -34,7 +39,9 @@ class TestFileToSha3512(unittest.TestCase):
         self.assertNotEqual(r1, r2)
 
     def test_returns_hex_string(self):
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".txt", delete=False
+        ) as f:
             f.write("hex check")
             path = f.name
         result = file_to_sha3_512(path)

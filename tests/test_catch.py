@@ -1,6 +1,5 @@
 import unittest
 from unittest.mock import MagicMock, patch
-
 from definers import _init_logger, catch
 
 

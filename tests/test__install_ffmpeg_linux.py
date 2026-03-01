@@ -1,7 +1,6 @@
 import subprocess
 import unittest
 from unittest.mock import call, patch
-
 from definers import _install_ffmpeg_linux
 
 
@@ -52,22 +51,14 @@ class TestInstallFfmpegLinux(unittest.TestCase):
     @patch("shutil.which", return_value="/usr/bin/apt")
     @patch("definers.subprocess.run")
     def test_permission_denied_triggers_exit(
-        self,
-        mock_run,
-        mock_which,
-        mock_print,
-        mock_exit,
-        mock_geteuid,
+        self, mock_run, mock_which, mock_print, mock_exit, mock_geteuid
     ):
         mock_run.side_effect = subprocess.CalledProcessError(
             returncode=13, cmd=["apt-get", "update"]
         )
-
         with self.assertRaises(SystemExit):
             _install_ffmpeg_linux()
-
         mock_exit.assert_called_once_with(1)
-
         mock_print.assert_any_call(
             "[WARN] This script needs sudo privileges to install packages."
         )
@@ -95,12 +86,7 @@ class TestInstallFfmpegLinux(unittest.TestCase):
     @patch("definers.sys.exit", side_effect=SystemExit)
     @patch("builtins.print")
     def test_unexpected_error(
-        self,
-        mock_print,
-        mock_exit,
-        mock_run,
-        mock_which,
-        mock_geteuid,
+        self, mock_print, mock_exit, mock_run, mock_which, mock_geteuid
     ):
         with self.assertRaises(SystemExit):
             _install_ffmpeg_linux()

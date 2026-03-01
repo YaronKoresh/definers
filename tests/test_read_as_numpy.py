@@ -3,7 +3,6 @@ import shutil
 import tempfile
 import unittest
 from unittest.mock import patch
-
 from definers import read_as_numpy
 
 
@@ -21,9 +20,7 @@ class TestReadAsNumpy(unittest.TestCase):
     def test_read_as_numpy_calls_load_as_numpy(self, mock_load_as_numpy):
         expected_result = "mocked_numpy_array"
         mock_load_as_numpy.return_value = expected_result
-
         result = read_as_numpy(self.dummy_path)
-
         mock_load_as_numpy.assert_called_once_with(self.dummy_path)
         self.assertEqual(result, expected_result)
 

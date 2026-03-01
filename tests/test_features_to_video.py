@@ -1,8 +1,6 @@
 import unittest
 from unittest.mock import MagicMock, patch
-
 import numpy as np
-
 from definers import features_to_video, tmp
 
 
@@ -22,7 +20,6 @@ class TestFeaturesToVideo(unittest.TestCase):
         self.features = np.random.rand(
             self.num_frames, self.total_features_per_frame
         ).astype(np.float32)
-
         self.mock_cv2 = MagicMock()
         self.mock_cv2.VideoWriter_fourcc.return_value = "mp4v"
         self.mock_writer = MagicMock()
@@ -43,7 +40,6 @@ class TestFeaturesToVideo(unittest.TestCase):
             result = features_to_video(
                 self.features, video_shape=self.video_shape
             )
-
         self.assertEqual(result, "/fake/video.mp4")
         self.mock_cv2.VideoWriter.assert_called_with(
             "/fake/video.mp4", "mp4v", 24, (self.width, self.height)

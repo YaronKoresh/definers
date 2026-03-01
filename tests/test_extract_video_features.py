@@ -3,10 +3,8 @@ import shutil
 import tempfile
 import unittest
 from unittest.mock import patch
-
 import cv2
 import numpy as np
-
 from definers import extract_video_features
 
 
@@ -14,15 +12,12 @@ class TestExtractVideoFeatures(unittest.TestCase):
     def setUp(self):
         self.test_dir = tempfile.mkdtemp()
         self.video_path = os.path.join(self.test_dir, "test_video.mp4")
-        self.width, self.height = 64, 48
+        (self.width, self.height) = (64, 48)
         self.frame_count = 30
         self.fps = 10
         fourcc = cv2.VideoWriter_fourcc(*"mp4v")
         out = cv2.VideoWriter(
-            self.video_path,
-            fourcc,
-            self.fps,
-            (self.width, self.height),
+            self.video_path, fourcc, self.fps, (self.width, self.height)
         )
         for _ in range(self.frame_count):
             frame = np.random.randint(
@@ -40,7 +35,7 @@ class TestExtractVideoFeatures(unittest.TestCase):
         self.assertIsNotNone(features)
         self.assertIsInstance(features, np.ndarray)
         self.assertEqual(features.shape[0], 3)
-        expected_feature_length = (256 * 3) + (self.width * self.height) * 2
+        expected_feature_length = 256 * 3 + self.width * self.height * 2
         self.assertEqual(features.shape[1], expected_feature_length)
 
     @patch("definers.catch", lambda e: None)
@@ -63,10 +58,7 @@ class TestExtractVideoFeatures(unittest.TestCase):
         empty_video_path = os.path.join(self.test_dir, "empty.mp4")
         fourcc = cv2.VideoWriter_fourcc(*"mp4v")
         out = cv2.VideoWriter(
-            empty_video_path,
-            fourcc,
-            self.fps,
-            (self.width, self.height),
+            empty_video_path, fourcc, self.fps, (self.width, self.height)
         )
         out.release()
         features = extract_video_features(empty_video_path)

@@ -1,9 +1,7 @@
 import unittest
 from unittest.mock import MagicMock, patch
-
 import numpy as np
 from PIL import Image
-
 from definers import MODELS, _negative_prompt_, upscale
 
 
@@ -11,7 +9,6 @@ class TestUpscale(unittest.TestCase):
     def setUp(self):
         self.image_path = "dummy_image.png"
         Image.new("RGB", (100, 100)).save(self.image_path)
-
         self.mock_upscaler = MagicMock()
         self.mock_upscaler.upscale.return_value = Image.new("RGB", (200, 200))
         MODELS["upscale"] = self.mock_upscaler
@@ -29,7 +26,6 @@ class TestUpscale(unittest.TestCase):
         self, mock_manual_seed, mock_save_image
     ):
         result = upscale(self.image_path)
-
         mock_manual_seed.assert_called_once()
         self.mock_upscaler.upscale.assert_called_once()
         mock_save_image.assert_called_once()
@@ -48,7 +44,6 @@ class TestUpscale(unittest.TestCase):
             seed=12345,
             num_inference_steps=30,
         )
-
         mock_manual_seed.assert_called_with(12345)
         self.mock_upscaler.upscale.assert_called_with(
             image=unittest.mock.ANY,
@@ -75,10 +70,7 @@ class TestUpscale(unittest.TestCase):
         self.assertIsNone(result)
         self.mock_upscaler.upscale.assert_not_called()
 
-    @patch(
-        "PIL.Image.open",
-        side_effect=FileNotFoundError("File not found"),
-    )
+    @patch("PIL.Image.open", side_effect=FileNotFoundError("File not found"))
     def test_file_not_found(self, mock_image_open):
         with self.assertRaises(FileNotFoundError):
             upscale("non_existent_file.png")

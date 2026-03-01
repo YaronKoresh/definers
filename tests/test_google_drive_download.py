@@ -1,6 +1,5 @@
 import unittest
 from unittest.mock import patch
-
 from definers import google_drive_download
 
 
@@ -11,10 +10,7 @@ class TestGoogleDriveDownload(unittest.TestCase):
         dest_path = "/fake/path/file.zip"
         google_drive_download(file_id, dest_path)
         mock_download.assert_called_once_with(
-            file_id=file_id,
-            dest_path=dest_path,
-            unzip=True,
-            showsize=False,
+            file_id=file_id, dest_path=dest_path, unzip=True, showsize=False
         )
 
     @patch(

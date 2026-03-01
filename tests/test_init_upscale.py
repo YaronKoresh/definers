@@ -1,8 +1,6 @@
 import unittest
 from unittest.mock import MagicMock, patch
-
 import torch
-
 from definers import MODELS, init_upscale
 
 
@@ -30,26 +28,17 @@ class TestInitUpscale(unittest.TestCase):
         mock_device,
         mock_pillow_heif,
     ):
-
         mock_torch_load.return_value = self.mock_state_dict
-
         init_upscale()
-
         self.assertIn("upscale", MODELS)
         self.assertIsNotNone(MODELS["upscale"])
-
         mock_pillow_heif.register_heif_opener.assert_called_once()
         self.assertTrue(mock_hf_hub_download.called)
-
         self.assertGreaterEqual(mock_torch_load.call_count, 1)
-
         self.assertTrue(hasattr(MODELS["upscale"], "upscale"))
         self.assertTrue(hasattr(MODELS["upscale"], "to"))
 
-    @patch(
-        "definers.hf_hub_download",
-        side_effect=Exception("Download failed"),
-    )
+    @patch("definers.hf_hub_download", side_effect=Exception("Download failed"))
     def test_hf_hub_download_fails(self, mock_hf_hub_download):
         with self.assertRaises(Exception) as context:
             init_upscale()
@@ -76,11 +65,8 @@ class TestInitUpscale(unittest.TestCase):
         mock_device,
         mock_pillow_heif,
     ):
-
         mock_torch_load.return_value = self.mock_state_dict
-
         init_upscale()
-
         self.assertIn("upscale", MODELS)
         self.assertIsNotNone(MODELS["upscale"])
 

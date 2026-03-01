@@ -1,8 +1,6 @@
 import unittest
 from unittest.mock import MagicMock, patch
-
 import numpy as np
-
 from definers import check_parameter, simple_text, train
 
 
@@ -31,12 +29,9 @@ class TestTrain(unittest.TestCase):
         mock_fetch_dataset.return_value = [{"feature": "data"}]
         mock_model = MagicMock()
         mock_load.return_value = mock_model
-
         result = train(
-            model_path="existing_model.joblib",
-            remote_src="some_remote_src",
+            model_path="existing_model.joblib", remote_src="some_remote_src"
         )
-
         mock_load.assert_called_with("existing_model.joblib")
         mock_model.fit.assert_called()
         mock_dump.assert_called()
@@ -59,16 +54,13 @@ class TestTrain(unittest.TestCase):
         ]
         mock_model_instance = MagicMock()
         mock_hybrid_model.return_value = mock_model_instance
-
         result = train(
-            remote_src="remote_data",
-            dataset_label_columns=["label_1"],
+            remote_src="remote_data", dataset_label_columns=["label_1"]
         )
-
         mock_fetch_dataset.assert_called_with("remote_data", "parquet", None)
         mock_model_instance.fit.assert_called()
         mock_dump.assert_called()
-        self.assertRegex(result, r"model_.*\.joblib")
+        self.assertRegex(result, "model_.*\\.joblib")
 
     @patch("definers.files_to_dataset")
     @patch("definers.init_tokenizer")
@@ -85,9 +77,7 @@ class TestTrain(unittest.TestCase):
         mock_files_to_dataset.return_value = [{"feature": "local data"}]
         mock_model_instance = MagicMock()
         mock_hybrid_model.return_value = mock_model_instance
-
         result = train(features=["local_file.txt"])
-
         mock_files_to_dataset.assert_called_with(["local_file.txt"], None)
         mock_model_instance.fit.assert_called()
         mock_dump.assert_called()
@@ -106,7 +96,6 @@ class TestTrain(unittest.TestCase):
         mock_init_tokenizer.return_value = self.mock_tokenizer
         mock_fetch_dataset.return_value = [{"feature": "data"}]
         mock_dump.side_effect = Exception("Failed to save")
-
         result = train(remote_src="some_path")
         self.assertIsNone(result)
 

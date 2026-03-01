@@ -1,7 +1,5 @@
 import unittest
-
 import numpy as np
-
 from definers import normalize_arr
 
 

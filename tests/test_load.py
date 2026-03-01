@@ -2,7 +2,6 @@ import os
 import shutil
 import tempfile
 import unittest
-
 from definers import load
 
 

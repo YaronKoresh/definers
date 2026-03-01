@@ -1,5 +1,3 @@
-"""Text processing utilities for the definers package."""
-
 import argparse
 import asyncio
 import base64
@@ -54,7 +52,6 @@ from string import ascii_letters, digits, punctuation
 from time import sleep, time
 from typing import Any, Optional, Union
 from urllib.parse import quote
-
 from definers._constants import (
     MODELS,
     SYSTEM_MESSAGE,
@@ -85,30 +82,21 @@ def set_system_message(
     creative: bool = None,
 ):
     global SYSTEM_MESSAGE
-
     parts = []
-
     parts.append(f"You are {role}.")
-
     if name:
         parts.append(f"Your name is {name}.")
-
     if tone:
         parts.append(f"Your tone should be {tone}.")
-
     if chattiness:
         parts.append(f"In terms of verbosity, {chattiness}.")
-
     if interaction_style:
         parts.append(f"When interacting, {interaction_style}.")
-
     if persona_data:
         for key, value in persona_data.items():
             parts.append(f"{key} is {value}")
-
     if goals:
         parts.append("; ".join(goals) + ".")
-
     if task_rules or output_format:
         parts.append("You must strictly follow these rules:")
         rule_num = 1
@@ -120,13 +108,10 @@ def set_system_message(
             parts.append(
                 f"{rule_num}. Your final output must be exclusively in the following format: {output_format}."
             )
-
     SYSTEM_MESSAGE = "\n".join(parts)
-
     import definers as _d
 
     _d.SYSTEM_MESSAGE = SYSTEM_MESSAGE
-
     _d.log("System Message Updated", SYSTEM_MESSAGE)
 
 
@@ -136,68 +121,59 @@ def language(text):
     return detect(text).lower()
 
 
-def camel_case(txt: str):
+import re
+from functools import lru_cache
+
+
+@lru_cache(maxsize=1024)
+def camel_case(txt: str) -> str:
     if not txt:
         return ""
-    return "".join(word.capitalize() for word in txt.split())
+    words = re.sub("[^a-zA-Z0-9]+", " ", txt).split()
+    if not words:
+        return ""
+    return words[0].lower() + "".join((word.capitalize() for word in words[1:]))
 
 
 def ai_translate(text, lang="en"):
     import torch
     from sacremoses import MosesPunctNormalizer
-    from stopes.pipelines.monolingual.utils.sentence_split import (
-        get_split_algo,
-    )
+    from stopes.pipelines.monolingual.utils.sentence_split import get_split_algo
 
     if not text or not text.strip():
         return ""
-
     text = strip_nikud(text)
-
     long_paragraph_threshold = 800
-
     tgt_code = unesco_mapping[lang]
     if isinstance(tgt_code, list):
         tgt_code = tgt_code[0]
-
     model = MODELS["translate"]
-
     tokenizer = TOKENIZERS["translate"]
     tokenizer.tgt_lang = tgt_code
-
     paragraphs = text.split("\n")
     translated_paragraphs = []
-
     for paragraph in paragraphs:
         if not paragraph.strip():
             translated_paragraphs.append("")
             continue
-
         try:
             source_lang_code = language(paragraph)
             src_code = unesco_mapping[source_lang_code]
             if isinstance(src_code, list):
                 src_code = src_code[0]
-
         except (KeyError, Exception) as e:
             print(f"Language detection or mapping failed: {e}")
             translated_paragraphs.append(paragraph)
             continue
-
         if src_code == tgt_code:
             translated_paragraphs.append(paragraph)
             continue
-
         punct_normalizer = MosesPunctNormalizer(lang=source_lang_code)
         paragraph = punct_normalizer.normalize(paragraph)
-
         splitter = get_split_algo(src_code[:3], "default")
-
         tokenizer.src_lang = src_code
-
         _beam_kwargs = beam_kwargs
         _beam_kwargs["num_beams"] = higher_beams
-
         if len(paragraph) < long_paragraph_threshold:
             try:
                 inputs = tokenizer(
@@ -208,7 +184,6 @@ def ai_translate(text, lang="en"):
                 )
                 input_ids = inputs.input_ids.to(device())
                 forced_token_id = tokenizer.convert_tokens_to_ids(tgt_code)
-
                 translated_ids = model.generate(
                     input_ids=input_ids,
                     forced_bos_token_id=forced_token_id,
@@ -216,7 +191,6 @@ def ai_translate(text, lang="en"):
                     max_length=512,
                     **_beam_kwargs,
                 )
-
                 translated_paragraph = tokenizer.decode(
                     translated_ids[0], skip_special_tokens=True
                 )
@@ -233,7 +207,6 @@ def ai_translate(text, lang="en"):
                 for sentence in sentences:
                     if not sentence.strip():
                         continue
-
                     inputs = tokenizer(
                         sentence,
                         return_tensors="pt",
@@ -242,7 +215,6 @@ def ai_translate(text, lang="en"):
                     )
                     input_ids = inputs.input_ids.to(device())
                     forced_token_id = tokenizer.convert_tokens_to_ids(tgt_code)
-
                     translated_ids = model.generate(
                         input_ids=input_ids,
                         forced_bos_token_id=forced_token_id,
@@ -250,12 +222,10 @@ def ai_translate(text, lang="en"):
                         max_length=512,
                         **_beam_kwargs,
                     )
-
                     translated_chunk = tokenizer.decode(
                         translated_ids[0], skip_special_tokens=True
                     )
                     translated_sentences.append(translated_chunk)
-
                 translated_paragraph = " ".join(translated_sentences)
                 translated_paragraphs.append(translated_paragraph)
             except Exception as e:
@@ -263,26 +233,20 @@ def ai_translate(text, lang="en"):
                 translated_paragraphs.append(
                     f"[Translation Error: {paragraph[:30]}...]"
                 )
-
     return "\n".join(translated_paragraphs)
 
 
 def google_translate(text, lang="en"):
-
     import requests
 
     if text is None or lang is None:
         return ""
-
     if text.strip() == "":
         return ""
-
     lang = simple_text(lang)
     text = simple_text(text)
-
     url = f"https://translate.googleapis.com/translate_a/single?client=gtx&dt=t&q={text}&sl={language(text)}&tl={lang}"
     r = requests.get(url)
-
     ret = r.text.split('"')[1]
     ret = simple_text(ret)
     print(ret)
@@ -290,18 +254,13 @@ def google_translate(text, lang="en"):
 
 
 def duck_translate(text, lang="en"):
-
     if text is None or lang is None:
         return ""
-
     if text.strip() == "":
         return ""
-
     lang = simple_text(lang)
     lang = language_codes[lang]
-
     text = simple_text(text)
-
     url = f"https://duckduckgo.com/?q={lang} translate: {text}&ia=web"
     scraped = extract_text(
         url,
@@ -319,7 +278,7 @@ def duck_translate(text, lang="en"):
 def random_string(min_len=50, max_len=60):
     characters = string.ascii_letters + string.digits + "_"
     length = random.randint(min_len, max_len)
-    return "".join(random.choice(characters) for _ in range(length))
+    return "".join((random.choice(characters) for _ in range(length)))
 
 
 def random_salt(size):
@@ -366,35 +325,29 @@ class Database:
         db_path = os.path.join(self.path, db)
         if not os.path.exists(db_path):
             return []
-
         start_timestamp = 0
         if days is not None and isinstance(days, (int, float)):
-            start_timestamp = time() - (days * 86400)
-
+            start_timestamp = time() - days * 86400
         try:
             timestamp_dirs = [
                 d for d in os.listdir(db_path) if int(d) >= start_timestamp
             ]
         except (ValueError, FileNotFoundError):
             return []
-
         results = []
         for ts_string in timestamp_dirs:
             record_path = os.path.join(db_path, ts_string)
             if not os.path.isdir(record_path):
                 continue
-
             item_data = {}
             for key_file in os.listdir(record_path):
                 with open(os.path.join(record_path, key_file)) as f:
                     item_data[key_file] = f.read()
-
             all_filters_match = True
             for key, value in filters.items():
                 if item_data.get(key) != str(value):
                     all_filters_match = False
                     break
-
             if all_filters_match:
                 ts_int = int(ts_string)
                 record = {
@@ -403,7 +356,6 @@ class Database:
                     "data": item_data,
                 }
                 results.append(record)
-
         return sorted(results, key=lambda x: x["timestamp"], reverse=True)
 
     def history(self, db, filters={}, days=None):
@@ -418,10 +370,8 @@ class Database:
                 timestamp = int(timestamp)
             except (ValueError, TypeError):
                 timestamp = int(time())
-
         record_path = os.path.join(self.path, db, str(timestamp))
         os.makedirs(record_path, exist_ok=True)
-
         for key, value in data.items():
             file_path = os.path.join(record_path, key)
             with open(file_path, "w") as f:
@@ -438,31 +388,25 @@ class Database:
                 db_name: self.latest(db_name, filters, days, identifierKey)
                 for db_name in db
             }
-
         full_history = self._get_history(db)
-
         latest_items = {}
         for item in full_history:
             item_id = item["data"].get(identifierKey)
             if item_id is None:
                 continue
-
             if (
                 item_id not in latest_items
                 or item["timestamp"] > latest_items[item_id]["timestamp"]
             ):
                 latest_items[item_id] = item
-
         filtered_results = list(latest_items.values())
-
         if days is not None:
-            start_timestamp = time() - (days * 86400)
+            start_timestamp = time() - days * 86400
             filtered_results = [
                 item
                 for item in filtered_results
                 if item["timestamp"] >= start_timestamp
             ]
-
         if filters:
             final_results = []
             for item in filtered_results:
@@ -474,11 +418,8 @@ class Database:
                 if all_filters_match:
                     final_results.append(item)
             filtered_results = final_results
-
         sorted_results = sorted(
-            filtered_results,
-            key=lambda x: x["timestamp"],
-            reverse=True,
+            filtered_results, key=lambda x: x["timestamp"], reverse=True
         )
         return [item["data"] for item in sorted_results]
 
@@ -492,7 +433,6 @@ class Database:
             for db_name in db:
                 self.clean(db_name, identifierKey)
             return
-
         full_history = self._get_history(db)
         latest_items = {}
         for item in full_history:
@@ -504,13 +444,10 @@ class Database:
                 or item["timestamp"] > latest_items[item_id]["timestamp"]
             ):
                 latest_items[item_id] = item
-
         records_to_keep = list(latest_items.values())
-
         db_path = os.path.join(self.path, db)
         if os.path.isdir(db_path):
             shutil.rmtree(db_path)
-
         for item in records_to_keep:
             self.push(db, item["data"], item["timestamp"])
 
@@ -518,11 +455,8 @@ class Database:
 def translate_with_code(text_to_translate, lang):
     if not text_to_translate or not text_to_translate.strip():
         return text_to_translate
-
-    code_block_pattern = r"(```.*?```)"
-
+    code_block_pattern = "(```.*?```)"
     parts = re.split(code_block_pattern, text_to_translate, flags=re.DOTALL)
-
     processed_parts = []
     for i, part in enumerate(parts):
         if i % 2 == 0:
@@ -533,5 +467,4 @@ def translate_with_code(text_to_translate, lang):
                 processed_parts.append(part)
         else:
             processed_parts.append(part)
-
     return "".join(processed_parts)

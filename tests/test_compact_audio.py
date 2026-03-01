@@ -1,7 +1,6 @@
 import subprocess
 import unittest
 from unittest.mock import patch
-
 from definers import compact_audio
 
 
@@ -10,9 +9,7 @@ class TestCompactAudio(unittest.TestCase):
     def test_compact_audio_success(self, mock_run):
         input_file = "input.mp3"
         output_file = "output.mp3"
-
         result = compact_audio(input_file, output_file)
-
         self.assertEqual(result, output_file)
         expected_command = [
             "ffmpeg",
@@ -33,12 +30,9 @@ class TestCompactAudio(unittest.TestCase):
     @patch("definers.catch")
     def test_compact_audio_failure(self, mock_catch, mock_run):
         mock_run.side_effect = subprocess.CalledProcessError(1, "ffmpeg")
-
         input_file = "input.mp3"
         output_file = "output.mp3"
-
         result = compact_audio(input_file, output_file)
-
         self.assertIsNone(result)
         mock_catch.assert_called_once()
         self.assertIsInstance(

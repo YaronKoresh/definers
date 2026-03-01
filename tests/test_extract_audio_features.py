@@ -1,8 +1,6 @@
 import unittest
 from unittest.mock import MagicMock, patch
-
 import numpy as np
-
 from definers import extract_audio_features
 
 
@@ -18,10 +16,8 @@ class TestExtractAudioFeatures(unittest.TestCase):
             self.dummy_audio_data,
             self.sample_rate,
         )
-
         with patch.dict("sys.modules", {"librosa": mock_librosa}):
             features = extract_audio_features(self.audio_path)
-
         self.assertIsNotNone(features)
         self.assertIsInstance(features, np.ndarray)
 
@@ -33,10 +29,8 @@ class TestExtractAudioFeatures(unittest.TestCase):
             self.sample_rate,
         )
         mock_librosa.feature.mfcc.return_value = np.random.rand(n_mfcc, 10)
-
         with patch.dict("sys.modules", {"librosa": mock_librosa}):
             features = extract_audio_features(self.audio_path, n_mfcc=n_mfcc)
-
         self.assertIsNotNone(features)
         mock_librosa.feature.mfcc.assert_called_with(
             y=self.dummy_audio_data,
@@ -49,10 +43,8 @@ class TestExtractAudioFeatures(unittest.TestCase):
     def test_audio_loading_error(self):
         mock_librosa = MagicMock()
         mock_librosa.load.side_effect = Exception("File not found")
-
         with patch.dict("sys.modules", {"librosa": mock_librosa}):
             features = extract_audio_features(self.audio_path)
-
         self.assertIsNone(features)
 
     def test_output_dtype_is_float32(self):
@@ -61,10 +53,8 @@ class TestExtractAudioFeatures(unittest.TestCase):
             self.dummy_audio_data,
             self.sample_rate,
         )
-
         with patch.dict("sys.modules", {"librosa": mock_librosa}):
             features = extract_audio_features(self.audio_path)
-
         self.assertIsNotNone(features)
         self.assertEqual(features.dtype, np.float32)
 
@@ -75,10 +65,8 @@ class TestExtractAudioFeatures(unittest.TestCase):
             self.sample_rate,
         )
         mock_librosa.feature.mfcc.side_effect = Exception("Feature error")
-
         with patch.dict("sys.modules", {"librosa": mock_librosa}):
             features = extract_audio_features(self.audio_path)
-
         self.assertIsNone(features)
 
 

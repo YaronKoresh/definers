@@ -1,5 +1,3 @@
-"""Machine learning utilities for the definers package."""
-
 import argparse
 import asyncio
 import base64
@@ -54,10 +52,9 @@ from string import ascii_letters, digits, punctuation
 from time import sleep, time
 from typing import Any, Optional, Union
 from urllib.parse import quote
-
 import numpy as _np
 import numpy as np
-
+from definers._audio import audio_preview
 from definers._constants import (
     MODELS,
     PROCESSORS,
@@ -71,11 +68,9 @@ from definers._constants import (
     language_codes,
     tasks,
 )
-from definers._audio import audio_preview
 from definers._cuda import device
 from definers._image import image_resolution
 from definers._logger import _init_logger
-from definers._text import language
 from definers._system import (
     add_path,
     big_number,
@@ -108,6 +103,7 @@ from definers._system import (
     wait,
     write,
 )
+from definers._text import language
 
 logger = _init_logger()
 
@@ -119,33 +115,23 @@ def answer(history: list):
 
     img_list = []
     snd_list = []
-
-    alt_history = [
-        {"role": "system", "content": SYSTEM_MESSAGE},
-    ]
+    alt_history = [{"role": "system", "content": SYSTEM_MESSAGE}]
     add_role = None
-
     required_lang = "en"
     history_len = len(history)
-
     for history_index in range(history_len):
         h = history[history_index]
-
         content = h["content"]
         role = h["role"]
-
         is_text = bool(
-            not isinstance(content, dict) and not isinstance(content, tuple)
+            not isinstance(content, dict) and (not isinstance(content, tuple))
         )
-
         add_content = ""
-
         if is_text:
             content_lang = language(content)
             if content_lang != required_lang:
                 content = ai_translate(content, lang=required_lang)
             add_content += "\n\n" + content
-
         else:
             ps = []
             if isinstance(content, dict):
@@ -156,14 +142,14 @@ def answer(history: list):
                 ext = get_ext(p)
                 if ext in common_audio_formats:
                     aud = audio_preview(file_path=p, max_duration=16)
-                    audio, samplerate = librosa.load(aud, sr=16000, mono=True)
+                    (audio, samplerate) = librosa.load(aud, sr=16000, mono=True)
                     snd_list.append((audio, samplerate))
                     add_content += f" <|audio_{str(len(snd_list))}|>"
                 elif ext in iio_formats:
-                    w, h = image_resolution(p)
-                    w2, h2 = get_max_resolution(w, h, mega_pixels=0.25)
+                    (w, h) = image_resolution(p)
+                    (w2, h2) = get_max_resolution(w, h, mega_pixels=0.25)
                     if w2 > w:
-                        pth, img = resize_image(p, w, h)
+                        (pth, img) = resize_image(p, w, h)
                         img_list.append(img)
                     else:
                         img = Image.open(p)
@@ -175,7 +161,6 @@ def answer(history: list):
                     if content_lang != required_lang:
                         content = ai_translate(content, lang=required_lang)
                     add_content += "\n\n" + content
-
         if add_role != role:
             add_role = role
             alt_history.append(
@@ -184,56 +169,40 @@ def answer(history: list):
             continue
         alt_history[-1]["content"] += "\n\n" + add_content
         alt_history[-1]["content"] = alt_history[-1]["content"].strip()
-
     prompt = PROCESSORS["answer"].tokenizer.apply_chat_template(
         alt_history, tokenize=False, add_generation_prompt=True
     )
-
     inputs = PROCESSORS["answer"](
         text=prompt,
         images=img_list if img_list else None,
         audios=snd_list if snd_list else None,
         return_tensors="pt",
     )
-
     inputs = inputs.to(device())
-
     generate_ids = MODELS["answer"].generate(
-        **inputs,
-        **beam_kwargs,
-        max_length=4096,
-        num_logits_to_keep=1,
+        **inputs, **beam_kwargs, max_length=4096, num_logits_to_keep=1
     )
-
     output_ids = generate_ids[:, inputs["input_ids"].shape[1] :]
     response = PROCESSORS["answer"].batch_decode(
-        output_ids,
-        skip_special_tokens=True,
-        clean_up_tokenization_spaces=False,
+        output_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
     )[0]
-
     return response
 
 
 def linear_regression(X, y, learning_rate=0.01, epochs=50):
     import numpy as np
 
-    m, n = X.shape
-
+    (m, n) = X.shape
     weights = np.zeros(n)
     bias = 0
-
     for _ in range(epochs):
         y_pred = X @ weights + bias
-
         error = y_pred - y
-        dw = (2 / m) * X.T @ error
-        db = (2 / m) * np.sum(error)
-
+        dw = 2 / m * X.T @ error
+        db = 2 / m * np.sum(error)
         weights -= learning_rate * dw
         bias -= learning_rate * db
-
-    return weights, bias
+    return (weights, bias)
 
 
 def initialize_linear_regression(input_dim, model_path):
@@ -246,7 +215,6 @@ def initialize_linear_regression(input_dim, model_path):
     else:
         model_torch = LinearRegressionTorch(input_dim)
         print("Created new model.")
-
     model_torch.to(device())
     return model_torch
 
@@ -255,72 +223,50 @@ def train_linear_regression(X, y, model_path, learning_rate=0.01):
     import torch
 
     model_torch = initialize_linear_regression(X.shape[1], model_path)
-
     criterion = torch.nn.MSELoss()
     optimizer = torch.optim.SGD(model_torch.parameters(), lr=learning_rate)
-
     d = device()
     X_torch = torch.tensor(X, dtype=torch.float32, device=d)
     y_torch = torch.tensor(y, dtype=torch.float32, device=d)
-
     y_pred = model_torch(X_torch).squeeze()
     loss = criterion(y_pred, y_torch)
     optimizer.zero_grad()
     loss.backward()
     optimizer.step()
-
     torch.save(model_torch.state_dict(), model_path)
     print("Model saved.")
-
     return model_torch
 
 
 def init_model_file(task: str, turbo: bool = False, model_type: str = None):
     import pickle
-
     import joblib
     import onnxruntime
     import torch
     from safetensors.torch import load_file
 
     free()
-
     global MODELS
-
     model_path = task
     if task in tasks:
         model_path = tasks[task]
-
     if not model_type:
         model_type = get_ext(model_path)
     model_type = model_type.lower()
-
     if model_path.startswith("https://") or model_path.startswith("https://"):
         temp_model_path = tmp(model_type, keep=False)
         model_path = download_file(model_path, temp_model_path)
-
     try:
         model = None
-
-        supported_types = [
-            "onnx",
-            "pkl",
-            "pt",
-            "pth",
-            "safetensors",
-            "joblib",
-        ]
-
+        supported_types = ["onnx", "pkl", "pt", "pth", "safetensors", "joblib"]
         if model_type not in supported_types:
             print(
                 f'Error: Model type "{model_type}" is not supported. Must be one of {supported_types}'
             )
             return None
-
         print(
             f"Attempting to load a {model_type.upper()} model from: {model_path}"
         )
-
         if model_type == "joblib":
             model = joblib.load(model_path)
         elif model_type == "onnx":
@@ -333,22 +279,18 @@ def init_model_file(task: str, turbo: bool = False, model_type: str = None):
                 model = torch.load(model_path, map_location=device())
             else:
                 model = load_file(model_path, map_location=device())
-
             if hasattr(model, "eval"):
                 model.eval()
                 print("Model set to evaluation mode.")
-
         if not turbo:
             try:
                 model.vae.enable_slicing()
             except:
                 pass
-
             try:
                 model.vae.enable_tiling()
             except:
                 pass
-
             optimizations = [
                 "enable_vae_slicing",
                 "enable_vae_tiling",
@@ -366,10 +308,8 @@ def init_model_file(task: str, turbo: bool = False, model_type: str = None):
                     pass
                 except Exception as e:
                     print(f"Could not apply optimization {opt}: {e}")
-
         print("✅ Model loaded successfully.")
         MODELS[task] = model
-
     except FileNotFoundError:
         print(f"Error: The file was not found at '{model_path}'")
         return None
@@ -391,27 +331,21 @@ def kmeans_k_suggestions(X, k_range=range(2, 20), random_state=None):
     silhouette_scores = {}
     davies_bouldin_indices = {}
     calinski_harabasz_indices = {}
-
     suggested_k_elbow = None
     suggested_k_silhouette = None
     suggested_k_davies_bouldin = None
     suggested_k_calinski_harabasz = None
     final_suggestion_k = None
-
     kmeans_lib = None
     is_cupy_available = True
-
     try:
         import cupy
     except ImportError:
         is_cupy_available = False
-
     from cuml.cluster import KMeans
 
     kmeans_lib = KMeans
-
     X_array = np.asarray(X)
-
     if len(k_range) < 2:
         return {
             "wcss": wcss_values,
@@ -425,7 +359,6 @@ def kmeans_k_suggestions(X, k_range=range(2, 20), random_state=None):
             "final_suggestion": final_suggestion_k,
             "notes": "K-range too small to provide meaningful suggestions. Try a range with at least 2 different k values.",
         }
-
     for k in k_range:
         if k <= 1:
             wcss_values[k] = 0
@@ -433,25 +366,18 @@ def kmeans_k_suggestions(X, k_range=range(2, 20), random_state=None):
             davies_bouldin_indices[k] = np.nan
             calinski_harabasz_indices[k] = np.nan
             continue
-
         kmeans = kmeans_lib(
-            n_clusters=int(k),
-            random_state=random_state,
-            init="k-means++",
+            n_clusters=int(k), random_state=random_state, init="k-means++"
         )
         labels = kmeans.fit_predict(X_array)
-
         numpy_labels = np.asnumpy(labels) if is_cupy_available else labels
         numpy_X = np.asnumpy(X_array) if is_cupy_available else X_array
-
         wcss_values[k] = kmeans.inertia_
-
         silhouette_scores[k] = silhouette_score(numpy_X, numpy_labels)
         davies_bouldin_indices[k] = davies_bouldin_score(numpy_X, numpy_labels)
         calinski_harabasz_indices[k] = calinski_harabasz_score(
             numpy_X, numpy_labels
         )
-
     wcss_ratios = {}
     if len(k_range) > 2:
         for i in range(len(k_range) - 1):
@@ -460,20 +386,15 @@ def kmeans_k_suggestions(X, k_range=range(2, 20), random_state=None):
             if wcss_values[k1] > 0:
                 ratio = wcss_values[k2] / wcss_values[k1]
                 wcss_ratios[k2] = ratio
-
         if wcss_ratios:
             suggested_k_elbow = min(wcss_ratios, key=wcss_ratios.get)
-
     suggested_k_silhouette = max(silhouette_scores, key=silhouette_scores.get)
-
     suggested_k_davies_bouldin = min(
         davies_bouldin_indices, key=davies_bouldin_indices.get
     )
-
     suggested_k_calinski_harabasz = max(
         calinski_harabasz_indices, key=calinski_harabasz_indices.get
     )
-
     if suggested_k_elbow is not None:
         final_suggestion_k = suggested_k_elbow
     elif (
@@ -485,7 +406,6 @@ def kmeans_k_suggestions(X, k_range=range(2, 20), random_state=None):
         final_suggestion_k = suggested_k_calinski_harabasz
     else:
         final_suggestion_k = None
-
     return {
         "wcss": wcss_values,
         "silhouette_scores": silhouette_scores,
@@ -502,9 +422,7 @@ def kmeans_k_suggestions(X, k_range=range(2, 20), random_state=None):
 
 
 def fit(model):
-
     log("Features", model.X_all)
-
     try:
         if hasattr(model, "y_all"):
             log("Labels", model.y_all)
@@ -521,12 +439,10 @@ def fit(model):
             model.fit(model.X_all)
     except Exception as e:
         catch(e)
-
     return model
 
 
 def feed(model, X_new, y_new=None, epochs=1):
-
     if model is None:
         model = HybridModel()
     if y_new is None:
@@ -538,7 +454,6 @@ def feed(model, X_new, y_new=None, epochs=1):
             else:
                 current_X = np.concatenate((current_X, X_new), axis=0)
         model.X_all = current_X
-
     else:
         current_X = model.X_all if hasattr(model, "X_all") else None
         current_y = model.y_all if hasattr(model, "y_all") else None
@@ -553,7 +468,6 @@ def feed(model, X_new, y_new=None, epochs=1):
                 current_y = np.concatenate((current_y, y_new), axis=0)
         model.X_all = current_X
         model.y_all = current_y
-
     return model
 
 
@@ -569,39 +483,29 @@ def train(
     selected_rows=None,
 ):
     import joblib
-
     import definers as _d
 
     tokenizer = _d.init_tokenizer()
-
     got_inp = _d.check_parameter(features) or _d.check_parameter(remote_src)
     is_supv = _d.check_parameter(dataset_label_columns) or _d.check_parameter(
         labels
     )
-
     model = None
-
     if _d.check_parameter(model_path):
         model = joblib.load(model_path)
         print(f"cuML model loaded from {model_path}")
         if model is None:
             logging.error(f"Could not load model from {model_path}")
             return None
-
     model_path = f"model_{_d.random_string()}.joblib"
-
     if not got_inp:
         return None
-
     if _d.check_parameter(remote_src):
         dataset = _d.fetch_dataset(remote_src, url_type, revision)
     else:
         dataset = _d.files_to_dataset(features, labels)
-
     dataset = _d.drop_columns(dataset, drop_list)
-
     _d.log("Full dataset length", len(dataset))
-
     loaders = []
     if _d.check_parameter(selected_rows):
         selected_rows = simple_text(selected_rows).split()
@@ -611,56 +515,45 @@ def train(
                 loaders.append(
                     _d.to_loader(
                         _d.select_rows(
-                            dataset,
-                            int(start_end[0]) - 1,
-                            int(start_end[-1]),
+                            dataset, int(start_end[0]) - 1, int(start_end[-1])
                         )
                     )
                 )
             else:
                 loaders.append(
-                    _d.to_loader(_d.select_rows(dataset, int(part) - 1, int(part)))
+                    _d.to_loader(
+                        _d.select_rows(dataset, int(part) - 1, int(part))
+                    )
                 )
     else:
         loaders.append(_d.to_loader(dataset))
-
     if is_supv:
         for l, loader in enumerate(loaders):
             print(f"Loader {l + 1}")
             for i, b in enumerate(loader):
                 print(f"Batch {i + 1}: {b}")
-
-                X, y = _d.split_columns(b, dataset_label_columns, is_batch=True)
-
+                (X, y) = _d.split_columns(
+                    b, dataset_label_columns, is_batch=True
+                )
                 X = _d.tokenize_and_pad(X, tokenizer)
                 y = _d.tokenize_and_pad(y, tokenizer)
-
                 X = _d.pad_sequences(X)
-
                 X = _d.numpy_to_cupy(X)
                 y = _d.numpy_to_cupy(y)
-
                 print("Feeding model")
                 model = feed(model, X, y)
-
     else:
         for l, loader in enumerate(loaders):
             print(f"Loader {l + 1}")
             for i, b in enumerate(loader):
                 print(f"Batch {i + 1}: {b}")
-
                 X = _d.tokenize_and_pad(b, tokenizer)
-
                 X = _d.pad_sequences(X)
-
                 X = _d.numpy_to_cupy(X)
-
                 print("Feeding model")
                 model = feed(model, X)
-
     print("Fitting model")
     fit(model)
-
     try:
         joblib.dump(model, model_path)
         _d.log("Trained model path", model_path, status=True)
@@ -674,11 +567,12 @@ def extract_text_features(text, vectorizer=None):
     from sklearn.feature_extraction.text import TfidfVectorizer
 
     try:
-        vectorizer = vectorizer or TfidfVectorizer(token_pattern=r"(?u)\b\w+\b")
+        vectorizer = vectorizer or TfidfVectorizer(
+            token_pattern="(?u)\\b\\w+\\b"
+        )
         tfidf_matrix = vectorizer.fit_transform([text])
         features = tfidf_matrix.toarray().flatten().astype(_np.float32)
         return features
-
     except Exception as e:
         print(f"Error extracting text features: {e}")
         return None
@@ -691,20 +585,14 @@ def predict_linear_regression(X_new, model_path):
         input_dim = X_new.shape[1]
         model_torch = LinearRegressionTorch(input_dim)
         model_torch.load_state_dict(torch.load(model_path))
-
         model_torch.eval()
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         model_torch.to(device)
-
         X_new_torch = torch.tensor(X_new, dtype=torch.float32, device=device)
-
         with torch.no_grad():
             predictions_torch = model_torch(X_new_torch).squeeze()
-
         predictions_numpy = predictions_torch.cpu().numpy()
-
         return predictions_numpy
-
     except Exception as e:
         print(f"Error during prediction: {e}")
         return None
@@ -720,23 +608,16 @@ def features_to_text(predicted_features, vectorizer=None, vocabulary=None):
         raise ValueError(
             "Either a vectorizer or a vocabulary must be provided."
         )
-
     try:
         if vectorizer is None:
-            vectorizer = TfidfVectorizer(token_pattern=r"(?u)\b\w+\b")
+            vectorizer = TfidfVectorizer(token_pattern="(?u)\\b\\w+\\b")
             vectorizer.fit(vocabulary)
-
         tfidf_matrix = predicted_features.reshape(1, -1)
-
         word_indices = tfidf_matrix.nonzero()[1]
-
         feature_names = vectorizer.get_feature_names_out()
-
         reconstructed_words = [feature_names[i] for i in word_indices]
         reconstructed_text = " ".join(reconstructed_words)
-
         return reconstructed_text
-
     except Exception as e:
         print(f"Error generating text from features: {e}")
         return None
@@ -758,20 +639,16 @@ def find_latest_rvc_checkpoint(folder_path: str, model_name: str) -> str | None:
     if not os.path.isdir(folder_path):
         logger.error(f"Error: Folder not found at {folder_path}")
         return None
-
-    pattern = re.compile(rf"^{re.escape(model_name)}_e(\d+)_s(\d+)\.pth$")
-
+    pattern = re.compile(f"^{re.escape(model_name)}_e(\\d+)_s(\\d+)\\.pth$")
     latest_checkpoint = None
     latest_epoch = -1
     latest_global_step = -1
-
     try:
         for filename in os.listdir(folder_path):
             match = pattern.match(filename)
             if match:
                 epoch = int(match.group(1))
                 global_step = int(match.group(2))
-
                 if epoch > latest_epoch:
                     latest_epoch = epoch
                     latest_global_step = global_step
@@ -779,36 +656,29 @@ def find_latest_rvc_checkpoint(folder_path: str, model_name: str) -> str | None:
                 elif epoch == latest_epoch and global_step > latest_global_step:
                     latest_global_step = global_step
                     latest_checkpoint = filename
-
     except Exception as e:
         logger.error(
             f"An error occurred while scanning the folder for checkpoints: {e}"
         )
         return None
-
     if latest_checkpoint:
         logger.info(f"Latest checkpoint found: {latest_checkpoint}")
     else:
         logger.warning(
             f"No checkpoint found matching the pattern in '{folder_path}'"
         )
-
     return latest_checkpoint
 
 
 def get_cluster_content(model, cluster_index):
-
     if not hasattr(model, "labels_"):
         raise ValueError("Model must be a trained KMeans model.")
-
     cluster_labels = model.labels_
-
     cluster_contents = {}
     for i, label in enumerate(cluster_labels):
         if label not in cluster_contents:
             cluster_contents[label] = []
         cluster_contents[label].append(model.x_all[i])
-
     if cluster_index in cluster_contents:
         return cluster_contents[cluster_index]
     return None
@@ -821,70 +691,42 @@ def is_clusters_model(model):
 def build_faiss():
     with cwd():
         git("YaronKoresh", "faiss", parent="./xfaiss")
-
     set_cuda_env()
-
     cmake = "/usr/local/cmake/bin/cmake"
-
     try:
         with cwd("./xfaiss"):
             print("faiss - stage 1")
             run(
-                f"{cmake} "
-                f"-B build "
-                "-DBUILD_TESTING=OFF "
-                "-DCMAKE_BUILD_TYPE=Release "
-                "-DFAISS_ENABLE_MKL=OFF "
-                "-DFAISS_ENABLE_C_API=ON "
-                "-DFAISS_ENABLE_GPU=ON "
-                "-DFAISS_ENABLE_PYTHON=ON "
-                f"-DPython_EXECUTABLE={sys.executable} "
-                f"-DPython_INCLUDE_DIR={sys.prefix}/include/python{sys.version_info.major}.{sys.version_info.minor} "
-                f"-DPython_LIBRARY={sys.prefix}/lib/libpython{sys.version_info.major}.{sys.version_info.minor}.so "
-                f"-DPython_NumPy_INCLUDE_DIRS={sys.prefix}/lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages/numpy/core/include "
-                "."
+                f"{cmake} -B build -DBUILD_TESTING=OFF -DCMAKE_BUILD_TYPE=Release -DFAISS_ENABLE_MKL=OFF -DFAISS_ENABLE_C_API=ON -DFAISS_ENABLE_GPU=ON -DFAISS_ENABLE_PYTHON=ON -DPython_EXECUTABLE={sys.executable} -DPython_INCLUDE_DIR={sys.prefix}/include/python{sys.version_info.major}.{sys.version_info.minor} -DPython_LIBRARY={sys.prefix}/lib/libpython{sys.version_info.major}.{sys.version_info.minor}.so -DPython_NumPy_INCLUDE_DIRS={sys.prefix}/lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages/numpy/core/include ."
             )
-
             print("faiss - stage 2")
             run(f"{cmake} --build build -j {cores()} --target faiss")
-
             print("faiss - stage 3")
             run(f"{cmake} --build build -j {cores()} --target swigfaiss")
-
         temp_dir = tmp(dir=True)
-
         with cwd("./xfaiss/build/faiss/python"):
             print(
                 "faiss - stage 4: Building wheel with numpy==1.26.4 constraint"
             )
-
             with tempfile.NamedTemporaryFile(mode="w", delete=False) as reqs:
                 reqs.write("numpy==1.26.4\n")
                 constraints_path = reqs.name
-
             try:
                 run(
                     f"{sys.executable} -m pip wheel . -w {temp_dir} -c {constraints_path}"
                 )
             finally:
                 os.remove(constraints_path)
-
         with cwd():
             delete("./xfaiss")
-
         free()
-
         any_wheel_path = paths(f"{temp_dir}/faiss-*.whl")[0]
-
         repaired_wheel_dir = tmp(dir=True)
-
         print("faiss - stage 5: Repairing wheel")
         run(
             f"{sys.executable} -m auditwheel repair {any_wheel_path} -w {repaired_wheel_dir}"
         )
-
         repaired_wheel_path = paths(f"{repaired_wheel_dir}/faiss-*.whl")[0]
-
         print(
             "faiss - stage 6: Modifying final wheel metadata for runtime constraints"
         )
@@ -892,9 +734,7 @@ def build_faiss():
         final_wheel_path = modify_wheel_requirements(
             repaired_wheel_path, dependency_constraints
         )
-
         return final_wheel_path
-
     except subprocess.CalledProcessError as e:
         catch(f"Error during installation: {e}")
     except FileNotFoundError as e:
@@ -904,30 +744,22 @@ def build_faiss():
 
 
 def simple_text(prompt):
-    punc = r'["\'!#$%&()*+,/:;<=>?@\[\\\]^_`\{\|\}~]'
-
+    punc = "[\"\\'!#$%&()*+,/:;<=>?@\\[\\\\\\]^_`\\{\\|\\}~]"
     prompt = re.sub("[\t]", " ", prompt)
-
     prompt = re.sub("(\n){2,}", "\n", prompt)
     prompt = re.sub("( ){2,}", " ", prompt)
-
-    prompt = re.sub(r"[\. ]+\.[\.]*|[\. ]*\.[\.]+", ".", prompt)
+    prompt = re.sub("[\\. ]+\\.[\\.]*|[\\. ]*\\.[\\.]+", ".", prompt)
     prompt = re.sub("(-){2,}", "-", prompt)
     prompt = prompt.replace("|", " or ")
-    prompt = re.sub(r"([ !]){1,}\?([ !?]){1,}", " I wonder ", prompt)
-
-    prompt = re.sub(r"(?<=[a-zA-Z0-9])\/(?=[a-zA-Z0-9])", " ", prompt)
-
+    prompt = re.sub("([ !]){1,}\\?([ !?]){1,}", " I wonder ", prompt)
+    prompt = re.sub("(?<=[a-zA-Z0-9])\\/(?=[a-zA-Z0-9])", " ", prompt)
     prompt = re.sub(punc, "", prompt)
-
     prompt = prompt.strip().strip(".")
-
-    prompt = re.sub("\\s*(?:(?<!\\d)(?<!\b[a-zA-Z])\\.)+\\s*", " and ", prompt)
-
+    prompt = re.sub(
+        "\\s*(?:(?<!\\d)(?<!\x08[a-zA-Z])\\.)+\\s*", " and ", prompt
+    )
     prompt = re.sub("(\n){2,}", "\n", prompt)
-
     prompt = re.sub("( ){2,}", " ", prompt)
-
     lines = prompt.split("\n")
     lines = [
         line.lower().strip().replace(" -", "-").replace("- ", "-")
@@ -935,7 +767,6 @@ def simple_text(prompt):
     ]
     lines = [line for line in lines if line]
     prompt = "\n".join(lines)
-
     return prompt
 
 
@@ -947,11 +778,9 @@ def _summarize(text_to_summarize):
         truncation=True,
         max_length=512,
     )
-    encoded = {key: tensor.to(device()) for key, tensor in encoded.items()}
-
+    encoded = {key: tensor.to(device()) for (key, tensor) in encoded.items()}
     _beam_kwargs = beam_kwargs
     _beam_kwargs["num_beams"] = higher_beams
-
     gen = MODELS["summary"].generate(**encoded, **_beam_kwargs, max_length=512)
     return TOKENIZERS["summary"].decode(gen[0], skip_special_tokens=True)
 
@@ -959,18 +788,14 @@ def _summarize(text_to_summarize):
 def map_reduce_summary(text, max_words):
     chunk_size = 60
     overlap = 10
-
     while len(text.split()) > max_words:
         words = text.split()
-
         chunk_summaries = []
         for i in range(0, len(words), chunk_size - overlap):
             chunk_text = " ".join(words[i : i + chunk_size])
             chunk_summary = _summarize(chunk_text)
             chunk_summaries.append(chunk_summary)
-
         text = " ".join(chunk_summaries)
-
     final_summary = _summarize(text)
     return final_summary
 
@@ -985,7 +810,6 @@ def summary(text, max_words=20, min_loops=1):
             text = _summarize(text)
         min_loops = min_loops - 1
         words_count = len(text.split())
-
     log("Summary", text)
     return text
 
@@ -996,29 +820,21 @@ def git(user: str, repo: str, branch: str = "main", parent: str = "."):
     user = user.replace(" ", "_")
     repo = repo.replace(" ", "-")
     parent = full_path(parent)
-
     directory(parent)
-
     clone_dir = tmp(dir=True)
-
     repo_url = f"https://github.com/{user}/{repo}.git"
     env = os.environ.copy()
     env["GIT_LFS_SKIP_SMUDGE"] = "1"
-
     run(f"git clone --branch {branch} {repo_url} {clone_dir}", env=env)
 
     def _lfs(_dir):
-
         for p in read(_dir):
             if is_directory(p) and path_end(p) == ".git":
                 continue
-
             if is_directory(p):
                 _lfs(p)
                 continue
-
             content = None
-
             try:
                 content = read(p)
             except Exception as e:
@@ -1042,14 +858,12 @@ def git(user: str, repo: str, branch: str = "main", parent: str = "."):
                 continue
 
     _lfs(clone_dir)
-
     ps = paths(f"{clone_dir}/*")
     for p in ps:
         n = path_end(p)
         if n == ".git":
             continue
         move(p, f"{parent}/{n}")
-
     delete(clone_dir)
 
 
@@ -1058,32 +872,24 @@ def init_model_repo(task: str, turbo: bool = False):
 
     global MODELS
     global TOKENIZERS
-
     free()
-
     model = None
-
     if task in ["translate"]:
         import nltk
         from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
         nltk.download("punkt_tab")
-
         TOKENIZERS[task] = AutoTokenizer.from_pretrained(tasks[task])
         model = AutoModelForSeq2SeqLM.from_pretrained(tasks[task]).to(device())
-
     elif task in ["tts"]:
         from chatterbox.tts import ChatterboxTTS
 
         model = ChatterboxTTS.from_pretrained(device=device())
-
     elif task in ["svc"]:
         logger.info("Initializing RVC by downloading necessary files.")
         with cwd():
             git("YaronKoresh", "definers rvc files")
-
         log("RVC initialization", "Initialization complete.", True)
-
     elif task in ["speech-recognition"]:
         from transformers import pipeline
 
@@ -1092,7 +898,6 @@ def init_model_repo(task: str, turbo: bool = False):
             model=tasks["speech-recognition"],
             device=device(),
         )
-
     elif task in ["audio-classification"]:
         from transformers import pipeline
 
@@ -1101,7 +906,6 @@ def init_model_repo(task: str, turbo: bool = False):
             model=tasks["audio-classification"],
             device=device(),
         )
-
     elif task in ["detect"]:
         from transformers import (
             AutoConfig,
@@ -1132,12 +936,8 @@ def init_model_repo(task: str, turbo: bool = False):
                 trust_remote_code=True,
                 torch_dtype=dtype(),
             ).to(device())
-
     elif task in ["music"]:
-        from transformers import (
-            AutoProcessor,
-            MusicgenForConditionalGeneration,
-        )
+        from transformers import AutoProcessor, MusicgenForConditionalGeneration
 
         PROCESSORS[task] = AutoProcessor.from_pretrained(
             "facebook/musicgen-small"
@@ -1145,7 +945,6 @@ def init_model_repo(task: str, turbo: bool = False):
         model = MusicgenForConditionalGeneration.from_pretrained(
             "facebook/musicgen-small"
         ).to(device())
-
     elif task in ["answer"]:
         import torch
         from huggingface_hub import snapshot_download
@@ -1162,38 +961,21 @@ def init_model_repo(task: str, turbo: bool = False):
         snapshot_dir = Path(
             snapshot_download(
                 repo_id=tasks[task],
-                allow_patterns=[
-                    "*.txt",
-                    "*.py",
-                    "*.json",
-                    "*.safetensors",
-                ],
+                allow_patterns=["*.txt", "*.py", "*.json", "*.safetensors"],
                 revision="33e62acdd07cd7d6635badd529aa0a3467bb9c6a",
             )
         )
         print(f"Source files downloaded to: {snapshot_dir}")
-
-        prepare_inputs_for_generation_code = """
-    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, attention_mask=None, **kwargs):
-        if past_key_values:
-            input_ids = input_ids[:, -1:]
-
-        return {
-            "input_ids": input_ids,
-            "past_key_values": past_key_values,
-            "attention_mask": attention_mask,
-            **kwargs,
-        }
-"""
+        prepare_inputs_for_generation_code = '\n    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, attention_mask=None, **kwargs):\n        if past_key_values:\n            input_ids = input_ids[:, -1:]\n\n        return {\n            "input_ids": input_ids,\n            "past_key_values": past_key_values,\n            "attention_mask": attention_mask,\n            **kwargs,\n        }\n'
         target_file = snapshot_dir / "modeling_phi4mm.py"
         target_class_line = "class Phi4MMModel(Phi4MMPreTrainedModel):"
-
         print(f"Preparing to inject patch into {target_file}...")
         original_code_lines = target_file.read_text().splitlines()
-
         if any(
-            "dynamically injected to fix a compatibility issue" in line
-            for line in original_code_lines
+            (
+                "dynamically injected to fix a compatibility issue" in line
+                for line in original_code_lines
+            )
         ):
             print(
                 "✅ Source code appears to be already patched. Skipping injection."
@@ -1201,73 +983,43 @@ def init_model_repo(task: str, turbo: bool = False):
         else:
             try:
                 line_number = original_code_lines.index(target_class_line)
-
                 injection_point = line_number + 1
                 original_code_lines.insert(
-                    injection_point,
-                    prepare_inputs_for_generation_code,
+                    injection_point, prepare_inputs_for_generation_code
                 )
-
                 patched_code = "\n".join(original_code_lines)
                 target_file.write_text(patched_code)
                 print(
                     "✅✅✅ SUCCESS: Method injected directly into source code."
                 )
-
             except ValueError:
                 print(
                     "⚠️ Could not find the target class declaration line. Aborting patch."
                 )
-
         print("Rewriting relative imports to absolute...")
         for py_file in snapshot_dir.glob("*.py"):
             content = py_file.read_text()
-            modified_content = re.sub(r"from \.([\w_]+)", r"from \1", content)
+            modified_content = re.sub("from \\.([\\w_]+)", "from \\1", content)
             modified_content = re.sub(
-                r"import \.([\w_]+)", r"import \1", modified_content
+                "import \\.([\\w_]+)", "import \\1", modified_content
             )
             if content != modified_content:
                 print(f"  - Rewrote imports in {py_file.name}")
                 py_file.write_text(modified_content)
-
         py_modules = [p.stem for p in snapshot_dir.glob("*.py")]
         print(py_modules)
-
-        pyproject_toml_content = f"""
-[build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
-
-[project]
-name = "{package_name}"
-version = "0.0.1"
-description = "A dynamically generated package for the Phi-4 model code."
-
-[tool.setuptools]
-py-modules = {py_modules}
-        """
-
+        pyproject_toml_content = f'\n[build-system]\nrequires = ["setuptools>=61.0"]\nbuild-backend = "setuptools.build_meta"\n\n[project]\nname = "{package_name}"\nversion = "0.0.1"\ndescription = "A dynamically generated package for the Phi-4 model code."\n\n[tool.setuptools]\npy-modules = {py_modules}\n        '
         (snapshot_dir / "pyproject.toml").write_text(pyproject_toml_content)
         print("Dynamically created pyproject.toml file.")
-
         print(f"Installing '{package_name}' from local source...")
         subprocess.check_call(
-            [
-                sys.executable,
-                "-m",
-                "pip",
-                "install",
-                "-e",
-                str(snapshot_dir),
-            ],
+            [sys.executable, "-m", "pip", "install", "-e", str(snapshot_dir)],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
         print(f"Successfully installed '{package_name}'.")
-
         str_snapshot_dir = str(snapshot_dir)
         add_path(str_snapshot_dir)
-
         print("Loading tokenizer, processor, and model via patched loader...")
         AutoTokenizer.from_pretrained(str_snapshot_dir)
         PROCESSORS["answer"] = AutoProcessor.from_pretrained(
@@ -1279,21 +1031,15 @@ py-modules = {py_modules}
             trust_remote_code=True,
             _attn_implementation="eager",
         ).to(device())
-
         print("✅ Phi-4 model loaded successfully!")
-
     elif task in ["summary"]:
-        from transformers import (
-            T5ForConditionalGeneration,
-            T5Tokenizer,
-        )
+        from transformers import T5ForConditionalGeneration, T5Tokenizer
 
         TOKENIZERS[task] = T5Tokenizer.from_pretrained(tasks[task])
         free()
         model = T5ForConditionalGeneration.from_pretrained(
             tasks[task], torch_dtype=dtype()
         ).to(device())
-
     elif task in ["video"]:
         import torch
         from diffusers import (
@@ -1308,7 +1054,6 @@ py-modules = {py_modules}
             tasks[task], transformer=transformer, torch_dtype=dtype()
         )
         model.to(device())
-
     elif task in ["image"]:
         import torch
         from diffusers import FluxPipeline
@@ -1318,7 +1063,6 @@ py-modules = {py_modules}
         model = FluxPipeline.from_pretrained(
             tasks[task], torch_dtype=dtype(), use_safetensors=True
         )
-
         srpo_path = hf_hub_download(
             repo_id=tasks["image-spro"],
             filename="diffusion_pytorch_model.safetensors",
@@ -1326,27 +1070,21 @@ py-modules = {py_modules}
         state_dict = load_file(srpo_path)
         model.transformer.load_state_dict(state_dict)
         model = model.to(device())
-
     elif task not in tasks:
         from transformers import AutoModel
 
         model = AutoModel.from_pretrained(
-            task,
-            torch_dtype=dtype(),
-            trust_remote_code=True,
+            task, torch_dtype=dtype(), trust_remote_code=True
         ).to(device())
-
     if not turbo:
         try:
             model.vae.enable_slicing()
         except:
             pass
-
         try:
             model.vae.enable_tiling()
         except:
             pass
-
         optimizations = [
             "enable_vae_slicing",
             "enable_vae_tiling",
@@ -1364,9 +1102,7 @@ py-modules = {py_modules}
                 pass
             except Exception as e:
                 print(f"Could not apply optimization {opt}: {e}")
-
     MODELS[task] = model
-
     free()
 
 
@@ -1374,7 +1110,7 @@ def is_huggingface_repo(repo_id: str) -> bool:
     if not isinstance(repo_id, str) or not repo_id:
         return False
     repo_id = repo_id.strip()
-    pattern = re.compile(r"^[a-zA-Z0-9.\-_]+/[a-zA-Z0-9.\-_]+$")
+    pattern = re.compile("^[a-zA-Z0-9.\\-_]+/[a-zA-Z0-9.\\-_]+$")
     return bool(pattern.fullmatch(repo_id))
 
 
@@ -1384,8 +1120,7 @@ def init_pretrained_model(task: str, turbo: bool = False):
         return
     if (
         task in repo_tasks_override
-        or task in tasks
-        and is_huggingface_repo(tasks[task])
+        or (task in tasks and is_huggingface_repo(tasks[task]))
         or is_huggingface_repo(task)
     ):
         return init_model_repo(task, turbo)
@@ -1395,17 +1130,13 @@ def init_pretrained_model(task: str, turbo: bool = False):
 def choose_random_words(word_list, num_words=10):
     if not word_list:
         return []
-
     list_length = len(word_list)
-
     if num_words > list_length:
         num_words = list_length - 1
-
     if num_words == 0:
         num_words = 1
     elif num_words == -1:
         return []
-
     chosen_words = random.sample(word_list, num_words)
     return chosen_words
 
@@ -1434,7 +1165,6 @@ def pipe(
     length: int = 3,
     fps: int = 24,
 ):
-
     import cv2
     import torch
     from diffusers.utils import export_to_video
@@ -1444,8 +1174,8 @@ def pipe(
     params2 = {}
     if task in ["image", "video"]:
         log("Pipe activated", prompt, status="")
-        width, height = resolution.split("x")
-        width, height = int(width), int(height)
+        (width, height) = resolution.split("x")
+        (width, height) = (int(width), int(height))
         if task == "video":
             length = length * fps
         else:
@@ -1466,7 +1196,6 @@ def pipe(
     elif task == "detect":
         image = Image.open(path)
         params1.append(image)
-
     from transformers import AutoTokenizer
 
     if task in ["detect"]:
@@ -1474,7 +1203,6 @@ def pipe(
         inputs = tokenizer(*params1, **params2, return_tensors="tf")
     elif task in ["image", "video"]:
         inputs = params2
-
     try:
         outputs = MODELS[task](**inputs)
     except Exception as e:
@@ -1483,7 +1211,6 @@ def pipe(
             outputs = MODELS["video"](**inputs)
         elif task == "video":
             outputs = MODELS["image"](**inputs)
-
     if task == "video":
         sample = outputs.frames[0]
         path = tmp("mp4")
@@ -1504,11 +1231,12 @@ def pipe(
 
 
 def check_parameter(p):
-    return p is not None and not (
-        isinstance(p, list)
-        and (len(p) == 0 or isinstance(p[0], str) and p[0].strip() == "")
-        or isinstance(p, str)
-        and p.strip() == ""
+    return p is not None and (
+        not (
+            isinstance(p, list)
+            and (len(p) == 0 or (isinstance(p[0], str) and p[0].strip() == ""))
+            or (isinstance(p, str) and p.strip() == "")
+        )
     )
 
 
@@ -1518,57 +1246,41 @@ class HybridModel:
 
     def fit(self, X, y=None):
         if y is not None:
-            from cuml.linear_model import (
-                LinearRegression as cuLinearRegression,
-            )
+            from cuml.linear_model import LinearRegression as cuLinearRegression
 
             if self.model is None:
                 self.model = cuLinearRegression()
-
             start_train = time()
             self.model.fit(X, y)
             if hasattr(np, "cuda"):
                 np.cuda.runtime.deviceSynchronize()
             end_train = time()
             train_time = end_train - start_train
-
             print(f"Train Time: {train_time:.4f} seconds")
-
         else:
             from cuml.cluster import KMeans as cuKMeans
 
             if self.model is None:
                 self.model = cuKMeans(n_clusters=32768)
-
             start_train = time()
             self.model.fit(X)
             if hasattr(np, "cuda"):
                 np.cuda.runtime.deviceSynchronize()
             end_train = time()
             train_time = end_train - start_train
-
             print(f"Train Time: {train_time:.4f} seconds")
 
     def predict(self, X):
-        """
-        Predicts using a trained hybrid model.
-        """
-
         if self.model is None:
             raise ValueError("Model must be trained before prediction.")
-
         start_predict = time()
-
         predictions = self.model.predict(X)
-
         if hasattr(np, "cuda"):
             np.cuda.runtime.deviceSynchronize()
         end_predict = time()
         predict_time = end_predict - start_predict
         predictions = cupy_to_numpy(predictions)
-
         print(f"Predict Time: {predict_time:.4f} seconds")
-
         return predictions
 
 
@@ -1616,18 +1328,16 @@ def SklearnWrapper(sklearn_model, is_classification=False):
         def fit(self, x, y=None):
             x_numpy = self._to_numpy(x)
             y_numpy = self._to_numpy(y) if y is not None else None
-
             if y_numpy is not None:
                 self.sklearn_model.fit(x_numpy, y_numpy)
+            elif len(x_numpy.shape) > 2:
+                logging.warning(
+                    "Fitting model on 3D input without labels. Fitting on each sequence independently."
+                )
+                for i in range(x_numpy.shape[0]):
+                    self.sklearn_model.fit(x_numpy[i])
             else:
-                if len(x_numpy.shape) > 2:
-                    logging.warning(
-                        "Fitting model on 3D input without labels. Fitting on each sequence independently."
-                    )
-                    for i in range(x_numpy.shape[0]):
-                        self.sklearn_model.fit(x_numpy[i])
-                else:
-                    self.sklearn_model.fit(x_numpy)
+                self.sklearn_model.fit(x_numpy)
 
         def _to_numpy(self, tensor_or_array):
             if tensor_or_array is None:
@@ -1644,12 +1354,11 @@ def SklearnWrapper(sklearn_model, is_classification=False):
 
 
 def rvc_to_onnx(model_path):
-    if not os.path.exists("infer") and not os.path.exists("infer/"):
+    if not os.path.exists("infer") and (not os.path.exists("infer/")):
         logger.info("Infer module not found, downloading...")
         google_drive_download(
             id="1kqMYQskvVKwKglcWQsK2Q5G3yPahnbtH", dest="./infer.zip"
         )
-
     try:
         from .infer.modules.onnx.export import export_onnx as eo
 
@@ -1672,17 +1381,13 @@ def export_files_rvc(experiment: str):
     weight_root = os.path.join(now_dir, "assets", "weights")
     index_root = os.path.join(now_dir, "logs")
     exp_path = os.path.join(index_root, experiment)
-
     latest_checkpoint_filename = find_latest_checkpoint(weight_root, experiment)
-
     if latest_checkpoint_filename is None:
         error_message = f"Error: No latest checkpoint found for experiment '{experiment}' in '{exp_path}'. Cannot export."
         logger.error(error_message)
         return []
-
     pth_path = os.path.join(weight_root, latest_checkpoint_filename)
     logger.info(f"Found latest checkpoint: {pth_path}")
-
     index_file = ""
     for root, dirs, files in os.walk(exp_path, topdown=False):
         for name in files:
@@ -1692,22 +1397,18 @@ def export_files_rvc(experiment: str):
                 break
         if index_file:
             break
-
     onnx_path = rvc_to_onnx(pth_path)
-
     exported_files = [pth_path]
     if os.path.exists(onnx_path):
         exported_files.append(onnx_path)
         logger.info(f"Added ONNX file to exported list: {onnx_path}")
     else:
         logger.warning(f"ONNX file not found after export attempt: {onnx_path}")
-
     if os.path.exists(index_file):
         exported_files.append(index_file)
         logger.info(f"Added index file to exported list: {index_file}")
     else:
         logger.warning(f"Index file not found: {index_file}")
-
     logger.info(f"Exported files: {exported_files}")
     return exported_files
 
@@ -1719,20 +1420,16 @@ def find_latest_checkpoint(folder_path: str, model_name: str) -> str | None:
     if not os.path.isdir(folder_path):
         logger.error(f"Error: Folder not found at {folder_path}")
         return None
-
-    pattern = re.compile(rf"^{re.escape(model_name)}_e(\d+)_s(\d+)\.pth$")
-
+    pattern = re.compile(f"^{re.escape(model_name)}_e(\\d+)_s(\\d+)\\.pth$")
     latest_checkpoint = None
     latest_epoch = -1
     latest_global_step = -1
-
     try:
         for filename in os.listdir(folder_path):
             match = pattern.match(filename)
             if match:
                 epoch = int(match.group(1))
                 global_step = int(match.group(2))
-
                 if epoch > latest_epoch:
                     latest_epoch = epoch
                     latest_global_step = global_step
@@ -1740,20 +1437,17 @@ def find_latest_checkpoint(folder_path: str, model_name: str) -> str | None:
                 elif epoch == latest_epoch and global_step > latest_global_step:
                     latest_global_step = global_step
                     latest_checkpoint = filename
-
     except Exception as e:
         logger.error(
             f"An error occurred while scanning the folder for checkpoints: {e}"
         )
         return None
-
     if latest_checkpoint:
         logger.info(f"Latest checkpoint found: {latest_checkpoint}")
     else:
         logger.warning(
             f"No checkpoint found matching the pattern in '{folder_path}'"
         )
-
     return latest_checkpoint
 
 
@@ -1761,22 +1455,17 @@ def train_model_rvc(
     experiment: str, path: str, lvl: int = 1, f0method: str = "crepe"
 ):
     logger.info(f"Starting RVC training for experiment: {experiment}")
-
     import pydub
     import torch
-
     from .configs.config import Config
     from .i18n.i18n import I18nAuto
 
     path = normalize_audio_to_peak(path)
-    path, music = separate_stems(path)
+    (path, music) = separate_stems(path)
     path = normalize_audio_to_peak(path)
-
     now_dir = os.getcwd()
     index_root = os.path.join(now_dir, "logs")
-
     config = Config()
-
     gpus = (
         "-".join([str(i) for i in range(torch.cuda.device_count())])
         if torch.cuda.is_available()
@@ -1799,16 +1488,13 @@ def train_model_rvc(
     )
     if default_batch_size == 0:
         default_batch_size = 1
-
     exp_dir = experiment
     exp_path = os.path.join(index_root, exp_dir)
     logger.info(f"Experiment directory: {exp_path}")
-
     directory(os.path.join(exp_path, "1_16k_wavs"))
     directory(os.path.join(exp_path, "0_gt_wavs"))
     input_root = os.path.join(exp_path, "input_root")
     directory(input_root)
-
     input_path = os.path.join(input_root, "input.wav")
     logger.info(f"Moving input audio '{path}' to '{input_path}'")
     try:
@@ -1817,25 +1503,20 @@ def train_model_rvc(
         logger.error(f"Failed to move input audio file: {e}")
         catch(e)
         return None
-
     filelist_path = os.path.join(exp_path, "filelist.txt")
     logger.info(f"Creating filelist: {filelist_path}")
     try:
         write(filelist_path)
-
     except Exception as e:
         logger.error(f"Failed to create filelist.txt: {e}")
         catch(e)
         return None
-
     sr = 96000
     n_p = int(_np.ceil(config.n_cpu / 1.5))
     log_file_preprocess = os.path.join(exp_path, "preprocess.log")
-
     if_f0 = True
     gpus_rmvpe = f"{gpus}-{gpus}"
     log_file_f0_feature = os.path.join(exp_path, "extract_f0_feature.log")
-
     logger.info("Starting preprocessing...")
     try:
         with open(log_file_preprocess, "w") as f_preprocess:
@@ -1850,11 +1531,9 @@ def train_model_rvc(
             ]
             logger.info("Execute: " + " ".join(cmd_preprocess))
             run(" ".join(cmd_preprocess))
-
         with open(log_file_preprocess) as f_preprocess:
             log_content = f_preprocess.read()
             logger.info("Preprocessing Log:\n" + log_content)
-
     except Exception as e:
         logger.error(
             f"Preprocessing failed with return code {e.returncode}: {e}"
@@ -1872,16 +1551,13 @@ def train_model_rvc(
         catch(e)
         return None
     logger.info("Preprocessing complete.")
-
     logger.info("Starting feature extraction...")
     try:
         with open(log_file_f0_feature, "w") as f_f0_feature:
             if if_f0:
                 logger.info(f"Extracting F0 using method: {f0method}")
-
                 if torch.cuda.is_available() and f0method == "rmvpe":
                     f0method = "rmvpe_gpu"
-
                 if f0method != "rmvpe_gpu":
                     cmd_f0 = f'"{config.python_cmd}" -m infer.modules.train.extract.extract_f0_print "{exp_path}" {n_p} {f0method}'
                     logger.info("Execute: " + cmd_f0)
@@ -1899,7 +1575,6 @@ def train_model_rvc(
                         p = thread(run, cmd_f0_rmvpe)
                         ps.append(p)
                     wait(*ps)
-
             logger.info("Extracting features...")
             leng = len(gpus.split("-"))
             ps = []
@@ -1912,54 +1587,44 @@ def train_model_rvc(
                 p = thread(run, cmd_feature_print)
                 ps.append(p)
             wait(*ps)
-
         with open(log_file_f0_feature) as f_f0_feature:
             log_content = f_f0_feature.read()
             logger.info("F0 and Feature Extraction Log:\n" + log_content)
-
     except Exception as e:
         catch("An error occurred during F0 or feature extraction")
         catch(e)
         return None
     logger.info("Feature extraction complete.")
-
     logger.info("Starting index training...")
     feature_dir = os.path.join(exp_path, "3_feature768")
     listdir_res = []
     if os.path.exists(feature_dir):
         listdir_res = os.listdir(feature_dir)
-
     if not os.path.exists(feature_dir) or not any(listdir_res):
         error_message = f"Error: Feature directory '{feature_dir}' is missing or empty! Cannot train index."
         catch(error_message)
         return None
-
     try:
         npys = []
         for name in sorted(listdir_res):
             if name.endswith(".npy"):
                 phone = _np.load(os.path.join(feature_dir, name))
                 npys.append(phone)
-
         if not npys:
             error_message = f"Error: No .npy files found in '{feature_dir}'! Cannot train index."
             logger.error(error_message)
             return None
-
         big_npy = _np.concatenate(npys, 0)
         logger.info(f"Concatenated features shape: {big_npy.shape}")
-
         big_npy_idx = _np.arange(big_npy.shape[0])
         _np.random.shuffle(big_npy_idx)
         big_npy = big_npy[big_npy_idx]
-
     except Exception as e:
         catch(
             "An error occurred while loading and concatenating features for index training"
         )
         catch(e)
         return None
-
     try:
         from sklearn.cluster import MiniBatchKMeans
 
@@ -1976,46 +1641,38 @@ def train_model_rvc(
             .cluster_centers_
         )
         logger.info(f"KMeans cluster centers shape: {big_npy.shape}")
-
         import faiss
 
         feature_dimension = big_npy.shape[1]
         n_ivf = min(
-            int(16 * _np.sqrt(big_npy.shape[0])),
-            big_npy.shape[0] // 39,
+            int(16 * _np.sqrt(big_npy.shape[0])), big_npy.shape[0] // 39
         )
         n_ivf = max(1, n_ivf)
         logger.info(
             f"Training Faiss index with dimension {feature_dimension} and n_ivf {n_ivf}"
         )
-
         index = faiss.index_factory(feature_dimension, f"IVF{n_ivf},Flat")
         index_ivf = faiss.extract_index_ivf(index)
         index_ivf.nprobe = 1
         logger.info(f"Faiss index nprobe set to: {index_ivf.nprobe}")
-
         logger.info("Training Faiss index...")
         index.train(big_npy)
         logger.info("Faiss index training complete.")
-
         trained_index_path = os.path.join(
             exp_path,
             f"trained_IVF{n_ivf}_Flat_nprobe_{index_ivf.nprobe}_{exp_dir}_v2.index",
         )
         faiss.write_index(index, trained_index_path)
         logger.info(f"Trained Faiss index saved to: {trained_index_path}")
-
         logger.info("Adding features to Faiss index...")
         batch_size_add = 8192
         for i in range(0, big_npy.shape[0], batch_size_add):
             index.add(big_npy[i : i + batch_size_add])
         logger.info("Features added to Faiss index.")
-
         added_index_filename = f"added_IVF{n_ivf}_Flat_nprobe_{index_ivf.nprobe}_{exp_dir}_v2.index"
         added_index_path = os.path.join(exp_path, added_index_filename)
         faiss.write_index(index, added_index_path)
         logger.info(f"Final Faiss index saved to: {added_index_path}")
-
         target_link_path = os.path.join(index_root, added_index_filename)
         logger.info(
             f"Creating link from '{added_index_path}' to '{target_link_path}'"
@@ -2028,7 +1685,6 @@ def train_model_rvc(
                 logger.warning(
                     f"Removed existing file/link at {target_link_path}"
                 )
-
             if platform.system() != "Windows":
                 os.symlink(added_index_path, target_link_path)
             else:
@@ -2037,18 +1693,15 @@ def train_model_rvc(
         except Exception as e:
             logger.error(f"Linking index failed: {e}")
             catch(e)
-
     except Exception as e:
         logger.error(f"An error occurred during index training: {e}")
         catch(e)
         return None
     logger.info("Index training complete.")
-
     logger.info("Starting model training...")
     try:
         pretrained_G = "assets/pretrained_v2/f0G48k.pth"
         pretrained_D = "assets/pretrained_v2/f0D48k.pth"
-
         batch_size = default_batch_size
         total_epoch = 250 * lvl
         save_epoch = 250
@@ -2056,10 +1709,8 @@ def train_model_rvc(
         if_cache_gpu = 1
         if_save_every_weights = 1
         gpus_str = gpus
-
         config_path = "v2/48k.json"
         config_save_path = os.path.join(exp_path, "config.json")
-
         if not exist(config_save_path):
             logger.info(f"Saving training config to: {config_save_path}")
             try:
@@ -2075,40 +1726,21 @@ def train_model_rvc(
             except Exception as e:
                 logger.error(f"Failed to save training config file: {e}")
                 catch(e)
-
         log_file_train = os.path.join(exp_path, "train.log")
-
         logger.info("Executing training command...")
         with open(log_file_train, "w") as f_train:
-            cmd_train = (
-                f'"{config.python_cmd}" -m infer.modules.train.train '
-                f'-e "{exp_dir}" '
-                f"-sr 96k "
-                f"-f0 1 "
-                f"-bs {batch_size} "
-                f"-g {gpus_str} "
-                f"-te {total_epoch} "
-                f"-se {save_epoch} "
-                f'-pg "{pretrained_G}" '
-                f'-pd "{pretrained_D}" '
-                f"-l {if_save_latest} "
-                f"-c {if_cache_gpu} "
-                f"-sw {if_save_every_weights} "
-                f"-v v2"
-            )
+            cmd_train = f'"{config.python_cmd}" -m infer.modules.train.train -e "{exp_dir}" -sr 96k -f0 1 -bs {batch_size} -g {gpus_str} -te {total_epoch} -se {save_epoch} -pg "{pretrained_G}" -pd "{pretrained_D}" -l {if_save_latest} -c {if_cache_gpu} -sw {if_save_every_weights} -v v2'
             logger.info("Execute: " + cmd_train)
             run(cmd_train)
-
         with open(log_file_train) as f_train:
             log_content = f_train.read()
             logger.info("Training Log:\n" + log_content)
-
     except subprocess.CalledProcessError as e:
         logger.error(
             f"Model training failed with return code {e.returncode}: {e}"
         )
         logger.error(
-            f"Training output:\n{e.stdout.decode() if e.stdout else 'N/A'}\n{e.stderr.decode() if e.stderr else 'N/A'}"
+            f"Training output:\n{(e.stdout.decode() if e.stdout else 'N/A')}\n{(e.stderr.decode() if e.stderr else 'N/A')}"
         )
         catch(e)
         return None
@@ -2117,7 +1749,6 @@ def train_model_rvc(
         catch(e)
         return None
     logger.info("Model training complete.")
-
     logger.info("Training complete, exporting files...")
     exp_files = export_files_rvc(exp_dir)
     tmps = []
@@ -2130,32 +1761,24 @@ def train_model_rvc(
 
 def convert_vocal_rvc(experiment: str, path: str):
     logger.info(f"Starting vocal conversion for experiment: {experiment}")
-
     from .configs.config import Config
     from .infer.modules.vc.modules import VC
 
     path = normalize_audio_to_peak(path)
-    path, music = separate_stems(path)
-
+    (path, music) = separate_stems(path)
     now_dir = os.getcwd()
     index_root = os.path.join(now_dir, "logs")
     weight_root = os.path.join(now_dir, "assets", "weights")
-
     config = Config()
     vc = VC(config)
-
     exp_path = os.path.join(index_root, experiment)
-
     latest_checkpoint_filename = find_latest_checkpoint(weight_root, experiment)
-
     if latest_checkpoint_filename is None:
         error_message = f"Error: No latest checkpoint found for experiment '{experiment}' in '{exp_path}'. Cannot perform conversion."
         logger.error(error_message)
         return None
-
     pth_path = os.path.join(weight_root, latest_checkpoint_filename)
     logger.info(f"Using model checkpoint: {pth_path}")
-
     idx_path = None
     for root, dirs, files in os.walk(exp_path, topdown=False):
         for name in files:
@@ -2165,12 +1788,10 @@ def convert_vocal_rvc(experiment: str, path: str):
                 break
         if idx_path:
             break
-
     if idx_path is None:
         logger.warning(
             f"No index file found for experiment '{experiment}' in '{exp_path}'. Conversion may be less effective."
         )
-
     filter_radius = 7
     semitones = 0
     index_rate = 1.0
@@ -2184,9 +1805,8 @@ def convert_vocal_rvc(experiment: str, path: str):
         logger.error(f"Failed to load VC model: {e}")
         catch(e)
         return None
-
     try:
-        message, (sr, aud) = vc.vc_single(
+        (message, (sr, aud)) = vc.vc_single(
             sid=0,
             input_audio_path=path,
             f0_up_key=semitones,
@@ -2201,29 +1821,23 @@ def convert_vocal_rvc(experiment: str, path: str):
             protect=protect,
         )
         logger.info(f"Vocal conversion message: {message}")
-
     except Exception as e:
         logger.error(f"An error occurred during vocal conversion: {e}")
         catch(e)
         return None
-
-    if aud is not None and isinstance(aud, _np.ndarray) and aud.size > 0:
+    if aud is not None and isinstance(aud, _np.ndarray) and (aud.size > 0):
         logger.info(
             f"Conversion successful, saving output audio with shape {aud.shape} at sample rate {sr}"
         )
         try:
             out_voice = tmp("wav")
-
             import pydub
             import soundfile as sf
 
             sf.write(out_voice, aud, sr)
-
             out_path = stem_mixer([out_voice, music], "mp3")
-
             logger.info(f"Output audio saved to: {out_path}")
             return out_path
-
         except Exception as e:
             logger.error(f"Failed to save output audio file: {e}")
             catch(e)
@@ -2247,7 +1861,6 @@ def get_model_instructions(task: str, model_type: str) -> str:
         SKLEARN_AVAILABLE = True
     except ImportError:
         SKLEARN_AVAILABLE = False
-
     try:
         import onnxruntime
 
@@ -2268,7 +1881,7 @@ def get_model_instructions(task: str, model_type: str) -> str:
         if not isinstance(model_obj, nn.Module):
             return
         layer_counts = Counter(
-            layer.__class__.__name__ for layer in model_obj.modules()
+            (layer.__class__.__name__ for layer in model_obj.modules())
         )
         if (
             layer_counts["TransformerEncoderLayer"] > 0
@@ -2310,7 +1923,6 @@ def get_model_instructions(task: str, model_type: str) -> str:
                 arg_name = param.name
                 if arg_name in ["self", "args", "kwargs"]:
                     continue
-
                 input_spec = next(
                     (
                         item
@@ -2321,12 +1933,13 @@ def get_model_instructions(task: str, model_type: str) -> str:
                 )
                 if not input_spec:
                     continue
-
                 shape = tuple(
-                    d if isinstance(d, int) else 2 for d in input_spec["shape"]
+                    (
+                        d if isinstance(d, int) else 2
+                        for d in input_spec["shape"]
+                    )
                 )
                 dtype_str = input_spec["dtype"]
-
                 if "float" in dtype_str:
                     dummy_inputs_kwargs[arg_name] = torch.randn(
                         shape, dtype=getattr(torch, dtype_str)
@@ -2343,21 +1956,20 @@ def get_model_instructions(task: str, model_type: str) -> str:
                     dummy_inputs_kwargs[arg_name] = torch.randint(
                         0, vocab_size, shape, dtype=torch.long
                     )
-
             if not dummy_inputs_kwargs:
                 profile["notes"].append(
                     "Dynamic probe skipped: could not determine input arguments for `forward` method."
                 )
                 return
-
             model_obj.eval()
             with torch.no_grad():
                 output = model_obj(**dummy_inputs_kwargs)
-
             output_tensors = (
                 [output]
                 if isinstance(output, torch.Tensor)
-                else (output if isinstance(output, (list, tuple)) else [])
+                else output
+                if isinstance(output, (list, tuple))
+                else []
             )
             for i, out_tensor in enumerate(output_tensors):
                 if isinstance(out_tensor, torch.Tensor):
@@ -2396,32 +2008,23 @@ def get_model_instructions(task: str, model_type: str) -> str:
             )
             report += f"**Architectural Details**:\n{details}\n"
         report += "\n---\n### 📥 Input & 📤 Output Specification\n"
-
         if not profile["inputs"]:
             report += "**Inputs**: Could not be determined automatically.\n"
         for i, inp in enumerate(profile["inputs"]):
             report += f"- **INPUT `{i}` (`{inp.get('name', 'N/A')}`)**: Shape=`{inp['shape']}`, DType=`{inp['dtype']}`\n"
-
         if not profile["outputs"]:
             report += "**Outputs**: Not confirmed. Dynamic probe did not run or failed.\n"
         for i, out in enumerate(profile["outputs"]):
             report += f"- **OUTPUT `{i}` (`{out.get('name', 'N/A')}`)**: Shape=`{out['shape']}`, DType=`{out['dtype']}` (Confirmed by probe)\n"
-
         report += "\n---\n### ⚙️ Preprocessing & Usage Guide\n"
-
-        example_imports, prep_steps, example_body = "", "", ""
+        (example_imports, prep_steps, example_body) = ("", "", "")
         if profile["framework"] == "PyTorch":
             example_imports = "import torch\n"
             example_body = f"model = YourModelClass() # Instantiate your defined model architecture\nmodel.load_state_dict(torch.load('path/to/{task}.pt'))\nmodel.eval()\n\ndummy_inputs = {{}}\n"
-
             for inp in profile["inputs"]:
-                shape, dtype, name = (
-                    inp["shape"],
-                    inp["dtype"],
-                    inp["name"],
-                )
+                (shape, dtype, name) = (inp["shape"], inp["dtype"], inp["name"])
                 if "image" in name or "pixel" in name:
-                    C, H, W = shape[1], shape[2], shape[3]
+                    (C, H, W) = (shape[1], shape[2], shape[3])
                     prep_steps += f"**For Input `{name}` (Image)**:\n1. Load image (e.g., with Pillow).\n2. Resize to `{H}x{W}`.\n3. Convert to a tensor and normalize (e.g., ImageNet stats).\n4. Ensure shape is `(1, {C}, {H}, {W})`.\n"
                     example_imports += "from PIL import Image\nimport torchvision.transforms as T\n"
                     example_body += "image = Image.open('path/to/image.jpg')\n"
@@ -2430,12 +2033,10 @@ def get_model_instructions(task: str, model_type: str) -> str:
                 elif "text" in name or "ids" in name:
                     prep_steps += f"**For Input `{name}` (Text)**:\n1. Use the specific tokenizer the model was trained with.\n2. Convert text to token IDs.\n3. Format as a `{dtype}` tensor with shape `{shape}`.\n"
                     example_body += f"# Use the model's specific tokenizer\ndummy_inputs['{name}'] = torch.randint(0, 1000, {shape}, dtype=torch.long)\n"
-
             example_body += "\nwith torch.no_grad():\n    output = model(**dummy_inputs)\n    print(f'Output: {output}')\n"
             profile["example_code"] = (
                 f"```python\n{example_imports}\n# 1. Define or import your model class (YourModelClass)\n\n# 2. Load model and prepare inputs\n{example_body}```"
             )
-
         elif profile["framework"] == "scikit-learn":
             prep_steps += "1. Ensure your input data is in the correct format (NumPy array, Pandas DataFrame, or raw text for pipelines).\n2. Apply the exact same feature engineering and preprocessing steps used during training.\n"
             example_body = (
@@ -2450,7 +2051,6 @@ def get_model_instructions(task: str, model_type: str) -> str:
                 "predictions = model.predict(input_data)\nprint(predictions)"
             )
             profile["example_code"] = f"```python\n{example_body}\n```"
-
         report += (
             prep_steps
             + "\n#### Example Usage Snippet\n"
@@ -2470,7 +2070,6 @@ def get_model_instructions(task: str, model_type: str) -> str:
             status=False,
         )
         return
-
     if isinstance(model_object, nn.Module) or isinstance(
         model_object, (dict, OrderedDict)
     ):
@@ -2480,7 +2079,7 @@ def get_model_instructions(task: str, model_type: str) -> str:
             profile["notes"].append(
                 "Analysis is based on a state_dict, not a full model. Instantiate the model class before loading these weights."
             )
-            first_key, first_tensor = next(iter(model_object.items()))
+            (first_key, first_tensor) = next(iter(model_object.items()))
             in_features = (
                 first_tensor.shape[1] if len(first_tensor.shape) == 2 else "N/A"
             )
@@ -2512,34 +2111,25 @@ def get_model_instructions(task: str, model_type: str) -> str:
                 elif "text" in name or "ids" in name:
                     profile["modalities"].add("Text")
                     profile["inputs"].append(
-                        {
-                            "name": name,
-                            "shape": (1, 16),
-                            "dtype": "long",
-                        }
+                        {"name": name, "shape": (1, 16), "dtype": "long"}
                     )
                 else:
                     profile["modalities"].add("Tabular")
                     profile["inputs"].append(
-                        {
-                            "name": name,
-                            "shape": (1, 64),
-                            "dtype": "float32",
-                        }
+                        {"name": name, "shape": (1, 64), "dtype": "float32"}
                     )
             _analyze_architecture_pytorch(model_object)
             _probe_model_pytorch(model_object)
-
     elif SKLEARN_AVAILABLE and hasattr(model_object, "predict"):
         profile["framework"] = "scikit-learn"
         if isinstance(model_object, Pipeline):
             profile["architecture"]["type"] = "Scikit-learn Pipeline"
             steps = [
                 f"{name} ({step.__class__.__name__})"
-                for name, step in model_object.steps
+                for (name, step) in model_object.steps
             ]
             profile["architecture"]["details"] = steps
-            if any("TfidfVectorizer" in s for s in steps):
+            if any(("TfidfVectorizer" in s for s in steps)):
                 profile["modalities"].add("Text")
                 profile["inputs"].append(
                     {
@@ -2561,7 +2151,6 @@ def get_model_instructions(task: str, model_type: str) -> str:
                     "dtype": "float",
                 }
             )
-
     elif ONNX_AVAILABLE and isinstance(
         model_object, onnxruntime.InferenceSession
     ):
@@ -2569,23 +2158,14 @@ def get_model_instructions(task: str, model_type: str) -> str:
         profile["architecture"]["type"] = "ONNX Graph"
         for inp in model_object.get_inputs():
             profile["inputs"].append(
-                {
-                    "name": inp.name,
-                    "shape": inp.shape,
-                    "dtype": inp.type,
-                }
+                {"name": inp.name, "shape": inp.shape, "dtype": inp.type}
             )
             if len(inp.shape) == 4 and inp.shape[1] in [1, 3]:
                 profile["modalities"].add("Image")
         for out in model_object.get_outputs():
             profile["outputs"].append(
-                {
-                    "name": out.name,
-                    "shape": out.shape,
-                    "dtype": out.type,
-                }
+                {"name": out.name, "shape": out.shape, "dtype": out.type}
             )
-
     final_report = _generate_report()
     log(f"Deep Dive Analysis for '{task}'", final_report)
 
@@ -2601,23 +2181,17 @@ def infer(task: str, inference_file: str, model_type: str = None):
 
     vec = None
     input_data = None
-
     model_path = task
     if task in tasks:
         model_path = tasks[task]
-
     if not model_type:
         model_type = get_ext(model_path)
     model_type = model_type.lower()
-
     if not (task in MODELS and MODELS[task]):
         init_model_file(task)
-
     mod = MODELS[task]
-
     if mod is None:
         return None
-
     file_ext = get_ext(inference_file)
     if file_ext == "txt":
         txt = read(inference_file)
@@ -2631,47 +2205,37 @@ def infer(task: str, inference_file: str, model_type: str = None):
         return out
     else:
         input_data = numpy_to_cupy(load_as_numpy(inference_file))
-
     if input_data is None:
         log("Could not load input data", inference_file, status=False)
         return None
-
     pred = None
     input_numpy = cupy_to_numpy(one_dim_numpy(input_data))
-
     try:
         if model_type in ["joblib", "pkl"]:
             pred = mod.predict(input_numpy)
-
         elif model_type in ["pt", "pth", "safetensors"]:
             input_tensor = torch.from_numpy(input_numpy).to(device())
             with torch.no_grad():
                 output_tensor = mod(input_tensor)
             pred = output_tensor.cpu().numpy()
-
         elif model_type == "onnx":
             input_name = mod.get_inputs()[0].name
             onnx_output = mod.run(
                 None, {input_name: input_numpy.astype(np.float32)}
             )
             pred = onnx_output[0]
-
     except Exception as e:
         logging.error(f"Model prediction failed for type '{model_type}': {e}")
         return None
-
     if pred is None:
         logging.error("Model prediction returned None.")
         return None
-
     if is_clusters_model(mod):
         pred = one_dim_numpy(get_cluster_content(mod, int(pred[0])))
-
     pred_type = guess_numpy_type(pred)
     output_filename = (
         f"{random_string()}.{get_prediction_file_extension(pred_type)}"
     )
-
     if vec is not None:
         pred = features_to_text(pred)
     elif pred_type == "text":
@@ -2682,7 +2246,6 @@ def infer(task: str, inference_file: str, model_type: str = None):
         pred = features_to_image(pred)
     elif pred_type == "video":
         pred = features_to_video(pred)
-
     handlers = {
         "video": lambda: write_video(pred, 24),
         "image": lambda: iio.imwrite(
@@ -2691,7 +2254,6 @@ def infer(task: str, inference_file: str, model_type: str = None):
         "audio": lambda: wavfile.write(output_filename, 32000, pred),
         "text": lambda: open(output_filename, "w").write(pred),
     }
-
     if pred_type in handlers:
         try:
             handlers[pred_type]()
@@ -2701,7 +2263,6 @@ def infer(task: str, inference_file: str, model_type: str = None):
     else:
         logging.error(f"Unsupported prediction type: {pred_type}")
         return None
-
     print(f"Prediction saved to {output_filename}")
     return output_filename
 
@@ -2709,7 +2270,6 @@ def infer(task: str, inference_file: str, model_type: str = None):
 def compile_model(model_or_pipeline):
     import inspect
     import types
-
     import torch
 
     try:
@@ -2721,13 +2281,11 @@ def compile_model(model_or_pipeline):
             "Please install `diffusers` and `transformers` for full functionality."
         )
         return model_or_pipeline
-
     if not hasattr(torch, "compile"):
         warnings.warn(
             "torch.compile() is not available. Please use PyTorch 2.0 or newer."
         )
         return model_or_pipeline
-
     compile_kwargs = {
         "mode": "reduce-overhead",
         "fullgraph": False,
@@ -2756,10 +2314,7 @@ def compile_model(model_or_pipeline):
         print(
             "✅ Detected a Diffusers pipeline. Dynamically compiling submodels..."
         )
-        for (
-            attr_name,
-            attr_value,
-        ) in model_or_pipeline.__dict__.items():
+        for attr_name, attr_value in model_or_pipeline.__dict__.items():
             if isinstance(attr_value, ModelMixin):
                 try:
                     attr_value = patch_forward(attr_value)
@@ -2779,7 +2334,6 @@ def compile_model(model_or_pipeline):
                         f"Could not compile submodel '{attr_name}'. Reason: {e}"
                     )
         return model_or_pipeline
-
     elif isinstance(model_or_pipeline, PreTrainedModel):
         print("✅ Detected a Transformers model. Compiling the model...")
         try:
@@ -2787,7 +2341,6 @@ def compile_model(model_or_pipeline):
         except Exception as e:
             warnings.warn(f"Could not compile the model. Reason: {e}")
             return model_or_pipeline
-
     else:
         warnings.warn(
             "Object is not a recognized Diffusers pipeline or Transformers model. No action taken."
@@ -2799,7 +2352,6 @@ def keep_alive(fn, outputs: int = 1):
     import gradio as gr
 
     def worker(*args, **kwargs):
-
         yld = None
         if outputs >= 2:
             yld = (gr.update(),) * outputs
@@ -2813,7 +2365,6 @@ def keep_alive(fn, outputs: int = 1):
                 return catch(e)
 
         t = thread(thread_target, *args, **kwargs)
-
         sleep(5)
         counter = 5
         if outputs == 0:
@@ -2827,7 +2378,6 @@ def keep_alive(fn, outputs: int = 1):
                 gr.Info(f"Time passed: {str(counter)}s", duration=1.0)
                 sleep(5)
                 counter += 5
-
         if outputs == 0:
             wait(t)
         elif outputs >= 1:

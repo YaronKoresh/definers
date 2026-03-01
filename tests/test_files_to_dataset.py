@@ -1,10 +1,8 @@
 import unittest
 from unittest.mock import MagicMock, patch
-
 import numpy as np
 import torch
 from torch.utils.data import TensorDataset
-
 from definers import files_to_dataset
 
 
@@ -16,10 +14,7 @@ class TestFilesToDataset(unittest.TestCase):
         self.mock_cupy = self.cupy_patcher.start()
         self.addCleanup(self.cupy_patcher.stop)
 
-    @patch(
-        "definers.load_as_numpy",
-        return_value=np.array([[1, 2], [3, 4]]),
-    )
+    @patch("definers.load_as_numpy", return_value=np.array([[1, 2], [3, 4]]))
     def test_successful_run_with_features_and_labels(self, mock_load):
         features_paths = ["f1.npy", "f2.npy"]
         labels_paths = ["l1.npy", "l2.npy"]
@@ -62,8 +57,7 @@ class TestFilesToDataset(unittest.TestCase):
         self.assertIsNone(result)
 
     @patch(
-        "definers.load_as_numpy",
-        return_value=[np.array([1]), np.array([2])],
+        "definers.load_as_numpy", return_value=[np.array([1]), np.array([2])]
     )
     def test_load_returns_list(self, mock_load):
         features_paths = ["features.list"]

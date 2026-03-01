@@ -1,6 +1,5 @@
 import unittest
 from unittest.mock import call, patch
-
 from definers import install_faiss
 
 
@@ -23,11 +22,8 @@ class TestInstallFaiss(unittest.TestCase):
         mock_sys.version_info.major = 3
         mock_sys.version_info.minor = 10
         mock_cwd.return_value.__enter__.return_value = "_faiss_"
-
         install_faiss()
-
         self.assertEqual(mock_subprocess_run.call_count, 5)
-
         calls = [
             call(
                 [
@@ -56,13 +52,9 @@ class TestInstallFaiss(unittest.TestCase):
                 ],
                 check=True,
             ),
+            call(["make", "-C", "_faiss_/build", "-j16", "faiss"], check=True),
             call(
-                ["make", "-C", "_faiss_/build", "-j16", "faiss"],
-                check=True,
-            ),
-            call(
-                ["make", "-C", "_faiss_/build", "-j16", "swigfaiss"],
-                check=True,
+                ["make", "-C", "_faiss_/build", "-j16", "swigfaiss"], check=True
             ),
             call(
                 ["/path/to/python", "-m", "pip", "install", "."],
@@ -73,10 +65,7 @@ class TestInstallFaiss(unittest.TestCase):
         mock_subprocess_run.assert_has_calls(calls)
 
     @patch("definers.importable", return_value=False)
-    @patch(
-        "definers.subprocess.run",
-        side_effect=Exception("Test Exception"),
-    )
+    @patch("definers.subprocess.run", side_effect=Exception("Test Exception"))
     @patch("builtins.print")
     def test_installation_failure(
         self, mock_print, mock_subprocess_run, mock_importable

@@ -1,6 +1,5 @@
 import unittest
 from unittest.mock import MagicMock, patch
-
 from definers import find_latest_rvc_checkpoint
 
 
@@ -56,8 +55,7 @@ class TestFindLatestRvcCheckpoint(unittest.TestCase):
 
     @patch("os.path.isdir", return_value=True)
     @patch(
-        "os.listdir",
-        return_value=["other_model_e1_s1.pth", "random_file.txt"],
+        "os.listdir", return_value=["other_model_e1_s1.pth", "random_file.txt"]
     )
     @patch("definers._ml.logger")
     def test_no_matching_checkpoints(

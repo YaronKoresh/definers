@@ -1,7 +1,6 @@
 import os
 import unittest
 from unittest.mock import call, patch
-
 from definers import set_cuda_env
 
 
@@ -18,16 +17,11 @@ class TestSetCudaEnv(unittest.TestCase):
         set_cuda_env()
         self.assertEqual(os.environ["CUDA_PATH"], "/usr/local/cuda-12.2/")
         self.assertEqual(
-            os.environ["LD_LIBRARY_PATH"],
-            "/usr/local/cuda-12.2/lib64/",
+            os.environ["LD_LIBRARY_PATH"], "/usr/local/cuda-12.2/lib64/"
         )
         expected_calls = [
             call("CUDA_PATH", "/usr/local/cuda-12.2/", status=True),
-            call(
-                "LD_LIBRARY_PATH",
-                "/usr/local/cuda-12.2/lib64/",
-                status=True,
-            ),
+            call("LD_LIBRARY_PATH", "/usr/local/cuda-12.2/lib64/", status=True),
         ]
         mock_log.assert_has_calls(expected_calls)
 
@@ -41,9 +35,7 @@ class TestSetCudaEnv(unittest.TestCase):
         self.assertNotIn("CUDA_PATH", os.environ)
         self.assertNotIn("LD_LIBRARY_PATH", os.environ)
         mock_log.assert_called_once_with(
-            "Cuda not found",
-            "Failed setting CUDA environment",
-            status=False,
+            "Cuda not found", "Failed setting CUDA environment", status=False
         )
 
     @patch("definers._cuda.get_os_name", return_value="linux")
@@ -56,9 +48,7 @@ class TestSetCudaEnv(unittest.TestCase):
         self.assertNotIn("CUDA_PATH", os.environ)
         self.assertNotIn("LD_LIBRARY_PATH", os.environ)
         mock_log.assert_called_once_with(
-            "Cuda not found",
-            "Failed setting CUDA environment",
-            status=False,
+            "Cuda not found", "Failed setting CUDA environment", status=False
         )
 
     @patch("definers._cuda.get_os_name", return_value="linux")
@@ -73,9 +63,7 @@ class TestSetCudaEnv(unittest.TestCase):
         self.assertNotIn("CUDA_PATH", os.environ)
         self.assertNotIn("LD_LIBRARY_PATH", os.environ)
         mock_log.assert_called_once_with(
-            "Cuda not found",
-            "Failed setting CUDA environment",
-            status=False,
+            "Cuda not found", "Failed setting CUDA environment", status=False
         )
 
 

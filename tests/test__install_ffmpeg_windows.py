@@ -1,6 +1,5 @@
 import unittest
 from unittest.mock import MagicMock, patch
-
 from definers import _install_ffmpeg_windows, is_admin_windows
 
 
@@ -28,11 +27,7 @@ class TestInstallFfmpegWindows(unittest.TestCase):
 
     @patch("definers.is_admin_windows", return_value=True)
     @patch(
-        "definers.subprocess.run",
-        side_effect=[
-            FileNotFoundError,
-            MagicMock(),
-        ],
+        "definers.subprocess.run", side_effect=[FileNotFoundError, MagicMock()]
     )
     @patch("requests.get")
     @patch("zipfile.ZipFile")
@@ -59,12 +54,9 @@ class TestInstallFfmpegWindows(unittest.TestCase):
         mock_response.raise_for_status.return_value = None
         mock_response.iter_content.return_value = [b"zip_data"]
         mock_requests_get.return_value.__enter__.return_value = mock_response
-
         mock_zip_instance = MagicMock()
         mock_zipfile.return_value.__enter__.return_value = mock_zip_instance
-
         _install_ffmpeg_windows()
-
         self.assertEqual(mock_run.call_count, 2)
         mock_requests_get.assert_called_once()
         mock_zipfile.assert_called_once_with("/tmp/ffmpeg.zip", "r")

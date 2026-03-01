@@ -1,8 +1,6 @@
 import unittest
 from unittest.mock import MagicMock, call, patch
-
 import numpy as np
-
 from definers import fit
 
 
@@ -11,7 +9,6 @@ class TestFit(unittest.TestCase):
         self.mock_model_supervised = MagicMock()
         self.mock_model_supervised.X_all = np.array([[1, 2], [3, 4]])
         self.mock_model_supervised.y_all = np.array([1, 2])
-
         self.mock_model_unsupervised = MagicMock()
         self.mock_model_unsupervised.X_all = np.array([[5, 6], [7, 8]])
         del self.mock_model_unsupervised.y_all
@@ -30,16 +27,13 @@ class TestFit(unittest.TestCase):
         mock_log,
     ):
         returned_model = fit(self.mock_model_supervised)
-
         mock_log.assert_any_call("Features", self.mock_model_supervised.X_all)
         mock_log.assert_any_call("Labels", self.mock_model_supervised.y_all)
         mock_get_max_shapes.assert_called_once_with(
-            self.mock_model_supervised.X_all,
-            self.mock_model_supervised.y_all,
+            self.mock_model_supervised.X_all, self.mock_model_supervised.y_all
         )
         self.mock_model_supervised.fit.assert_called_once_with(
-            self.mock_model_supervised.X_all,
-            self.mock_model_supervised.y_all,
+            self.mock_model_supervised.X_all, self.mock_model_supervised.y_all
         )
         self.assertIs(returned_model, self.mock_model_supervised)
 
@@ -57,7 +51,6 @@ class TestFit(unittest.TestCase):
         mock_log,
     ):
         returned_model = fit(self.mock_model_unsupervised)
-
         mock_log.assert_any_call("Features", self.mock_model_unsupervised.X_all)
         mock_get_max_shapes.assert_called_once_with(
             self.mock_model_unsupervised.X_all
@@ -85,9 +78,7 @@ class TestFit(unittest.TestCase):
         self.mock_model_supervised.fit.side_effect = Exception(
             "Supervised fit error"
         )
-
         fit(self.mock_model_supervised)
-
         mock_catch.assert_called_once()
         self.assertIsInstance(mock_catch.call_args[0][0], Exception)
 
@@ -109,9 +100,7 @@ class TestFit(unittest.TestCase):
         self.mock_model_unsupervised.fit.side_effect = Exception(
             "Unsupervised fit error"
         )
-
         fit(self.mock_model_unsupervised)
-
         mock_catch.assert_called_once()
         self.assertIsInstance(mock_catch.call_args[0][0], Exception)
 

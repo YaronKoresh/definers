@@ -1,13 +1,11 @@
 import unittest
 from unittest.mock import MagicMock, patch
-
 import numpy as np
 
 try:
     import cupy
 except ImportError:
     cupy = None
-
 from definers import cupy_to_numpy, process_rows
 
 
@@ -28,17 +26,13 @@ class TestProcessRows(unittest.TestCase):
         mock_scaler_cls.return_value = self.mock_scaler
         mock_normalizer_cls.return_value = self.mock_normalizer
         mock_imputer_cls.return_value = self.mock_imputer
-
         batch_input = [
             np.array([[1.0, 2.0], [3.0, 4.0]]),
             np.array([[5.0, 6.0], [7.0, 8.0]]),
         ]
-
         result = process_rows(batch_input)
-
         self.assertIsInstance(result, np.ndarray)
         self.assertEqual(result.shape, (2, 2))
-
         self.assertEqual(mock_scaler_cls.call_count, 2)
         self.assertEqual(mock_normalizer_cls.call_count, 2)
         self.assertEqual(mock_imputer_cls.call_count, 2)
@@ -47,10 +41,7 @@ class TestProcessRows(unittest.TestCase):
     @patch("definers.Normalizer")
     @patch("definers.StandardScaler")
     def test_process_rows_with_cuml(
-        self,
-        mock_scaler_cuml,
-        mock_normalizer_cuml,
-        mock_imputer_cuml,
+        self, mock_scaler_cuml, mock_normalizer_cuml, mock_imputer_cuml
     ):
         self._run_process_rows_test(
             mock_scaler_cuml, mock_normalizer_cuml, mock_imputer_cuml
@@ -60,10 +51,7 @@ class TestProcessRows(unittest.TestCase):
     @patch("definers.Normalizer", create=True)
     @patch("definers.StandardScaler", create=True)
     def test_process_rows_with_sklearn_fallback(
-        self,
-        mock_scaler_sklearn,
-        mock_normalizer_sklearn,
-        mock_imputer_sklearn,
+        self, mock_scaler_sklearn, mock_normalizer_sklearn, mock_imputer_sklearn
     ):
         with patch.dict("sys.modules", {"cuml": None}):
             self._run_process_rows_test(
@@ -87,10 +75,8 @@ class TestProcessRows(unittest.TestCase):
         mock_scaler_cls.return_value = self.mock_scaler
         mock_normalizer_cls.return_value = self.mock_normalizer
         mock_imputer_cls.return_value = self.mock_imputer
-
         batch_input = [np.array([10.0, 20.0])]
         result = process_rows(batch_input)
-
         self.assertIsInstance(result, np.ndarray)
         self.assertEqual(result.shape, (1, 2))
         self.assertEqual(mock_scaler_cls.call_count, 1)

@@ -1,6 +1,5 @@
 import logging
 import unittest
-
 from definers import _init_logger
 
 

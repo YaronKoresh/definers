@@ -1,11 +1,8 @@
 import unittest
-
 import numpy as np
-
 import definers._data as _data
 
 _data.np = np
-
 from definers import numpy_to_list
 
 

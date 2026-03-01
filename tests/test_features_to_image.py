@@ -1,8 +1,6 @@
 import unittest
 from unittest.mock import MagicMock, patch
-
 import numpy as np
-
 from definers import features_to_image
 
 
@@ -16,7 +14,6 @@ class TestFeaturesToImage(unittest.TestCase):
         self.edge_size = self.height * self.width
         self.total_features = self.hist_size + self.lbp_size + self.edge_size
         self.features = np.random.rand(self.total_features).astype(np.float32)
-
         self.mock_cv2 = MagicMock()
         self.mock_cv2.normalize.side_effect = (
             lambda src, dst, alpha, beta, norm_type, dtype: (src * 255).astype(

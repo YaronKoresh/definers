@@ -3,12 +3,10 @@ import shutil
 import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
-
 import imageio.v2 as iio
 import numpy as np
 import pandas as pd
 import soundfile as sf
-
 from definers import load_as_numpy
 
 
@@ -43,10 +41,7 @@ class TestLoadAsNumpy(unittest.TestCase):
         writer.append_data(np.zeros((10, 10, 3), dtype=np.uint8))
         writer.close()
 
-    @patch(
-        "definers.extract_audio_features",
-        return_value=np.array([1, 2, 3]),
-    )
+    @patch("definers.extract_audio_features", return_value=np.array([1, 2, 3]))
     @patch("definers.sox.Transformer")
     def test_load_audio_wav_no_training(self, mock_sox, mock_extract):
         mock_transformer = MagicMock()
@@ -57,10 +52,7 @@ class TestLoadAsNumpy(unittest.TestCase):
         mock_transformer.build_file.assert_called_once()
         mock_extract.assert_called_once()
 
-    @patch(
-        "definers.extract_audio_features",
-        return_value=np.array([1, 2, 3]),
-    )
+    @patch("definers.extract_audio_features", return_value=np.array([1, 2, 3]))
     @patch("definers.split_mp3", return_value=("some_dir", 1))
     @patch("definers.remove_silence")
     @patch("definers.sox.Transformer")

@@ -2,7 +2,6 @@ import os
 import sys
 import unittest
 from unittest.mock import MagicMock, patch
-
 from definers import run_linux
 
 
@@ -27,18 +26,13 @@ class TestRunLinux(unittest.TestCase):
         mock_permit,
         mock_write,
     ):
-
         mock_openpty.return_value = (10, 20)
         mock_fork.return_value = 1234
         mock_waitpid.return_value = (1234, 0)
-
         output_stream = [b"line 1\n", b"line 2\n", b""]
         mock_read.side_effect = output_stream
-
         mock_select.return_value = ([10], [], [])
-
         result = run_linux("echo 'line 1' && echo 'line 2'", silent=True)
-
         self.assertEqual(result, ["line 1", "line 2"])
         mock_write.assert_called_once()
         mock_permit.assert_called_once()
@@ -60,11 +54,9 @@ class TestRunLinux(unittest.TestCase):
         mock_permit,
         mock_write,
     ):
-
         mock_openpty.return_value = (10, 20)
         mock_fork.return_value = 1234
         mock_waitpid.return_value = (1234, 256)
-
         result = run_linux("exit 1", silent=True)
         self.assertFalse(result)
 
@@ -72,15 +64,12 @@ class TestRunLinux(unittest.TestCase):
     def test_run_linux_with_env(self, mock_run_linux):
         if sys.platform.startswith("win"):
             self.skipTest("Linux-specific test")
-
         run_linux("echo $MY_VAR", env={"MY_VAR": "test_value"})
-
         pass
 
     def test_run_on_windows(self):
         if not sys.platform.startswith("win"):
             self.skipTest("Windows-specific check")
-
         pass
 
 

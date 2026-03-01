@@ -1,5 +1,4 @@
 import unittest
-
 from definers import strip_nikud
 
 

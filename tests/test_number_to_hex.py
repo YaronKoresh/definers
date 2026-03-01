@@ -1,5 +1,4 @@
 import unittest
-
 from definers import number_to_hex
 
 

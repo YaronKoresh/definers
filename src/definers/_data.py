@@ -1,5 +1,3 @@
-"""Data processing utilities for the definers package."""
-
 import argparse
 import asyncio
 import base64
@@ -54,18 +52,9 @@ from string import ascii_letters, digits, punctuation
 from time import sleep, time
 from typing import Any, Optional, Union
 from urllib.parse import quote
-
 import numpy as _np
-
 from definers._constants import TOKENIZERS, iio_formats, tasks
-from definers._system import (
-    catch,
-    delete,
-    load,
-    log,
-    read,
-    tmp,
-)
+from definers._system import catch, delete, load, log, read, tmp
 
 
 def patch_cupy_numpy():
@@ -100,15 +89,12 @@ def patch_cupy_numpy():
         "sometrue": np.any,
         "rank": np.ndim,
     }
-
     _set_aliases(np, type_aliases)
     _set_aliases(np, func_aliases)
-
     if "char" not in getattr(np, "__dict__", {}):
         import types
 
         setattr(np, "char", types.SimpleNamespace())
-
     char_funcs = {
         "encode": lambda s, encoding=None: bytes(s, encoding or "utf-8"),
         "decode": lambda b, encoding=None: b.decode(encoding or "utf-8"),
@@ -144,28 +130,38 @@ def patch_cupy_numpy():
         "join": lambda sep, iterable: sep.join(iterable),
         "count": lambda s, sub, start=None, end=None: (
             s.count(sub, start, end)
-            if (start is not None and end is not None)
-            else (s.count(sub, start) if start is not None else s.count(sub))
+            if start is not None and end is not None
+            else s.count(sub, start)
+            if start is not None
+            else s.count(sub)
         ),
         "find": lambda s, sub, start=None, end=None: (
             s.find(sub, start, end)
-            if (start is not None and end is not None)
-            else (s.find(sub, start) if start is not None else s.find(sub))
+            if start is not None and end is not None
+            else s.find(sub, start)
+            if start is not None
+            else s.find(sub)
         ),
         "rfind": lambda s, sub, start=None, end=None: (
             s.rfind(sub, start, end)
-            if (start is not None and end is not None)
-            else (s.rfind(sub, start) if start is not None else s.rfind(sub))
+            if start is not None and end is not None
+            else s.rfind(sub, start)
+            if start is not None
+            else s.rfind(sub)
         ),
         "index": lambda s, sub, start=None, end=None: (
             s.index(sub, start, end)
-            if (start is not None and end is not None)
-            else (s.index(sub, start) if start is not None else s.index(sub))
+            if start is not None and end is not None
+            else s.index(sub, start)
+            if start is not None
+            else s.index(sub)
         ),
         "rindex": lambda s, sub, start=None, end=None: (
             s.rindex(sub, start, end)
-            if (start is not None and end is not None)
-            else (s.rindex(sub, start) if start is not None else s.rindex(sub))
+            if start is not None and end is not None
+            else s.rindex(sub, start)
+            if start is not None
+            else s.rindex(sub)
         ),
         "zfill": lambda s, width: s.zfill(width),
         "center": lambda s, width, fillchar=" ": s.center(width, fillchar),
@@ -194,14 +190,11 @@ def patch_cupy_numpy():
         "less": lambda a, b: a < b,
         "less_equal": lambda a, b: a <= b,
     }
-
     for name, func in char_funcs.items():
         if not hasattr(np.char, name):
             setattr(np.char, name, func)
-
     if "asscalar" not in getattr(np, "__dict__", {}):
         np.asscalar = lambda a: a.item()
-
     if "rec" not in getattr(np, "__dict__", {}):
 
         class NumpyRec:
@@ -226,22 +219,19 @@ def patch_cupy_numpy():
                 )
 
         np.rec = NumpyRec()
-
     if "machar" not in getattr(np, "__dict__", {}):
 
         class MachAr:
             pass
 
         np.core.machar = MachAr
-
-    if hasattr(np, "testing") and not hasattr(np.testing, "Tester"):
+    if hasattr(np, "testing") and (not hasattr(np.testing, "Tester")):
 
         class Tester:
             def test(self, label="fast", extra_argv=None):
                 return True
 
         np.testing.Tester = Tester
-
     if "distutils" not in getattr(np, "__dict__", {}):
 
         class DummyDistutils:
@@ -250,10 +240,8 @@ def patch_cupy_numpy():
                     return {}
 
         np.distutils = DummyDistutils()
-
     if "set_string_function" not in getattr(np, "__dict__", {}):
         np.set_string_function = lambda *args, **kwargs: None
-
     _original_finfo = np.finfo
 
     def patched_finfo(dtype):
@@ -263,23 +251,22 @@ def patch_cupy_numpy():
             return np.iinfo(dtype)
 
     np.finfo = patched_finfo
-
     if "_no_nep50_warning" not in getattr(np, "__dict__", {}):
 
         def dummy_npwarn_decorator_factory():
+
             def npwarn_decorator(x):
                 return x
 
             return npwarn_decorator
 
         np._no_nep50_warning = dummy_npwarn_decorator_factory
-
     try:
         import cupy
 
-        return cupy, np
+        return (cupy, np)
     except ImportError:
-        return np, np
+        return (np, np)
 
 
 def _find_spec(mod_name):
@@ -297,16 +284,13 @@ def _init_cupy_numpy():
     cupy_in_sys = sys.modules.get("cupy")
     if cupy_in_sys is not None and importlib.util.find_spec("cupy"):
         np_module = cupy_in_sys
-
     if np_module is None:
         np_module = _numpy_module
-
     if "float" not in getattr(np_module, "__dict__", {}):
         np_module.float = np_module.float64
     if "int" not in getattr(np_module, "__dict__", {}):
         np_module.int = np_module.int64
-
-    return np_module, _numpy_module
+    return (np_module, _numpy_module)
 
 
 def patch_torch_proxy_mode():
@@ -355,9 +339,7 @@ def fetch_dataset(src, url_type=None, revision=None):
                     )
                 else:
                     dataset = load_dataset(
-                        url_type,
-                        data_files={"train": src},
-                        split="train",
+                        url_type, data_files={"train": src}, split="train"
                     )
             except FileNotFoundError:
                 logging.error(
@@ -376,7 +358,6 @@ def fetch_dataset(src, url_type=None, revision=None):
                 return None
         else:
             return None
-
     return dataset
 
 
@@ -416,22 +397,18 @@ def split_columns(data, labels, is_batch=False):
     import definers as _d
 
     if not _d.check_parameter(labels):
-        X, y = data
-        return X, y
-
+        (X, y) = data
+        return (X, y)
     if is_batch:
         X_batch = []
         y_batch = []
-
         batch_size = 0
         for value in data.values():
             if isinstance(value, list) or isinstance(value, np.ndarray):
                 batch_size = len(value)
                 break
-
         if batch_size == 0:
-            return [], []
-
+            return ([], [])
         for i in range(batch_size):
             X = {}
             y = {}
@@ -442,23 +419,19 @@ def split_columns(data, labels, is_batch=False):
                     y[key] = value[i]
             X_batch.append(X)
             y_batch.append(y)
-
-        return X_batch, y_batch
-
+        return (X_batch, y_batch)
     else:
         features = drop_columns(data, labels)
         labels_data = select_columns(data, labels)
-        return features, labels_data
+        return (features, labels_data)
 
 
 def tokenize_and_pad(rows, tokenizer=None):
     import numpy as np
-
     import definers as _d
 
     if not tokenizer:
         tokenizer = _d.init_tokenizer()
-
     features_list = []
     for row in rows:
         if isinstance(row, dict):
@@ -473,12 +446,8 @@ def tokenize_and_pad(rows, tokenizer=None):
             features_list.append(row)
         else:
             return rows
-
     tokenized_inputs = tokenizer(
-        features_list,
-        padding=True,
-        truncation=True,
-        return_tensors="pt",
+        features_list, padding=True, truncation=True, return_tensors="pt"
     )
     return two_dim_numpy(tokenized_inputs["input_ids"])
 
@@ -499,10 +468,8 @@ def files_to_dataset(features_paths: list, labels_paths: list = None):
 
     features = []
     labels = []
-
     features_have_strings = False
     labels_have_strings = False
-
     try:
         for feature_path in features_paths:
             loaded = load_as_numpy(feature_path, training=True)
@@ -516,23 +483,23 @@ def files_to_dataset(features_paths: list, labels_paths: list = None):
                 features_have_strings = True
             elif isinstance(loaded, list):
                 if any(
-                    isinstance(l, _np.ndarray)
-                    and (
-                        _np.issubdtype(l.dtype, _np.str_)
-                        or _np.issubdtype(l.dtype, _np.object_)
+                    (
+                        isinstance(l, _np.ndarray)
+                        and (
+                            _np.issubdtype(l.dtype, _np.str_)
+                            or _np.issubdtype(l.dtype, _np.object_)
+                        )
+                        for l in loaded
+                        if l is not None
                     )
-                    for l in loaded
-                    if l is not None
                 ):
                     features_have_strings = True
-
             if isinstance(loaded, list):
                 features.extend(
                     [cupy_to_numpy(l) for l in loaded if l is not None]
                 )
             else:
                 features.append(cupy_to_numpy(loaded))
-
         if labels_paths:
             for label_path in labels_paths:
                 loaded = load_as_numpy(label_path, training=True)
@@ -546,68 +513,58 @@ def files_to_dataset(features_paths: list, labels_paths: list = None):
                     labels_have_strings = True
                 elif isinstance(loaded, list):
                     if any(
-                        isinstance(l, _np.ndarray)
-                        and (
-                            _np.issubdtype(l.dtype, _np.str_)
-                            or _np.issubdtype(l.dtype, _np.object_)
+                        (
+                            isinstance(l, _np.ndarray)
+                            and (
+                                _np.issubdtype(l.dtype, _np.str_)
+                                or _np.issubdtype(l.dtype, _np.object_)
+                            )
+                            for l in loaded
+                            if l is not None
                         )
-                        for l in loaded
-                        if l is not None
                     ):
                         labels_have_strings = True
-
                 if isinstance(loaded, list):
                     labels.extend(
                         [cupy_to_numpy(l) for l in loaded if l is not None]
                     )
                 else:
                     labels.append(cupy_to_numpy(loaded))
-
     except Exception as e:
         print(f"Error during data loading: {e}")
         return None
-
-    if not features and not labels:
+    if not features and (not labels):
         print("No valid data loaded.")
         return None
-
     tokenizer = None
     if features_have_strings:
         print("features_have_strings")
         if not tokenizer:
             tokenizer = init_tokenizer()
-
         features_as_strings = []
         for f in features:
             if isinstance(f, _np.ndarray):
                 features_as_strings.append(" ".join(f.astype(str).flatten()))
             else:
                 features_as_strings.append(str(f))
-
         tokenized_features = tokenize_and_pad(features_as_strings, tokenizer)
         features = [cupy_to_numpy(row) for row in tokenized_features]
-
     if labels_paths and labels_have_strings:
         print("labels_have_strings")
         if not tokenizer:
             tokenizer = init_tokenizer()
-
         labels_as_strings = []
         for l in labels:
             if isinstance(l, _np.ndarray):
                 labels_as_strings.append(" ".join(l.astype(str).flatten()))
             else:
                 labels_as_strings.append(str(l))
-
         tokenized_labels = tokenize_and_pad(labels_as_strings, tokenizer)
         labels = [cupy_to_numpy(row) for row in tokenized_labels]
-
     all_data = features + labels if labels else features
     if not all_data:
         return None
-
     max_lens = get_max_shapes(*all_data)
-
     try:
         features_tensor = convert_tensor_dtype(
             torch.stack(
@@ -617,7 +574,6 @@ def files_to_dataset(features_paths: list, labels_paths: list = None):
                 ]
             )
         )
-
         if labels:
             labels_tensor = convert_tensor_dtype(
                 torch.stack(
@@ -630,9 +586,7 @@ def files_to_dataset(features_paths: list, labels_paths: list = None):
             dataset = TensorDataset(features_tensor, labels_tensor)
         else:
             dataset = TensorDataset(features_tensor)
-
         return dataset
-
     except Exception as e_tensor:
         catch(f"Error creating tensor dataset: {type(e_tensor)}")
         catch(e_tensor)
@@ -671,16 +625,14 @@ def pad_sequences(X):
 def create_vectorizer(texts):
     from sklearn.feature_extraction.text import TfidfVectorizer
 
-    vectorizer = TfidfVectorizer(token_pattern=r"(?u)\b\w+\b")
+    vectorizer = TfidfVectorizer(token_pattern="(?u)\\b\\w+\\b")
     vectorizer.fit(texts)
     return vectorizer
 
 
 def vectorize(vectorizer, texts):
-
     if vectorizer is None or texts is None:
         return None
-
     X_tfidf = vectorizer.transform(texts)
     return np.array(X_tfidf.toarray())
 
@@ -688,10 +640,8 @@ def vectorize(vectorizer, texts):
 def unvectorize(vectorizer, vectorized_data):
     if vectorizer is None or vectorized_data is None:
         return None
-
     vocabulary = vectorizer.vocabulary_
-    index_to_word = {v: k for k, v in vocabulary.items()}
-
+    index_to_word = {v: k for (k, v) in vocabulary.items()}
     unvectorized_texts = []
     for row in vectorized_data:
         words = []
@@ -700,12 +650,10 @@ def unvectorize(vectorizer, vectorized_data):
                 if i in index_to_word:
                     words.append(index_to_word[i])
         unvectorized_texts.append(" ".join(words))
-
     return unvectorized_texts
 
 
 def load_as_numpy(path, training=False):
-
     import imageio as iio
     import pandas
     import sox
@@ -719,14 +667,12 @@ def load_as_numpy(path, training=False):
                 try:
                     tfm = sox.Transformer()
                     tfm.rate(32000)
-
                     if training:
                         temp_name = tmp("wav")
                         tfm.build_file(path, temp_name)
-
                         temp_2 = tmp("mp3")
                         remove_silence(temp_name, temp_2)
-                        dir, num = split_mp3(temp_2, 5)
+                        (dir, num) = split_mp3(temp_2, 5)
                         files = read(dir)
                         x = []
                         for _f in files:
@@ -735,24 +681,16 @@ def load_as_numpy(path, training=False):
                         delete(temp_name)
                         delete(temp_2)
                         delete(dir)
-
                     else:
                         temp_name = tmp("mp3")
                         tfm.build_file(path, temp_name)
-
                         x = numpy_to_cupy(extract_audio_features(temp_name))
                         delete(temp_name)
-
                     return x
-
                 except Exception as e:
                     catch(e)
                     return None
-            elif last in [
-                "csv",
-                "xlsx",
-                "json",
-            ]:
+            elif last in ["csv", "xlsx", "json"]:
                 try:
                     if last == "csv":
                         df = pandas.read_csv(path)
@@ -773,7 +711,7 @@ def load_as_numpy(path, training=False):
                     return None
             elif last in iio_formats:
                 try:
-                    path_resized, img = resize_image(path, 1024, 1024)
+                    (path_resized, img) = resize_image(path, 1024, 1024)
                     return numpy_to_cupy(extract_image_features(path_resized))
                 except Exception as e_image:
                     catch(e_image)
@@ -818,17 +756,12 @@ def get_prediction_file_extension(pred_type):
 
 def process_rows(batch):
     try:
-        from cuml.preprocessing import (
-            Normalizer,
-            SimpleImputer,
-            StandardScaler,
-        )
+        from cuml.preprocessing import Normalizer, SimpleImputer, StandardScaler
     except Exception as e:
         catch(e)
         print("Falling back to sklearn (CPU)")
         from sklearn.impute import SimpleImputer
         from sklearn.preprocessing import Normalizer, StandardScaler
-
     lst = []
     for i, row in enumerate(batch):
         r = two_dim_numpy(row)
@@ -843,13 +776,11 @@ def process_rows(batch):
         r = imputer.fit_transform(r)
         log(f"Reshaping {i + 1}", r)
         lst.append(reshape_numpy(r))
-
     return two_dim_numpy(lst)
 
 
 def tensor_length(tensor):
     nums = list(tensor.size())
-
     ret = 1
     for num in nums:
         ret = ret * num
@@ -861,20 +792,15 @@ def dtype(size=16, is_float=True):
 
     if size == 16 and is_float and torch.cuda.is_bf16_supported():
         return torch.bfloat16
-
     if size == 16 and is_float:
         return torch.float16
-
     if size == 32 and is_float:
         return torch.float32
-
-    if size == 32 and not is_float:
+    if size == 32 and (not is_float):
         return torch.int
-
-    if size == 16 and not is_float:
+    if size == 16 and (not is_float):
         return torch.int16
-
-    if size == 8 and not is_float:
+    if size == 8 and (not is_float):
         return torch.int8
 
 
@@ -917,7 +843,6 @@ def two_dim_numpy(v):
             raise TypeError(f"Input of type {type(v)} is not supported: {e}")
     else:
         v = np.array([v])
-
     if v.ndim == 0:
         return numpy_to_cupy(v.reshape(1, 1))
     elif v.ndim == 1:
@@ -958,7 +883,6 @@ def three_dim_numpy(v):
             raise TypeError(f"Input of type {type(v)} is not supported: {e}")
     else:
         v = np.array([v])
-
     if v.ndim <= 2:
         return numpy_to_cupy(v.reshape(-1, 1, 1))
     elif v.ndim == 3:
@@ -986,48 +910,20 @@ def guess_numpy_sample_rate(
     peak_distance=10,
     frequency_threshold=0.05,
 ):
-    """
-    מעריכה את קצב הדגימה של אודיו באמצעות ניתוח תדרים.
-
-    Args:
-        audio_data (np.ndarray): מערך NumPy של נתוני האודיו.
-        possible_sample_rates (list, optional): רשימה של קצבי דגימה אפשריים.
-            אם None, ינסה למצוא התאמה מתוך טווח רחב.
-        window_type (str, optional): סוג חלון לשימוש (hann, hamming, etc.).
-        window_size (int, optional): גודל החלון. אם None, ייבחר אוטומטית.
-        peak_prominence (float, optional): מינימום prominence לזיהוי פסגות.
-        peak_distance (int, optional): מינימום מרחק בין פסגות.
-        frequency_threshold (float, optional): סף להתאמה בין תדרים (יחסית לתדר נייקוויסט).
-
-    Returns:
-        int: קצב הדגימה המשוער, או None אם לא נמצאה התאמה.
-    """
-
     from scipy import signal as scipy_signal
 
     audio_data = cupy_to_numpy(audio_data)
-
     if window_size is None:
         window_size = len(audio_data)
     window = scipy_signal.get_window(window_type, window_size)
     frequencies = _np.fft.fftfreq(window_size, d=1.0)
     spectrum = _np.abs(_np.fft.fft(audio_data[:window_size] * window))
-
     peak_indices = scipy_signal.find_peaks(
         spectrum, prominence=peak_prominence, distance=peak_distance
     )[0]
     dominant_frequencies = frequencies[peak_indices]
-
     if possible_sample_rates is None:
-        possible_sample_rates = [
-            22050,
-            44100,
-            48000,
-            88200,
-            96000,
-            192000,
-        ]
-
+        possible_sample_rates = [22050, 44100, 48000, 88200, 96000, 192000]
     for sr in possible_sample_rates:
         nyquist_frequency = sr / 2
         for freq in dominant_frequencies:
@@ -1041,7 +937,6 @@ def guess_numpy_sample_rate(
 
 
 def guess_numpy_type(data):
-
     numpy_to_list(data)
     mean = np.mean(data)
     std = np.std(data)
@@ -1077,11 +972,8 @@ def numpy_to_cupy(v: Any) -> Any:
 
 
 def get_max_shapes(*data):
-
     lengths = []
-
     shapes = [np_arr.shape for np_arr in data]
-
     for sh in shapes:
         l = len(lengths)
         while l < len(sh):
@@ -1089,7 +981,6 @@ def get_max_shapes(*data):
             l = len(lengths)
         for i, dim in enumerate(sh):
             lengths[i] = max(lengths[i], dim)
-
     return lengths
 
 
@@ -1098,47 +989,36 @@ def pad_nested(nested_data, lengths, fill_value=0):
         nested_data = nested_data.tolist()
     elif isinstance(nested_data, tuple):
         nested_data = list(nested_data)
-
     if not nested_data:
         return [fill_value] * lengths[0]
-
     if not isinstance(nested_data[0], list):
         data_len = len(nested_data)
         diff = lengths[0] - data_len
         if diff > 0:
             nested_data.extend([fill_value] * diff)
         return nested_data
-
     ret = []
     for arr in nested_data:
         ret.append(pad_nested(arr, lengths[1:], fill_value))
-
     data_len = len(ret)
     diff = lengths[0] - data_len
     if diff > 0:
         ret.extend([pad_nested([], lengths[1:], fill_value)] * diff)
-
     return ret
 
 
 def reshape_numpy(data, fill_value=0, lengths=None):
-
     if isinstance(data, _np.ndarray):
         data = data.tolist()
-
     if not data:
         return _np.array([])
-
     try:
         if lengths is None:
             lengths = get_max_shapes(data)
-
         log("Reshaping data", lengths)
         reshaped_data = pad_nested(data, lengths)
         log("Reshaped data", lengths)
-
         return _np.array(reshaped_data)
-
     except (TypeError, IndexError) as e:
         catch(e)
         return _np.array([])
@@ -1158,7 +1038,6 @@ def convert_tensor_dtype(tensor):
     elif not torch.is_floating_point(tensor):
         max_val = tensor.max()
         min_val = tensor.min()
-
         if min_val >= 0:
             if max_val <= 255:
                 return tensor.to(torch.uint8)
@@ -1168,16 +1047,14 @@ def convert_tensor_dtype(tensor):
                 return tensor.to(torch.uint32)
             else:
                 return tensor.to(torch.uint64)
+        elif min_val >= -128 and max_val <= 127:
+            return tensor.to(torch.int8)
+        elif min_val >= -32768 and max_val <= 32767:
+            return tensor.to(torch.int16)
+        elif min_val >= -2147483648 and max_val <= 2147483647:
+            return tensor.to(torch.int32)
         else:
-            if min_val >= -128 and max_val <= 127:
-                return tensor.to(torch.int8)
-            elif min_val >= -32768 and max_val <= 32767:
-                return tensor.to(torch.int16)
-            elif min_val >= -2147483648 and max_val <= 2147483647:
-                return tensor.to(torch.int32)
-            else:
-                return tensor.to(torch.int64)
-
+            return tensor.to(torch.int64)
     else:
         return tensor
 

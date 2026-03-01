@@ -4,7 +4,6 @@ import stat
 import tempfile
 import unittest
 from unittest.mock import patch
-
 from definers import permit
 
 
@@ -31,10 +30,7 @@ class TestPermit(unittest.TestCase):
     def test_permit_success(self, mock_subprocess_run):
         self.assertTrue(permit(self.test_file))
 
-    @patch(
-        "definers.subprocess.run",
-        side_effect=Exception("chmod failed"),
-    )
+    @patch("definers.subprocess.run", side_effect=Exception("chmod failed"))
     def test_permit_failure(self, mock_subprocess_run):
         self.assertFalse(permit(self.test_file))
 
@@ -43,14 +39,14 @@ class TestPermit(unittest.TestCase):
             os.chmod(self.test_file, 0)
             permit(self.test_file)
             mode = stat.S_IMODE(os.stat(self.test_file).st_mode)
-            self.assertEqual(mode, 0o777)
+            self.assertEqual(mode, 511)
 
     def test_permit_functional_directory(self):
         if os.name != "nt":
             os.chmod(self.test_dir, 0)
             permit(self.test_dir)
             mode = stat.S_IMODE(os.stat(self.test_dir).st_mode)
-            self.assertEqual(mode, 0o777)
+            self.assertEqual(mode, 511)
 
     def test_permit_non_existent_path(self):
         non_existent_path = os.path.join(self.test_dir, "non_existent")

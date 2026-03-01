@@ -1,12 +1,9 @@
 import unittest
-
 import numpy as _numpy
-
 import definers._data as _data
 
 _data._np = _numpy
 _data.np = _numpy
-
 from definers import pad_nested
 
 

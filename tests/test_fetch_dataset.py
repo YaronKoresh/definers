@@ -1,6 +1,5 @@
 import unittest
 from unittest.mock import MagicMock, patch
-
 from definers import fetch_dataset
 
 
@@ -9,7 +8,6 @@ class TestFetchDataset(unittest.TestCase):
     def test_successful_load(self, mock_load_dataset):
         mock_dataset = MagicMock()
         mock_load_dataset.return_value = mock_dataset
-
         dataset = fetch_dataset("some_dataset")
         self.assertEqual(dataset, mock_dataset)
         mock_load_dataset.assert_called_once_with("some_dataset", split="train")
@@ -18,7 +16,6 @@ class TestFetchDataset(unittest.TestCase):
     def test_successful_load_with_revision(self, mock_load_dataset):
         mock_dataset = MagicMock()
         mock_load_dataset.return_value = mock_dataset
-
         dataset = fetch_dataset("some_dataset", revision="v1.0")
         self.assertEqual(dataset, mock_dataset)
         mock_load_dataset.assert_called_once_with(

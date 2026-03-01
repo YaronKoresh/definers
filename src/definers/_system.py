@@ -1,6 +1,3 @@
-"""System utilities for the definers package."""
-
-from pathlib import Path
 import ctypes
 import importlib
 import logging
@@ -19,7 +16,6 @@ from contextlib import contextmanager
 from datetime import datetime
 from glob import glob
 from pathlib import Path
-
 from definers._constants import FFMPEG_URL, ai_model_extensions
 
 
@@ -54,7 +50,6 @@ def _install_ffmpeg_windows():
     import requests
 
     print("[INFO] Running FFmpeg installer for Windows...")
-
     if not is_admin_windows():
         print(
             "[ERROR] This script requires Administrator privileges to run on Windows."
@@ -63,7 +58,6 @@ def _install_ffmpeg_windows():
             "[INFO] Please re-run this script from a terminal with Administrator rights."
         )
         sys.exit(1)
-
     print(
         "\n[INFO] Attempting to install using Winget (Windows Package Manager)..."
     )
@@ -95,17 +89,14 @@ def _install_ffmpeg_windows():
             f"[WARN] Winget installation failed with exit code {e.returncode}."
         )
         print(f"[DEBUG] Winget stderr: {e.stderr}")
-
     print(
         "\n[INFO] Winget installation failed or was not available. Attempting manual download..."
     )
-
     temp_dir = tempfile.gettempdir()
     zip_path = os.path.join(temp_dir, "ffmpeg.zip")
     extract_path = os.path.join(temp_dir, "ffmpeg_extracted")
     program_files = os.environ.get("ProgramFiles", "C:\\Program Files")
     ffmpeg_install_dir = os.path.join(program_files, "ffmpeg")
-
     try:
         print(
             f"[INFO] Downloading latest FFmpeg essentials build from {FFMPEG_URL}..."
@@ -116,39 +107,32 @@ def _install_ffmpeg_windows():
                 for chunk in r.iter_content(chunk_size=8192):
                     f.write(chunk)
         print("[SUCCESS] Download complete.")
-
         print(f"[INFO] Extracting FFmpeg to {extract_path}...")
         if os.path.exists(extract_path):
             shutil.rmtree(extract_path)
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
             zip_ref.extractall(extract_path)
         print("[SUCCESS] Extraction complete.")
-
         extracted_files = os.listdir(extract_path)
         if not extracted_files:
             raise OSError(
                 "Extraction failed, no files found in temporary directory."
             )
-
         ffmpeg_build_dir = os.path.join(extract_path, extracted_files[0])
         ffmpeg_bin_dir = os.path.join(ffmpeg_build_dir, "bin")
-
         print(f"[INFO] Moving FFmpeg binaries to {ffmpeg_install_dir}...")
         if os.path.exists(ffmpeg_install_dir):
             shutil.rmtree(ffmpeg_install_dir)
         shutil.move(ffmpeg_bin_dir, ffmpeg_install_dir)
         print("[SUCCESS] Binaries moved.")
-
         print("[INFO] Adding FFmpeg to the system PATH...")
         subprocess.run(
-            ["setx", "/M", "PATH", f"%PATH%;{ffmpeg_install_dir}"],
-            check=True,
+            ["setx", "/M", "PATH", f"%PATH%;{ffmpeg_install_dir}"], check=True
         )
         print("[SUCCESS] FFmpeg added to system PATH.")
         print(
             "[INFO] IMPORTANT: You must restart your terminal or PC for the new PATH to be recognized."
         )
-
     except Exception as e:
         print(f"\n[ERROR] An error occurred during manual installation: {e}")
         sys.exit(1)
@@ -163,11 +147,9 @@ def _install_ffmpeg_windows():
 
 def _install_ffmpeg_linux():
     print("[INFO] Running FFmpeg installer for Linux...")
-
     if os.geteuid() != 0:
         print("[WARN] This script needs sudo privileges to install packages.")
         print("[INFO] It will likely prompt you for your password.")
-
     package_managers = {
         "apt": {
             "update_cmd": ["apt-get", "update"],
@@ -176,34 +158,26 @@ def _install_ffmpeg_linux():
         "dnf": {"install_cmd": ["dnf", "install", "ffmpeg", "-y"]},
         "pacman": {"install_cmd": ["pacman", "-S", "ffmpeg", "--noconfirm"]},
     }
-
     selected_pm = None
     for pm in package_managers:
         if shutil.which(pm):
             selected_pm = pm
             break
-
     if not selected_pm:
         print(
             "[ERROR] Could not detect a supported package manager (apt, dnf, pacman)."
         )
         print("[INFO] Please install FFmpeg manually.")
         sys.exit(1)
-
     print(f"[INFO] Detected package manager: {selected_pm}")
-
     try:
         pm_cmds = package_managers[selected_pm]
-
         if "update_cmd" in pm_cmds:
             print(f"[INFO] Running package list update ({selected_pm})...")
             subprocess.run(pm_cmds["update_cmd"], check=True)
-
         print(f"[INFO] Installing FFmpeg using {selected_pm}...")
         subprocess.run(pm_cmds["install_cmd"], check=True)
-
         print("\n[SUCCESS] FFmpeg installed successfully.")
-
     except subprocess.CalledProcessError as e:
         print(
             f"\n[ERROR] The installation command failed with exit code {e.returncode}."
@@ -261,7 +235,7 @@ def install_audio_effects():
             install_dir, "soundfonts", "FluidR3_GM.sf2"
         )
         rubberband_extract_path = os.path.join(install_dir, "rubberband")
-        if not "rubberband" in os.environ.get("PATH", ""):
+        if "rubberband" not in os.environ.get("PATH", ""):
             if _d.download_and_unzip(rubberband_url, rubberband_extract_path):
                 extracted_dirs = [
                     d
@@ -274,7 +248,7 @@ def install_audio_effects():
                     )
                     _d.add_to_path_windows(rubberband_bin_path)
         fluidsynth_extract_path = os.path.join(install_dir, "fluidsynth")
-        if not any("fluidsynth" in s for s in os.environ.get("PATH", "")):
+        if not any(("fluidsynth" in s for s in os.environ.get("PATH", ""))):
             if _d.download_and_unzip(fluidsynth_url, fluidsynth_extract_path):
                 fluidsynth_bin_path = os.path.join(
                     fluidsynth_extract_path, "bin"
@@ -295,7 +269,6 @@ def pip_install(packs):
     from definers import download_file
 
     packs_arr = packs.strip().split()
-
     for idx, pack in enumerate(packs_arr):
         if (
             pack.startswith("https://") or pack.startswith("http://")
@@ -303,11 +276,8 @@ def pip_install(packs):
             temp_path = tmp("whl", keep=False)
             download_file(pack, temp_path)
             packs_arr[idx] = temp_path
-
     packs = " ".join(packs_arr)
-
     run(f"pip install --upgrade --force-reinstall --no-cache-dir {packs}")
-
     for idx, pack in enumerate(packs_arr):
         if pack.endswith(".whl"):
             pack = pack.split("-py3")[0].split("-py2")[0]
@@ -321,11 +291,9 @@ def modify_wheel_requirements(wheel_path: str, requirements_map: dict):
     print(f"Modifying metadata for wheel: {wheel_path}")
     if not os.path.exists(wheel_path):
         raise FileNotFoundError(f"Wheel file not found at {wheel_path}")
-
     temp_dir = tmp(dir=True)
     output_dir = os.path.dirname(wheel_path) or "."
     wheel_filename = os.path.basename(wheel_path)
-
     try:
         with zipfile.ZipFile(wheel_path, "r") as wheel_zip:
             wheel_zip.extractall(temp_dir)
@@ -335,19 +303,13 @@ def modify_wheel_requirements(wheel_path: str, requirements_map: dict):
         if not metadata_files:
             raise FileNotFoundError("Could not find METADATA file in wheel.")
         metadata_path = metadata_files[0]
-
         with open(metadata_path, encoding="utf-8") as f:
             metadata_content = f.read()
-
-        for (
-            package_name,
-            version_specifier,
-        ) in requirements_map.items():
+        for package_name, version_specifier in requirements_map.items():
             pattern = re.compile(
-                rf"^(Requires-Dist:\s*{re.escape(package_name)}(\s|\[|;|$).*)$",
+                f"^(Requires-Dist:\\s*{re.escape(package_name)}(\\s|\\[|;|$).*)$",
                 re.IGNORECASE | re.MULTILINE,
             )
-
             if version_specifier:
                 replacement = (
                     f"Requires-Dist: {package_name} ({version_specifier})"
@@ -366,21 +328,17 @@ def modify_wheel_requirements(wheel_path: str, requirements_map: dict):
                         f"Added new dependency: {package_name} ({version_specifier})"
                     )
             else:
-                metadata_content, count = pattern.subn("", metadata_content)
+                (metadata_content, count) = pattern.subn("", metadata_content)
                 if count > 0:
                     print(f"Removed dependency: {package_name}")
-
         metadata_content = "\n".join(
-            line for line in metadata_content.splitlines() if line.strip()
+            (line for line in metadata_content.splitlines() if line.strip())
         )
-
         with open(metadata_path, "w", encoding="utf-8") as f:
             f.write(metadata_content)
-
         new_wheel_path = os.path.join(output_dir, wheel_filename)
         if os.path.abspath(wheel_path) == os.path.abspath(new_wheel_path):
             os.remove(wheel_path)
-
         with zipfile.ZipFile(
             new_wheel_path, "w", zipfile.ZIP_DEFLATED
         ) as new_wheel_zip:
@@ -389,10 +347,8 @@ def modify_wheel_requirements(wheel_path: str, requirements_map: dict):
                     file_path = os.path.join(root, file)
                     arcname = os.path.relpath(file_path, temp_dir)
                     new_wheel_zip.write(file_path, arcname)
-
         print(f"Repacked wheel to: {new_wheel_path}")
         return new_wheel_path
-
     finally:
         delete(temp_dir)
 
@@ -402,70 +358,42 @@ def build_faiss():
 
     with cwd():
         git("YaronKoresh", "faiss", parent="./xfaiss")
-
     set_cuda_env()
-
     cmake = "/usr/local/cmake/bin/cmake"
-
     try:
         with cwd("./xfaiss"):
             print("faiss - stage 1")
             run(
-                f"{cmake} "
-                f"-B build "
-                "-DBUILD_TESTING=OFF "
-                "-DCMAKE_BUILD_TYPE=Release "
-                "-DFAISS_ENABLE_MKL=OFF "
-                "-DFAISS_ENABLE_C_API=ON "
-                "-DFAISS_ENABLE_GPU=ON "
-                "-DFAISS_ENABLE_PYTHON=ON "
-                f"-DPython_EXECUTABLE={sys.executable} "
-                f"-DPython_INCLUDE_DIR={sys.prefix}/include/python{sys.version_info.major}.{sys.version_info.minor} "
-                f"-DPython_LIBRARY={sys.prefix}/lib/libpython{sys.version_info.major}.{sys.version_info.minor}.so "
-                f"-DPython_NumPy_INCLUDE_DIRS={sys.prefix}/lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages/numpy/core/include "
-                "."
+                f"{cmake} -B build -DBUILD_TESTING=OFF -DCMAKE_BUILD_TYPE=Release -DFAISS_ENABLE_MKL=OFF -DFAISS_ENABLE_C_API=ON -DFAISS_ENABLE_GPU=ON -DFAISS_ENABLE_PYTHON=ON -DPython_EXECUTABLE={sys.executable} -DPython_INCLUDE_DIR={sys.prefix}/include/python{sys.version_info.major}.{sys.version_info.minor} -DPython_LIBRARY={sys.prefix}/lib/libpython{sys.version_info.major}.{sys.version_info.minor}.so -DPython_NumPy_INCLUDE_DIRS={sys.prefix}/lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages/numpy/core/include ."
             )
-
             print("faiss - stage 2")
             run(f"{cmake} --build build -j {cores()} --target faiss")
-
             print("faiss - stage 3")
             run(f"{cmake} --build build -j {cores()} --target swigfaiss")
-
         temp_dir = tmp(dir=True)
-
         with cwd("./xfaiss/build/faiss/python"):
             print(
                 "faiss - stage 4: Building wheel with numpy==1.26.4 constraint"
             )
-
             with tempfile.NamedTemporaryFile(mode="w", delete=False) as reqs:
                 reqs.write("numpy==1.26.4\n")
                 constraints_path = reqs.name
-
             try:
                 run(
                     f"{sys.executable} -m pip wheel . -w {temp_dir} -c {constraints_path}"
                 )
             finally:
                 os.remove(constraints_path)
-
         with cwd():
             delete("./xfaiss")
-
         free()
-
         any_wheel_path = paths(f"{temp_dir}/faiss-*.whl")[0]
-
         repaired_wheel_dir = tmp(dir=True)
-
         print("faiss - stage 5: Repairing wheel")
         run(
             f"{sys.executable} -m auditwheel repair {any_wheel_path} -w {repaired_wheel_dir}"
         )
-
         repaired_wheel_path = paths(f"{repaired_wheel_dir}/faiss-*.whl")[0]
-
         print(
             "faiss - stage 6: Modifying final wheel metadata for runtime constraints"
         )
@@ -473,9 +401,7 @@ def build_faiss():
         final_wheel_path = modify_wheel_requirements(
             repaired_wheel_path, dependency_constraints
         )
-
         return final_wheel_path
-
     except subprocess.CalledProcessError as e:
         catch(f"Error during installation: {e}")
     except FileNotFoundError as e:
@@ -532,7 +458,6 @@ def paths(*patterns):
     import definers as _d
 
     patterns = [full_path(p) for p in patterns]
-
     path_list = []
     for p in patterns:
         try:
@@ -540,7 +465,6 @@ def paths(*patterns):
             path_list = [*path_list, *lst]
         except Exception:
             pass
-
     return sorted(list(set(path_list)))
 
 
@@ -559,17 +483,14 @@ def copy(src, dst):
             shutil.copy(str(src), str(dst))
     elif os.path.isdir(str(src_path)):
         shutil.copytree(
-            str(src),
-            str(dst),
-            symlinks=False,
-            ignore_dangling_symlinks=True,
+            str(src), str(dst), symlinks=False, ignore_dangling_symlinks=True
         )
     else:
         shutil.copy(str(src), str(dst))
 
 
 def big_number(zeros=10):
-    return int("1" + ("0" * zeros))
+    return int("1" + "0" * zeros)
 
 
 def find_package_paths(package_name):
@@ -577,13 +498,11 @@ def find_package_paths(package_name):
 
     package_paths_found = []
     package_dir_name = package_name.replace("-", "_")
-
     site_packages_dirs = _d.site.getsitepackages()
     for site_packages_dir in site_packages_dirs:
         package_path = os.path.join(site_packages_dir, package_dir_name)
         if os.path.exists(package_path) and os.path.isdir(package_path):
             package_paths_found.append(package_path)
-
     for path in sys.path:
         if path:
             potential_package_path = os.path.join(path, package_dir_name)
@@ -591,7 +510,6 @@ def find_package_paths(package_name):
                 potential_package_path
             ):
                 package_paths_found.append(potential_package_path)
-
     for site_packages_dir in site_packages_dirs:
         dist_packages_dir = site_packages_dir.replace(
             "site-packages", "dist-packages"
@@ -600,7 +518,6 @@ def find_package_paths(package_name):
             package_path = os.path.join(dist_packages_dir, package_dir_name)
             if os.path.exists(package_path) and os.path.isdir(package_path):
                 package_paths_found.append(package_path)
-
     unique_paths = unique(package_paths_found)
     return unique_paths
 
@@ -655,18 +572,14 @@ def send_signal_to_process(pid, signal_number):
 def cwd(dir=None):
     if not dir:
         dir = "."
-
-    if not dir.startswith("/") and not dir.startswith("~"):
+    if not dir.startswith("/") and (not dir.startswith("~")):
         dir = full_path(os.path.dirname(__file__), dir)
     else:
         dir = full_path(dir)
-
     owd = full_path(os.getcwd())
-
     try:
         os.chdir(dir)
         yield dir
-
     finally:
         try:
             os.chdir(owd)
@@ -678,7 +591,6 @@ def log(subject, data, status=None):
     import definers as _d
 
     now = _d.datetime.now().time()
-
     if status is True:
         print(
             f"\n >>> {now} <<< \nOK OK OK OK OK OK OK\n{str(data)}\nOK OK OK OK OK OK OK\n >>> {subject} <<< \n"
@@ -765,7 +677,7 @@ def _is_text(data):
     if not data:
         return True
     text_chars = set(range(32, 127)) | {9, 10, 13} | set(range(128, 256))
-    return all(b in text_chars for b in data[:8192])
+    return all((b in text_chars for b in data[:8192]))
 
 
 def read(path):
@@ -803,21 +715,17 @@ def run_linux(command, silent=False, env={}):
 
     original_env = os.environ.copy()
     modified_env = {**original_env, **env}
-
     if isinstance(command, list):
         command = "\n".join(command)
-
     in_lines = command.strip().splitlines()
     cmds = [i.strip() for i in in_lines if i.strip() != ""]
-
     if len(cmds) > 0:
         script = "\n".join(cmds)
-
         name = tmp(".sh")
         try:
             write(name, "#!/bin/bash --login\n" + script)
             permit(name)
-            master, slave = pty.openpty()
+            (master, slave) = pty.openpty()
             pid = os.fork()
             if pid == 0:
                 os.setsid()
@@ -830,12 +738,7 @@ def run_linux(command, silent=False, env={}):
                     os.close(slave)
                     os.environ.update(modified_env)
                     os.execl(
-                        "/bin/bash",
-                        "/bin/bash",
-                        "--login",
-                        "-c",
-                        name,
-                        "&",
+                        "/bin/bash", "/bin/bash", "--login", "-c", name, "&"
                     )
                 except Exception as e:
                     print(f"Execution Error: {e}")
@@ -843,13 +746,12 @@ def run_linux(command, silent=False, env={}):
                     delete(name)
                     os.environ.update(original_env)
                     os._exit(0)
-
             else:
                 os.close(slave)
                 output_bytes = b""
                 output = ""
                 while True:
-                    rlist, _, _ = select.select([master], [], [])
+                    (rlist, _, _) = select.select([master], [], [])
                     if master in rlist:
                         try:
                             chunk = os.read(master, 1024)
@@ -878,7 +780,6 @@ def run_linux(command, silent=False, env={}):
                 out_lines = output.strip().splitlines()
                 ret_lines = [o.strip() for o in out_lines if o.strip() != ""]
                 return ret_lines
-
         except OSError as e:
             catch(e)
             return False
@@ -897,9 +798,7 @@ def run_windows(command, silent=False, env={}):
                 )
             else:
                 command_to_run = command
-
         modified_env = {**os.environ.copy(), **env}
-
         process = subprocess.Popen(
             command_to_run,
             shell=True,
@@ -909,17 +808,13 @@ def run_windows(command, silent=False, env={}):
             env=modified_env,
             universal_newlines=True,
         )
-
-        stdout, stderr = process.communicate()
-
+        (stdout, stderr) = process.communicate()
         returncode = process.returncode
-
         if not silent:
             if stdout:
                 print(stdout, end="", flush=True)
             if stderr:
                 print(stderr, end="", flush=True)
-
         if returncode != 0:
             if not silent:
                 log(f"Script failed [{returncode}]", command_to_run)
@@ -928,11 +823,9 @@ def run_windows(command, silent=False, env={}):
         else:
             if not silent:
                 log("Script completed", command_to_run)
-
             out_lines = stdout.strip().splitlines()
             ret_lines = [o.strip() for o in out_lines if o.strip()]
             return ret_lines
-
     except Exception as e:
         catch(e)
         return False
@@ -948,12 +841,7 @@ def run(command, silent=False, env={}):
 
 
 def thread(func, *args, **kwargs):
-    t = threading.Thread(
-        target=func,
-        args=args,
-        kwargs=kwargs,
-        daemon=True,
-    )
+    t = threading.Thread(target=func, args=args, kwargs=kwargs, daemon=True)
     t.start()
     return t
 
@@ -972,8 +860,7 @@ def permit(path):
             return True
         if get_os_name() == "windows":
             subprocess.run(
-                ["icacls", path, "/grant", "Everyone:F", "/T"],
-                check=True,
+                ["icacls", path, "/grant", "Everyone:F", "/T"], check=True
             )
             return True
         return False
@@ -991,25 +878,20 @@ def installed(pack, version=None):
     import definers as _d
 
     pack_lower = pack.lower().strip()
-
     version_lower = None
     if version:
         version_lower = version.lower().strip()
-
     system = _d.get_os_name()
-
     if system == "windows":
         cmd = 'powershell.exe -Command "Get-ItemProperty HKLM:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*, HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*, HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* | Select-Object DisplayName, DisplayVersion | Format-Table -HideTableHeaders'
         try:
             lines = _d.run(cmd, silent=True)
             for line in lines:
-                parts = re.split(r"\s{2,}", line.strip())
+                parts = re.split("\\s{2,}", line.strip())
                 if not parts or not parts[0]:
                     continue
-
                 name = parts[0].lower().strip()
                 ver = parts[1].strip() if len(parts) > 1 else ""
-
                 if pack_lower in name:
                     if (
                         version_lower is None
@@ -1023,20 +905,17 @@ def installed(pack, version=None):
                         return True
         except Exception:
             pass
-
     elif system == "linux":
         which_result = _d.shutil.which(pack)
         if which_result:
             if version_lower is None:
                 return True
-
             try:
                 lines = _d.run(f"{pack} --version", silent=True)
                 if not lines:
                     lines = _d.run(f"{pack} -v", silent=True)
-
                 if lines:
-                    match = re.search(r"(\d+\.\d+(\.\d+)*)", lines[0])
+                    match = re.search("(\\d+\\.\\d+(\\.\\d+)*)", lines[0])
                     if match:
                         actual_version = match.group(0)
                         if actual_version.startswith(version_lower) or (
@@ -1048,12 +927,11 @@ def installed(pack, version=None):
                             return True
             except Exception:
                 pass
-
     try:
         lines = _d.run("pip list", silent=True)
         if lines:
             for line in lines:
-                parts = re.sub(r"( ){2,}", ";", line).split(";")
+                parts = re.sub("( ){2,}", ";", line).split(";")
                 if len(parts) == 2:
                     n = parts[0].lower().strip()
                     v = parts[1].lower().strip()
@@ -1068,12 +946,9 @@ def installed(pack, version=None):
                         return True
                 else:
                     continue
-
         return False
-
     except subprocess.CalledProcessError:
         raise
-
     except FileNotFoundError:
         return False
 
@@ -1110,12 +985,10 @@ def is_package_path(package_path, package_name=None):
         and os.path.isdir(package_path)
         and (
             os.path.exists(os.path.join(package_path, "__init__.py"))
-            or (
-                os.path.exists(
-                    os.path.join(package_path, os.path.basename(package_path))
-                )
+            or os.path.exists(
+                os.path.join(package_path, os.path.basename(package_path))
             )
-            or (os.path.exists(os.path.join(package_path, "src")))
+            or os.path.exists(os.path.join(package_path, "src"))
         )
         and (
             package_name is None
@@ -1131,16 +1004,13 @@ def get_python_version():
 
     try:
         version_info = _d.sys.version_info
-
         if not hasattr(version_info, "major"):
             raise AttributeError(
                 "sys.version_info is missing essential version attributes"
             )
-
         major = version_info.major
         minor = getattr(version_info, "minor", 0)
         micro = getattr(version_info, "micro", 0)
-
         version_str = f"{major}.{minor}.{micro}"
         return version_str
     except Exception as e:
@@ -1172,41 +1042,32 @@ def get_linux_distribution():
                 check=True,
             )
             output = result.stdout
-
-            distro_match = re.search(r"Distributor ID:\s*([^\n]+)", output)
-            release_match = re.search(r"Release:\s*([^\n]+)", output)
-
+            distro_match = re.search("Distributor ID:\\s*([^\\n]+)", output)
+            release_match = re.search("Release:\\s*([^\\n]+)", output)
             if distro_match and release_match:
                 distro = distro_match.group(1).strip().lower().split(" ")[0]
                 release = release_match.group(1).strip()
-                return distro, release
+                return (distro, release)
             else:
-                return None, None
-
+                return (None, None)
         except (FileNotFoundError, subprocess.CalledProcessError):
             pass
-
         try:
             with open("/etc/os-release") as f:
                 os_release_content = f.read()
-
-            name_match = re.search(r'NAME="([^"]+)"', os_release_content)
+            name_match = re.search('NAME="([^"]+)"', os_release_content)
             version_match = re.search(
-                r'VERSION_ID="([^"]+)"', os_release_content
+                'VERSION_ID="([^"]+)"', os_release_content
             )
-
             if name_match and version_match:
                 distro = name_match.group(1).strip()
                 release = version_match.group(1).strip()
-                return distro, release
-
+                return (distro, release)
         except FileNotFoundError:
             pass
-
-        return None, None
-
+        return (None, None)
     except Exception:
-        return None, None
+        return (None, None)
 
 
 def cores():
@@ -1279,7 +1140,6 @@ def pre_install():
 
 def post_install():
     import numpy as _np
-
     import definers
 
     try:
@@ -1335,8 +1195,7 @@ def install_faiss():
             check=True,
         )
         subprocess.run(
-            ["make", "-C", f"{faiss_dir}/build", "-j16", "faiss"],
-            check=True,
+            ["make", "-C", f"{faiss_dir}/build", "-j16", "faiss"], check=True
         )
         subprocess.run(
             ["make", "-C", f"{faiss_dir}/build", "-j16", "swigfaiss"],
@@ -1357,15 +1216,11 @@ def apt_install(upgrade=False):
     import definers
 
     definers.pre_install()
-
     basic_apt = "build-essential gcc cmake swig gdebi git git-lfs wget curl libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev libncursesw5-dev xz-utils tk-dev libffi-dev liblzma-dev initramfs-tools libgirepository1.0-dev libdbus-1-dev libdbus-glib-1-dev libsecret-1-0 libmanette-0.2-0 libharfbuzz0b libharfbuzz-icu0 libenchant-2-2 libhyphen0 libwoff1 libgraphene-1.0-0 libxml2-dev libxmlsec1-dev"
     audio_apt = "libportaudio2 libasound2-dev sox libsox-fmt-all praat ffmpeg libavcodec-extra libavif-dev"
     visual_apt = "libopenblas-dev libgflags-dev libgles2 libgtk-3-0 libgtk-4-1 libatk1.0-0 libatk-bridge2.0-0 libcups2 libxcomposite1 libxdamage1 libatspi2.0-0 libgstreamer1.0-0 gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-tools gstreamer1.0-gl"
-
     definers.run("apt-get update")
     definers.run(f"apt-get install -y {basic_apt} {audio_apt} {visual_apt}")
-
     if upgrade:
         definers.run("apt-get upgrade -y")
-
     definers.post_install()

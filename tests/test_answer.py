@@ -1,6 +1,5 @@
 import unittest
 from unittest.mock import MagicMock, patch
-
 import definers
 from definers import answer
 
@@ -8,20 +7,14 @@ from definers import answer
 class TestAnswer(unittest.TestCase):
     def setUp(self):
         self.mock_sf = MagicMock()
-        self.mock_sf.read.return_value = (
-            MagicMock(),
-            MagicMock(),
-        )
+        self.mock_sf.read.return_value = (MagicMock(), MagicMock())
         self.mock_image = MagicMock()
         self.mock_image.open.return_value = MagicMock()
         self.mock_model = MagicMock()
         self.mock_model.generate.return_value = "A witty response."
 
     @patch("definers.MODELS", new={"answer": None})
-    @patch(
-        "definers.SYSTEM_MESSAGE",
-        new="Mock System Message",
-    )
+    @patch("definers.SYSTEM_MESSAGE", new="Mock System Message")
     def test_basic_text_history(self):
         with patch.dict(
             "sys.modules",
@@ -33,27 +26,14 @@ class TestAnswer(unittest.TestCase):
             definers.MODELS["answer"] = self.mock_model
             history = [
                 {"role": "user", "content": "Hi there"},
-                {
-                    "role": "assistant",
-                    "content": "Hello! How can I help?",
-                },
+                {"role": "assistant", "content": "Hello! How can I help?"},
                 {"role": "user", "content": "Tell me a joke"},
             ]
             response = answer(history)
             self.assertEqual(response, "A witty response.")
-
-            expected_prompt = (
-                "<|system|>Mock System Message<|end|>"
-                "<|user|>Hi there<|end|>"
-                "<|assistant|>Hello! How can I help?<|end|>"
-                "<|user|>Tell me a joke<|end|>"
-                "<|assistant|>"
-            )
-
+            expected_prompt = "<|system|>Mock System Message<|end|><|user|>Hi there<|end|><|assistant|>Hello! How can I help?<|end|><|user|>Tell me a joke<|end|><|assistant|>"
             self.mock_model.generate.assert_called_once_with(
-                prompt=expected_prompt,
-                max_length=200,
-                beam_width=16,
+                prompt=expected_prompt, max_length=200, beam_width=16
             )
 
     @patch("definers.MODELS", new={"answer": None})

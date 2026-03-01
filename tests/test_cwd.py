@@ -2,12 +2,10 @@ import os
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-
 from definers import cwd
 
 
 def _resolve(p):
-    """Compute the path as full_path() would: resolve then normpath."""
     return os.path.normpath(str(Path(p).resolve()))
 
 
@@ -18,10 +16,8 @@ class TestCwd(unittest.TestCase):
         new_dir = "/new/test/dir"
         expected_new = _resolve(new_dir)
         expected_owd = _resolve("/original/path")
-
         with cwd(new_dir):
             mock_chdir.assert_called_once_with(expected_new)
-
         mock_chdir.assert_called_with(expected_owd)
         self.assertEqual(mock_chdir.call_count, 2)
 
@@ -35,10 +31,8 @@ class TestCwd(unittest.TestCase):
         mock_dirname.return_value = mock_script_dir
         expected_new = _resolve(os.path.join(mock_script_dir, "."))
         expected_owd = _resolve("/original/path")
-
         with cwd():
             mock_chdir.assert_called_once_with(expected_new)
-
         mock_chdir.assert_called_with(expected_owd)
         self.assertEqual(mock_chdir.call_count, 2)
 
@@ -48,7 +42,6 @@ class TestCwd(unittest.TestCase):
             os.path.join(original_dir, "temp_test_dir_for_cwd")
         )
         os.makedirs(temp_dir, exist_ok=True)
-
         try:
             with cwd(temp_dir):
                 self.assertEqual(os.getcwd(), temp_dir)

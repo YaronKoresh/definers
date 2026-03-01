@@ -2,10 +2,8 @@ import os
 import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
-
 import numpy as np
 import soundfile as sf
-
 from definers import predict_audio
 
 
@@ -16,17 +14,13 @@ class TestPredictAudio(unittest.TestCase):
         self.sr = 32000
         self.audio_data = np.random.randn(self.sr * 2)
         sf.write(self.audio_path, self.audio_data, self.sr)
-
         self.mock_model = MagicMock()
         self.mock_model.predict.return_value = np.random.rand(100)
-
         self.patcher_timeline = patch(
-            "definers.get_active_audio_timeline",
-            return_value=[(0.5, 1.5)],
+            "definers.get_active_audio_timeline", return_value=[(0.5, 1.5)]
         )
         self.patcher_features_to_audio = patch(
-            "definers.features_to_audio",
-            return_value=np.random.randn(self.sr),
+            "definers.features_to_audio", return_value=np.random.randn(self.sr)
         )
         self.patcher_tmp = patch(
             "definers.tmp",
@@ -36,10 +30,8 @@ class TestPredictAudio(unittest.TestCase):
             "definers.is_clusters_model", return_value=False
         )
         self.patcher_get_cluster = patch(
-            "definers.get_cluster_content",
-            return_value=np.random.rand(100),
+            "definers.get_cluster_content", return_value=np.random.rand(100)
         )
-
         self.mock_timeline = self.patcher_timeline.start()
         self.mock_features_to_audio = self.patcher_features_to_audio.start()
         self.mock_tmp = self.patcher_tmp.start()
@@ -60,7 +52,6 @@ class TestPredictAudio(unittest.TestCase):
     def test_successful_prediction_non_cluster_model(self):
         self.mock_is_clusters.return_value = False
         result_path = predict_audio(self.mock_model, self.audio_path)
-
         self.assertIsNotNone(result_path)
         self.assertTrue(os.path.exists(result_path))
         self.mock_timeline.assert_called_once_with(self.audio_path)
@@ -71,7 +62,6 @@ class TestPredictAudio(unittest.TestCase):
         self.mock_is_clusters.return_value = True
         self.mock_model.predict.return_value = np.array([0])
         result_path = predict_audio(self.mock_model, self.audio_path)
-
         self.assertIsNotNone(result_path)
         self.assertTrue(os.path.exists(result_path))
         self.mock_get_cluster.assert_called_with(self.mock_model, 0)
@@ -84,7 +74,6 @@ class TestPredictAudio(unittest.TestCase):
     def test_silent_audio_file(self):
         self.mock_timeline.return_value = []
         result_path = predict_audio(self.mock_model, self.audio_path)
-
         self.assertIsNotNone(result_path)
         self.assertTrue(os.path.exists(result_path))
         self.mock_model.predict.assert_not_called()
@@ -92,11 +81,9 @@ class TestPredictAudio(unittest.TestCase):
     def test_features_to_audio_fails(self):
         self.mock_features_to_audio.return_value = None
         result_path = predict_audio(self.mock_model, self.audio_path)
-
         self.assertIsNotNone(result_path)
         self.assertTrue(os.path.exists(result_path))
-
-        output_data, output_sr = sf.read(result_path)
+        (output_data, output_sr) = sf.read(result_path)
         self.assertTrue(np.all(output_data == 0))
 
     def test_model_prediction_raises_exception(self):

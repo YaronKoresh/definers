@@ -1,9 +1,7 @@
 import os
 import unittest
 from unittest.mock import MagicMock, call, mock_open, patch
-
 import numpy as np
-
 from definers import predict
 
 
@@ -40,7 +38,6 @@ class TestPredict(unittest.TestCase):
         mock_read,
         mock_joblib_load,
     ):
-
         mock_joblib_load.return_value = self.mock_model
         mock_read.return_value = "This is a test text."
         mock_vectorizer_instance = MagicMock()
@@ -49,14 +46,10 @@ class TestPredict(unittest.TestCase):
         mock_extract.return_value = mock_extracted_features
         mock_to_cupy.side_effect = lambda x: x
         mock_one_dim.return_value = mock_extracted_features.flatten()
-
         mock_prediction_result = np.array([0.4, 0.5, 0.6])
         self.mock_model.predict.return_value = mock_prediction_result
-
         mock_features_to_text.return_value = "predicted text"
-
         result_path = predict(self.prediction_file_txt, self.model_path)
-
         self.assertEqual(result_path, "random.txt")
         mock_joblib_load.assert_called_with(self.model_path)
         mock_read.assert_called_with(self.prediction_file_txt)
@@ -76,9 +69,7 @@ class TestPredict(unittest.TestCase):
     ):
         mock_joblib_load.return_value = self.mock_model
         mock_predict_audio.return_value = "predicted_audio.wav"
-
         result_path = predict(self.prediction_file_audio, self.model_path)
-
         self.assertEqual(result_path, "predicted_audio.wav")
         mock_joblib_load.assert_called_with(self.model_path)
         mock_predict_audio.assert_called_with(
@@ -113,24 +104,19 @@ class TestPredict(unittest.TestCase):
         mock_load_numpy.return_value = mock_input_data
         mock_to_cupy.side_effect = lambda x: x
         mock_one_dim.return_value = mock_input_data.flatten()
-
         mock_prediction_result = np.random.rand(100 * 100 * 3)
         self.mock_model.predict.return_value = mock_prediction_result
-
         mock_reconstructed_image = np.zeros((50, 50, 3), dtype=np.uint8)
         mock_features_to_image.return_value = mock_reconstructed_image
         mock_cupy_to_numpy.side_effect = lambda x: (
             x if isinstance(x, np.ndarray) else np.array(x)
         )
-
         result_path = predict(self.prediction_file_image, self.model_path)
-
         self.assertEqual(result_path, "random_img.png")
         mock_load_numpy.assert_called_with(self.prediction_file_image)
         self.mock_model.predict.assert_called_once()
         np.testing.assert_array_equal(
-            self.mock_model.predict.call_args[0][0],
-            mock_input_data.flatten(),
+            self.mock_model.predict.call_args[0][0], mock_input_data.flatten()
         )
         mock_features_to_image.assert_called_once()
         mock_imwrite.assert_called_once()
@@ -152,18 +138,13 @@ class TestPredict(unittest.TestCase):
     @patch("definers.numpy_to_cupy")
     @patch("definers.one_dim_numpy")
     def test_predict_prediction_fail(
-        self,
-        mock_one_dim,
-        mock_to_cupy,
-        mock_load_numpy,
-        mock_joblib_load,
+        self, mock_one_dim, mock_to_cupy, mock_load_numpy, mock_joblib_load
     ):
         mock_joblib_load.return_value = self.mock_model
         mock_load_numpy.return_value = np.array([1, 2, 3])
         mock_to_cupy.side_effect = lambda x: x
         mock_one_dim.return_value = np.array([1, 2, 3])
         self.mock_model.predict.return_value = None
-
         result = predict("some_file.data", self.model_path)
         self.assertIsNone(result)
 
@@ -192,14 +173,11 @@ class TestPredict(unittest.TestCase):
         mock_load_numpy.return_value = np.array([1, 2, 3])
         mock_to_cupy.side_effect = lambda x: x
         mock_one_dim.return_value = np.array([1, 2, 3])
-
         self.mock_model.predict.return_value = np.array([0])
         mock_cluster_content = np.array([0.7, 0.8, 0.9])
         mock_get_cluster.return_value = mock_cluster_content
         mock_features_to_text.return_value = "clustered text"
-
         predict("some_file.data", self.model_path)
-
         mock_get_cluster.assert_called_with(self.mock_model, 0)
         mock_features_to_text.assert_called_with(mock_cluster_content)
         mock_file_open().write.assert_called_with("clustered text")

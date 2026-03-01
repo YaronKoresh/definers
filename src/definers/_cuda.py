@@ -1,5 +1,3 @@
-"""CUDA and GPU utilities for the definers package."""
-
 import argparse
 import asyncio
 import base64
@@ -54,7 +52,6 @@ from string import ascii_letters, digits, punctuation
 from time import sleep, time
 from typing import Any, Optional, Union
 from urllib.parse import quote
-
 from definers._system import (
     catch,
     directory,
@@ -72,64 +69,36 @@ def cuda_toolkit():
 
     if get_os_name() != "linux":
         return None
-
     _d.directory("/usr/share/keyrings/")
     _d.directory("/etc/modprobe.d/")
     _d.permit("/tmp")
     _d.permit("/usr/bin")
     _d.permit("/usr/lib")
     _d.permit("/usr/local")
-
     _d.run("apt-get update")
     _d.run("apt-get install -y curl")
-
     _d.run(
-        """
-        export PATH=/sbin:$PATH
-        apt-get update
-        apt-get purge nvidia-*
-        echo "blacklist nouveau" > /etc/modprobe.d/blacklist-nouveau.conf
-        echo "options nouveau modeset=0" >> /etc/modprobe.d/blacklist-nouveau.conf
-        apt-get install -y --reinstall dkms
-        apt-get install -f
-        curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/cuda-keyring_1.1-1_all.deb > /usr/share/keyrings/cuda.deb
-        cd /usr/share/keyrings/
-        ar vx cuda.deb
-        tar xvf data.tar.xz
-        mv /usr/share/keyrings/usr/share/keyrings/cuda-archive-keyring.gpg /usr/share/keyrings/cuda-archive-keyring.gpg
-        rm -r /usr/share/keyrings/usr/
-        rm -r /usr/share/keyrings/etc/
-        echo "deb [signed-by=/usr/share/keyrings/cuda-archive-keyring.gpg] https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/ /" > /etc/apt/sources.list.d/CUDA.list
-    """
+        '\n        export PATH=/sbin:$PATH\n        apt-get update\n        apt-get purge nvidia-*\n        echo "blacklist nouveau" > /etc/modprobe.d/blacklist-nouveau.conf\n        echo "options nouveau modeset=0" >> /etc/modprobe.d/blacklist-nouveau.conf\n        apt-get install -y --reinstall dkms\n        apt-get install -f\n        curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/cuda-keyring_1.1-1_all.deb > /usr/share/keyrings/cuda.deb\n        cd /usr/share/keyrings/\n        ar vx cuda.deb\n        tar xvf data.tar.xz\n        mv /usr/share/keyrings/usr/share/keyrings/cuda-archive-keyring.gpg /usr/share/keyrings/cuda-archive-keyring.gpg\n        rm -r /usr/share/keyrings/usr/\n        rm -r /usr/share/keyrings/etc/\n        echo "deb [signed-by=/usr/share/keyrings/cuda-archive-keyring.gpg] https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/ /" > /etc/apt/sources.list.d/CUDA.list\n    '
     )
-
     _d.permit("/usr/share/keyrings/cuda-archive-keyring.gpg")
     _d.permit("/etc/apt/sources.list.d/CUDA.list")
-
     _d.run(
-        """
-        apt-get update
-        apt-get install -y cuda-toolkit
-    """
+        "\n        apt-get update\n        apt-get install -y cuda-toolkit\n    "
     )
 
 
 def cuda_version():
     try:
         result = subprocess.run(
-            ["nvcc", "--version"],
-            capture_output=True,
-            text=True,
-            check=True,
+            ["nvcc", "--version"], capture_output=True, text=True, check=True
         )
         output = result.stdout
-        match = re.search(r"Build cuda_([\d\.]+)", output)
+        match = re.search("Build cuda_([\\d\\.]+)", output)
         if match:
             cuda_version = match.group(1).strip(".")
             return cuda_version
         else:
             return False
-
     except Exception:
         return False
 
@@ -139,11 +108,7 @@ def set_cuda_env():
 
     if get_os_name() != "linux":
         return None
-
-    cu_path = _d.paths(
-        "/opt/cuda*/",
-        "/usr/local/cuda*/",
-    )
+    cu_path = _d.paths("/opt/cuda*/", "/usr/local/cuda*/")
     ld_path = _d.paths(
         "/opt/cuda*/lib",
         "/usr/local/cuda*/lib",
@@ -158,12 +123,7 @@ def set_cuda_env():
         os.environ["CUDA_PATH"] = cu
         os.environ["LD_LIBRARY_PATH"] = ld
         return
-
-    _d.log(
-        "Cuda not found",
-        "Failed setting CUDA environment",
-        status=False,
-    )
+    _d.log("Cuda not found", "Failed setting CUDA environment", status=False)
     return
 
 
@@ -178,7 +138,6 @@ def free():
     run("rm -rf /data-nvme/zerogpu-offload/*", silent=True)
     run("rm -rf /opt/ml/checkpoints/*", silent=True)
     run("pip cache purge", silent=True)
-
     mamba_path = os.path.expanduser("~/miniconda3/bin/mamba")
     if os.path.exists(mamba_path):
         run(f"{mamba_path} clean --all", silent=True)

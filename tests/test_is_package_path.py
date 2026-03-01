@@ -3,7 +3,6 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
-
 from definers import is_package_path
 
 

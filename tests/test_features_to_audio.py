@@ -1,8 +1,6 @@
 import unittest
 from unittest.mock import MagicMock, patch
-
 import numpy as np
-
 from definers import features_to_audio
 
 
@@ -29,7 +27,6 @@ class TestFeaturesToAudio(unittest.TestCase):
         unpadded_features = np.random.rand(20 * 100 + 5).astype(np.float32)
         with patch.dict("sys.modules", {"librosa": self.mock_librosa}):
             features_to_audio(unpadded_features, n_mfcc=20)
-
         self.mock_librosa.feature.inverse.mfcc_to_mel.assert_called()
 
     def test_uses_default_parameters(self):

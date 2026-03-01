@@ -1,6 +1,5 @@
 import base64
 import unittest
-
 from definers import linked_url
 
 
@@ -11,18 +10,14 @@ class TestLinkedUrl(unittest.TestCase):
         self.assertTrue(
             data_url.startswith("data:text/html;charset=utf-8;base64,")
         )
-
         encoded_html = data_url.split(",", 1)[1]
         decoded_html = base64.b64decode(encoded_html).decode("utf-8")
-
         self.assertIn(
-            '<base href="http://example.com" target="_top">',
-            decoded_html,
+            '<base href="http://example.com" target="_top">', decoded_html
         )
         self.assertIn('<a href=""></a>', decoded_html)
         self.assertIn(
-            "onload='document.querySelector(\"a\").click()'",
-            decoded_html,
+            "onload='document.querySelector(\"a\").click()'", decoded_html
         )
 
     def test_url_with_query_params(self):
@@ -31,17 +26,13 @@ class TestLinkedUrl(unittest.TestCase):
         self.assertTrue(
             data_url.startswith("data:text/html;charset=utf-8;base64,")
         )
-
         encoded_html = data_url.split(",", 1)[1]
         decoded_html = base64.b64decode(encoded_html).decode("utf-8")
-
         self.assertIn(
-            '<base href="https://example.com/path" target="_top">',
-            decoded_html,
+            '<base href="https://example.com/path" target="_top">', decoded_html
         )
         self.assertIn(
-            '<a href="?param1=value1&param2=value2"></a>',
-            decoded_html,
+            '<a href="?param1=value1&param2=value2"></a>', decoded_html
         )
 
     def test_url_without_protocol(self):

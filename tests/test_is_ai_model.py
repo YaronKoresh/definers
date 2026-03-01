@@ -1,5 +1,4 @@
 import unittest
-
 from definers import is_ai_model
 
 

@@ -11,58 +11,46 @@ import tempfile
 from datetime import datetime
 from glob import glob
 from pathlib import Path
-
 import joblib
 
 try:
     import imageio as iio
 except ImportError:
     iio = None
-
 try:
     import onnx
 except ImportError:
     onnx = None
-
 try:
     import pydub
 except ImportError:
     pydub = None
-
 try:
     import sox
 except ImportError:
     sox = None
-
 try:
     from huggingface_hub import hf_hub_download
 except ImportError:
     hf_hub_download = None
-
 try:
     from torch.utils.data import TensorDataset
 except ImportError:
     TensorDataset = None
-
 try:
     from sklearn.preprocessing import StandardScaler
 except ImportError:
     StandardScaler = None
-
 try:
     from sklearn.cluster import KMeans
 except ImportError:
     KMeans = None
-
 try:
     from transformers import AutoTokenizer
 except ImportError:
     AutoTokenizer = None
-
 collections.MutableSequence = collections.abc.MutableSequence
-
 import numpy as _np
-
 from definers._audio import (
     analyze_audio,
     analyze_audio_features,
@@ -220,9 +208,7 @@ from definers._image import (
     upscale,
     write_on_image,
 )
-from definers._logger import (
-    _init_logger,
-)
+from definers._logger import _init_logger
 from definers._ml import (
     HybridModel,
     LinearRegressionTorch,
@@ -369,48 +355,34 @@ try:
     import cupy as np
 except Exception:
     import numpy as np
-
 logger = _init_logger()
-
 importlib.util.find_spec = _find_spec
-
 if _find_spec("dask"):
     import dask
     import dask.array
     import dask.dataframe
     import dask.diagnostics
     from dask import base
-    from dask.graph_manipulation import (
-        bind,
-        checkpoint,
-        clone,
-        wait_on,
-    )
+    from dask.graph_manipulation import bind, checkpoint, clone, wait_on
     from dask.optimization import cull, fuse, inline, inline_functions
     from dask.utils import key_split
 
     dask.dataframe.core = dask.dataframe
     dask.diagnostics.core = dask.diagnostics
     dask.array.core = dask.array
-
     sys.modules["dask.dataframe.core"] = sys.modules["dask.dataframe"]
     sys.modules["dask.diagnostics.core"] = sys.modules["dask.diagnostics"]
     sys.modules["dask.array.core"] = sys.modules["dask.array"]
-
     dask.core = base
-
     dask.core.fuse = fuse
     dask.core.cull = cull
     dask.core.inline = inline
     dask.core.inline_functions = inline_functions
-
     dask.core.key_split = key_split
-
     dask.core.checkpoint = checkpoint
     dask.core.bind = bind
     dask.core.wait_on = wait_on
     dask.core.clone = clone
-
     dask.core.get = dask.get
 
     def _visualize_wrapper(dsk, **kwargs):
@@ -418,28 +390,20 @@ if _find_spec("dask"):
 
     dask.core.visualize = _visualize_wrapper
     dask.core.to_graphviz = _visualize_wrapper
-
 try:
     patch_torch_proxy_mode()
 except Exception:
     pass
-
-set_system_message(
-    name="Phi",
-    role="a helpful chat assistant",
-)
+set_system_message(name="Phi", role="a helpful chat assistant")
 
 
 def predict(prediction_file, model_path):
     model = joblib.load(model_path)
     if model is None:
         return None
-
     ext = os.path.splitext(prediction_file)[1].lstrip(".").lower()
-
     if ext in common_audio_formats:
         return predict_audio(model, prediction_file)
-
     if ext == "txt":
         data = read(prediction_file)
         vectorizer = create_vectorizer()
@@ -448,19 +412,14 @@ def predict(prediction_file, model_path):
         features = load_as_numpy(prediction_file)
         if features is None:
             return None
-
     gpu_features = numpy_to_cupy(features)
     flat = one_dim_numpy(gpu_features)
     prediction = model.predict(flat)
-
     if prediction is None:
         return None
-
     if is_clusters_model(model):
         prediction = get_cluster_content(model, int(prediction[0]))
-
     output_type = guess_numpy_type(prediction)
-
     if output_type == "text":
         text = features_to_text(prediction)
         path = random_string() + ".txt"
@@ -473,7 +432,6 @@ def predict(prediction_file, model_path):
         path = random_string() + ".png"
         iio.imwrite(path, img_np)
         return path
-
     return None
 
 

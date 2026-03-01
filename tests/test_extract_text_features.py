@@ -1,8 +1,6 @@
 import unittest
-
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
-
 from definers import extract_text_features
 
 
@@ -17,9 +15,8 @@ class TestExtractTextFeatures(unittest.TestCase):
 
     def test_successful_extraction_with_vectorizer(self):
         training_text = ["a b c"]
-        vectorizer = TfidfVectorizer(token_pattern=r"(?u)\b\w+\b")
+        vectorizer = TfidfVectorizer(token_pattern="(?u)\\b\\w+\\b")
         vectorizer.fit(training_text)
-
         text = "a test sentence"
         features = extract_text_features(text, vectorizer)
         self.assertIsNotNone(features)

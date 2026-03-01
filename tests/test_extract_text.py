@@ -1,8 +1,6 @@
 import unittest
 from unittest.mock import MagicMock, patch
-
 import playwright
-
 import definers
 from definers import extract_text
 
@@ -24,7 +22,6 @@ class TestExtractText(unittest.TestCase):
         mock_sync_playwright.return_value.__enter__.return_value = (
             mock_playwright_instance
         )
-
         result = extract_text("http://example.com", ".content")
         self.assertEqual(result, "Expected Text")
 
@@ -44,7 +41,6 @@ class TestExtractText(unittest.TestCase):
         mock_sync_playwright.return_value.__enter__.return_value = (
             mock_playwright_instance
         )
-
         result = extract_text("http://example.com", ".nonexistent")
         self.assertEqual(result, "")
 
@@ -62,9 +58,7 @@ class TestExtractText(unittest.TestCase):
         mock_sync_playwright.return_value.__enter__.return_value = (
             mock_playwright_instance
         )
-
         result = extract_text("http://example.com", ".content")
-
         self.assertEqual(result, "")
 
     @patch(

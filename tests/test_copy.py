@@ -2,7 +2,6 @@ import os
 import shutil
 import unittest
 from unittest.mock import patch
-
 from definers import copy
 
 
@@ -47,11 +46,8 @@ class TestCopy(unittest.TestCase):
         dst = "/test/dst_dir"
         resolved_path = "/test/resolved_dir"
         mock_resolve.return_value = resolved_path
-
         mock_isdir.side_effect = lambda path: path in [resolved_path]
-
         copy(src, dst)
-
         mock_copytree.assert_called_once_with(
             src, dst, symlinks=False, ignore_dangling_symlinks=True
         )
@@ -88,9 +84,7 @@ class TestCopy(unittest.TestCase):
         dst = "/test/dst_file.txt"
         resolved_path = "/test/resolved_file.txt"
         mock_resolve.return_value = resolved_path
-
         copy(src, dst)
-
         mock_copy.assert_called_once_with(src, dst)
         mock_copytree.assert_not_called()
         mock_isdir.assert_any_call(str(resolved_path))

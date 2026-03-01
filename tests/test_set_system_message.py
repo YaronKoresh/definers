@@ -1,6 +1,5 @@
 import unittest
 from unittest.mock import patch
-
 import definers
 
 
@@ -33,8 +32,7 @@ class TestSetSystemMessage(unittest.TestCase):
             "In terms of verbosity, concise.", definers.SYSTEM_MESSAGE
         )
         self.assertIn(
-            "When interacting, ask questions.",
-            definers.SYSTEM_MESSAGE,
+            "When interacting, ask questions.", definers.SYSTEM_MESSAGE
         )
 
     def test_with_persona_data(self):
@@ -55,12 +53,10 @@ class TestSetSystemMessage(unittest.TestCase):
             task_rules=rules, output_format=output_format
         )
         self.assertIn(
-            "You must strictly follow these rules:",
-            definers.SYSTEM_MESSAGE,
+            "You must strictly follow these rules:", definers.SYSTEM_MESSAGE
         )
         self.assertIn(
-            "1. Do not mention you are an AI.",
-            definers.SYSTEM_MESSAGE,
+            "1. Do not mention you are an AI.", definers.SYSTEM_MESSAGE
         )
         self.assertIn(
             "2. Your final output must be exclusively in the following format: JSON.",
@@ -89,19 +85,16 @@ class TestSetSystemMessage(unittest.TestCase):
         self.assertIn("You are a friendly guide.", definers.SYSTEM_MESSAGE)
         self.assertIn("Your name is ChatBot.", definers.SYSTEM_MESSAGE)
         self.assertIn(
-            "Your tone should be encouraging.",
-            definers.SYSTEM_MESSAGE,
+            "Your tone should be encouraging.", definers.SYSTEM_MESSAGE
         )
         self.assertIn("guide the user.", definers.SYSTEM_MESSAGE)
         self.assertIn(
-            "In terms of verbosity, detailed.",
-            definers.SYSTEM_MESSAGE,
+            "In terms of verbosity, detailed.", definers.SYSTEM_MESSAGE
         )
         self.assertIn("language is Python", definers.SYSTEM_MESSAGE)
         self.assertIn("1. Always be positive", definers.SYSTEM_MESSAGE)
         self.assertIn(
-            "When interacting, offer examples.",
-            definers.SYSTEM_MESSAGE,
+            "When interacting, offer examples.", definers.SYSTEM_MESSAGE
         )
         self.assertIn("format: Markdown", definers.SYSTEM_MESSAGE)
 

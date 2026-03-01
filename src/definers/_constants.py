@@ -1,12 +1,8 @@
-"""Constants and configuration data for the definers package."""
-
 import collections
 import collections.abc
 
 collections.MutableSequence = collections.abc.MutableSequence
-
 SYSTEM_MESSAGE = None
-
 beam_kwargs = {
     "do_sample": False,
     "top_k": 2,
@@ -15,9 +11,7 @@ beam_kwargs = {
     "num_beams": 4,
     "early_stopping": True,
 }
-
 higher_beams = 64
-
 ai_model_extensions = [
     "safetensors",
     "onnx",
@@ -30,7 +24,6 @@ ai_model_extensions = [
     "gguf",
     "ckpt",
 ]
-
 unesco_mapping = {
     "ar": [
         "acm_Arab",
@@ -168,7 +161,6 @@ unesco_mapping = {
     "ms": "zsm_Latn",
     "zu": "zul_Latn",
 }
-
 language_codes = {
     "af": "afrikaans",
     "sq": "albanian",
@@ -305,9 +297,7 @@ language_codes = {
     "yo": "yoruba",
     "zu": "zulu",
 }
-
 FFMPEG_URL = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
-
 tasks = {
     "general-tokenizer": "distilbert-base-uncased",
     "video": "hunyuanvideo-community/HunyuanVideo-I2V",
@@ -322,7 +312,6 @@ tasks = {
     "speech-recognition": "openai/whisper-large-v3",
     "audio-classification": "MIT/ast-finetuned-audioset-10-10-0.4593",
 }
-
 MODELS = {
     "video": None,
     "image": None,
@@ -338,22 +327,9 @@ MODELS = {
     "tts": None,
     "stable-whisper": None,
 }
-
-TOKENIZERS = {
-    "summary": None,
-    "translate": None,
-    "general-tokenizer": None,
-}
-
-PROCESSORS = {
-    "answer": None,
-    "music": None,
-}
-
-CONFIGS = {
-    "answer": None,
-}
-
+TOKENIZERS = {"summary": None, "translate": None, "general-tokenizer": None}
+PROCESSORS = {"answer": None, "music": None}
+CONFIGS = {"answer": None}
 user_agents = {
     "chrome": [
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
@@ -396,14 +372,12 @@ user_agents = {
         "Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148b Safari/604.1",
     ],
 }
-
 try:
     import madmom
 
     MADMOM_AVAILABLE = True
 except ImportError:
     MADMOM_AVAILABLE = False
-
 STYLES_DB = {
     "Psychedelic Geometry": {
         "tags": ["Abstract", "Trippy", "Geometry"],
@@ -434,9 +408,7 @@ STYLES_DB = {
         "desc": "Fluid motion reacting to low frequencies",
     },
 }
-
 iio_formats = ["png", "jpg", "jpeg", "gif", "bmp", "tiff", "tif"]
-
 common_audio_formats = [
     "wav",
     "mp3",
@@ -448,6 +420,5 @@ common_audio_formats = [
     "m4a",
     "wma",
 ]
-
 _negative_prompt_ = "glamour, makeup, airbrushed, smooth, retouching, polished, perfect, oversaturated, CGI, 3d, vfx, SFX, rendered, painted, unreal, octane, cinematic, bokeh, blurry, cropped, mutated, duplicated"
 _positive_prompt_ = "journalism, realism, national geographic, minimalism, rough, grainy, messy, natural, correct structure, correct anatomy"

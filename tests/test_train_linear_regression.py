@@ -1,9 +1,7 @@
 import unittest
 from unittest.mock import MagicMock, patch
-
 import numpy as np
 import torch
-
 from definers import (
     LinearRegressionTorch,
     initialize_linear_regression,
@@ -43,17 +41,14 @@ class TestTrainLinearRegression(unittest.TestCase):
     ):
         mock_optimizer_instance = MagicMock()
         mock_sgd.return_value = mock_optimizer_instance
-
         mock_loss_instance = MagicMock()
         mock_loss_instance.return_value = torch.tensor(0.5, requires_grad=True)
         mock_mse_loss.return_value = mock_loss_instance
-
         with patch(
             "definers.initialize_linear_regression",
             return_value=LinearRegressionTorch(self.input_dim),
         ):
             train_linear_regression(self.X, self.y, self.model_path)
-
             mock_optimizer_instance.zero_grad.assert_called_once()
             mock_loss_instance.return_value.backward.assert_called_once()
             mock_optimizer_instance.step.assert_called_once()

@@ -1,7 +1,5 @@
 import unittest
-
 from sklearn.feature_extraction.text import TfidfVectorizer
-
 from definers import create_vectorizer
 
 

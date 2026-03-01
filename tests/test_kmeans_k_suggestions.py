@@ -1,8 +1,6 @@
 import unittest
 from unittest.mock import MagicMock, mock_open, patch
-
 import numpy as np
-
 from definers import kmeans_k_suggestions
 
 
@@ -29,13 +27,11 @@ class TestKmeansKSuggestions(unittest.TestCase):
         mock_silhouette_score.return_value = 0.8
         mock_db_score.return_value = 0.5
         mock_ch_score.return_value = 500
-
         with patch("builtins.print") as mock_print:
             results = kmeans_k_suggestions(self.X_np, k_range=range(2, 5))
             mock_print.assert_called_with(
                 "Warning: CuPy (cuML) is unavailable, falling back to CPU with scikit-learn KMeans."
             )
-
         self.assertIn("wcss", results)
         self.assertIn("silhouette_scores", results)
         self.assertIn("davies_bouldin_indices", results)
@@ -51,7 +47,6 @@ class TestKmeansKSuggestions(unittest.TestCase):
         mock_kmeans_instance = MagicMock()
         mock_kmeans_instance.inertia_ = 100
         mock_kmeans_class.return_value = mock_kmeans_instance
-
         with (
             patch("definers.silhouette_score", return_value=0.8),
             patch("definers.davies_bouldin_score", return_value=0.5),
@@ -72,7 +67,6 @@ class TestKmeansKSuggestions(unittest.TestCase):
                     )
             except ImportError:
                 self.skipTest("CuPy or cuML not available for GPU test.")
-
         self.assertIn("wcss", results)
 
     def test_small_k_range(self):
@@ -83,25 +77,16 @@ class TestKmeansKSuggestions(unittest.TestCase):
     def test_logic_for_suggestions(self):
         with (
             patch("definers.KMeans") as mock_kmeans_class,
+            patch("definers.silhouette_score", side_effect=[0.5, 0.8, 0.6]),
+            patch("definers.davies_bouldin_score", side_effect=[0.9, 0.5, 0.7]),
             patch(
-                "definers.silhouette_score",
-                side_effect=[0.5, 0.8, 0.6],
-            ),
-            patch(
-                "definers.davies_bouldin_score",
-                side_effect=[0.9, 0.5, 0.7],
-            ),
-            patch(
-                "definers.calinski_harabasz_score",
-                side_effect=[200, 300, 250],
+                "definers.calinski_harabasz_score", side_effect=[200, 300, 250]
             ),
         ):
             mock_kmeans_instance = MagicMock()
             mock_kmeans_instance.inertia_ = 100
             mock_kmeans_class.return_value = mock_kmeans_instance
-
             results = kmeans_k_suggestions(self.X_np, k_range=range(2, 5))
-
             self.assertEqual(results["suggested_k_silhouette"], 3)
             self.assertEqual(results["suggested_k_davies_bouldin"], 3)
             self.assertEqual(results["suggested_k_calinski_harabasz"], 3)

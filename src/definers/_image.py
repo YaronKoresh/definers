@@ -1,5 +1,3 @@
-"""Image processing utilities for the definers package."""
-
 import argparse
 import asyncio
 import base64
@@ -54,16 +52,8 @@ from string import ascii_letters, digits, punctuation
 from time import sleep, time
 from typing import Any, Optional, Union
 from urllib.parse import quote
-
 from definers._constants import MODELS, _negative_prompt_, _positive_prompt_
-from definers._system import (
-    exist,
-    full_path,
-    load,
-    read,
-    save,
-    tmp,
-)
+from definers._system import exist, full_path, load, read, save, tmp
 
 
 def extract_image_features(image_path):
@@ -74,16 +64,13 @@ def extract_image_features(image_path):
         img = cv2.imread(image_path)
         if img is None:
             raise ValueError("Image could not be read.")
-
         img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
         hist_b = cv2.calcHist([img], [0], None, [256], [0, 256]).flatten()
         hist_g = cv2.calcHist([img], [1], None, [256], [0, 256]).flatten()
         hist_r = cv2.calcHist([img], [2], None, [256], [0, 256]).flatten()
         color_hist = _np.concatenate((hist_b, hist_g, hist_r)).astype(
             _np.float32
         )
-
         radius = 1
         n_points = 8 * radius
         lbp = (
@@ -93,13 +80,9 @@ def extract_image_features(image_path):
             .flatten()
             .astype(_np.float32)
         )
-
         edges = cv2.Canny(img_gray, 100, 200).flatten().astype(_np.float32)
-
         all_features = _np.concatenate((color_hist, lbp, edges))
-
         return all_features
-
     except Exception as e:
         print(f"Error extracting image features: {e}")
         return None
@@ -109,11 +92,10 @@ def features_to_image(predicted_features, image_shape=(1024, 1024, 3)):
     import cv2
 
     try:
-        height, width, channels = image_shape
+        (height, width, channels) = image_shape
         hist_size = 256 * 3
         lbp_size = height * width
         height * width
-
         color_hist = predicted_features[:hist_size].reshape(3, 256)
         lbp_features = predicted_features[
             hist_size : hist_size + lbp_size
@@ -121,9 +103,7 @@ def features_to_image(predicted_features, image_shape=(1024, 1024, 3)):
         edge_features = predicted_features[hist_size + lbp_size :].reshape(
             height, width
         )
-
         reconstructed_image = np.zeros(image_shape, dtype=np.uint8)
-
         for c in range(channels):
             for i in range(256):
                 if c == 0:
@@ -138,14 +118,12 @@ def features_to_image(predicted_features, image_shape=(1024, 1024, 3)):
                     reconstructed_image[:, :, 2] += np.uint8(
                         color_hist[2][i] / np.max(color_hist[2]) * 255
                     )
-
         lbp_scaled = cv2.normalize(
             lbp_features, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U
         )
         edge_scaled = cv2.normalize(
             edge_features, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U
         )
-
         reconstructed_image_gray = cv2.addWeighted(
             lbp_scaled, 0.5, edge_scaled, 0.5, 0
         )
@@ -158,9 +136,7 @@ def features_to_image(predicted_features, image_shape=(1024, 1024, 3)):
         reconstructed_image = cv2.cvtColor(
             reconstructed_image, cv2.COLOR_GRAY2BGR
         )
-
         return reconstructed_image
-
     except Exception as e:
         print(f"Error generating image from features: {e}")
         return None
@@ -170,63 +146,44 @@ def write_on_image(
     image_path, top_title=None, middle_title=None, bottom_title=None
 ):
     from PIL import Image, ImageDraw, ImageFont
-
     import definers as _d
 
     if not exist("./Alef-Bold.ttf"):
         _d.google_drive_download(
             "1C48KkYWQDYu7ypbNtSXAUJ6kuzoZ42sI", "./Alef-Bold.ttf"
         )
-
     img = Image.open(image_path)
-
-    w, h = img.size
-
+    (w, h) = img.size
     draw = ImageDraw.Draw(img)
 
     def draw_text_block(text_block, vertical_position):
         if not text_block:
             return
-
         lines = text_block.strip().split("\n")
         num_lines = len(lines)
-
         font_size = min(math.ceil(w / 12), math.ceil(h / (num_lines * 4)))
         font = ImageFont.truetype("Alef-Bold.ttf", font_size)
-
         line_heights = [
             draw.textbbox((0, 0), line, font=font)[3] for line in lines
         ]
         total_text_height = sum(line_heights) + (num_lines - 1) * 4
-
         if vertical_position == "top":
             y = h * 0.15 - total_text_height / 2
         elif vertical_position == "middle":
             y = h / 2 - total_text_height / 2
         else:
             y = h * 0.85 - total_text_height / 2
-
         for i, line in enumerate(lines):
             bbox = draw.textbbox((0, 0), line, font=font)
             line_width = bbox[2] - bbox[0]
             x = (w - line_width) / 2
-
             stroke_width = math.ceil(font_size / 20)
-
             if vertical_position == "top":
-                fill_color, stroke_color = (255, 255, 255), (0, 0, 0)
+                (fill_color, stroke_color) = ((255, 255, 255), (0, 0, 0))
             elif vertical_position == "middle":
-                fill_color, stroke_color = (
-                    (255, 255, 255),
-                    (
-                        64,
-                        64,
-                        64,
-                    ),
-                )
+                (fill_color, stroke_color) = ((255, 255, 255), (64, 64, 64))
             else:
-                fill_color, stroke_color = (0, 0, 0), (255, 255, 255)
-
+                (fill_color, stroke_color) = ((0, 0, 0), (255, 255, 255))
             draw.text(
                 (x, y),
                 line,
@@ -241,7 +198,6 @@ def write_on_image(
     draw_text_block(top_title, "top")
     draw_text_block(middle_title, "middle")
     draw_text_block(bottom_title, "bottom")
-
     return save_image(img)
 
 
@@ -260,12 +216,10 @@ def init_upscale():
         import cupy.typing as npt
     except Exception:
         import numpy.typing as npt
-
     Tile = tuple[int, int, Image.Image]
     Tiles = list[tuple[int, int, list[Tile]]]
 
     def conv_block(in_nc: int, out_nc: int) -> nn.Sequential:
-
         return nn.Sequential(
             nn.Conv2d(in_nc, out_nc, kernel_size=3, padding=1),
             nn.LeakyReLU(negative_slope=0.2, inplace=True),
@@ -273,9 +227,7 @@ def init_upscale():
 
     class ResidualDenseBlock_5C(nn.Module):
         def __init__(self, nf: int = 64, gc: int = 32) -> None:
-
             super().__init__()
-
             self.conv1 = conv_block(nf, gc)
             self.conv2 = conv_block(nf + gc, gc)
             self.conv3 = conv_block(nf + 2 * gc, gc)
@@ -306,8 +258,6 @@ def init_upscale():
             return out * 0.2 + x
 
     class Upsample2x(nn.Module):
-        """Upsample 2x."""
-
         def __init__(self) -> None:
             super().__init__()
 
@@ -315,8 +265,6 @@ def init_upscale():
             return nn.functional.interpolate(x, scale_factor=2.0)
 
     class ShortcutBlock(nn.Module):
-        """Elementwise sum the output of a submodule to its input"""
-
         def __init__(self, submodule: nn.Module) -> None:
             super().__init__()
             self.sub = submodule
@@ -328,7 +276,6 @@ def init_upscale():
         def __init__(self, in_nc: int, out_nc: int, nf: int, nb: int) -> None:
             super().__init__()
             assert in_nc % 4 != 0
-
             self.model = nn.Sequential(
                 nn.Conv2d(in_nc, nf, kernel_size=3, padding=1),
                 ShortcutBlock(
@@ -354,13 +301,11 @@ def init_upscale():
     def infer_params(
         state_dict: dict[str, torch.Tensor],
     ) -> tuple[int, int, int, int, int]:
-
         scale2x = 0
         scalemin = 6
         n_uplayer = 0
         out_nc = 0
         nb = 0
-
         for block in list(state_dict):
             parts = block.split(".")
             n_parts = len(parts)
@@ -371,33 +316,22 @@ def init_upscale():
                 if (
                     part_num > scalemin
                     and parts[0] == "model"
-                    and parts[2] == "weight"
+                    and (parts[2] == "weight")
                 ):
                     scale2x += 1
                 if part_num > n_uplayer:
                     n_uplayer = part_num
                     out_nc = state_dict[block].shape[0]
             assert "conv1x1" not in block
-
         nf = state_dict["model.0.weight"].shape[0]
         in_nc = state_dict["model.0.weight"].shape[1]
         scale = 2**scale2x
-
         assert out_nc > 0
         assert nb > 0
-
-        return in_nc, out_nc, nf, nb, scale
+        return (in_nc, out_nc, nf, nb, scale)
 
     Grid = namedtuple(
-        "Grid",
-        [
-            "tiles",
-            "tile_w",
-            "tile_h",
-            "image_w",
-            "image_h",
-            "overlap",
-        ],
+        "Grid", ["tiles", "tile_w", "tile_h", "image_w", "image_h", "overlap"]
     )
 
     def split_grid(
@@ -408,16 +342,12 @@ def init_upscale():
     ) -> Grid:
         w = image.width
         h = image.height
-
         non_overlap_width = tile_w - overlap
         non_overlap_height = tile_h - overlap
-
         cols = max(1, math.ceil((w - overlap) / non_overlap_width))
         rows = max(1, math.ceil((h - overlap) / non_overlap_height))
-
         dx = (w - tile_w) / (cols - 1) if cols > 1 else 0
         dy = (h - tile_h) / (rows - 1) if rows > 1 else 0
-
         grid = Grid([], tile_w, tile_h, w, h, overlap)
         for row in range(rows):
             row_images: list[Tile] = []
@@ -429,13 +359,11 @@ def init_upscale():
                 tile = image.crop((x1, y1, x2, y2))
                 row_images.append((x1, tile_w, tile))
             grid.tiles.append((y1, tile_h, row_images))
-
         return grid
 
     def combine_grid(grid: Grid):
-        def make_mask_image(
-            r: npt.NDArray[np.float32],
-        ) -> Image.Image:
+
+        def make_mask_image(r: npt.NDArray[np.float32]) -> Image.Image:
             r = r * 255 / grid.overlap
             return Image.fromarray(r.astype(np.uint8), "L")
 
@@ -449,7 +377,6 @@ def init_upscale():
             .reshape((grid.overlap, 1))
             .repeat(grid.image_w, axis=1)
         )
-
         combined_image = Image.new("RGB", (grid.image_w, grid.image_h))
         for y, h, row in grid.tiles:
             combined_row = Image.new("RGB", (grid.image_w, h))
@@ -457,21 +384,15 @@ def init_upscale():
                 if x == 0:
                     combined_row.paste(tile, (0, 0))
                     continue
-
                 combined_row.paste(
-                    tile.crop((0, 0, grid.overlap, h)),
-                    (x, 0),
-                    mask=mask_w,
+                    tile.crop((0, 0, grid.overlap, h)), (x, 0), mask=mask_w
                 )
                 combined_row.paste(
-                    tile.crop((grid.overlap, 0, w, h)),
-                    (x + grid.overlap, 0),
+                    tile.crop((grid.overlap, 0, w, h)), (x + grid.overlap, 0)
                 )
-
             if y == 0:
                 combined_image.paste(combined_row, (0, 0))
                 continue
-
             combined_image.paste(
                 combined_row.crop((0, 0, combined_row.width, grid.overlap)),
                 (0, y),
@@ -481,15 +402,11 @@ def init_upscale():
                 combined_row.crop((0, grid.overlap, combined_row.width, h)),
                 (0, y + grid.overlap),
             )
-
         return combined_image
 
     class UpscalerESRGAN:
         def __init__(
-            self,
-            model_path: Path,
-            device: torch.device,
-            dtype: torch.dtype,
+            self, model_path: Path, device: torch.device, dtype: torch.dtype
         ):
             self.model_path = model_path
             self.device = device
@@ -509,12 +426,11 @@ def init_upscale():
             state_dict: dict[str, torch.Tensor] = torch.load(
                 filename, weights_only=True, map_location=self.device
             )
-            in_nc, out_nc, nf, nb, upscale = infer_params(state_dict)
+            (in_nc, out_nc, nf, nb, upscale) = infer_params(state_dict)
             assert upscale == 4, "Only 4x upscaling is supported"
             model = RRDBNet(in_nc=in_nc, out_nc=out_nc, nf=nf, nb=nb)
             model.load_state_dict(state_dict)
             model.eval()
-
             return model
 
         def upscale_without_tiling(self, img: Image.Image) -> Image.Image:
@@ -536,16 +452,14 @@ def init_upscale():
             grid = split_grid(img)
             newtiles: Tiles = []
             scale_factor: int = 1
-
             for y, h, row in grid.tiles:
                 newrow: list[Tile] = []
                 for tiledata in row:
-                    x, w, tile = tiledata
+                    (x, w, tile) = tiledata
                     output = self.upscale_without_tiling(tile)
                     scale_factor = output.width // tile.width
                     newrow.append((x * scale_factor, w * scale_factor, output))
                 newtiles.append((y * scale_factor, h * scale_factor, newrow))
-
             newgrid = Grid(
                 newtiles,
                 grid.tile_w * scale_factor,
@@ -572,9 +486,7 @@ def init_upscale():
                 checkpoints=checkpoints, device=device, dtype=dtype
             )
             self.esrgan = UpscalerESRGAN(
-                checkpoints.esrgan,
-                device=self.device,
-                dtype=self.dtype,
+                checkpoints.esrgan, device=self.device, dtype=self.dtype
             )
 
         def to(self, device: torch.device, dtype: torch.dtype):
@@ -594,7 +506,6 @@ def init_upscale():
     pillow_heif.register_heif_opener()
 
     def _rescale_checkpoints():
-
         from huggingface_hub import hf_hub_download
 
         CHECKPOINTS = ESRGANUpscalerCheckpoints(
@@ -658,16 +569,12 @@ def init_upscale():
                 ),
             },
         )
-
         return CHECKPOINTS
 
     upscaler = ESRGANUpscaler(
-        checkpoints=_rescale_checkpoints(),
-        device=device(),
-        dtype=dtype(),
+        checkpoints=_rescale_checkpoints(), device=device(), dtype=dtype()
     )
     upscaler.to(device=device(), dtype=dtype())
-
     MODELS["upscale"] = upscaler
 
 
@@ -688,23 +595,15 @@ def upscale(
 ):
     from PIL import Image
     from refiners.fluxion.utils import manual_seed
-    from refiners.foundationals.latent_diffusion import (
-        Solver,
-        solvers,
-    )
+    from refiners.foundationals.latent_diffusion import Solver, solvers
 
     if upscale_factor < 2 or upscale_factor > 4:
         return
-
     if not seed:
         seed = random.randint(0, 2**32 - 1)
-
     manual_seed(seed)
-
     solver_type: type[Solver] = getattr(solvers, solver)
-
     input_image = Image.open(path)
-
     upscaled_image = MODELS["upscale"].upscale(
         image=input_image,
         prompt=prompt,
@@ -719,21 +618,20 @@ def upscale(
         loras_scale={"more_details": 0.0, "sdxl_render": 0.0},
         solver_type=solver_type,
     )
-
     return save_image(upscaled_image)
 
 
 def get_max_resolution(width, height, mega_pixels=0.25, factor=16):
     max_pixels = mega_pixels * 1000 * 1000
     ratio = width / height
-    best_w, best_h = 0, 0
+    (best_w, best_h) = (0, 0)
     max_found_pixels = 0
     h_estimate = int((max_pixels / ratio) ** 0.5)
     search_range = range(
         max(factor, h_estimate - factor * 4), h_estimate + factor * 4
     )
     for h_test in search_range:
-        h_rounded = (h_test // factor) * factor
+        h_rounded = h_test // factor * factor
         if h_rounded == 0:
             continue
         w_rounded = round(h_rounded * ratio / factor) * factor
@@ -742,13 +640,13 @@ def get_max_resolution(width, height, mega_pixels=0.25, factor=16):
         current_pixels = w_rounded * h_rounded
         if current_pixels <= max_pixels and current_pixels > max_found_pixels:
             max_found_pixels = current_pixels
-            best_w, best_h = w_rounded, h_rounded
+            (best_w, best_h) = (w_rounded, h_rounded)
     if best_w > 0 and best_h > 0:
-        return best_w, best_h
+        return (best_w, best_h)
     h = int((max_pixels / ratio) ** 0.5)
-    new_h = (h // factor) * factor
-    new_w = (int(new_h * ratio) // factor) * factor
-    return new_w, new_h
+    new_h = h // factor * factor
+    new_w = int(new_h * ratio) // factor * factor
+    return (new_w, new_h)
 
 
 def save_image(img, path="."):
@@ -765,28 +663,23 @@ def resize_image(image_path, target_width, target_height, anti_aliasing=True):
     from skimage.transform import resize
 
     image_data = iio.imread(image_path)
-
     try:
         if image_data.ndim < 2:
             raise ValueError(
                 "Input image must have at least 2 dimensions (height, width)."
             )
-
         resized_image = resize(
             image_data,
             (target_height, target_width),
             anti_aliasing=anti_aliasing,
         )
-
         img = (resized_image * 255).astype(np.uint8)
         img = Image.fromarray(img)
         pth = save_image(img, tmp("png", keep=False))
-        return pth, img
-
+        return (pth, img)
     except ValueError as ve:
         print(f"ValueError: {ve}")
         return None
-
     except Exception as e:
         print(f"An error occurred during resizing: {e}")
         return None

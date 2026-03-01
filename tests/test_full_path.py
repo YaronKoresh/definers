@@ -1,6 +1,5 @@
 import os
 import unittest
-
 from definers import full_path
 
 

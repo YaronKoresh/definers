@@ -1,17 +1,31 @@
-"""Logger initialization for the definers package."""
-
 import logging
 import warnings
+from typing import ClassVar, Final
+from definers._core import enforce_error_boundary
 
 
-def _init_logger():
-    logger = logging.getLogger(__name__)
-    logger.setLevel(logging.DEBUG)
-    console_handler = logging.StreamHandler()
-    formatter = logging.Formatter(
+class UnifiedLoggingSystem:
+    DIAGNOSTIC_LEVEL: ClassVar[int] = logging.DEBUG
+    MESSAGE_SCHEMA: Final[str] = (
         "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
-    console_handler.setFormatter(formatter)
-    if not logger.handlers:
-        logger.addHandler(console_handler)
-    return logger
+
+    @staticmethod
+    @enforce_error_boundary
+    def construct_default_diagnostic_pipeline(
+        context_scope_identifier: str,
+    ) -> logging.Logger:
+        diagnostic_stream = logging.getLogger(context_scope_identifier)
+        diagnostic_stream.setLevel(UnifiedLoggingSystem.DIAGNOSTIC_LEVEL)
+        if not diagnostic_stream.handlers:
+            terminal_output_bridge = logging.StreamHandler()
+            structured_message_schema = logging.Formatter(
+                UnifiedLoggingSystem.MESSAGE_SCHEMA
+            )
+            terminal_output_bridge.setFormatter(structured_message_schema)
+            diagnostic_stream.addHandler(terminal_output_bridge)
+        return diagnostic_stream
+
+
+def _init_logger() -> logging.Logger:
+    return UnifiedLoggingSystem.construct_default_diagnostic_pipeline(__name__)

@@ -1,7 +1,6 @@
 import os
 import unittest
 from unittest.mock import patch
-
 from definers import exist
 
 
@@ -35,7 +34,6 @@ class TestExist(unittest.TestCase):
         mock_expanduser.return_value = "/home/user/some_file"
         mock_abspath.return_value = "/home/user/some_file"
         mock_exists.return_value = True
-
         self.assertTrue(exist("~/some_file"))
         mock_expanduser.assert_called_once_with("~/some_file")
         mock_abspath.assert_called_once_with("/home/user/some_file")

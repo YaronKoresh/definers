@@ -1,6 +1,5 @@
 import unittest
 from unittest.mock import MagicMock, patch
-
 from definers import device
 
 
@@ -10,9 +9,7 @@ class TestDevice(unittest.TestCase):
         mock_instance = MagicMock()
         mock_instance.device = "cuda"
         mock_accelerator.return_value = mock_instance
-
         result = device()
-
         self.assertEqual(result, "cuda")
         mock_accelerator.assert_called_once()
 
@@ -21,9 +18,7 @@ class TestDevice(unittest.TestCase):
         mock_instance = MagicMock()
         mock_instance.device = "cpu"
         mock_accelerator.return_value = mock_instance
-
         result = device()
-
         self.assertEqual(result, "cpu")
         mock_accelerator.assert_called_once()
 

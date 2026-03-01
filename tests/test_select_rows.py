@@ -1,17 +1,12 @@
 import unittest
 from unittest.mock import MagicMock
-
 from datasets import Dataset
-
 from definers import select_rows
 
 
 class TestSelectRows(unittest.TestCase):
     def setUp(self):
-        self.data = {
-            "col1": [1, 2, 3, 4, 5],
-            "col2": ["A", "B", "C", "D", "E"],
-        }
+        self.data = {"col1": [1, 2, 3, 4, 5], "col2": ["A", "B", "C", "D", "E"]}
         self.dataset = Dataset.from_dict(self.data)
 
     def test_selects_a_slice_of_rows(self):

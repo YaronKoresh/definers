@@ -1,12 +1,9 @@
 import unittest
-
 import numpy as np
-
 import definers._data as _data
 
 _data.np = np
 _data._np = np
-
 from definers import guess_numpy_type
 
 

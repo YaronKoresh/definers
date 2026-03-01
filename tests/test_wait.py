@@ -3,7 +3,6 @@ import time
 import unittest
 from queue import Queue
 from unittest.mock import Mock
-
 from definers import thread, wait
 
 
@@ -17,9 +16,7 @@ class TestWait(unittest.TestCase):
         mock_thread1 = Mock(spec=threading.Thread)
         mock_thread2 = Mock(spec=threading.Thread)
         mock_thread3 = Mock(spec=threading.Thread)
-
         wait(mock_thread1, mock_thread2, mock_thread3)
-
         mock_thread1.join.assert_called_once()
         mock_thread2.join.assert_called_once()
         mock_thread3.join.assert_called_once()
@@ -38,12 +35,9 @@ class TestWait(unittest.TestCase):
 
         t1 = thread(func1)
         t2 = thread(func2)
-
         self.assertTrue(t1.is_alive())
         self.assertTrue(t2.is_alive())
-
         wait(t1, t2)
-
         self.assertFalse(t1.is_alive())
         self.assertFalse(t2.is_alive())
         self.assertEqual(q1.get_nowait(), "done")

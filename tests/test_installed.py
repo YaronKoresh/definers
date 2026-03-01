@@ -1,7 +1,6 @@
 import subprocess
 import unittest
 from unittest.mock import MagicMock, patch
-
 from definers import installed
 
 
@@ -21,7 +20,6 @@ class TestInstalled(unittest.TestCase):
     @patch("definers.shutil.which")
     def test_installed_linux_command_not_exists(self, mock_which, mock_os):
         mock_which.return_value = None
-
         with patch("definers.run") as mock_run:
             mock_run.return_value = ["packageA 1.0", "packageB 2.0"]
             self.assertFalse(installed("nonexistent"))
@@ -75,10 +73,7 @@ class TestInstalled(unittest.TestCase):
     @patch("definers.get_os_name", return_value="windows")
     @patch("definers.run")
     def test_installed_windows_program_not_found(self, mock_run, mock_os):
-        mock_run.side_effect = [
-            ["Some Other Program 1.0"],
-            ["pip-package 1.0"],
-        ]
+        mock_run.side_effect = [["Some Other Program 1.0"], ["pip-package 1.0"]]
         self.assertFalse(installed("nonexistent"))
         self.assertEqual(mock_run.call_count, 2)
 
@@ -100,10 +95,7 @@ class TestInstalled(unittest.TestCase):
         mock_run.return_value = ["requests          2.28.1"]
         self.assertFalse(installed("requests", "2.29.0"))
 
-    @patch(
-        "definers.run",
-        side_effect=subprocess.CalledProcessError(1, "pip"),
-    )
+    @patch("definers.run", side_effect=subprocess.CalledProcessError(1, "pip"))
     def test_installed_pip_fails(self, mock_run):
         with self.assertRaises(subprocess.CalledProcessError):
             installed("anypackage")

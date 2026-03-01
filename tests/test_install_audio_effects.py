@@ -2,7 +2,6 @@ import os
 import sys
 import unittest
 from unittest.mock import MagicMock, patch
-
 from definers import install_audio_effects
 
 
@@ -24,10 +23,7 @@ class TestInstallAudioEffects(unittest.TestCase):
     @patch("definers.download_and_unzip", return_value=True)
     @patch("definers.download_file", return_value=True)
     @patch("definers.add_to_path_windows")
-    @patch(
-        "os.listdir",
-        return_value=["rubberband-dir", "fluidsynth-dir"],
-    )
+    @patch("os.listdir", return_value=["rubberband-dir", "fluidsynth-dir"])
     @patch.dict(os.environ, {"PATH": ""})
     @patch("builtins.print")
     def test_install_on_windows_first_time(
@@ -42,9 +38,7 @@ class TestInstallAudioEffects(unittest.TestCase):
         mock_get_os,
     ):
         install_audio_effects()
-
         install_dir = os.path.join(os.path.expanduser("~"), "app_dependencies")
-
         mock_download_unzip.assert_any_call(
             "https://breakfastquay.com/files/releases/rubberband-3.3.0-gpl-executable-windows.zip",
             os.path.join(install_dir, "rubberband"),
@@ -53,14 +47,12 @@ class TestInstallAudioEffects(unittest.TestCase):
             "https://github.com/FluidSynth/fluidsynth/releases/download/v2.3.5/fluidsynth-2.3.5-win64.zip",
             os.path.join(install_dir, "fluidsynth"),
         )
-
         mock_add_to_path.assert_any_call(
             os.path.join(install_dir, "rubberband", "rubberband-dir")
         )
         mock_add_to_path.assert_any_call(
             os.path.join(install_dir, "fluidsynth", "bin")
         )
-
         mock_download_file.assert_called_once_with(
             "https://github.com/FluidSynth/fluidsynth/raw/master/sf2/FluidR3_GM.sf2",
             os.path.join(install_dir, "soundfonts", "FluidR3_GM.sf2"),

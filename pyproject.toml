@@ -1,16 +1,17 @@
 [build-system]
-requires = ["hatchling"]
+requires = [
+    "hatchling",
+]
 build-backend = "hatchling.build"
 
 [project]
 name = "definers"
 version = "0.1.0"
 authors = [
-  { name = "Yaron Koresh" },
+    { name = "Yaron Koresh" },
 ]
 description = "A comprehensive Python toolkit for AI, data processing, media manipulation, and system utilities."
 readme = "README.md"
-license = { text = "MIT" }
 requires-python = ">=3.10"
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -25,6 +26,9 @@ dependencies = [
     "pillow>=10.0.0",
     "scipy>=1.11.0",
 ]
+
+[project.license]
+text = "MIT"
 
 [project.urls]
 Homepage = "https://github.com/YaronKoresh/definers"
@@ -113,7 +117,7 @@ dev = [
     "ruff",
     "poethepoet",
     "pre-commit",
-    "build"
+    "build",
 ]
 cuda = [
     "distributed-ucxx-cu12==0.39.1",
@@ -146,31 +150,42 @@ cuda = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/definers"]
+packages = [
+    "src/definers",
+]
 
 [tool.hatch.metadata]
 allow-direct-references = true
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = [
+    "tests",
+]
 
-# --- RUFF CONFIGURATION ---
 [tool.ruff]
 target-version = "py310"
 line-length = 80
 
 [tool.ruff.lint]
-select = ["E", "W", "F", "I", "UP"]
+select = [
+    "E",
+    "W",
+    "F",
+    "I",
+    "UP",
+]
 ignore = [
     "E501",
     "E402",
     "E722",
     "E741",
-    "F401"
+    "F401",
 ]
 
 [tool.ruff.lint.extend-per-file-ignores]
-"tests/**/*" = ["E731"]
+"tests/**/*" = [
+    "E731",
+]
 
 [tool.ruff.lint.isort]
 force-single-line = false
@@ -180,71 +195,45 @@ combine-as-imports = true
 quote-style = "double"
 indent-style = "space"
 
-# --- POE TASKS ---
 [tool.poe.tasks]
-# Quality Assurance
 test = "pytest tests/"
-compile = { cmd = "python -m compileall -q ." }
-pre-commit = { cmd = "pre-commit run --all-files", env = { SKIP = "no-commit-to-branch" } }
-clean = { cmd = '''python -Bc "
-import pathlib, shutil;
-targets = {
-        'directories': {
-            '__pycache__', '.pytest_cache', '.ruff_cache', '.mypy_cache',
-            '.tox', '.nox', '.cache', '.ipynb_checkpoints', 'htmlcov',
-            'build', 'dist', '.eggs', '*.egg-info', '.coverage.reports'
-        },
-        'files': {
-            '.coverage', '.coverage.*', '.sqlite', 'nosetests.xml',
-            'coverage.xml', '*.pyc', '*.pyo', '*.pyd', '.DS_Store'
-        }
-};
-for p in pathlib.Path('.').rglob('*'):
-        if p.name in targets['directories'] or any(p.match(pat) for pat in targets['directories']):
-            if p.is_dir(): shutil.rmtree(p, ignore_errors=True)
-        elif p.name in targets['files'] or any(p.match(pat) for pat in targets['files']):
-            if p.is_file(): p.unlink(missing_ok=True)
-"''' }
-strip-comments = { cmd = '''python -c "
-import tokenize
-import io
-import pathlib
+check = [
+    "clean",
+    "compile",
+    "lint",
+    "format",
+    "sanitize",
+    "pre-commit",
+    "test",
+    "clean",
+]
 
-def strip_comments_and_format(file_path):
-    try:
-        with open(file_path, 'r', encoding='utf-8', newline='') as f:
-            source = f.read()
+[tool.poe.tasks.compile]
+cmd = "python -m compileall -q ."
 
-        tokens = tokenize.generate_tokens(io.StringIO(source).readline)
-        result = []
-        last_lineno = -1
-        last_col = 0
+[tool.poe.tasks.lint]
+cmd = "ruff check ."
 
-        for toktype, tokval, start, end, line in tokens:
-            if toktype == tokenize.COMMENT:
-                continue
+[tool.poe.tasks.pre-commit]
+cmd = "pre-commit run --all-files"
 
-            if toktype == tokenize.NL or toktype == tokenize.NEWLINE:
-                pass
+[tool.poe.tasks.pre-commit.env]
+SKIP = "no-commit-to-branch"
 
-            result.append((toktype, tokval, start, end, line))
-        cleaned = tokenize.untokenize(result)
+[tool.poe.tasks.clean]
+cmd = "python scripts/clean_workspace.py"
 
-        with open(file_path, 'w', encoding='utf-8', newline='') as f:
-            f.write(cleaned)
+[tool.poe.tasks.sanitize]
+cmd = "python scripts/sanitize_python.py"
 
-        print(f'Stripped and cleaned: {file_path}')
+[tool.poe.tasks.strip-comments]
+cmd = "python scripts/sanitize_python.py"
 
-    except Exception as e:
-        print(f'Failed to process {file_path}: {e}')
+[tool.poe.tasks.build]
+cmd = "python -m build"
 
-for p in pathlib.Path('.').rglob('*.py'):
-    strip_comments_and_format(p)
-"''' }
-check = ["clean", "compile", "strip-comments", "pre-commit", "test", "clean"]
+[tool.poe.tasks.hook]
+cmd = "pre-commit install"
 
-# Build Pipeline
-build = { cmd = "python -m build" }
-
-# Setup Task
-hook = { cmd = "pre-commit install" }
+[tool.poe.tasks.format]
+cmd = "ruff format ."

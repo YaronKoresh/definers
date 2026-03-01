@@ -1,16 +1,12 @@
 import sys
 import unittest
 from unittest.mock import MagicMock, patch
-
 from definers import post_install
 
 
 class TestPostInstall(unittest.TestCase):
     @patch("definers.free")
-    @patch(
-        "torch.fx.experimental.proxy_tensor.get_proxy_mode",
-        create=True,
-    )
+    @patch("torch.fx.experimental.proxy_tensor.get_proxy_mode", create=True)
     def test_post_install_calls_free(self, mock_get_proxy_mode, mock_free):
         post_install()
         mock_free.assert_called_once()
@@ -22,9 +18,7 @@ class TestPostInstall(unittest.TestCase):
     ):
         if hasattr(mock_proxy_tensor, "get_proxy_mode"):
             delattr(mock_proxy_tensor, "get_proxy_mode")
-
         post_install()
-
         self.assertTrue(hasattr(mock_proxy_tensor, "get_proxy_mode"))
         self.assertTrue(callable(getattr(mock_proxy_tensor, "get_proxy_mode")))
 
@@ -33,7 +27,6 @@ class TestPostInstall(unittest.TestCase):
     def test_post_install_monkeypatches_numpy(self, mock_np_warn, mock_free):
         if hasattr(sys.modules["numpy"], "_no_nep50_warning"):
             pass
-
         post_install()
         self.assertTrue(hasattr(sys.modules["numpy"], "_no_nep50_warning"))
         self.assertTrue(

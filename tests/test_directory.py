@@ -2,7 +2,6 @@ import os
 import shutil
 import tempfile
 import unittest
-
 from definers import directory
 
 
@@ -36,7 +35,6 @@ class TestDirectory(unittest.TestCase):
         file_path = os.path.join(self.test_dir, "a_file.txt")
         with open(file_path, "w") as f:
             f.write("hello")
-
         with self.assertRaises(FileExistsError):
             directory(file_path)
 

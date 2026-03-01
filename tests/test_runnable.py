@@ -1,6 +1,5 @@
 import unittest
 from unittest.mock import patch
-
 from definers import runnable
 
 
@@ -43,8 +42,7 @@ class TestRunnable(unittest.TestCase):
         mock_run.return_value = False
         self.assertFalse(runnable("nonexistentcommand"))
         mock_run.assert_called_once_with(
-            "powershell.exe -Command 'nonexistentcommand' -WhatIf",
-            silent=True,
+            "powershell.exe -Command 'nonexistentcommand' -WhatIf", silent=True
         )
 
     @patch("definers.get_os_name", return_value="windows")
@@ -53,8 +51,7 @@ class TestRunnable(unittest.TestCase):
         mock_run.return_value = True
         self.assertTrue(runnable("powershell.exe -Command Get-ChildItem"))
         mock_run.assert_called_once_with(
-            "powershell.exe -Command 'powershell.exe' -WhatIf",
-            silent=True,
+            "powershell.exe -Command 'powershell.exe' -WhatIf", silent=True
         )
 
 

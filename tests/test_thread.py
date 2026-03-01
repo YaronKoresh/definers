@@ -1,7 +1,6 @@
 import time
 import unittest
 from unittest.mock import MagicMock
-
 from definers import thread
 
 
@@ -27,6 +26,7 @@ class TestThread(unittest.TestCase):
         t.join()
 
     def test_thread_exception_handling(self):
+
         def func_that_raises():
             raise ValueError("Test Error")
 
