@@ -710,9 +710,11 @@ def save_temp_text(text_content):
     return temp_path
 
 
-def run_linux(command, silent=False, env={}):
+def run_linux(command, silent=False, env=None):
     import pty
 
+    if env is None:
+        env = {}
     original_env = os.environ.copy()
     modified_env = {**original_env, **env}
     if isinstance(command, list):
@@ -783,10 +785,13 @@ def run_linux(command, silent=False, env={}):
         except OSError as e:
             catch(e)
             return False
+    return False
 
 
-def run_windows(command, silent=False, env={}):
+def run_windows(command, silent=False, env=None):
     try:
+        if env is None:
+            env = {}
         if isinstance(command, list):
             cmds = command
             command_to_run = " && ".join([c.strip() for c in cmds if c.strip()])
@@ -797,7 +802,9 @@ def run_windows(command, silent=False, env={}):
                     [c.strip() for c in cmds if c.strip()]
                 )
             else:
-                command_to_run = command
+                command_to_run = command.strip()
+        if not command_to_run:
+            return False
         modified_env = {**os.environ.copy(), **env}
         process = subprocess.Popen(
             command_to_run,
@@ -831,8 +838,11 @@ def run_windows(command, silent=False, env={}):
         return False
 
 
-def run(command, silent=False, env={}):
+def run(command, silent=False, env=None):
     import definers as _d
+
+    if env is None:
+        env = {}
 
     if sys.platform.startswith("win"):
         return _d.run_windows(command, silent=silent, env=env)
@@ -954,29 +964,36 @@ def installed(pack, version=None):
 
 
 def importable(name):
-    import definers as _d
-
-    if not name:
+    if not isinstance(name, str):
         return False
-    res = _d.run(f'python -c "import {name}"', silent=True)
-    if res is False or res is None:
+    module_name = name.strip()
+    if not module_name:
         return False
-    return True
+    try:
+        module_specification = importlib.util.find_spec(module_name)
+        if module_specification is None:
+            return False
+        return True
+    except Exception:
+        return False
 
 
 def runnable(cmd):
-    import definers as _d
-
-    first_word = cmd.split()[0]
-    if _d.get_os_name() == "windows" and _d.run(
-        f"powershell.exe -Command {repr(first_word)} -WhatIf", silent=True
-    ):
-        return True
-    if _d.get_os_name() == "linux" and _d.run(
-        f"which {repr(first_word)}", silent=True
-    ):
-        return True
-    return False
+    if not isinstance(cmd, str):
+        return False
+    command_line = cmd.strip()
+    if not command_line:
+        return False
+    try:
+        command_parts = shlex.split(command_line, posix=False)
+    except ValueError:
+        command_parts = command_line.split()
+    if len(command_parts) == 0:
+        return False
+    command_name = command_parts[0].strip('"').strip("'")
+    if not command_name:
+        return False
+    return shutil.which(command_name) is not None
 
 
 def is_package_path(package_path, package_name=None):

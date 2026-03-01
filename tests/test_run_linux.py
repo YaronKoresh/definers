@@ -72,6 +72,10 @@ class TestRunLinux(unittest.TestCase):
             self.skipTest("Windows-specific check")
         pass
 
+    @unittest.skipIf(sys.platform.startswith("win"), "Linux-specific test")
+    def test_run_linux_empty_command_returns_false(self):
+        self.assertFalse(run_linux("   ", silent=True))
+
 
 if __name__ == "__main__":
     unittest.main()

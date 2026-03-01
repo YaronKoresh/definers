@@ -65,6 +65,32 @@ def test_circuit_breaker_half_open_then_close() -> None:
     assert breaker.snapshot().state == CircuitState.CLOSED
 
 
+def test_circuit_breaker_half_open_failure_reopens_immediately() -> None:
+    clock_samples = [0.0, 10.0, 10.0]
+
+    def monotonic_clock() -> float:
+        if not clock_samples:
+            return 10.0
+        return clock_samples.pop(0)
+
+    breaker = CircuitBreaker(
+        failure_threshold=5,
+        recovery_timeout=2,
+        clock=monotonic_clock,
+    )
+
+    def failing_operation() -> str:
+        raise RuntimeError("down")
+
+    with pytest.raises(RuntimeError):
+        breaker.execute(failing_operation)
+    assert breaker.snapshot().state == CircuitState.OPEN
+
+    with pytest.raises(RuntimeError):
+        breaker.execute(failing_operation)
+    assert breaker.snapshot().state == CircuitState.OPEN
+
+
 @pytest.mark.asyncio
 async def test_execute_async_opens_circuit_on_threshold() -> None:
     breaker = CircuitBreaker(failure_threshold=2, recovery_timeout=10)

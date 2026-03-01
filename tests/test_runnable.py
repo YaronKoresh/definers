@@ -4,55 +4,45 @@ from definers import runnable
 
 
 class TestRunnable(unittest.TestCase):
-    @patch("definers.get_os_name", return_value="linux")
-    @patch("definers.run")
-    def test_runnable_linux_true(self, mock_run, mock_os):
-        mock_run.return_value = ["/bin/ls"]
+    @patch("definers.shutil.which", return_value="/bin/ls")
+    def test_runnable_linux_true(self, mock_which):
         self.assertTrue(runnable("ls"))
-        mock_run.assert_called_once_with("which 'ls'", silent=True)
+        mock_which.assert_called_once_with("ls")
 
-    @patch("definers.get_os_name", return_value="linux")
-    @patch("definers.run")
-    def test_runnable_linux_false(self, mock_run, mock_os):
-        mock_run.return_value = False
+    @patch("definers.shutil.which", return_value=None)
+    def test_runnable_linux_false(self, mock_which):
         self.assertFalse(runnable("nonexistentcommand"))
-        mock_run.assert_called_once_with(
-            "which 'nonexistentcommand'", silent=True
-        )
+        mock_which.assert_called_once_with("nonexistentcommand")
 
-    @patch("definers.get_os_name", return_value="linux")
-    @patch("definers.run")
-    def test_runnable_linux_with_args(self, mock_run, mock_os):
-        mock_run.return_value = ["/bin/ls"]
+    @patch("definers.shutil.which", return_value="/bin/ls")
+    def test_runnable_linux_with_args(self, mock_which):
         self.assertTrue(runnable("ls -l"))
-        mock_run.assert_called_once_with("which 'ls'", silent=True)
+        mock_which.assert_called_once_with("ls")
 
-    @patch("definers.get_os_name", return_value="windows")
-    @patch("definers.run")
-    def test_runnable_windows_true(self, mock_run, mock_os):
-        mock_run.return_value = True
+    @patch("definers.shutil.which", return_value="C:\\Windows\\System32\\cmd.exe")
+    def test_runnable_windows_true(self, mock_which):
         self.assertTrue(runnable("cmd"))
-        mock_run.assert_called_once_with(
-            "powershell.exe -Command 'cmd' -WhatIf", silent=True
-        )
+        mock_which.assert_called_once_with("cmd")
 
-    @patch("definers.get_os_name", return_value="windows")
-    @patch("definers.run")
-    def test_runnable_windows_false(self, mock_run, mock_os):
-        mock_run.return_value = False
+    @patch("definers.shutil.which", return_value=None)
+    def test_runnable_windows_false(self, mock_which):
         self.assertFalse(runnable("nonexistentcommand"))
-        mock_run.assert_called_once_with(
-            "powershell.exe -Command 'nonexistentcommand' -WhatIf", silent=True
-        )
+        mock_which.assert_called_once_with("nonexistentcommand")
 
-    @patch("definers.get_os_name", return_value="windows")
-    @patch("definers.run")
-    def test_runnable_windows_with_args(self, mock_run, mock_os):
-        mock_run.return_value = True
+    @patch("definers.shutil.which", return_value="C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe")
+    def test_runnable_windows_with_args(self, mock_which):
         self.assertTrue(runnable("powershell.exe -Command Get-ChildItem"))
-        mock_run.assert_called_once_with(
-            "powershell.exe -Command 'powershell.exe' -WhatIf", silent=True
-        )
+        mock_which.assert_called_once_with("powershell.exe")
+
+    @patch("definers.shutil.which")
+    def test_runnable_empty_command(self, mock_which):
+        self.assertFalse(runnable("   "))
+        mock_which.assert_not_called()
+
+    @patch("definers.shutil.which", return_value="C:\\Program Files\\Tool\\tool.exe")
+    def test_runnable_quoted_executable(self, mock_which):
+        self.assertTrue(runnable('"C:\\Program Files\\Tool\\tool.exe" --help'))
+        mock_which.assert_called_once_with("C:\\Program Files\\Tool\\tool.exe")
 
 
 if __name__ == "__main__":

@@ -96,6 +96,12 @@ class TestRunWindows(unittest.TestCase):
             mock_print.call_args_list,
         )
 
+    @patch("subprocess.Popen")
+    def test_run_windows_empty_command_returns_false(self, mock_popen):
+        result = run_windows("   ", silent=True)
+        self.assertFalse(result)
+        mock_popen.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

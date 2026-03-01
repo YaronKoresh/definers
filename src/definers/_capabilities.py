@@ -81,6 +81,9 @@ class CircuitBreaker:
         self.failure_count = 0
 
     def _record_failure(self) -> None:
+        if self.state == CircuitState.HALF_OPEN:
+            self._transition_open()
+            return
         self.failure_count += 1
         if self.failure_count >= self.failure_threshold:
             self._transition_open()

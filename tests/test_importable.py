@@ -4,37 +4,38 @@ from definers import importable
 
 
 class TestImportable(unittest.TestCase):
-    @patch("definers.run")
-    def test_importable_returns_true_for_successful_import(self, mock_run):
-        mock_run.return_value = []
+    @patch("importlib.util.find_spec")
+    def test_importable_returns_true_for_successful_import(self, mock_find_spec):
+        mock_find_spec.return_value = object()
         self.assertTrue(importable("os"))
-        mock_run.assert_called_once_with('python -c "import os"', silent=True)
+        mock_find_spec.assert_called_once_with("os")
 
-    @patch("definers.run")
-    def test_importable_returns_false_for_failed_import(self, mock_run):
-        mock_run.return_value = False
+    @patch("importlib.util.find_spec")
+    def test_importable_returns_false_for_failed_import(self, mock_find_spec):
+        mock_find_spec.return_value = None
         self.assertFalse(importable("non_existent_package"))
-        mock_run.assert_called_once_with(
-            'python -c "import non_existent_package"', silent=True
-        )
+        mock_find_spec.assert_called_once_with("non_existent_package")
 
-    @patch("definers.run")
-    def test_importable_handles_run_returning_output(self, mock_run):
-        mock_run.return_value = ["some output"]
+    @patch("importlib.util.find_spec")
+    def test_importable_handles_complex_name(self, mock_find_spec):
+        mock_find_spec.return_value = object()
         self.assertTrue(importable("sys"))
 
-    @patch("definers.run")
-    def test_importable_with_empty_string(self, mock_run):
-        mock_run.return_value = False
+    @patch("importlib.util.find_spec")
+    def test_importable_with_empty_string(self, mock_find_spec):
         self.assertFalse(importable(""))
+        mock_find_spec.assert_not_called()
 
-    @patch("definers.run")
-    def test_importable_with_complex_name(self, mock_run):
-        mock_run.return_value = True
+    @patch("importlib.util.find_spec")
+    def test_importable_with_dotted_name(self, mock_find_spec):
+        mock_find_spec.return_value = object()
         self.assertTrue(importable("unittest.mock"))
-        mock_run.assert_called_once_with(
-            'python -c "import unittest.mock"', silent=True
-        )
+        mock_find_spec.assert_called_once_with("unittest.mock")
+
+    @patch("importlib.util.find_spec", side_effect=Exception)
+    def test_importable_handles_find_spec_exception(self, mock_find_spec):
+        self.assertFalse(importable("bad.module"))
+        mock_find_spec.assert_called_once_with("bad.module")
 
 
 if __name__ == "__main__":
