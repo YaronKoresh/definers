@@ -118,6 +118,7 @@ dev = [
     "poethepoet",
     "pre-commit",
     "build",
+    "vulture>=2.10",
 ]
 cuda = [
     "distributed-ucxx-cu12==0.39.1",
@@ -196,15 +197,10 @@ quote-style = "double"
 indent-style = "space"
 
 [tool.poe.tasks]
-test = "pytest tests/"
-check = [
-    "clean",
-    "compile",
-    "sanitize",
-    "pre-commit",
-    "test",
-    "clean",
-]
+check = ["clean", "compile", "dead-code", "strip-comments", "pre-commit", "test", "clean"]
+
+[tool.poe.tasks.test]
+cmd = "pytest tests/"
 
 [tool.poe.tasks.compile]
 cmd = "python -m compileall -q ."
@@ -221,17 +217,20 @@ SKIP = "no-commit-to-branch"
 [tool.poe.tasks.clean]
 cmd = "python scripts/clean_workspace.py"
 
-[tool.poe.tasks.sanitize]
-cmd = "python scripts/sanitize_python.py"
-
 [tool.poe.tasks.strip-comments]
-cmd = "python scripts/sanitize_python.py"
+cmd = "python scripts/strip_comments.py"
 
 [tool.poe.tasks.build]
 cmd = "python -m build"
+
+[tool.poe.tasks.build-wheel]
+cmd = "python -m build --wheel"
 
 [tool.poe.tasks.hook]
 cmd = "pre-commit install"
 
 [tool.poe.tasks.format]
 cmd = "ruff format ."
+
+[tool.poe.tasks.dead-code]
+cmd = "vulture src/ --min-confidence 80 --sort-by-size"
