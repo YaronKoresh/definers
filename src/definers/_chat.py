@@ -1,5 +1,6 @@
 import gc
 import math
+import os
 import random
 import re
 import tempfile
@@ -567,19 +568,32 @@ def generate_video_handler(
         frame = apply_post_fx(frame, post_effects, rms)
         return cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-    output = tempfile.mktemp(suffix=".mp4")
     clip = VideoClip(make_frame, duration=adata["duration"])
     clip = clip.with_audio(AudioFileClip(audio))
-    print("Rendering...")
-    clip.write_videofile(
-        output,
-        fps=fps,
-        codec="libx264",
-        audio_codec="aac",
-        preset="ultrafast",
-        logger=None,
-    )
-    return (output, f"Render Complete! Duration: {adata['duration']:.2f}s")
+
+    tmp = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+    output = tmp.name
+
+    try:
+        tmp.close()
+
+        print("Rendering...")
+        clip.write_videofile(
+            output,
+            fps=fps,
+            codec="libx264",
+            audio_codec="aac",
+            preset="ultrafast",
+            logger=None,
+        )
+        return (output, f"Render Complete! Duration: {adata['duration']:.2f}s")
+    finally:
+        if os.path.exists(output):
+            try:
+                os.remove(output)
+                print("Temporary file cleaned up successfully.")
+            except OSError as e:
+                print(f"Error cleaning up: {e}")
 
 
 def filter_styles(query, category):
