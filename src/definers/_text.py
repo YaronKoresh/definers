@@ -96,7 +96,7 @@ def simple_text(prompt: str) -> str:
     prompt = re.sub("[\t]", " ", str(prompt))
     prompt = re.sub("(\n){2,}", "\n", prompt)
     prompt = re.sub("( ){2,}", " ", prompt)
-    prompt = re.sub(r"[ ]*\.[ .]*\.", ".", prompt)
+    prompt = re.sub(r"(?=([ ]*))\1\.(?:(?=([ ]*))\2\.)+", ".", prompt)
     prompt = re.sub("(-){2,}", "-", prompt)
     prompt = prompt.replace("|", " or ")
     prompt = re.sub(r"(?=([ !]+))\1\?[! ?]*", " I wonder ", prompt)
