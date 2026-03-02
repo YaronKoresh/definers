@@ -138,7 +138,7 @@ cuda = [
     "dask-cudf-cu12==24.8.2",
     "distributed==2024.7.1",
     "nvidia-cublas-cu12>=12.8.0,<12.9.0",
-    "nvidia-cuda-cupti-cu12>=12.8.0,<12.9.0",
+    "nvidia-cuda-cupti-cu12>=12.8.0,<12.10.0",
     "nvidia-cuda-nvrtc-cu12>=12.8.0,<12.9.0",
     "nvidia-cuda-runtime-cu12>=12.8.0,<12.9.0",
     "nvidia-cudnn-cu12>=9.10.0,<9.11.0",
