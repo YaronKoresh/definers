@@ -321,9 +321,10 @@ def features_to_audio(
 
 
 def predict_audio(model, audio_file):
-    import definers as _d
     import librosa
     import soundfile as sf
+
+    import definers as _d
 
     try:
         (audio_data, sr) = librosa.load(audio_file, sr=32000, mono=True)
@@ -420,7 +421,9 @@ def master(source_path, strength=1, format_choice="mp3"):
             final_sound = _d.pydub.AudioSegment.from_file(processed_path)
             gain_db = round((float(strength) - 1.0) * 6.0, 1)
             final_sound = final_sound + gain_db
-            output_path = _d.export_audio(final_sound, output_stem, format_choice)
+            output_path = _d.export_audio(
+                final_sound, output_stem, format_choice
+            )
             if repeats > 0:
                 _d.delete(processed_path)
             return output_path
@@ -430,8 +433,9 @@ def master(source_path, strength=1, format_choice="mp3"):
 
 
 def split_mp3(path: str, chunk_seconds: float):
-    import definers as _d
     from pydub import AudioSegment
+
+    import definers as _d
 
     sound = AudioSegment.from_mp3(path)
     chunk_ms = chunk_seconds * 1000

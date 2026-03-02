@@ -71,8 +71,9 @@ def set_cuda_env():
 
 
 def free():
-    import definers as _d
     import torch
+
+    import definers as _d
 
     try:
         torch.cuda.empty_cache()

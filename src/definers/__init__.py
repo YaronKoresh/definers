@@ -31,10 +31,73 @@ try:
     import pydub
 except ImportError:
     pydub = None
-try:
-    import sox
-except ImportError:
-    sox = None
+
+import contextlib
+import io
+
+
+class _MissingTransformer:
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        raise ImportError("sox is not available")
+
+
+from types import ModuleType
+from typing import Any
+
+
+class _SoxProxy:
+    Transformer = _MissingTransformer
+
+    def __getattr__(self, name: str) -> Any:
+        raise ImportError("sox module is not available")
+
+
+from typing import Optional
+
+
+def _load_sox_module() -> ModuleType | None:
+    try:
+        buf = io.StringIO()
+        import subprocess
+
+        orig_run = subprocess.run
+        orig_popen = subprocess.Popen
+
+        def _silent_run(*args, **kwargs):
+            kwargs.setdefault("stderr", subprocess.DEVNULL)
+            kwargs.setdefault("stdout", subprocess.DEVNULL)
+            return orig_run(*args, **kwargs)
+
+        class _SilentPopen(orig_popen):
+            def __init__(self, *args, **kwargs):
+                kwargs.setdefault("stderr", subprocess.DEVNULL)
+                kwargs.setdefault("stdout", subprocess.DEVNULL)
+                super().__init__(*args, **kwargs)
+
+        subprocess.run = _silent_run
+        subprocess.Popen = _SilentPopen
+        try:
+            with (
+                contextlib.redirect_stderr(buf),
+                contextlib.redirect_stdout(buf),
+            ):
+                return importlib.import_module("sox")
+        finally:
+            subprocess.run = orig_run
+            subprocess.Popen = orig_popen
+    except ImportError:
+        return None
+    except Exception:
+        return None
+
+
+sox = _load_sox_module() or _SoxProxy()
+
+
+def has_sox() -> bool:
+    return not isinstance(sox, _SoxProxy)
+
+
 try:
     from huggingface_hub import hf_hub_download
 except ImportError:

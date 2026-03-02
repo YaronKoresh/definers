@@ -9,6 +9,19 @@ Definers is a Python toolkit for AI workflows, media processing, data operations
 - `definers._audio`, `definers._image`, `definers._video`, and `definers._ml` provide domain processing capabilities.
 - `definers._system` and related utility modules provide environment and runtime helpers.
 
+## Audio Dependency
+
+*The `sox` Python package is an optional dependency used by
+`load_as_numpy` for audio conversion.  To avoid spurious error messages on
+import, `definers` now lazily loads the module and suppresses the
+underlying CLI check.  If the `sox` binary is not installed or not on
+`PATH`, the module falls back to a proxy that raises `ImportError` when
+used; audio features will therefore return `None`.
+
+Users on Windows encountering the message "'sox' is not recognized as an
+internal or external command" no longer see it when simply running
+`import definers`.
+
 ## Development Workflow
 
 - Install development dependencies:

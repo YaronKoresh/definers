@@ -425,8 +425,9 @@ def init_tokenizer(mod="google-bert/bert-base-multilingual-cased"):
 
 def files_to_dataset(features_paths: list, labels_paths: list = None):
     import torch
-    import definers as _d
     from torch.utils.data import DataLoader, TensorDataset
+
+    import definers as _d
 
     features = []
     labels = []
@@ -578,8 +579,9 @@ def to_loader(dataset, batch_size=1):
 
 
 def pad_sequences(X):
-    import definers as _d
     import torch
+
+    import definers as _d
 
     if X is None or (hasattr(X, "__len__") and len(X) == 0):
         return torch.tensor([])
@@ -629,10 +631,11 @@ def unvectorize(vectorizer, vectorized_data):
 
 
 def load_as_numpy(path, training=False):
-    import definers
     import imageio as iio
     import pandas
     from scipy.io import wavfile
+
+    import definers
 
     try:
         parts = path.split(".")
@@ -705,9 +708,7 @@ def load_as_numpy(path, training=False):
                     return None
             else:
                 try:
-                    resized_video_file = definers.resize_video(
-                        path, 1024, 1024
-                    )
+                    resized_video_file = definers.resize_video(path, 1024, 1024)
                     new_fps_video_file = definers.convert_video_fps(
                         resized_video_file, 24
                     )

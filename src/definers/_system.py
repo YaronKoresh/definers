@@ -49,8 +49,9 @@ def is_admin_windows():
 
 
 def _install_ffmpeg_windows():
-    import definers as _d
     import requests
+
+    import definers as _d
 
     print("[INFO] Running FFmpeg installer for Windows...")
     if not _d.is_admin_windows():

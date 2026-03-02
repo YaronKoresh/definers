@@ -165,8 +165,9 @@ def write_on_image(
 
 
 def init_upscale():
-    import definers as _d
     import torch
+
+    import definers as _d
 
     try:
         probe_model_path = _d.hf_hub_download(
@@ -182,7 +183,7 @@ def init_upscale():
         try:
             torch.load(probe_model_path)
         except OSError as e:
-            raise IOError(str(e))
+            raise OSError(str(e))
         pillow_handler = getattr(_d, "pillow_heif", None)
         if pillow_handler is None:
             import pillow_heif as pillow_handler
@@ -590,10 +591,11 @@ def upscale(
     num_inference_steps: int = 100,
     solver: str = "DPMSolver",
 ):
-    import definers as _d
     from PIL import Image
     from refiners.fluxion.utils import manual_seed
     from refiners.foundationals.latent_diffusion import Solver, solvers
+
+    import definers as _d
 
     if upscale_factor < 2 or upscale_factor > 4:
         return

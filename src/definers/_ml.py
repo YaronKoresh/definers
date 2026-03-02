@@ -93,8 +93,9 @@ logger = _init_logger()
 
 
 def answer(history: list):
-    import definers as _d
     from PIL import Image
+
+    import definers as _d
 
     try:
         import librosa
@@ -211,12 +212,15 @@ def answer(history: list):
         return None
 
     if processor is None:
-        prompt = "".join(
-            [
-                f"<|{msg['role']}|>{msg['content']}<|end|>"
-                for msg in alt_history
-            ]
-        ) + "<|assistant|>"
+        prompt = (
+            "".join(
+                [
+                    f"<|{msg['role']}|>{msg['content']}<|end|>"
+                    for msg in alt_history
+                ]
+            )
+            + "<|assistant|>"
+        )
         generate_kwargs = {
             "prompt": prompt,
             "max_length": 200,
@@ -265,8 +269,9 @@ def linear_regression(X, y, learning_rate=0.01, epochs=50):
 
 
 def initialize_linear_regression(input_dim, model_path):
-    import definers as _d
     import torch
+
+    import definers as _d
 
     model_exists = os.path.exists(model_path)
     model_torch = _d.LinearRegressionTorch(input_dim)
@@ -283,9 +288,11 @@ def initialize_linear_regression(input_dim, model_path):
 
 
 def train_linear_regression(X, y, model_path, learning_rate=0.01):
-    import definers as _d
-    import torch
     from unittest.mock import MagicMock
+
+    import torch
+
+    import definers as _d
 
     model_torch = _d.initialize_linear_regression(X.shape[1], model_path)
     criterion = torch.nn.MSELoss()
@@ -459,9 +466,7 @@ def kmeans_k_suggestions(X, k_range=range(2, 20), random_state=None):
             ch_fn = _ch
         silhouette_scores[k] = silhouette_fn(numpy_X, numpy_labels)
         davies_bouldin_indices[k] = db_fn(numpy_X, numpy_labels)
-        calinski_harabasz_indices[k] = ch_fn(
-            numpy_X, numpy_labels
-        )
+        calinski_harabasz_indices[k] = ch_fn(numpy_X, numpy_labels)
     wcss_ratios = {}
     if len(k_range) > 2:
         for i in range(len(k_range) - 1):
@@ -514,10 +519,14 @@ def fit(model):
             log("Labels", model.y_all)
             max_lens = _d.get_max_shapes(model.X_all, model.y_all)
             X_all = _d.numpy_to_cupy(
-                _d.reshape_numpy(_d.cupy_to_numpy(model.X_all), lengths=max_lens)
+                _d.reshape_numpy(
+                    _d.cupy_to_numpy(model.X_all), lengths=max_lens
+                )
             )
             y_all = _d.numpy_to_cupy(
-                _d.reshape_numpy(_d.cupy_to_numpy(model.y_all), lengths=max_lens)
+                _d.reshape_numpy(
+                    _d.cupy_to_numpy(model.y_all), lengths=max_lens
+                )
             )
             log(
                 "Fitting Supervised model...",
@@ -527,7 +536,9 @@ def fit(model):
         else:
             max_lens = _d.get_max_shapes(model.X_all)
             X_all = _d.numpy_to_cupy(
-                _d.reshape_numpy(_d.cupy_to_numpy(model.X_all), lengths=max_lens)
+                _d.reshape_numpy(
+                    _d.cupy_to_numpy(model.X_all), lengths=max_lens
+                )
             )
             log(
                 "Fitting Unsupervised model...",

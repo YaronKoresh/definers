@@ -68,8 +68,9 @@ def extract_video_features(video_path, frame_interval=10):
 def features_to_video(
     predicted_features, frame_interval=10, fps=24, video_shape=(1024, 1024, 3)
 ):
-    import definers as _d
     import cv2
+
+    import definers as _d
 
     if predicted_features is None or predicted_features.size == 0:
         return False
@@ -135,9 +136,10 @@ def features_to_video(
 def resize_video(
     input_video_path, target_height, target_width, anti_aliasing=True
 ):
-    import definers as _d
     import imageio as iio
     from skimage.transform import resize
+
+    import definers as _d
 
     output_video_path = _d.tmp("mp4")
     try:
@@ -162,8 +164,9 @@ def resize_video(
 
 
 def convert_video_fps(input_video_path, target_fps):
-    import definers as _d
     import imageio as iio
+
+    import definers as _d
 
     output_video_path = _d.tmp("mp4")
     try:
@@ -190,8 +193,9 @@ def convert_video_fps(input_video_path, target_fps):
 
 
 def write_video(video_data, fps):
-    import definers as _d
     import imageio as iio
+
+    import definers as _d
 
     output_path = _d.tmp("mp4")
     try:

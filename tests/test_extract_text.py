@@ -10,9 +10,7 @@ from definers import extract_text
 class TestExtractText(unittest.TestCase):
     @patch("playwright.sync_api.expect")
     @patch("playwright.sync_api.sync_playwright")
-    def test_extract_text_successfully(
-        self, mock_sync_playwright, mock_expect
-    ):
+    def test_extract_text_successfully(self, mock_sync_playwright, mock_expect):
         mock_page = MagicMock()
         mock_page.content.return_value = (
             '<html><body><div class="content">Expected Text</div></body></html>'

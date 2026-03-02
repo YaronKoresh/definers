@@ -114,12 +114,21 @@ class TestLoadAsNumpy(unittest.TestCase):
         mock_resize.return_value = "resized.mp4"
         mock_fps.return_value = "resized_fps.mp4"
         mock_extract.return_value = self.mock_features
+
         vid_path = self._create_dummy_file("test.mov", self._write_mp4)
         result = load_as_numpy(vid_path)
+
         mock_resize.assert_called_with(vid_path, 1024, 1024)
         mock_fps.assert_called_with("resized.mp4", 24)
         mock_extract.assert_called_with("resized_fps.mp4")
         np.testing.assert_array_equal(result, self.mock_features)
+
+    @patch("definers.sox.Transformer", side_effect=ImportError)
+    def test_load_audio_no_sox(self, mock_sox):
+
+        wav_path = self._create_dummy_file("test.wav", self._write_wav)
+        result = load_as_numpy(wav_path)
+        self.assertIsNone(result)
 
     @patch("definers.catch")
     def test_invalid_path_format(self, mock_catch):
