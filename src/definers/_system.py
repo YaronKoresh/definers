@@ -643,17 +643,17 @@ def is_symlink(*p):
 
 
 def delete(path):
-    p = Path(str(path))
+    resolved = full_path(str(path))
+    p = Path(resolved)
     if p.is_symlink():
         p.unlink()
         return
-    path = full_path(str(path))
-    if not exist(path):
+    if not exist(resolved):
         return
-    if is_directory(path):
-        shutil.rmtree(path)
+    if is_directory(resolved):
+        shutil.rmtree(resolved)
     else:
-        Path(path).unlink(missing_ok=True)
+        p.unlink(missing_ok=True)
 
 
 def remove(path):

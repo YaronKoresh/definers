@@ -1,15 +1,13 @@
 import asyncio
 import base64
-import ctypes
 import io
 import logging
 import os
 import random
+import sys
 import threading
 import urllib.request
-import winreg
 import zipfile
-from ctypes import wintypes
 from pathlib import Path
 from typing import Any
 
@@ -284,13 +282,22 @@ def download_and_unzip(url: str, extract_to: str) -> bool:
 
 
 def broadcast_path_change():
+    if sys.platform != "win32":
+        return
+    import ctypes
+    from ctypes import wintypes
+
     SendMessageTimeout = ctypes.windll.user32.SendMessageTimeoutW
     SendMessageTimeout(
         65535, 26, 0, "Environment", 2, 5000, ctypes.byref(wintypes.DWORD())
     )
 
 
-def add_to_path_windows(folder_path):
+def add_to_path_windows(folder_path: str) -> None:
+    if sys.platform != "win32":
+        return
+    import winreg
+
     folder_path = os.path.normpath(folder_path).strip('"')
     try:
         key = winreg.OpenKey(
