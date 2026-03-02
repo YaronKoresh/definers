@@ -11,7 +11,7 @@ Definers is a Python toolkit for AI workflows, media processing, data operations
 
 ## Audio Dependency
 
-*The `sox` Python package is an optional dependency used by
+The `sox` Python package is an optional dependency used by
 `load_as_numpy` for audio conversion.  To avoid spurious error messages on
 import, `definers` now lazily loads the module and suppresses the
 underlying CLI check.  If the `sox` binary is not installed or not on
@@ -37,7 +37,7 @@ The `poe check` task executes cleanup, compile verification, linting, formatting
 
 - Formatting and quote normalization are enforced by Ruff using double quotes.
 - Repository hygiene is automated by `scripts/clean_workspace.py`.
-- Python source sanitization for comments and docstrings is available in `scripts/sanitize_python.py`.
+- Python source sanitization for comments and docstrings is available in `scripts/strip_comments.py`.
 - CI validation runs via GitHub Actions in `.github/workflows/check.yml`.
 
 ## License Summary
