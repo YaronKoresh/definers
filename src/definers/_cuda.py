@@ -12,8 +12,6 @@ from definers._system import (
 def cuda_toolkit():
     import definers as _d
 
-    if get_os_name() != "linux":
-        return None
     _d.directory("/usr/share/keyrings/")
     _d.directory("/etc/modprobe.d/")
     _d.permit("/tmp")
@@ -73,19 +71,20 @@ def set_cuda_env():
 
 
 def free():
+    import definers as _d
     import torch
 
     try:
         torch.cuda.empty_cache()
     except Exception as e:
-        catch(e)
-    run("rm -rf ~/.cache/huggingface/*", silent=True)
-    run("rm -rf /data-nvme/zerogpu-offload/*", silent=True)
-    run("rm -rf /opt/ml/checkpoints/*", silent=True)
-    run("pip cache purge", silent=True)
+        _d.catch(e)
+    _d.run("rm -rf ~/.cache/huggingface/*", silent=True)
+    _d.run("rm -rf /data-nvme/zerogpu-offload/*", silent=True)
+    _d.run("rm -rf /opt/ml/checkpoints/*", silent=True)
+    _d.run("pip cache purge", silent=True)
     mamba_path = os.path.expanduser("~/miniconda3/bin/mamba")
     if os.path.exists(mamba_path):
-        run(f"{mamba_path} clean --all", silent=True)
+        _d.run(f"{mamba_path} clean --all", silent=True)
 
 
 def device():

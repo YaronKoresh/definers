@@ -3,6 +3,7 @@ import collections.abc
 import importlib
 import os
 import pickle
+import random
 import shutil
 import site
 import subprocess
@@ -23,6 +24,10 @@ try:
 except ImportError:
     onnx = None
 try:
+    import matchering as mg
+except ImportError:
+    mg = None
+try:
     import pydub
 except ImportError:
     pydub = None
@@ -35,6 +40,10 @@ try:
 except ImportError:
     hf_hub_download = None
 try:
+    import pillow_heif
+except ImportError:
+    pillow_heif = None
+try:
     from torch.utils.data import TensorDataset
 except ImportError:
     TensorDataset = None
@@ -43,9 +52,27 @@ try:
 except ImportError:
     StandardScaler = None
 try:
+    from sklearn.preprocessing import Normalizer
+except ImportError:
+    Normalizer = None
+try:
+    from sklearn.impute import SimpleImputer
+except ImportError:
+    SimpleImputer = None
+try:
     from sklearn.cluster import KMeans
 except ImportError:
     KMeans = None
+try:
+    from sklearn.metrics import (
+        calinski_harabasz_score,
+        davies_bouldin_score,
+        silhouette_score,
+    )
+except ImportError:
+    calinski_harabasz_score = None
+    davies_bouldin_score = None
+    silhouette_score = None
 try:
     from transformers import AutoTokenizer
 except ImportError:

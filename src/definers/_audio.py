@@ -321,14 +321,13 @@ def features_to_audio(
 
 
 def predict_audio(model, audio_file):
+    import definers as _d
     import librosa
     import soundfile as sf
 
-    from definers._ml import get_cluster_content, is_clusters_model
-
     try:
         (audio_data, sr) = librosa.load(audio_file, sr=32000, mono=True)
-        timeline = get_active_audio_timeline(audio_file)
+        timeline = _d.get_active_audio_timeline(audio_file)
         log("Audio shape", audio_data.shape)
         log("Active audio timeline", timeline)
         predicted_audio = _np.zeros_like(audio_data)
@@ -352,13 +351,13 @@ def predict_audio(model, audio_file):
                 f"Predicting audio segment {i + 1}/{len(timeline)} with shape {active_audio_part_model_input.shape}",
             )
             prediction = model.predict(active_audio_part_model_input)
-            if is_clusters_model(model):
+            if _d.is_clusters_model(model):
                 log(
                     "Getting prediction cluster content",
                     f"Predicted cluster for segment {i + 1}: {int(prediction[0])}",
                 )
                 part_feat = cupy_to_numpy(
-                    get_cluster_content(model, int(prediction[0]))
+                    _d.get_cluster_content(model, int(prediction[0]))
                 )
             else:
                 part_feat = cupy_to_numpy(prediction)
@@ -366,7 +365,7 @@ def predict_audio(model, audio_file):
                 "Prediction shape",
                 f"Predicted features shape for segment {i + 1}: {part_feat.shape}",
             )
-            part_aud = features_to_audio(part_feat)
+            part_aud = _d.features_to_audio(part_feat)
             if part_aud is None:
                 log(
                     "Segment failure",
@@ -378,7 +377,7 @@ def predict_audio(model, audio_file):
             predicted_audio[start_sample : start_sample + min_len] = part_aud[
                 :min_len
             ]
-        output_file = tmp("wav")
+        output_file = _d.tmp("wav")
         sf.write(output_file, predicted_audio, sr)
         log("Audio output", f"Predicted audio saved to: {output_file}")
         return output_file
@@ -387,28 +386,26 @@ def predict_audio(model, audio_file):
         return None
 
 
-def master(source_path, format_choice="mp3", repeats=1):
-    import matchering as mg
-    import pydub
+def master(source_path, strength=1, format_choice="mp3"):
+    import definers as _d
 
-    source_path = normalize_audio_to_peak(source_path)
-    output_stem = Path(source_path).with_name(
-        f"{Path(source_path).stem}_mastered"
-    )
     try:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            reference_path = Path(temp_dir) / "reference.wav"
-            google_drive_download(
+        output_stem = _d.Path(source_path).with_name(
+            f"{_d.Path(source_path).stem}_mastered"
+        )
+        with _d.tempfile.TemporaryDirectory() as temp_dir:
+            reference_path = _d.Path(temp_dir) / "reference.wav"
+            _d.google_drive_download(
                 "1UF_FIuq4vbCdDfCVLHvD_9fXzJDoredh", str(reference_path)
             )
 
             def _master(current_source_path):
-                result_wav_path = tmp("wav", keep=False)
-                mg.process(
+                result_wav_path = _d.tmp("wav", keep=False)
+                _d.mg.process(
                     target=str(current_source_path),
                     reference=str(reference_path),
-                    results=[mg.pcm24(str(result_wav_path))],
-                    config=mg.Config(
+                    results=[_d.mg.pcm24(str(result_wav_path))],
+                    config=_d.mg.Config(
                         max_length=60 * 60 * 24,
                         threshold=0.9,
                         internal_sample_rate=44100,
@@ -417,19 +414,23 @@ def master(source_path, format_choice="mp3", repeats=1):
                 return result_wav_path
 
             processed_path = source_path
+            repeats = int(strength) if strength > 1 else 0
             for _ in range(repeats):
                 processed_path = _master(processed_path)
-                processed_path = normalize_audio_to_peak(processed_path)
-            final_sound = pydub.AudioSegment.from_file(processed_path)
-            output_path = export_audio(final_sound, output_stem, format_choice)
-            delete(processed_path)
+            final_sound = _d.pydub.AudioSegment.from_file(processed_path)
+            gain_db = round((float(strength) - 1.0) * 6.0, 1)
+            final_sound = final_sound + gain_db
+            output_path = _d.export_audio(final_sound, output_stem, format_choice)
+            if repeats > 0:
+                _d.delete(processed_path)
             return output_path
     except Exception as e:
-        catch(e)
+        _d.catch(e)
         return None
 
 
 def split_mp3(path: str, chunk_seconds: float):
+    import definers as _d
     from pydub import AudioSegment
 
     sound = AudioSegment.from_mp3(path)
@@ -439,9 +440,9 @@ def split_mp3(path: str, chunk_seconds: float):
         for i in range(math.ceil(len(sound) / (chunk_seconds * 1000)))
     ]
     export_path = (
-        f"{os.getcwd()}/mp3_segments_{str(random.random()).split('.')[1]}"
+        f"{os.getcwd()}/mp3_segments_{str(_d.random.random()).split('.')[1]}"
     )
-    Path(export_path).mkdir(parents=True, exist_ok=True)
+    _d.Path(export_path).mkdir(parents=True, exist_ok=True)
     i = 0
     for chunk_idx in range(len(chunks)):
         chunk = chunks[chunk_idx]

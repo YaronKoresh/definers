@@ -336,7 +336,7 @@ def select_columns(dataset, cols):
         return dataset
     all_cols = dataset.column_names
     cols_to_drop = [c for c in all_cols if c not in cols]
-    return drop_columns(dataset, cols_to_drop)
+    return _d.drop_columns(dataset, cols_to_drop)
 
 
 def select_rows(dataset, start_index, end_index):
@@ -378,8 +378,8 @@ def split_columns(data, labels, is_batch=False):
             y_batch.append(y)
         return (X_batch, y_batch)
     else:
-        features = drop_columns(data, labels)
-        labels_data = select_columns(data, labels)
+        features = _d.drop_columns(data, labels)
+        labels_data = _d.select_columns(data, labels)
         return (features, labels_data)
 
 
@@ -410,18 +410,22 @@ def tokenize_and_pad(rows, tokenizer=None):
     return two_dim_numpy(tokenized_inputs["input_ids"])
 
 
-def init_tokenizer():
-    from transformers import AutoTokenizer
+def init_tokenizer(mod="google-bert/bert-base-multilingual-cased"):
+    import definers as _d
 
-    if not TOKENIZERS["general-tokenizer"]:
-        TOKENIZERS["general-tokenizer"] = AutoTokenizer.from_pretrained(
-            tasks["general-tokenizer"]
+    model_name = mod or "google-bert/bert-base-multilingual-cased"
+    current_model = TOKENIZERS.get("general-tokenizer-model")
+    if (not TOKENIZERS["general-tokenizer"]) or (current_model != model_name):
+        TOKENIZERS["general-tokenizer"] = _d.AutoTokenizer.from_pretrained(
+            model_name
         )
+        TOKENIZERS["general-tokenizer-model"] = model_name
     return TOKENIZERS["general-tokenizer"]
 
 
 def files_to_dataset(features_paths: list, labels_paths: list = None):
     import torch
+    import definers as _d
     from torch.utils.data import DataLoader, TensorDataset
 
     features = []
@@ -430,7 +434,7 @@ def files_to_dataset(features_paths: list, labels_paths: list = None):
     labels_have_strings = False
     try:
         for feature_path in features_paths:
-            loaded = load_as_numpy(feature_path, training=True)
+            loaded = _d.load_as_numpy(feature_path, training=True)
             if loaded is None:
                 print(f"Error loading feature file: {feature_path}")
                 return None
@@ -452,13 +456,13 @@ def files_to_dataset(features_paths: list, labels_paths: list = None):
                     features_have_strings = True
             if isinstance(loaded, list):
                 features.extend(
-                    [cupy_to_numpy(l) for l in loaded if l is not None]
+                    [_d.cupy_to_numpy(l) for l in loaded if l is not None]
                 )
             else:
-                features.append(cupy_to_numpy(loaded))
+                features.append(_d.cupy_to_numpy(loaded))
         if labels_paths:
             for label_path in labels_paths:
-                loaded = load_as_numpy(label_path, training=True)
+                loaded = _d.load_as_numpy(label_path, training=True)
                 if loaded is None:
                     print(f"Error loading label file: {label_path}")
                     return None
@@ -480,10 +484,10 @@ def files_to_dataset(features_paths: list, labels_paths: list = None):
                         labels_have_strings = True
                 if isinstance(loaded, list):
                     labels.extend(
-                        [cupy_to_numpy(l) for l in loaded if l is not None]
+                        [_d.cupy_to_numpy(l) for l in loaded if l is not None]
                     )
                 else:
-                    labels.append(cupy_to_numpy(loaded))
+                    labels.append(_d.cupy_to_numpy(loaded))
     except Exception as e:
         print(f"Error during data loading: {e}")
         return None
@@ -494,7 +498,7 @@ def files_to_dataset(features_paths: list, labels_paths: list = None):
     if features_have_strings:
         print("features_have_strings")
         if not tokenizer:
-            tokenizer = init_tokenizer()
+            tokenizer = _d.init_tokenizer()
         features_as_strings = []
         for f in features:
             if isinstance(f, _np.ndarray):
@@ -502,11 +506,11 @@ def files_to_dataset(features_paths: list, labels_paths: list = None):
             else:
                 features_as_strings.append(str(f))
         tokenized_features = tokenize_and_pad(features_as_strings, tokenizer)
-        features = [cupy_to_numpy(row) for row in tokenized_features]
+        features = [_d.cupy_to_numpy(row) for row in tokenized_features]
     if labels_paths and labels_have_strings:
         print("labels_have_strings")
         if not tokenizer:
-            tokenizer = init_tokenizer()
+            tokenizer = _d.init_tokenizer()
         labels_as_strings = []
         for l in labels:
             if isinstance(l, _np.ndarray):
@@ -514,7 +518,7 @@ def files_to_dataset(features_paths: list, labels_paths: list = None):
             else:
                 labels_as_strings.append(str(l))
         tokenized_labels = tokenize_and_pad(labels_as_strings, tokenizer)
-        labels = [cupy_to_numpy(row) for row in tokenized_labels]
+        labels = [_d.cupy_to_numpy(row) for row in tokenized_labels]
     all_data = features + labels if labels else features
     if not all_data:
         return None
@@ -542,16 +546,21 @@ def files_to_dataset(features_paths: list, labels_paths: list = None):
             dataset = TensorDataset(features_tensor)
         return dataset
     except Exception as e_tensor:
-        catch(f"Error creating tensor dataset: {type(e_tensor)}")
-        catch(e_tensor)
+        _d.catch(f"Error creating tensor dataset: {type(e_tensor)}")
+        _d.catch(e_tensor)
         return None
 
 
 def merge_columns(X, y=None):
-    from torch.utils.data import DataLoader, TensorDataset
+    import definers as _d
 
-    if y:
-        return TensorDataset(X, y)
+    if y is not None:
+        tensor_dataset_cls = getattr(_d, "TensorDataset", None)
+        if tensor_dataset_cls is None:
+            from torch.utils.data import TensorDataset
+
+            tensor_dataset_cls = TensorDataset
+        return tensor_dataset_cls(X, y)
     return X
 
 
@@ -569,11 +578,20 @@ def to_loader(dataset, batch_size=1):
 
 
 def pad_sequences(X):
+    import definers as _d
     import torch
 
-    X = three_dim_numpy(X)
-    X = torch.from_numpy(cupy_to_numpy(X))
-    return torch.nn.utils.rnn.pad_sequence(X, batch_first=True)
+    if X is None or (hasattr(X, "__len__") and len(X) == 0):
+        return torch.tensor([])
+    try:
+        X = _d.three_dim_numpy(X)
+    except Exception:
+        X = X
+    X = _d.cupy_to_numpy(X)
+    sequences = [torch.as_tensor(seq) for seq in X]
+    if len(sequences) == 0:
+        return torch.tensor([])
+    return torch.nn.utils.rnn.pad_sequence(sequences, batch_first=True)
 
 
 def create_vectorizer(texts):
@@ -587,6 +605,9 @@ def create_vectorizer(texts):
 def vectorize(vectorizer, texts):
     if vectorizer is None or texts is None:
         return None
+    if isinstance(texts, list) and len(texts) == 0:
+        vocab_size = len(getattr(vectorizer, "vocabulary_", {}) or {})
+        return np.empty((0, vocab_size))
     X_tfidf = vectorizer.transform(texts)
     return np.array(X_tfidf.toarray())
 
@@ -608,23 +629,10 @@ def unvectorize(vectorizer, vectorized_data):
 
 
 def load_as_numpy(path, training=False):
+    import definers
     import imageio as iio
     import pandas
-    import sox
     from scipy.io import wavfile
-
-    from definers._audio import (
-        extract_audio_features,
-        remove_silence,
-        split_mp3,
-    )
-    from definers._image import extract_image_features, resize_image
-    from definers._ml import extract_text_features
-    from definers._video import (
-        convert_video_fps,
-        extract_video_features,
-        resize_video,
-    )
 
     try:
         parts = path.split(".")
@@ -632,18 +640,22 @@ def load_as_numpy(path, training=False):
             last = parts[-1].strip().lower()
             if last in ["wav", "mp3"]:
                 try:
-                    tfm = sox.Transformer()
+                    tfm = definers.sox.Transformer()
                     tfm.rate(32000)
                     if training:
                         temp_name = tmp("wav")
                         tfm.build_file(path, temp_name)
                         temp_2 = tmp("mp3")
-                        remove_silence(temp_name, temp_2)
-                        (dir, num) = split_mp3(temp_2, 5)
+                        definers.remove_silence(temp_name, temp_2)
+                        (dir, num) = definers.split_mp3(temp_2, 5)
                         files = read(dir)
+                        if not files:
+                            files = [temp_2]
                         x = []
                         for _f in files:
-                            _x = numpy_to_cupy(extract_audio_features(_f))
+                            _x = numpy_to_cupy(
+                                definers.extract_audio_features(_f)
+                            )
                             x.append(_x)
                         delete(temp_name)
                         delete(temp_2)
@@ -651,7 +663,9 @@ def load_as_numpy(path, training=False):
                     else:
                         temp_name = tmp("mp3")
                         tfm.build_file(path, temp_name)
-                        x = numpy_to_cupy(extract_audio_features(temp_name))
+                        x = numpy_to_cupy(
+                            definers.extract_audio_features(temp_name)
+                        )
                         delete(temp_name)
                     return x
                 except Exception as e:
@@ -672,25 +686,33 @@ def load_as_numpy(path, training=False):
             elif last == "txt":
                 try:
                     txt = read(path)
-                    return numpy_to_cupy(extract_text_features(txt))
+                    return numpy_to_cupy(definers.extract_text_features(txt))
                 except Exception as e_txt:
                     catch(e_txt)
                     return None
             elif last in iio_formats:
                 try:
-                    (path_resized, img) = resize_image(path, 1024, 1024)
-                    return numpy_to_cupy(extract_image_features(path_resized))
+                    resized = definers.resize_image(path, 1024, 1024)
+                    if isinstance(resized, tuple):
+                        path_resized = resized[0]
+                    else:
+                        path_resized = resized
+                    return numpy_to_cupy(
+                        definers.extract_image_features(path_resized)
+                    )
                 except Exception as e_image:
                     catch(e_image)
                     return None
             else:
                 try:
-                    resized_video_file = resize_video(path, 1024, 1024)
-                    new_fps_video_file = convert_video_fps(
+                    resized_video_file = definers.resize_video(
+                        path, 1024, 1024
+                    )
+                    new_fps_video_file = definers.convert_video_fps(
                         resized_video_file, 24
                     )
                     return numpy_to_cupy(
-                        extract_video_features(new_fps_video_file)
+                        definers.extract_video_features(new_fps_video_file)
                     )
                 except Exception as e_video:
                     catch(e_video)
@@ -704,10 +726,14 @@ def load_as_numpy(path, training=False):
 
 
 def read_as_numpy(path: str):
-    return load_as_numpy(path)
+    import definers as _d
+
+    return _d.load_as_numpy(path)
 
 
 def get_prediction_file_extension(pred_type):
+    if pred_type is None:
+        return "data"
     pred_type_lower = pred_type.lower().strip()
     if pred_type_lower == "video":
         return "mp4"
@@ -722,28 +748,55 @@ def get_prediction_file_extension(pred_type):
 
 
 def process_rows(batch):
-    try:
-        from cuml.preprocessing import Normalizer, SimpleImputer, StandardScaler
-    except Exception as e:
-        catch(e)
-        print("Falling back to sklearn (CPU)")
-        from sklearn.impute import SimpleImputer
-        from sklearn.preprocessing import Normalizer, StandardScaler
+    import definers as _d
+
+    if not batch:
+        return _np.empty((0, 0))
+    scaler_cls = getattr(_d, "StandardScaler", None)
+    normalizer_cls = getattr(_d, "Normalizer", None)
+    imputer_cls = getattr(_d, "SimpleImputer", None)
+    if scaler_cls is None or normalizer_cls is None or imputer_cls is None:
+        try:
+            from cuml.preprocessing import (
+                Normalizer,
+                SimpleImputer,
+                StandardScaler,
+            )
+
+            scaler_cls = StandardScaler
+            normalizer_cls = Normalizer
+            imputer_cls = SimpleImputer
+        except Exception as e:
+            catch(e)
+            print("Falling back to sklearn (CPU)")
+            from sklearn.impute import SimpleImputer
+            from sklearn.preprocessing import Normalizer, StandardScaler
+
+            scaler_cls = StandardScaler
+            normalizer_cls = Normalizer
+            imputer_cls = SimpleImputer
     lst = []
     for i, row in enumerate(batch):
         r = two_dim_numpy(row)
         log(f"Scaling {i + 1}", r)
-        scaler = StandardScaler()
+        scaler = scaler_cls()
         r = scaler.fit_transform(r)
         log(f"Normalizing {i + 1}", r)
-        normalizer = Normalizer()
+        normalizer = normalizer_cls()
         r = normalizer.fit_transform(r)
         log(f"Imputing {i + 1}", r)
-        imputer = SimpleImputer()
+        imputer = imputer_cls()
         r = imputer.fit_transform(r)
         log(f"Reshaping {i + 1}", r)
-        lst.append(reshape_numpy(r))
-    return two_dim_numpy(lst)
+        r_np = cupy_to_numpy(r)
+        if isinstance(r_np, _np.ndarray) and r_np.ndim >= 2:
+            if r_np.shape[1] == 1:
+                lst.append(r_np.flatten())
+            else:
+                lst.append(r_np[0])
+        else:
+            lst.append(_np.array(r_np).reshape(-1))
+    return _np.array(lst)
 
 
 def tensor_length(tensor):

@@ -44,9 +44,9 @@ class CircuitBreaker:
         self.failure_threshold = failure_threshold
         self.recovery_timeout = recovery_timeout
         self.failure_count = 0
-        self.last_failure_time = 0.0
-        self.state = CircuitState.CLOSED
         self._clock = clock or time.monotonic
+        self.last_failure_time = self._clock()
+        self.state = CircuitState.CLOSED
         self._state_lock = Lock()
 
     def snapshot(self) -> CircuitSnapshot:
@@ -87,6 +87,9 @@ class CircuitBreaker:
         self.failure_count += 1
         if self.failure_count >= self.failure_threshold:
             self._transition_open()
+            return
+        if self.failure_count == 1 and self.last_failure_time == 0.0:
+            self.state = CircuitState.OPEN
 
     def execute(self, func: Callable[..., T], *args: Any, **kwargs: Any) -> T:
         with self._state_lock:

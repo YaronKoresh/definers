@@ -12,6 +12,7 @@ def extract_video_features(video_path, frame_interval=10):
     import cv2
     import skimage.feature as skf
 
+    cap = None
     try:
         cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():
@@ -53,23 +54,26 @@ def extract_video_features(video_path, frame_interval=10):
                 frame_features = _np.concatenate((color_hist, lbp, edges))
                 all_frame_features.append(frame_features)
             frame_count += 1
-        cap.release()
         if not all_frame_features:
             return None
         return np.array(all_frame_features)
     except Exception as e:
         catch(e)
         return None
+    finally:
+        if cap is not None:
+            cap.release()
 
 
 def features_to_video(
     predicted_features, frame_interval=10, fps=24, video_shape=(1024, 1024, 3)
 ):
+    import definers as _d
     import cv2
 
     if predicted_features is None or predicted_features.size == 0:
         return False
-    output_path = tmp("mp4")
+    output_path = _d.tmp("mp4")
     try:
         (height, width, channels) = video_shape
         hist_size = 256 * 3
@@ -131,10 +135,11 @@ def features_to_video(
 def resize_video(
     input_video_path, target_height, target_width, anti_aliasing=True
 ):
+    import definers as _d
     import imageio as iio
     from skimage.transform import resize
 
-    output_video_path = tmp("mp4")
+    output_video_path = _d.tmp("mp4")
     try:
         reader = iio.imiter(input_video_path)
         metadata = reader.metadata()
@@ -157,9 +162,10 @@ def resize_video(
 
 
 def convert_video_fps(input_video_path, target_fps):
+    import definers as _d
     import imageio as iio
 
-    output_video_path = tmp("mp4")
+    output_video_path = _d.tmp("mp4")
     try:
         reader = iio.imiter(input_video_path)
         metadata = reader.metadata()
@@ -184,9 +190,10 @@ def convert_video_fps(input_video_path, target_fps):
 
 
 def write_video(video_data, fps):
+    import definers as _d
     import imageio as iio
 
-    output_path = tmp("mp4")
+    output_path = _d.tmp("mp4")
     try:
         writer = iio.imwriter(output_path, fps=fps)
         for frame in video_data:

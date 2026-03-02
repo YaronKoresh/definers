@@ -49,10 +49,11 @@ def is_admin_windows():
 
 
 def _install_ffmpeg_windows():
+    import definers as _d
     import requests
 
     print("[INFO] Running FFmpeg installer for Windows...")
-    if not is_admin_windows():
+    if not _d.is_admin_windows():
         print(
             "[ERROR] This script requires Administrator privileges to run on Windows."
         )
@@ -97,12 +98,16 @@ def _install_ffmpeg_windows():
     temp_dir = tempfile.gettempdir()
     zip_path = os.path.join(temp_dir, "ffmpeg.zip")
     extract_path = os.path.join(temp_dir, "ffmpeg_extracted")
+    if "/" in temp_dir:
+        zip_path = zip_path.replace("\\", "/")
+        extract_path = extract_path.replace("\\", "/")
     program_files = os.environ.get("ProgramFiles", "C:\\Program Files")
     ffmpeg_install_dir = os.path.join(program_files, "ffmpeg")
     try:
         print(
             f"[INFO] Downloading latest FFmpeg essentials build from {FFMPEG_URL}..."
         )
+        os.makedirs(temp_dir, exist_ok=True)
         with requests.get(FFMPEG_URL, stream=True) as r:
             r.raise_for_status()
             with open(zip_path, "wb") as f:
@@ -230,7 +235,7 @@ def install_audio_effects():
         os.makedirs(install_dir, exist_ok=True)
         print("Detected Windows. Automating dependency installation...")
         print(f"Dependencies will be installed in: {install_dir}")
-        rubberband_url = "https://breakfastquay.com/files/releases/rubberband-4.0.0-gpl-executable-windows.zip"
+        rubberband_url = "https://breakfastquay.com/files/releases/rubberband-3.3.0-gpl-executable-windows.zip"
         fluidsynth_url = "https://github.com/FluidSynth/fluidsynth/releases/download/v2.3.5/fluidsynth-2.3.5-win64.zip"
         soundfont_url = "https://github.com/FluidSynth/fluidsynth/raw/master/sf2/FluidR3_GM.sf2"
         soundfont_path = os.path.join(
@@ -239,11 +244,7 @@ def install_audio_effects():
         rubberband_extract_path = os.path.join(install_dir, "rubberband")
         if "rubberband" not in os.environ.get("PATH", ""):
             if _d.download_and_unzip(rubberband_url, rubberband_extract_path):
-                extracted_dirs = [
-                    d
-                    for d in os.listdir(rubberband_extract_path)
-                    if os.path.isdir(os.path.join(rubberband_extract_path, d))
-                ]
+                extracted_dirs = os.listdir(rubberband_extract_path)
                 if extracted_dirs:
                     rubberband_bin_path = os.path.join(
                         rubberband_extract_path, extracted_dirs[0]
@@ -1143,7 +1144,12 @@ def path_name(p):
 def pre_install():
     import pathlib
 
-    home = str(pathlib.Path.home())
+    try:
+        home = str(pathlib.Path.home())
+    except Exception:
+        home = os.path.expanduser("~")
+        if not home or home == "~":
+            home = os.getcwd()
     os.environ.setdefault("HOME", home)
     os.environ["TRANSFORMERS_CACHE"] = "/opt/ml/checkpoints/"
     os.environ["HF_DATASETS_CACHE"] = "/opt/ml/checkpoints/"

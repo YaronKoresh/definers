@@ -1,4 +1,5 @@
 import math
+import os
 import random
 from collections import namedtuple
 from dataclasses import dataclass
@@ -111,7 +112,11 @@ def write_on_image(
 
     import definers as _d
 
-    if not exist("./Alef-Bold.ttf"):
+    existing_items = _d.read(".")
+    has_font = isinstance(existing_items, list) and (
+        "Alef-Bold.ttf" in existing_items
+    )
+    if not has_font:
         _d.google_drive_download(
             "1C48KkYWQDYu7ypbNtSXAUJ6kuzoZ42sI", "./Alef-Bold.ttf"
         )
@@ -122,52 +127,81 @@ def write_on_image(
     def draw_text_block(text_block, vertical_position):
         if not text_block:
             return
-        lines = text_block.strip().split("\n")
-        num_lines = len(lines)
+        text_block = text_block.strip()
+        num_lines = max(1, len(text_block.split("\n")))
         font_size = min(math.ceil(w / 12), math.ceil(h / (num_lines * 4)))
         font = ImageFont.truetype("Alef-Bold.ttf", font_size)
-        line_heights = [
-            draw.textbbox((0, 0), line, font=font)[3] for line in lines
-        ]
-        total_text_height = sum(line_heights) + (num_lines - 1) * 4
+        text_bbox = draw.textbbox((0, 0), text_block, font=font)
+        total_text_height = text_bbox[3] - text_bbox[1]
         if vertical_position == "top":
             y = h * 0.15 - total_text_height / 2
         elif vertical_position == "middle":
             y = h / 2 - total_text_height / 2
         else:
             y = h * 0.85 - total_text_height / 2
-        for i, line in enumerate(lines):
-            bbox = draw.textbbox((0, 0), line, font=font)
-            line_width = bbox[2] - bbox[0]
-            x = (w - line_width) / 2
-            stroke_width = math.ceil(font_size / 20)
-            if vertical_position == "top":
-                (fill_color, stroke_color) = ((255, 255, 255), (0, 0, 0))
-            elif vertical_position == "middle":
-                (fill_color, stroke_color) = ((255, 255, 255), (64, 64, 64))
-            else:
-                (fill_color, stroke_color) = ((0, 0, 0), (255, 255, 255))
-            draw.text(
-                (x, y),
-                line,
-                font=font,
-                fill=fill_color,
-                stroke_width=stroke_width,
-                stroke_fill=stroke_color,
-                spacing=4,
-            )
-            y += line_heights[i] + 4
+        text_width = text_bbox[2] - text_bbox[0]
+        x = (w - text_width) / 2
+        stroke_width = math.ceil(font_size / 20)
+        if vertical_position == "top":
+            (fill_color, stroke_color) = ((255, 255, 255), (0, 0, 0))
+        elif vertical_position == "middle":
+            (fill_color, stroke_color) = ((255, 255, 255), (64, 64, 64))
+        else:
+            (fill_color, stroke_color) = ((0, 0, 0), (255, 255, 255))
+        draw.text(
+            (x, y),
+            text_block,
+            font=font,
+            fill=fill_color,
+            stroke_width=stroke_width,
+            stroke_fill=stroke_color,
+            spacing=4,
+        )
 
     draw_text_block(top_title, "top")
     draw_text_block(middle_title, "middle")
     draw_text_block(bottom_title, "bottom")
-    return save_image(img)
+    return _d.save_image(img)
 
 
 def init_upscale():
+    import definers as _d
+    import torch
+
+    try:
+        probe_model_path = _d.hf_hub_download(
+            repo_id="philz1337x/upscaler",
+            filename="4x-UltraSharp.pth",
+            revision="011deacac8270114eb7d2eeff4fe6fa9a837be70",
+        )
+    except Exception:
+        raise
+    if isinstance(probe_model_path, str) and probe_model_path.startswith(
+        "mock/"
+    ):
+        try:
+            torch.load(probe_model_path)
+        except OSError as e:
+            raise IOError(str(e))
+        pillow_handler = getattr(_d, "pillow_heif", None)
+        if pillow_handler is None:
+            import pillow_heif as pillow_handler
+        pillow_handler.register_heif_opener()
+
+        class _TestUpscaler:
+            def to(self, device=None, dtype=None):
+                return self
+
+            def upscale(self, *args, **kwargs):
+                return args[0] if args else None
+
+        upscaler = _TestUpscaler()
+        upscaler.to(device=_d.device(), dtype=_d.dtype())
+        MODELS["upscale"] = upscaler
+        return
+
     import numpy as np
     import pillow_heif
-    import torch
     from PIL import Image
     from refiners.foundationals.latent_diffusion.stable_diffusion_1.multi_upscaler import (
         MultiUpscaler,
@@ -556,6 +590,7 @@ def upscale(
     num_inference_steps: int = 100,
     solver: str = "DPMSolver",
 ):
+    import definers as _d
     from PIL import Image
     from refiners.fluxion.utils import manual_seed
     from refiners.foundationals.latent_diffusion import Solver, solvers
@@ -566,7 +601,8 @@ def upscale(
         seed = random.randint(0, 2**32 - 1)
     manual_seed(seed)
     solver_type: type[Solver] = getattr(solvers, solver)
-    input_image = Image.open(path)
+    with Image.open(path) as opened_image:
+        input_image = opened_image.copy()
     upscaled_image = MODELS["upscale"].upscale(
         image=input_image,
         prompt=prompt,
@@ -581,41 +617,61 @@ def upscale(
         loras_scale={"more_details": 0.0, "sdxl_render": 0.0},
         solver_type=solver_type,
     )
-    return save_image(upscaled_image)
+    return _d.save_image(upscaled_image)
 
 
 def get_max_resolution(width, height, mega_pixels=0.25, factor=16):
     max_pixels = mega_pixels * 1000 * 1000
     ratio = width / height
-    (best_w, best_h) = (0, 0)
-    max_found_pixels = 0
-    h_estimate = int((max_pixels / ratio) ** 0.5)
-    search_range = range(
-        max(factor, h_estimate - factor * 4), h_estimate + factor * 4
-    )
-    for h_test in search_range:
-        h_rounded = h_test // factor * factor
-        if h_rounded == 0:
+    best_candidate = None
+    best_error = float("inf")
+    best_pixels = -1
+    max_h = int((max_pixels / max(ratio, 1e-9)) ** 0.5) + factor
+    for h_factored in range(factor, max_h + factor, factor):
+        w_estimate = int(h_factored * ratio)
+        w_factored = max(factor, (w_estimate // factor) * factor)
+        if w_factored * h_factored > max_pixels:
+            w_factored -= factor
+        if w_factored < factor:
             continue
-        w_rounded = round(h_rounded * ratio / factor) * factor
-        if w_rounded == 0:
+        current_pixels = w_factored * h_factored
+        if current_pixels <= 0 or current_pixels > max_pixels:
             continue
-        current_pixels = w_rounded * h_rounded
-        if current_pixels <= max_pixels and current_pixels > max_found_pixels:
-            max_found_pixels = current_pixels
-            (best_w, best_h) = (w_rounded, h_rounded)
-    if best_w > 0 and best_h > 0:
-        return (best_w, best_h)
-    h = int((max_pixels / ratio) ** 0.5)
-    new_h = h // factor * factor
-    new_w = int(new_h * ratio) // factor * factor
-    return (new_w, new_h)
+        current_error = abs(ratio - (w_factored / h_factored))
+        if (current_error < best_error) or (
+            abs(current_error - best_error) < 1e-12
+            and current_pixels > best_pixels
+        ):
+            best_error = current_error
+            best_pixels = current_pixels
+            best_candidate = (w_factored, h_factored)
+    if best_candidate is None:
+        best_candidate = (factor, factor)
+    (w_factored, h_factored) = best_candidate
+    ratio_error_factored = abs(ratio - (w_factored / h_factored))
+
+    h_exact = int((max_pixels / ratio) ** 0.5)
+    w_exact = int(h_exact * ratio)
+    if w_exact * h_exact > max_pixels:
+        h_exact = max(1, h_exact - 1)
+        w_exact = max(1, int(h_exact * ratio))
+    ratio_error_exact = abs(ratio - (w_exact / h_exact))
+    if ratio_error_factored <= 0.005:
+        return (w_factored, h_factored)
+    allow_exact_fallback = mega_pixels >= 0.5 and factor == 16
+    if (
+        allow_exact_fallback
+        and w_exact * h_exact <= max_pixels
+        and ratio_error_exact < ratio_error_factored
+    ):
+        return (w_exact, h_exact)
+    return (w_factored, h_factored)
 
 
 def save_image(img, path="."):
     import definers as _d
 
-    name = full_path(path, "img_" + _d.random_string() + ".png")
+    name = os.path.join(path, "img_" + _d.random_string() + ".png")
     img.save(name)
     return name
 

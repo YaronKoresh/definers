@@ -25,9 +25,13 @@ from definers._system import log
 def google_drive_download(id, dest, unzip=True):
     from googledrivedownloader import download_file_from_google_drive
 
-    download_file_from_google_drive(
-        file_id=id, dest_path=dest, unzip=unzip, showsize=False
-    )
+    try:
+        download_file_from_google_drive(
+            file_id=id, dest_path=dest, unzip=unzip, showsize=False
+        )
+    except Exception as e:
+        log("google_drive_download failed", e)
+        return None
 
 
 def linked_url(url):
@@ -75,7 +79,12 @@ def extract_text(url, selector):
         browser_app.close()
     if html_string is None:
         return None
-    html = fromstring(html_string)
+    if not str(html_string).strip():
+        return ""
+    try:
+        html = fromstring(html_string)
+    except Exception:
+        return ""
     elems = html.xpath(xpath)
     elems = [
         el.text_content().strip() for el in elems if el.text_content().strip()
