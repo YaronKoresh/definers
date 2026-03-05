@@ -136,7 +136,7 @@ cuda = [
     "dask[complete]==2026.1.2",
     "dask-cuda==24.8.2",
     "dask-cudf-cu12==24.8.2",
-    "distributed==2024.7.1",
+    "distributed==2026.1.2",
     "nvidia-cublas-cu12>=12.8.0,<12.9.0",
     "nvidia-cuda-cupti-cu12>=12.8.0,<12.10.0",
     "nvidia-cuda-nvrtc-cu12>=12.8.0,<12.9.0",
