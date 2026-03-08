@@ -1,4 +1,5 @@
 import ctypes
+import errno
 import importlib
 import logging
 import os
@@ -8,6 +9,7 @@ import select
 import shlex
 import shutil
 import site
+import stat
 import subprocess
 import sys
 import tempfile
@@ -236,14 +238,16 @@ def install_audio_effects():
         os.makedirs(install_dir, exist_ok=True)
         print("Detected Windows. Automating dependency installation...")
         print(f"Dependencies will be installed in: {install_dir}")
-        rubberband_url = "https://breakfastquay.com/files/releases/rubberband-3.3.0-gpl-executable-windows.zip"
-        fluidsynth_url = "https://github.com/FluidSynth/fluidsynth/releases/download/v2.3.5/fluidsynth-2.3.5-win64.zip"
-        soundfont_url = "https://github.com/FluidSynth/fluidsynth/raw/master/sf2/FluidR3_GM.sf2"
+        rubberband_url = "https://breakfastquay.com/files/releases/rubberband-4.0.0-gpl-executable-windows.zip"
+        fluidsynth_url = "https://github.com/FluidSynth/fluidsynth/releases/download/v2.5.2/fluidsynth-v2.5.2-win10-x64-glib.zip"
+        soundfont_url = "https://raw.githubusercontent.com/FluidSynth/fluidsynth/master/sf2/VintageDreamsWaves-v2.sf3"
         soundfont_path = os.path.join(
-            install_dir, "soundfonts", "FluidR3_GM.sf2"
+            install_dir, "soundfonts", "VintageDreamsWaves-v2.sf3"
         )
         rubberband_extract_path = os.path.join(install_dir, "rubberband")
-        if "rubberband" not in os.environ.get("PATH", ""):
+        if "rubberband" not in os.environ.get("PATH", "") or not exist(
+            rubberband_extract_path
+        ):
             if _d.download_and_unzip(rubberband_url, rubberband_extract_path):
                 extracted_dirs = os.listdir(rubberband_extract_path)
                 if extracted_dirs:
@@ -252,13 +256,15 @@ def install_audio_effects():
                     )
                     _d.add_to_path_windows(rubberband_bin_path)
         fluidsynth_extract_path = os.path.join(install_dir, "fluidsynth")
-        if not any("fluidsynth" in s for s in os.environ.get("PATH", "")):
+        if "fluidsynth" not in os.environ.get("PATH", "") or not exist(
+            fluidsynth_extract_path
+        ):
             if _d.download_and_unzip(fluidsynth_url, fluidsynth_extract_path):
                 fluidsynth_bin_path = os.path.join(
                     fluidsynth_extract_path, "bin"
                 )
                 _d.add_to_path_windows(fluidsynth_bin_path)
-        if not os.path.exists(soundfont_path):
+        if not exist(soundfont_path):
             os.makedirs(os.path.dirname(soundfont_path), exist_ok=True)
             print("Downloading SoundFont for MIDI playback...")
             _d.download_file(soundfont_url, soundfont_path)
@@ -642,6 +648,28 @@ def is_symlink(*p):
     return Path(os.path.join(*[str(_p).strip() for _p in p])).is_symlink()
 
 
+def remove_readonly(func, path, excinfo):
+    exception_instance = excinfo[1]
+
+    if exception_instance.errno == errno.EACCES:
+        os.chmod(path, stat.S_IWRITE)
+        func(path)
+    else:
+        raise
+
+
+def shutil_rmtree_readonly_handler(func, path, exc_info):
+    exception_instance = (
+        exc_info[1] if isinstance(exc_info, tuple) else exc_info
+    )
+
+    if exception_instance.errno == errno.EACCES:
+        os.chmod(path, stat.S_IWRITE)
+        func(path)
+    else:
+        raise
+
+
 def delete(path):
     resolved = full_path(str(path))
     p = Path(resolved)
@@ -651,7 +679,10 @@ def delete(path):
     if not exist(resolved):
         return
     if is_directory(resolved):
-        shutil.rmtree(resolved)
+        try:
+            shutil.rmtree(resolved, on_exc=shutil_rmtree_readonly_handler)
+        except TypeError:
+            shutil.rmtree(resolved, onerror=shutil_rmtree_readonly_handler)
     else:
         p.unlink(missing_ok=True)
 
@@ -817,9 +848,15 @@ def run_windows(command, silent=False, env=None):
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             env=modified_env,
-            universal_newlines=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
         )
         (stdout, stderr) = process.communicate()
+        if stdout is None:
+            stdout = ""
+        if stderr is None:
+            stderr = ""
         returncode = process.returncode
         if not silent:
             if stdout:
@@ -854,7 +891,14 @@ def run(command, silent=False, env=None):
 
 
 def thread(func, *args, **kwargs):
-    t = threading.Thread(target=func, args=args, kwargs=kwargs, daemon=True)
+
+    def _wrapper(*a, **kw):
+        try:
+            func(*a, **kw)
+        except Exception as e:
+            catch(e)
+
+    t = threading.Thread(target=_wrapper, args=args, kwargs=kwargs, daemon=True)
     t.start()
     return t
 

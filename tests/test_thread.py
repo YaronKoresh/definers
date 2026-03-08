@@ -27,13 +27,20 @@ class TestThread(unittest.TestCase):
         t.join()
 
     def test_thread_exception_handling(self):
+        import warnings
 
         def func_that_raises():
             raise ValueError("Test Error")
 
-        t = thread(func_that_raises)
-        t.join()
-        self.assertTrue(True)
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            t = thread(func_that_raises)
+            t.join()
+
+        assert not any(
+            "PytestUnhandledThreadExceptionWarning" in str(warn.message)
+            for warn in w
+        )
 
 
 if __name__ == "__main__":

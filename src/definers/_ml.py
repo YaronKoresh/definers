@@ -3,7 +3,6 @@ import json
 import logging
 import math
 import os
-import platform
 import random
 import re
 import shutil
@@ -70,6 +69,7 @@ from definers._system import (
     exist,
     full_path,
     get_ext,
+    get_os_name,
     is_directory,
     log,
     modify_wheel_requirements,
@@ -619,6 +619,11 @@ def train(
     dataset_label_columns=None,
     drop_list=None,
     selected_rows=None,
+    order_by=None,
+    stratify=None,
+    val_frac: float = 0.0,
+    test_frac: float = 0.0,
+    batch_size: int = 1,
 ):
     import joblib
 
@@ -639,14 +644,15 @@ def train(
     model_path = f"model_{_d.random_string()}.joblib"
     if not got_inp:
         return None
-    if _d.check_parameter(remote_src):
-        dataset = _d.fetch_dataset(remote_src, url_type, revision)
-    else:
-        dataset = _d.files_to_dataset(features, labels)
-    dataset = _d.drop_columns(dataset, drop_list)
-    _d.log("Full dataset length", len(dataset))
+
     loaders = []
     if _d.check_parameter(selected_rows):
+        if _d.check_parameter(remote_src):
+            dataset = _d.fetch_dataset(remote_src, url_type, revision)
+        else:
+            dataset = _d.files_to_dataset(features, labels)
+        dataset = _d.drop_columns(dataset, drop_list)
+        _d.log("Full dataset length", len(dataset))
         selected_rows = simple_text(selected_rows).split()
         for part in selected_rows:
             if "-" in part:
@@ -665,7 +671,33 @@ def train(
                     )
                 )
     else:
-        loaders.append(_d.to_loader(dataset))
+        td = _d.prepare_data(
+            remote_src=remote_src,
+            features=features,
+            labels=labels,
+            url_type=url_type,
+            revision=revision,
+            drop=drop_list,
+            order_by=order_by,
+            stratify=stratify,
+            val_frac=val_frac,
+            test_frac=test_frac,
+            batch_size=batch_size,
+        )
+        if td is None:
+            return None
+
+        loaders.append(td.train)
+        if td.val is not None:
+            loaders.append(td.val)
+        if td.test is not None:
+            loaders.append(td.test)
+        try:
+            dataset_len = len(td.train.dataset)
+        except Exception:
+            dataset_len = None
+        if dataset_len is not None:
+            _d.log("Full dataset length", dataset_len)
     if is_supv:
         for l, loader in enumerate(loaders):
             print(f"Loader {l + 1}")
@@ -1103,11 +1135,13 @@ def init_model_repo(task: str, turbo: bool = False):
 
         package_name = "phi4_package"
         print(f"Downloading source files for {tasks[task]}...")
+        not_win = get_os_name() != "windows"
         snapshot_dir = Path(
             snapshot_download(
                 repo_id=tasks[task],
                 allow_patterns=["*.txt", "*.py", "*.json", "*.safetensors"],
                 revision="33e62acdd07cd7d6635badd529aa0a3467bb9c6a",
+                local_dir_use_symlinks=not_win,
             )
         )
         print(f"Source files downloaded to: {snapshot_dir}")
@@ -1141,7 +1175,7 @@ def init_model_repo(task: str, turbo: bool = False):
                 )
         print("Rewriting relative imports to absolute...")
         for py_file in snapshot_dir.glob("*.py"):
-            content = py_file.read_text()
+            content = py_file.read_text(encoding="utf-8")
             modified_content = re.sub("from \\.([\\w_]+)", "from \\1", content)
             modified_content = re.sub(
                 "import \\.([\\w_]+)", "import \\1", modified_content
@@ -1829,7 +1863,7 @@ def train_model_rvc(
                 logger.warning(
                     f"Removed existing file/link at {target_link_path}"
                 )
-            if platform.system() != "Windows":
+            if get_os_name() != "windows":
                 os.symlink(added_index_path, target_link_path)
             else:
                 shutil.copy(added_index_path, target_link_path)

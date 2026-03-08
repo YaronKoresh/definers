@@ -22,6 +22,30 @@ Users on Windows encountering the message "'sox' is not recognized as an
 internal or external command" no longer see it when simply running
 `import definers`.
 
+## Available GUIs
+
+The package exposes a simple launcher in `definers._chat.start()` which
+brings up a lightweight Gradio interface for various subprojects.  The list
+of valid project names is computed dynamically from the available `_gui_`
+helpers in the module; new interfaces can be added without any changes to
+`start` itself.  You can also ask the package what names are currently
+registered by calling `definers._get_valid_projects()` (exported at the
+package root).
+
+At the time of writing, available GUIs include:
+
+- `translate` – text translation and image captioning
+- `animation` – manual chunked image-to-animation generator
+- `image` – text‑to-image generation and upscaling tools
+- `chat` – multimodal AI chatbot
+- `faiss` – download a prebuilt FAISS wheel
+- `video` – AI video architect (composition/layout engine)
+- `audio` – AI-powered audio production (formerly "Audio Studio Pro")
+- `train` – train or predict with custom models (formerly "teachless")
+
+Each GUI is loaded lazily; unknown project names are reported via
+`definers._system.catch()` which may raise or log depending on configuration.
+
 ## Development Workflow
 
 - Install development dependencies:
@@ -32,6 +56,36 @@ internal or external command" no longer see it when simply running
 	- `poe test`
 
 The `poe check` task executes cleanup, compile verification, linting, formatting, code sanitization, pre-commit hooks, and test execution.
+
+## Example: automatic data preparation and training
+
+```python
+import definers
+
+# prepare CSV features automatically; returns loaders and metadata
+data = definers.prepare_data(
+    features=["/path/to/f1.csv", "/path/to/f2.csv"],
+    drop=["unneeded_column"],
+    order_by=lambda x: len(str(x)),    # simple ordering strategy
+    stratify="label",
+    val_frac=0.1,
+    test_frac=0.1,
+    batch_size=32,
+)
+print(data.metadata)
+
+# the train entrypoint can also take the same arguments directly
+model_path = definers.train(
+    remote_src=None,
+    features=["/path/to/f1.csv"],
+    dataset_label_columns=["label"],
+    order_by="shuffle",
+    stratify="label",
+    val_frac=0.1,
+    test_frac=0.1,
+    batch_size=32,
+)
+```
 
 ## Automation
 

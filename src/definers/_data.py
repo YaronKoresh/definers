@@ -1,6 +1,8 @@
 import importlib
 import logging
 import sys
+from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as _np
@@ -12,6 +14,14 @@ try:
     import cupy as np
 except Exception:
     import numpy as np
+
+
+@dataclass
+class TrainingData:
+    train: Any
+    val: Any | None = None
+    test: Any | None = None
+    metadata: dict[str, Any] = None
 
 
 def patch_cupy_numpy():
@@ -578,6 +588,246 @@ def to_loader(dataset, batch_size=1):
     )
 
 
+def make_loader(dataset, batch_size=1, sampler=None):
+    from torch.utils.data import DataLoader
+
+    return DataLoader(
+        dataset,
+        pin_memory=False,
+        num_workers=0,
+        batch_size=batch_size,
+        shuffle=(sampler is None),
+        sampler=sampler,
+        drop_last=False,
+    )
+
+
+def load_source(
+    remote_src=None, features=None, labels=None, url_type=None, revision=None
+):
+    import definers as _d
+
+    if remote_src:
+        return _d.fetch_dataset(remote_src, url_type, revision)
+    if features:
+        return _d.files_to_dataset(features, labels)
+    return None
+
+
+def infer_data_type(array):
+    try:
+        return guess_numpy_type(array)
+    except Exception:
+        return None
+
+
+def tokenize_or_vectorize(data, tokenizer=None):
+    import numpy as np
+
+    if data is None:
+        return data
+    try:
+        arr = np.array(data)
+        if arr.dtype.kind in ("U", "S", "O"):
+            return tokenize_and_pad(arr.tolist(), tokenizer)
+    except Exception:
+        pass
+    return data
+
+
+def pad_or_reshape(arr_list):
+    if not arr_list:
+        return []
+    max_lens = get_max_shapes(*arr_list)
+    return [reshape_numpy(a, lengths=max_lens) for a in arr_list]
+
+
+def order_dataset(dataset, order_by=None):
+    from torch.utils.data import Subset
+
+    if order_by is None or order_by == "shuffle":
+        return dataset
+    n = len(dataset)
+    indices = list(range(n))
+    if callable(order_by):
+        try:
+            keys = [order_by(dataset[i]) for i in indices]
+            sorted_idx = [i for _, i in sorted(zip(keys, indices))]
+            return Subset(dataset, sorted_idx)
+        except Exception:
+            return dataset
+    if isinstance(order_by, str):
+        try:
+            keys = []
+            for i in indices:
+                item = dataset[i]
+                if isinstance(item, dict) and order_by in item:
+                    keys.append(item[order_by])
+                elif (
+                    hasattr(item, "__len__")
+                    and isinstance(item, (list, tuple))
+                    and len(item) > 0
+                ):
+                    try:
+                        keys.append(
+                            item[0] if order_by == 0 else item[order_by]
+                        )
+                    except Exception:
+                        keys.append(0)
+                else:
+                    keys.append(0)
+            sorted_idx = [i for _, i in sorted(zip(keys, indices))]
+            return Subset(dataset, sorted_idx)
+        except Exception:
+            return dataset
+    return dataset
+
+
+def split_dataset(
+    dataset,
+    stratify=None,
+    val_frac=0.0,
+    test_frac=0.0,
+    random_state=None,
+    batch_size=1,
+):
+    from sklearn.model_selection import train_test_split
+    from torch.utils.data import Subset
+
+    n = len(dataset)
+    indices = list(range(n))
+    labels = None
+    if stratify is not None:
+        if isinstance(stratify, str):
+            if hasattr(dataset, "column_names"):
+                labels = list(dataset[stratify])
+            elif isinstance(dataset, list):
+                try:
+                    labels = [
+                        item.get(stratify) if isinstance(item, dict) else None
+                        for item in dataset
+                    ]
+                except Exception:
+                    labels = None
+            else:
+                labels = None
+        else:
+            labels = stratify
+    rest_frac = val_frac + test_frac
+    if rest_frac <= 0:
+        train_idx = indices
+        val_idx = []
+        test_idx = []
+    else:
+        try:
+            train_idx, rest_idx = train_test_split(
+                indices,
+                test_size=rest_frac,
+                stratify=labels,
+                random_state=random_state,
+            )
+        except Exception:
+            train_idx = indices
+            rest_idx = []
+        if val_frac > 0 and test_frac > 0 and rest_idx:
+            try:
+                val_idx, test_idx = train_test_split(
+                    rest_idx,
+                    test_size=test_frac / rest_frac,
+                    random_state=random_state,
+                )
+            except Exception:
+                val_idx = rest_idx
+                test_idx = []
+        elif val_frac > 0:
+            val_idx = rest_idx
+            test_idx = []
+        else:
+            val_idx = []
+            test_idx = rest_idx
+
+    def subset_from(idx):
+        return Subset(dataset, idx)
+
+    train_ds = subset_from(train_idx)
+    val_ds = subset_from(val_idx) if val_idx else None
+    test_ds = subset_from(test_idx) if test_idx else None
+    train_loader = make_loader(train_ds, batch_size=batch_size)
+    val_loader = make_loader(val_ds, batch_size=batch_size) if val_ds else None
+    test_loader = (
+        make_loader(test_ds, batch_size=batch_size) if test_ds else None
+    )
+    metadata = {
+        "stratify": stratify,
+        "val_frac": val_frac,
+        "test_frac": test_frac,
+    }
+    return TrainingData(
+        train=train_loader, val=val_loader, test=test_loader, metadata=metadata
+    )
+
+
+_prepare_data_cache: dict[str, TrainingData] = {}
+
+
+def prepare_data(
+    remote_src=None,
+    features=None,
+    labels=None,
+    url_type=None,
+    revision=None,
+    drop=None,
+    order_by=None,
+    stratify=None,
+    val_frac=0.0,
+    test_frac=0.0,
+    batch_size=1,
+):
+
+    def make_key():
+        parts = []
+        for name, val in [
+            ("remote_src", remote_src),
+            ("features", tuple(features) if features is not None else None),
+            ("labels", tuple(labels) if labels is not None else None),
+            ("url_type", url_type),
+            ("revision", revision),
+            ("drop", tuple(drop) if drop is not None else None),
+            ("order_by", id(order_by) if callable(order_by) else order_by),
+            ("stratify", stratify),
+            ("val_frac", val_frac),
+            ("test_frac", test_frac),
+            ("batch_size", batch_size),
+        ]:
+            parts.append(f"{name}={val}")
+        return "|".join(map(str, parts))
+
+    cache_key = make_key()
+    if cache_key in _prepare_data_cache:
+        return _prepare_data_cache[cache_key]
+
+    dataset = load_source(remote_src, features, labels, url_type, revision)
+    if dataset is None:
+        return None
+    if drop:
+        dataset = drop_columns(dataset, drop)
+    if order_by:
+        dataset = order_dataset(dataset, order_by)
+    if val_frac > 0 or test_frac > 0 or stratify is not None:
+        result = split_dataset(
+            dataset,
+            stratify=stratify,
+            val_frac=val_frac,
+            test_frac=test_frac,
+            batch_size=batch_size,
+        )
+    else:
+        loader = make_loader(dataset, batch_size=batch_size)
+        result = TrainingData(train=loader, metadata={})
+    _prepare_data_cache[cache_key] = result
+    return result
+
+
 def pad_sequences(X):
     import torch
 
@@ -678,6 +928,9 @@ def load_as_numpy(path, training=False):
                 try:
                     if last == "csv":
                         df = pandas.read_csv(path)
+
+                        if df.empty:
+                            df = pandas.read_csv(path, header=None)
                     elif last == "xlsx":
                         df = pandas.read_excel(path)
                     elif last == "json":

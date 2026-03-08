@@ -321,10 +321,15 @@ def features_to_audio(
 
 
 def predict_audio(model, audio_file):
+    import os
+
     import librosa
     import soundfile as sf
 
     import definers as _d
+
+    if not os.path.exists(audio_file):
+        return None
 
     try:
         (audio_data, sr) = librosa.load(audio_file, sr=32000, mono=True)
@@ -1546,9 +1551,9 @@ def midi_to_audio(midi_path, format_choice):
             os.path.expanduser("~"),
             "app_dependencies",
             "soundfonts",
-            "FluidR3_GM.sf2",
+            "VintageDreamsWaves-v2.sf3",
         ),
-        "/usr/share/sounds/sf2/FluidR3_GM.sf2",
+        "/usr/share/sounds/sf2/VintageDreamsWaves-v2.sf3",
         "C:/Windows/System32/drivers/gm.dls",
     ]
     soundfont_file = None

@@ -26,7 +26,9 @@ class TestRunWindows(unittest.TestCase):
             stdout=unittest.mock.ANY,
             stderr=unittest.mock.ANY,
             env=unittest.mock.ANY,
-            universal_newlines=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
         )
 
     @patch("subprocess.Popen")
@@ -44,7 +46,9 @@ class TestRunWindows(unittest.TestCase):
             stdout=unittest.mock.ANY,
             stderr=unittest.mock.ANY,
             env=unittest.mock.ANY,
-            universal_newlines=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
         )
 
     @patch("subprocess.Popen")

@@ -64,13 +64,6 @@ class TestSetSystemMessage(unittest.TestCase):
             definers.SYSTEM_MESSAGE,
         )
 
-    @patch("definers.log")
-    def test_log_is_called(self, mock_log):
-        definers.set_system_message(name="Tester")
-        mock_log.assert_called_once_with(
-            "System Message Updated", definers.SYSTEM_MESSAGE
-        )
-
     def test_all_parameters(self):
         definers.set_system_message(
             name="ChatBot",

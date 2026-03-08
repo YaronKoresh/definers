@@ -141,6 +141,8 @@ try:
 except ImportError:
     AutoTokenizer = None
 collections.MutableSequence = collections.abc.MutableSequence
+from importlib.metadata import PackageNotFoundError, version as _pkg_version
+
 import numpy as _np
 
 from definers._audio import (
@@ -195,25 +197,32 @@ from definers._audio import (
     value_to_keys,
     write_mp3,
 )
-from definers._chat import (
+from definers._video_gui import (
     apply_global_overlays,
     apply_post_fx,
-    calculate_gpu_duration,
-    css,
     draw_custom_element,
     draw_star_of_david,
     filter_styles,
     generate_preview_handler,
     generate_video_handler,
-    get_chat_response,
     get_rms_and_beat,
+    normalize_arr,
+    prepare_common_resources,
+    render_frame_base,
+)
+
+try:
+    __version__ = _pkg_version("definers")
+except PackageNotFoundError:
+    __version__ = "0.0.0"
+
+from definers._chat import (
+    css,
+    get_chat_response,
     init_chat,
     init_stable_whisper,
     lyric_video,
     music_video,
-    normalize_arr,
-    prepare_common_resources,
-    render_frame_base,
     start,
     strip_nikud,
     theme,
@@ -247,6 +256,7 @@ from definers._cuda import (
     set_cuda_env,
 )
 from definers._data import (
+    TrainingData,
     _find_spec,
     _init_cupy_numpy,
     check_onnx,
@@ -269,10 +279,12 @@ from definers._data import (
     numpy_to_list,
     numpy_to_str,
     one_dim_numpy,
+    order_dataset,
     pad_nested,
     pad_sequences,
     patch_cupy_numpy,
     patch_torch_proxy_mode,
+    prepare_data,
     process_rows,
     pytorch_to_onnx,
     read_as_numpy,
@@ -280,6 +292,7 @@ from definers._data import (
     select_columns,
     select_rows,
     split_columns,
+    split_dataset,
     str_to_numpy,
     tensor_length,
     three_dim_numpy,
@@ -540,3 +553,6 @@ def init_custom_model(model_type, path):
     except Exception as e:
         catch(f"Error initializing model: {e}")
         return None
+
+
+from . import _chat, _system

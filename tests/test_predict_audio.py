@@ -70,7 +70,13 @@ class TestPredictAudio(unittest.TestCase):
         self.mock_features_to_audio.assert_called()
 
     def test_audio_file_not_found(self):
-        result = predict_audio(self.mock_model, "non_existent_file.wav")
+        import warnings
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            result = predict_audio(self.mock_model, "non_existent_file.wav")
+
+        self.assertEqual(len(w), 0)
         self.assertIsNone(result)
 
     def test_silent_audio_file(self):

@@ -73,7 +73,6 @@ def set_system_message(
     import definers as _d
 
     _d.SYSTEM_MESSAGE = SYSTEM_MESSAGE
-    _d.log("System Message Updated", SYSTEM_MESSAGE)
 
 
 def language(text):
