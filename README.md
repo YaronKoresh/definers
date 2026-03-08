@@ -28,9 +28,7 @@ The package exposes a simple launcher in `definers._chat.start()` which
 brings up a lightweight Gradio interface for various subprojects.  The list
 of valid project names is computed dynamically from the available `_gui_`
 helpers in the module; new interfaces can be added without any changes to
-`start` itself.  You can also ask the package what names are currently
-registered by calling `definers._get_valid_projects()` (exported at the
-package root).
+`start` itself.
 
 At the time of writing, available GUIs include:
 
