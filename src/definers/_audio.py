@@ -328,6 +328,8 @@ def predict_audio(model, audio_file):
 
     import definers as _d
 
+    audio_file = full_path(audio_file)
+
     if not os.path.exists(audio_file):
         return None
 

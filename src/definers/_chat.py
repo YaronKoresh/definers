@@ -347,7 +347,6 @@ def lyric_video(
     background_path,
     lyrics_text,
     text_position,
-    *,
     max_dim=640,
     font_size=70,
     text_color="white",
@@ -894,9 +893,7 @@ def _gui_video():
     custom_css = "\n        body { color: #00ff41; font-family: monospace; }\n        .gr-button.primary { background: #00f3ff; color: black; font-weight: bold; box-shadow: 0 0 10px #00f3ff; }\n        .gr-button.secondary { background: #222; color: white; border: 1px solid #444; }\n        .section-header { color: #ff003c; font-weight: bold; margin-bottom: 5px; border-bottom: 1px solid #333; padding-bottom: 5px; }\n        textarea { overflow-y: auto !important; }\n        "
     video_theme = gr.themes.Base(primary_hue="cyan", neutral_hue="slate")
 
-    with gr.Blocks(
-        title="AI VIDEO ARCHITECT", css=custom_css, theme=video_theme
-    ) as app:
+    with gr.Blocks(title="AI VIDEO ARCHITECT") as app:
         gr.Markdown("# 🏗️ AI VIDEO ARCHITECT")
         with gr.Tabs():
             with gr.TabItem("Composer"):
@@ -1095,7 +1092,12 @@ def _gui_video():
                         inputs=[mv_audio, mv_width, mv_height, mv_fps],
                         outputs=[mv_out],
                     )
-    app.launch(server_name="0.0.0.0", server_port=7860)
+    app.launch(
+        server_name="0.0.0.0",
+        css=custom_css,
+        theme=video_theme,
+        server_port=7860,
+    )
 
 
 def _gui_audio():
