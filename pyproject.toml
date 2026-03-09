@@ -127,7 +127,7 @@ cuda = [
     "rmm-cu12==24.8.2",
     "ucx-py-cu12==0.39.2",
     "ucxx-cu12==0.39.1",
-    "pylibraft-cu12==24.8.1",
+    "pylibraft-cu12==26.2.0",
     "pynvjitlink-cu12==0.7.0",
     "libucx-cu12==1.19.0",
     "cudf-cu12==24.8.1",
