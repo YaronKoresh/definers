@@ -121,7 +121,7 @@ dev = [
     "vulture>=2.10",
 ]
 cuda = [
-    "distributed-ucxx-cu12==0.39.1",
+    "distributed-ucxx-cu12==0.48.0",
     "raft-dask-cu12==24.8.1",
     "rapids-dask-dependency==26.2.0",
     "rmm-cu12==24.8.2",
