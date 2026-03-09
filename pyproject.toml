@@ -146,7 +146,7 @@ cuda = [
     "nvidia-curand-cu12>=10.3.0,<10.4.0",
     "nvidia-cusolver-cu12>=11.7.0,<11.8.0",
     "nvidia-cusparse-cu12>=12.5.0,<12.6.0",
-    "nvidia-nccl-cu12>=2.27.0,<2.28.0",
+    "nvidia-nccl-cu12>=2.27.0,<2.30.0",
     "nvidia-nvtx-cu12>=12.8.0,<12.10.0",
 ]
 
