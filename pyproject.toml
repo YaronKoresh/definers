@@ -124,7 +124,7 @@ cuda = [
     "distributed-ucxx-cu12==0.48.0",
     "raft-dask-cu12==26.2.0",
     "rapids-dask-dependency==26.2.0",
-    "rmm-cu12==24.8.2",
+    "rmm-cu12==26.2.0",
     "ucx-py-cu12==0.45.0",
     "ucxx-cu12==0.48.0",
     "pylibraft-cu12==26.2.0",
