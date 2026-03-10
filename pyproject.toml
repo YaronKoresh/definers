@@ -122,7 +122,7 @@ dev = [
 ]
 cuda = [
     "distributed-ucxx-cu12==0.48.0",
-    "raft-dask-cu12==24.8.1",
+    "raft-dask-cu12==26.2.0",
     "rapids-dask-dependency==26.2.0",
     "rmm-cu12==24.8.2",
     "ucx-py-cu12==0.45.0",
