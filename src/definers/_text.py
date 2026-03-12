@@ -89,24 +89,50 @@ def strip_nikud(text: str) -> str:
 
 
 def simple_text(prompt: str) -> str:
+
+    from definers import regex_utils
+    from definers._constants import MAX_CONSECUTIVE_SPACES, MAX_INPUT_LENGTH
+
     if prompt is None:
         return ""
-    punc = "[\"\\'!#$%&()*+,/:;<=>?@\\[\\\\\\]^_`\\{\\|\\}~]"
-    prompt = re.sub("[\t]", " ", str(prompt))
-    prompt = re.sub("(\n){2,}", "\n", prompt)
-    prompt = re.sub("( ){2,}", " ", prompt)
-    prompt = re.sub(r"(?=([ ]*))\1\.(?:(?=([ ]*))\2\.)+", ".", prompt)
-    prompt = re.sub("(-){2,}", "-", prompt)
+    prompt = str(prompt)
+
+    if len(prompt) > MAX_INPUT_LENGTH:
+        raise ValueError(f"input too long ({len(prompt)} > {MAX_INPUT_LENGTH})")
+    if " " * (MAX_CONSECUTIVE_SPACES + 1) in prompt:
+        raise ValueError("too many consecutive spaces")
+
+    prompt = prompt.replace("	", " ")
+
+    lines = prompt.splitlines()
+    collapsed = []
+    for line in lines:
+        if collapsed and not line and not collapsed[-1]:
+            continue
+        collapsed.append(line)
+    prompt = "\n".join(collapsed)
+
+    while "  " in prompt:
+        prompt = prompt.replace("  ", " ")
+    for pat in [" .", ". ", ".."]:
+        while pat in prompt:
+            prompt = prompt.replace(pat, ".")
+    while "--" in prompt:
+        prompt = prompt.replace("--", "-")
+
     prompt = prompt.replace("|", " or ")
-    prompt = re.sub(r"(?=([ !]+))\1\?[! ?]*", " I wonder ", prompt)
-    prompt = re.sub("(?<=[a-zA-Z0-9])\\/(?=[a-zA-Z0-9])", " ", prompt)
-    prompt = re.sub(punc, "", prompt)
+    prompt = regex_utils.sub(r"\s*\?\s*", " I wonder ", prompt)
+    prompt = regex_utils.sub(r"(?<=[A-Za-z0-9])\/(?=[A-Za-z0-9])", " ", prompt)
+
+    punc_chars = "\"'!#$%&()*+,/:;<=>?@[\\]^_`{|}~"
+    prompt = prompt.translate(str.maketrans("", "", punc_chars))
     prompt = prompt.strip().strip(".")
-    prompt = re.sub(
-        "\\s*(?:(?<!\\d)(?<!\x08[a-zA-Z])\\.)+\\s*", " and ", prompt
-    )
-    prompt = re.sub("(\n){2,}", "\n", prompt)
-    prompt = re.sub("( ){2,}", " ", prompt)
+
+    prompt = regex_utils.sub(r"\s*\.\s*", " and ", prompt)
+    while "  " in prompt:
+        prompt = prompt.replace("  ", " ")
+    prompt = regex_utils.sub(r"(\n){2,}", "\n", prompt)
+
     lines = prompt.split("\n")
     lines = [
         line.lower().strip().replace(" -", "-").replace("- ", "-")
@@ -129,7 +155,15 @@ def camel_case(txt: str) -> str:
 def ai_translate(text, lang="en"):
     import torch
     from sacremoses import MosesPunctNormalizer
-    from stopes.pipelines.monolingual.utils.sentence_split import get_split_algo
+
+    try:
+        from stopes.pipelines.monolingual.utils.sentence_split import (
+            get_split_algo,
+        )
+    except ImportError:
+
+        def get_split_algo(*_args, **_kwargs):
+            return lambda s: [s]
 
     if not text or not text.strip():
         return ""

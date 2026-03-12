@@ -260,6 +260,15 @@ def _execute_async_operation(coroutine: Any) -> Any:
 
 def download_file(url: str, destination: str) -> str | None:
 
+    from definers._constants import MAX_INPUT_LENGTH
+
+    if not isinstance(url, str):
+        raise ValueError("url must be a string")
+    if len(url) > MAX_INPUT_LENGTH:
+        raise ValueError(f"url too long ({len(url)} > {MAX_INPUT_LENGTH})")
+    if not (url.startswith("http://") or url.startswith("https://")):
+        raise ValueError(f"unsupported URL scheme: {url}")
+
     async def _async_runner() -> bool:
         orchestrator = ResourceRetrievalOrchestrator(
             HttpChunkedTransferStrategy()
@@ -271,6 +280,15 @@ def download_file(url: str, destination: str) -> str | None:
 
 
 def download_and_unzip(url: str, extract_to: str) -> bool:
+
+    from definers._constants import MAX_INPUT_LENGTH
+
+    if not isinstance(url, str):
+        raise ValueError("url must be a string")
+    if len(url) > MAX_INPUT_LENGTH:
+        raise ValueError(f"url too long ({len(url)} > {MAX_INPUT_LENGTH})")
+    if not (url.startswith("http://") or url.startswith("https://")):
+        raise ValueError(f"unsupported URL scheme: {url}")
 
     async def _async_runner() -> bool:
         orchestrator = ResourceRetrievalOrchestrator(

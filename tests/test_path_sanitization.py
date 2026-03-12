@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import pytest
 
@@ -11,10 +12,26 @@ def test_sanitize_path_allows_and_rejects(tmp_path):
     base.mkdir()
     good = base / "file.txt"
     good.write_text("x")
+
     os.environ["DEFINERS_TRUSTED_PATHS"] = str(base)
     assert sanitize_path(str(good)) == str(good.resolve())
+
     with pytest.raises(ValueError):
         sanitize_path(str(tmp_path / "other.txt"))
+
+
+def test_sanitize_path_tempdir_not_whitelisted(tmp_path):
+
+    import tempfile
+
+    tempdir = Path(tempfile.gettempdir()).resolve()
+
+    outside = tempdir / "not_trusted.txt"
+
+    outside.write_text("z")
+    os.environ["DEFINERS_TRUSTED_PATHS"] = ""
+    with pytest.raises(ValueError):
+        sanitize_path(str(outside))
 
 
 def test_sanitize_path_prevents_traversal(tmp_path):

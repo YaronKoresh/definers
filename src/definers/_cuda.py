@@ -1,6 +1,9 @@
 import os
 import re
+import shutil
 import subprocess
+import sys
+from pathlib import Path
 
 from definers._system import (
     catch,
@@ -87,10 +90,32 @@ def free():
         torch.cuda.empty_cache()
     except Exception as e:
         _d.catch(e)
-    _d.run(["rm", "-rf", "~/.cache/huggingface/*"], silent=True)
-    _d.run(["rm", "-rf", "/data-nvme/zerogpu-offload/*"], silent=True)
-    _d.run(["rm", "-rf", "/opt/ml/checkpoints/*"], silent=True)
-    _d.run(["pip", "cache", "purge"], silent=True)
+    hf_home = os.environ.get("HF_HOME")
+    cache_dir = (
+        Path(hf_home) if hf_home else Path.home() / ".cache" / "huggingface"
+    )
+    if cache_dir.exists():
+        for entry in cache_dir.iterdir():
+            try:
+                if entry.is_dir():
+                    shutil.rmtree(entry)
+                else:
+                    entry.unlink()
+            except Exception as exc:
+                _d.catch(exc)
+
+    for path_str in ("/data-nvme/zerogpu-offload", "/opt/ml/checkpoints"):
+        path = Path(path_str)
+        if path.exists():
+            try:
+                shutil.rmtree(path)
+            except Exception as exc:
+                _d.catch(exc)
+
+    try:
+        _d.run([sys.executable, "-m", "pip", "cache", "purge"], silent=True)
+    except Exception as exc:
+        _d.catch(exc)
     mamba_path = os.path.expanduser("~/miniconda3/bin/mamba")
     if os.path.exists(mamba_path):
         _d.run([mamba_path, "clean", "--all"], silent=True)

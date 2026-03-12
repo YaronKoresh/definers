@@ -58,6 +58,8 @@ class TestPredict(unittest.TestCase):
 
         mock_joblib_load.assert_called_with(self.model_path)
         mock_read.assert_called_with(self.prediction_file_txt)
+
+        mock_create_vec.assert_called_once_with([mock_read.return_value])
         self.mock_model.predict.assert_called_once()
         np.testing.assert_array_equal(
             self.mock_model.predict.call_args[0][0],

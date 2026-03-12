@@ -161,6 +161,12 @@ unesco_mapping = {
     "ms": "zsm_Latn",
     "zu": "zul_Latn",
 }
+
+MAX_INPUT_LENGTH = 1024
+
+
+MAX_CONSECUTIVE_SPACES = 3
+
 language_codes = {
     "af": "afrikaans",
     "sq": "albanian",

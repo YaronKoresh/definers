@@ -3,8 +3,15 @@ import math
 import random
 import re
 
+import definers._text as _text
 from definers._audio import value_to_keys
-from definers._constants import MODELS, STYLES_DB, language_codes
+from definers._constants import (
+    MAX_CONSECUTIVE_SPACES,
+    MAX_INPUT_LENGTH,
+    MODELS,
+    STYLES_DB,
+    language_codes,
+)
 from definers._cuda import device
 from definers._image import (
     get_max_resolution,
@@ -29,7 +36,6 @@ from definers._system import (
     tmp,
     unique,
 )
-from definers._text import ai_translate, language, simple_text
 from definers._video_gui import (
     draw_star_of_david,
     filter_styles,
@@ -71,7 +77,25 @@ def css():
     return '\n\nvideo {\n    border-radius: 20px;\n}\n\ndiv:has(>video) {\n    padding: 20px 20px 0px 20px !important;\n}\n\nspan {\n    margin-block: 0 !important;\n}\n\nlabel.container > span {\n    width: 100% !important;\n}\n\nhtml > body .gradio-container > main *:not(img, svg, span, :has(>svg)):is(*, *::placeholder) {\n    scrollbar-width: none !important;\n    text-align: center !important;\n    max-width: 100% !important;\n}\n\ndiv:not(.styler) > :is(.block:has(+ .block), .block + .block):has(:not(span, div, h1, h2, h3, h4, h5, h6, p, strong)) {\n    border: 1px dotted slategray !important;\n    margin-block: 10px !important;\n}\n\n.row {\n    padding-block: 20px !important;\n}\n\nlabel > input[type="radio"] {\n    border: 2px ridge black !important;\n    flex-grow: 0 !important;\n}\n\nlabel.selected > input[type="radio"] {\n    background: lime !important;\n}\n\nlabel:has(>input[type="radio"]) {\n    flex-grow: 0 !important;\n}\n\ndiv.form:has(>fieldset.block) {\n    margin-block: 10px !important;\n}\n\ndiv.controls {\n    width: 100% !important;\n}\n\ndiv.controls > * {\n    flex-grow: 1 !important;\n}\n\n    html > body .gradio-container {\n        padding: 0 !important;\n    }\n\n        html > body footer {\n            opacity: 0 !important;\n            visibility: hidden !important;\n            width: 0px !important;\n            height: 0px !important;\n        }\n\n    tr.file > td.download {\n        min-width: unset !important;\n        width: auto !important;\n    }\n\nhtml > body main {\n    padding-inline: 20px !important;\n}\n\n    button {\n        border-radius: 2mm !important;\n        border: none !important;\n        cursor: pointer !important;\n        margin-inline: 8px !important;\n    }\n\n    button:not(:has(svg)) {\n        width: auto !important;\n    }\n\n    textarea {\n        border: 1px solid #ccc !important;\n        border-radius: 5px !important;\n        padding: 8px !important;\n    }\n\n    textarea:focus{\n        border-color: #4CAF50 !important;\n        outline: none !important;\n        box-shadow: 0 0 5px rgba(76, 175, 80, 0.5) !important;\n    }\n\n    h1 {\n        color: #333 !important;\n    }\n\n    h2 {\n        color: #444 !important;\n    }\n\n    h3{\n        color: #555 !important;\n    }\n\n    '
 
 
+def validate_text_input(s):
+    import gradio as gr
+
+    if s is None:
+        return ""
+    if len(s) > MAX_INPUT_LENGTH:
+        log(
+            "Validation reject",
+            f"input length {len(s)} exceeds {MAX_INPUT_LENGTH}",
+        )
+        raise gr.Error(f"Input too long ({len(s)} > {MAX_INPUT_LENGTH})")
+    if " " * (MAX_CONSECUTIVE_SPACES + 1) in s:
+        log("Validation reject", "input has excessive consecutive spaces")
+        raise gr.Error("Input contains too many consecutive spaces")
+    return _text.simple_text(s)
+
+
 def get_chat_response(message, history: list):
+
     history = list(history)
     orig_lang = None
     including = []
@@ -81,10 +105,11 @@ def get_chat_response(message, history: list):
             history.append({"role": "user", "content": {"path": file_path}})
     if message["text"]:
         including.append("text")
-        orig_lang = language(message["text"])
+        orig_lang = _text.language(message["text"])
         if orig_lang != "en":
-            message["text"] = ai_translate(message["text"])
-        message["text"] = simple_text(message["text"])
+            message["text"] = _text.ai_translate(message["text"])
+
+        message["text"] = validate_text_input(message["text"])
         history.append({"role": "user", "content": message["text"]})
         if message["files"]:
             history.append(
@@ -372,7 +397,7 @@ def lyric_video(
     audio_clip = AudioFileClip(audio_path)
     duration = audio_clip.duration
     lyrics_text = strip_nikud(lyrics_text)
-    detected_lang = language(lyrics_text)
+    detected_lang = _text.language(lyrics_text)
     print(f"🌍 Detected language: {detected_lang}")
     print("🎤 Starting automatic lyric synchronization...")
     timed_lyrics = []
@@ -553,7 +578,9 @@ def _gui_translate():
         return write_on_image(image_path, top, middle, bottom)
 
     def handle_translate(txt, tgt_lang):
-        return ai_translate(txt, value_to_keys(language_codes, tgt_lang)[0])
+        return _text.ai_translate(
+            txt, value_to_keys(language_codes, tgt_lang)[0]
+        )
 
     with gr.Blocks() as app:
         gr.Markdown("# AI Translator")
@@ -609,6 +636,8 @@ def _gui_animation():
         chunk_state,
         progress=gr.Progress(),
     ):
+
+        txt = validate_text_input(txt)
         txt = optimize_prompt_realism(txt)
         total_frames = int(dur * fps)
         total_chunks = math.ceil(total_frames / FRAMES_PER_CHUNK)
@@ -710,6 +739,7 @@ def _gui_animation():
                     lines=4,
                     label="Prompt",
                     container=True,
+                    max_length=MAX_INPUT_LENGTH,
                 )
                 dur = gr.Slider(
                     minimum=1,
@@ -771,6 +801,20 @@ def _gui_animation():
 def _gui_image():
     import gradio as gr
 
+    def validate_text_input(s):
+        if s is None:
+            return ""
+        if len(s) > MAX_INPUT_LENGTH:
+            log(
+                "Validation reject",
+                f"input length {len(s)} exceeds {MAX_INPUT_LENGTH}",
+            )
+            raise gr.Error(f"Input too long ({len(s)} > {MAX_INPUT_LENGTH})")
+        if " " * (MAX_CONSECUTIVE_SPACES + 1) in s:
+            log("Validation reject", "input has excessive consecutive spaces")
+            raise gr.Error("Input contains too many consecutive spaces")
+        return _text.simple_text(s)
+
     init_pretrained_model("translate", True)
     init_pretrained_model("summary", True)
     init_pretrained_model("image", True)
@@ -780,6 +824,7 @@ def _gui_image():
         return write_on_image(image_path, top, middle, bottom)
 
     def handle_generation(text, w, h):
+        text = validate_text_input(text)
         (w, h) = get_max_resolution(w, h, mega_pixels=2.5)
         text = optimize_prompt_realism(text)
         return pipe("image", prompt=text, resolution=f"{w}x{h}")
@@ -801,7 +846,7 @@ def _gui_image():
                 data = gr.Textbox(
                     placeholder="Input data",
                     value="",
-                    max_length=1000,
+                    max_length=MAX_INPUT_LENGTH,
                     lines=4,
                     label="Prompt",
                     container=True,
@@ -2413,6 +2458,19 @@ def _gui_train():
         drop_list,
         selected_rows,
     ):
+
+        if selected_rows is not None:
+            from definers._ml import simple_text
+
+            if len(selected_rows) > MAX_INPUT_LENGTH:
+                raise gr.Error(
+                    f"Selected rows input too long ({len(selected_rows)} > {MAX_INPUT_LENGTH})"
+                )
+            if " " * (MAX_CONSECUTIVE_SPACES + 1) in selected_rows:
+                raise gr.Error(
+                    "Selected rows contains too many consecutive spaces"
+                )
+            selected_rows = simple_text(selected_rows)
         return train(
             model_path,
             remote_src,
@@ -2464,6 +2522,7 @@ def _gui_train():
                         selected_rows = gr.Textbox(
                             placeholder="Single rows and ranges (space separated, use a hyphen to choose a range or rows)",
                             label="Selected Rows",
+                            max_length=MAX_INPUT_LENGTH,
                         )
 
                     with gr.Column():

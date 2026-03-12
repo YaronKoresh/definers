@@ -519,7 +519,8 @@ def predict(prediction_file, model_path):
         return predict_audio(model, prediction_file)
     if ext == "txt":
         data = read(prediction_file)
-        vectorizer = create_vectorizer()
+
+        vectorizer = create_vectorizer([data])
         features = extract_text_features(data, vectorizer)
     else:
         features = load_as_numpy(prediction_file)
@@ -549,8 +550,17 @@ def predict(prediction_file, model_path):
 
 
 def init_custom_model(model_type, path):
+
+    from definers._constants import MAX_INPUT_LENGTH
+
     if not path or model_type not in ("onnx", "pkl"):
         return None
+    if not isinstance(path, str):
+        raise ValueError("model path must be a string")
+    if len(path) > MAX_INPUT_LENGTH:
+        raise ValueError(
+            f"model path too long ({len(path)} > {MAX_INPUT_LENGTH})"
+        )
     from definers._system import sanitize_load_path
 
     try:

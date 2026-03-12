@@ -9,6 +9,16 @@ Definers is a Python toolkit for AI workflows, media processing, data operations
 - `definers._audio`, `definers._image`, `definers._video`, and `definers._ml` provide domain processing capabilities.
 - `definers._system` and related utility modules provide environment and runtime helpers.
 
+## Security & Performance
+
+Regular-expression operations are centralized in `definers.regex_utils`.
+Consumers should never compile patterns containing raw user data directly;
+use `regex_utils.escape`, `escape_and_compile`, or the thin wrappers
+`sub`/`fullmatch` which enforce a maximum pattern length and reject
+nested quantifiers to prevent catastrophic backtracking.  User-facing
+textboxes are also guarded by `MAX_INPUT_LENGTH` and maximum consecutive
+spaces checks to reduce attack surface.
+
 ## Audio Dependency
 
 The `sox` Python package is an optional dependency used by

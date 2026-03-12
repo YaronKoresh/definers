@@ -17,6 +17,7 @@ from time import sleep, time
 import numpy as _np
 import numpy as np
 
+from definers import regex_utils
 from definers._audio import (
     audio_preview,
     features_to_audio,
@@ -85,7 +86,13 @@ from definers._system import (
     wait,
     write,
 )
-from definers._text import ai_translate, language, random_string, strip_nikud
+from definers._text import (
+    ai_translate,
+    language,
+    random_string,
+    simple_text,
+    strip_nikud,
+)
 from definers._video import features_to_video, write_video
 from definers._web import download_file, google_drive_download
 
@@ -622,6 +629,21 @@ def feed(model, X_new, y_new=None, epochs=1):
     return model
 
 
+from definers._constants import MAX_CONSECUTIVE_SPACES, MAX_INPUT_LENGTH
+
+
+def _validate_str_param(name: str, value: str) -> str:
+    if value is None:
+        return value
+    if not isinstance(value, str):
+        raise ValueError(f"{name} must be a string")
+    if len(value) > MAX_INPUT_LENGTH:
+        raise ValueError(f"{name} too long ({len(value)} > {MAX_INPUT_LENGTH})")
+    if " " * (MAX_CONSECUTIVE_SPACES + 1) in value:
+        raise ValueError(f"{name} contains too many consecutive spaces")
+    return value
+
+
 def train(
     model_path=None,
     remote_src=None,
@@ -644,7 +666,13 @@ def train(
     from definers._system import sanitize_load_path
 
     tokenizer = _d.init_tokenizer()
+
+    if _d.check_parameter(remote_src):
+        remote_src = _validate_str_param("remote_src", remote_src)
     got_inp = _d.check_parameter(features) or _d.check_parameter(remote_src)
+
+    if _d.check_parameter(selected_rows):
+        selected_rows = _validate_str_param("selected_rows", selected_rows)
     is_supv = _d.check_parameter(dataset_label_columns) or _d.check_parameter(
         labels
     )
@@ -666,6 +694,7 @@ def train(
 
     loaders = []
     if _d.check_parameter(selected_rows):
+        selected_rows = _validate_str_param("selected_rows", selected_rows)
         if _d.check_parameter(remote_src):
             dataset = _d.fetch_dataset(remote_src, url_type, revision)
         else:
@@ -1010,33 +1039,6 @@ def build_faiss():
         catch(f"An unexpected error occurred: {e}")
 
 
-def simple_text(prompt):
-    punc = "[\"\\'!#$%&()*+,/:;<=>?@\\[\\\\\\]^_`\\{\\|\\}~]"
-    prompt = re.sub("[\t]", " ", prompt)
-    prompt = re.sub("(\n){2,}", "\n", prompt)
-    prompt = re.sub("( ){2,}", " ", prompt)
-    prompt = re.sub("[\\. ]+\\.[\\.]*|[\\. ]*\\.[\\.]+", ".", prompt)
-    prompt = re.sub("(-){2,}", "-", prompt)
-    prompt = prompt.replace("|", " or ")
-    prompt = re.sub("([ !]){1,}\\?([ !?]){1,}", " I wonder ", prompt)
-    prompt = re.sub("(?<=[a-zA-Z0-9])\\/(?=[a-zA-Z0-9])", " ", prompt)
-    prompt = re.sub(punc, "", prompt)
-    prompt = prompt.strip().strip(".")
-    prompt = re.sub(
-        "\\s*(?:(?<!\\d)(?<!\x08[a-zA-Z])\\.)+\\s*", " and ", prompt
-    )
-    prompt = re.sub("(\n){2,}", "\n", prompt)
-    prompt = re.sub("( ){2,}", " ", prompt)
-    lines = prompt.split("\n")
-    lines = [
-        line.lower().strip().replace(" -", "-").replace("- ", "-")
-        for line in lines
-    ]
-    lines = [line for line in lines if line]
-    prompt = "\n".join(lines)
-    return prompt
-
-
 def _summarize(text_to_summarize):
     prefix = "summarize: "
     encoded = TOKENIZERS["summary"](
@@ -1288,8 +1290,10 @@ def init_model_repo(task: str, turbo: bool = True):
         print("Rewriting relative imports to absolute...")
         for py_file in snapshot_dir.glob("*.py"):
             content = py_file.read_text(encoding="utf-8")
-            modified_content = re.sub("from \\.([\\w_]+)", "from \\1", content)
-            modified_content = re.sub(
+            modified_content = regex_utils.sub(
+                r"from \\.(\\w_+)", "from \\1", content
+            )
+            modified_content = regex_utils.sub(
                 "import \\.([\\w_]+)", "import \\1", modified_content
             )
             if content != modified_content:

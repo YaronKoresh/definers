@@ -458,17 +458,9 @@ def sanitize_load_path(path: str, allow_dirs: list[str] | None = None) -> str:
             Path(b).expanduser().resolve() for b in env.split(os.pathsep) if b
         ]
 
-        if not env:
-            cwd = Path.cwd().resolve()
-            if cwd not in bases:
-                bases.append(cwd)
-
-            try:
-                tmp = Path(tempfile.gettempdir()).resolve()
-                if tmp not in bases:
-                    bases.append(tmp)
-            except Exception:
-                pass
+        cwd = Path.cwd().resolve()
+        if cwd not in bases:
+            bases.append(cwd)
     else:
         bases = [Path(b).expanduser().resolve() for b in allow_dirs]
     for b in bases:
@@ -1154,7 +1146,9 @@ def installed(pack, version=None):
         lines = _d.run("pip list", silent=True)
         if lines:
             for line in lines:
-                parts = re.sub("( ){2,}", ";", line).split(";")
+                from definers import regex_utils
+
+                parts = regex_utils.sub(r"( ){2,}", ";", line).split(";")
                 if len(parts) == 2:
                     n = parts[0].lower().strip()
                     v = parts[1].lower().strip()
