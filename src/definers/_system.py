@@ -509,15 +509,47 @@ def full_path(*p):
 
 
 def sanitize_basename(name: str, pattern: str = r"[A-Za-z0-9_.-]+") -> str:
+    """
+    Sanitize a simple basename that may be used in filesystem paths or
+    as part of a subprocess argument (for example, an experiment name).
+
+    Constraints:
+    - Must be a non-empty string.
+    - Must not contain path separators.
+    - Must not be "." or "..".
+    - Must match the allowed pattern (default: [A-Za-z0-9_.-]+).
+    - Must start with an alphanumeric character.
+    - Must not exceed a reasonable maximum length.
+    """
     if not isinstance(name, str) or not name:
         raise ValueError(f"Invalid name: {name!r}")
 
+    # Normalize surrounding whitespace
+    name = name.strip()
+    if not name:
+        raise ValueError("Invalid name: empty or whitespace-only")
+
+    # Disallow path traversal or directory separators
     if os.path.sep in name or (os.path.altsep and os.path.altsep in name):
         raise ValueError(f"Invalid name contains path separator: {name}")
     if name in {"..", "."}:
         raise ValueError(f"Invalid name: {name}")
+
+    # Enforce maximum length to avoid pathological paths
+    max_len = 128
+    if len(name) > max_len:
+        raise ValueError(f"Name too long (>{max_len} characters): {name!r}")
+
+    # Ensure the name starts with an alphanumeric character
+    if not re.match(r"[A-Za-z0-9]", name[0]):
+        raise ValueError(
+            f"Name must start with an alphanumeric character: {name!r}"
+        )
+
+    # Enforce allowed character set
     if not re.fullmatch(pattern, name):
-        raise ValueError(f"Name contains disallowed characters: {name}")
+        raise ValueError(f"Name contains disallowed characters: {name!r}")
+
     return name
 
 
