@@ -851,7 +851,25 @@ def run_linux(command, silent=False, env=None):
     modified_env = {**original_env, **env}
 
     if isinstance(command, list):
-        args = [str(c) for c in command if str(c).strip()]
+        # Normalize and validate command-line arguments before execution.
+        args = []
+        for c in command:
+            # Only allow simple scalar types as arguments.
+            if isinstance(c, (str, int, float, bool)):
+                s = str(c).strip()
+            else:
+                # Reject unsupported argument types to avoid unexpected behavior.
+                logger.error(
+                    "Rejected unsupported command argument type %r in %r", type(c), command
+                )
+                return False
+            if not s:
+                continue
+            # Optionally enforce a reasonable maximum length per argument.
+            if len(s) > 1024:
+                logger.error("Rejected overlong command argument in %r", command)
+                return False
+            args.append(s)
         if not args:
             return False
         try:
