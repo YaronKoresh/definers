@@ -448,27 +448,65 @@ def exist(*p):
 
 
 def sanitize_load_path(path: str, allow_dirs: list[str] | None = None) -> str:
-    if not path or not isinstance(path, str):
+    """
+    Normalize and validate a filesystem path against a set of trusted base
+    directories. The returned path is absolute, with user home expanded.
+
+    If allow_dirs is provided, those directories (after expansion and
+    resolution) define the allowed roots. Otherwise, the trusted roots are
+    taken from the DEFINERS_TRUSTED_PATHS environment variable (os.pathsep-
+    separated). If that variable is empty, the current working directory is
+    used as the sole trusted root.
+    """
+    if not isinstance(path, str) or not path:
         raise ValueError(f"Invalid path: {path!r}")
+
+    # Resolve the candidate path to an absolute, normalized form.
     p = Path(path).expanduser().resolve()
+
+    # Build list of trusted base directories.
     if allow_dirs is None:
         env = os.environ.get("DEFINERS_TRUSTED_PATHS", "")
         bases = [
             Path(b).expanduser().resolve() for b in env.split(os.pathsep) if b
         ]
 
+        # Always fall back to the current working directory if no bases were
+        # provided via the environment.
         cwd = Path.cwd().resolve()
         if cwd not in bases:
             bases.append(cwd)
     else:
         bases = [Path(b).expanduser().resolve() for b in allow_dirs]
+
+    # Ensure we have at least one base directory to compare against.
+    if not bases:
+        raise ValueError("No trusted base directories configured")
+
     for b in bases:
+        # On Windows, paths on different drives cannot be related.
+        if hasattr(p, "drive") and getattr(p, "drive", None) and getattr(
+            b, "drive", None
+        ):
+            if p.drive.lower() != b.drive.lower():
+                continue
         try:
+            # Python 3.9+: use Path.is_relative_to for a reliable containment check.
             if p.is_relative_to(b):
                 return str(p)
         except AttributeError:
-            if str(p) == str(b) or str(p).startswith(str(b) + os.sep):
-                return str(p)
+            # Fallback for older Python versions: use os.path.commonpath instead
+            # of naive string prefix checks to avoid partial component matches.
+            p_str = str(p)
+            b_str = str(b)
+            try:
+                common = os.path.commonpath([p_str, b_str])
+            except ValueError:
+                # Happens on Windows for paths on different drives.
+                continue
+            if common == b_str:
+                return p_str
+
     raise ValueError(f"Refusing to load from untrusted path: {p}")
 
 
