@@ -5,7 +5,6 @@ import logging
 import os
 import platform
 import re
-import select
 import shlex
 import shutil
 import site
@@ -499,54 +498,38 @@ def add_path(*p):
 
 
 def normalize_path(p):
-    return os.path.normpath(p)
+    normalized = os.path.normpath(p)
+    expanded = os.path.expanduser(normalized)
+    return expanded
 
 
 def full_path(*p):
     joined = os.path.join(*[str(_p).strip() for _p in p])
-    expanded = os.path.expanduser(joined)
-    return os.path.abspath(expanded)
+    return str(Path(joined).expanduser().resolve())
 
 
 def sanitize_basename(name: str, pattern: str = r"[A-Za-z0-9_.-]+") -> str:
-    """
-    Sanitize a simple basename that may be used in filesystem paths or
-    as part of a subprocess argument (for example, an experiment name).
-
-    Constraints:
-    - Must be a non-empty string.
-    - Must not contain path separators.
-    - Must not be "." or "..".
-    - Must match the allowed pattern (default: [A-Za-z0-9_.-]+).
-    - Must start with an alphanumeric character.
-    - Must not exceed a reasonable maximum length.
-    """
     if not isinstance(name, str) or not name:
         raise ValueError(f"Invalid name: {name!r}")
 
-    # Normalize surrounding whitespace
     name = name.strip()
     if not name:
         raise ValueError("Invalid name: empty or whitespace-only")
 
-    # Disallow path traversal or directory separators
     if os.path.sep in name or (os.path.altsep and os.path.altsep in name):
         raise ValueError(f"Invalid name contains path separator: {name}")
     if name in {"..", "."}:
         raise ValueError(f"Invalid name: {name}")
 
-    # Enforce maximum length to avoid pathological paths
     max_len = 128
     if len(name) > max_len:
         raise ValueError(f"Name too long (>{max_len} characters): {name!r}")
 
-    # Ensure the name starts with an alphanumeric character
     if not re.match(r"[A-Za-z0-9]", name[0]):
         raise ValueError(
             f"Name must start with an alphanumeric character: {name!r}"
         )
 
-    # Enforce allowed character set
     if not re.fullmatch(pattern, name):
         raise ValueError(f"Name contains disallowed characters: {name!r}")
 
@@ -839,35 +822,37 @@ def save_temp_text(text_content):
 
 
 def run_linux(command, silent=False, env=None):
-
-    try:
-        import pty
-    except ImportError:
-        pty = None
-
     if env is None:
         env = {}
     original_env = os.environ.copy()
     modified_env = {**original_env, **env}
 
+    if isinstance(command, str):
+        try:
+            command = shlex.split(command)
+        except ValueError as e:
+            log("Invalid command string format", str(e))
+            return False
+
     if isinstance(command, list):
-        # Normalize and validate command-line arguments before execution.
         args = []
         for c in command:
-            # Only allow simple scalar types as arguments.
             if isinstance(c, (str, int, float, bool)):
                 s = str(c).strip()
             else:
-                # Reject unsupported argument types to avoid unexpected behavior.
                 logger.error(
-                    "Rejected unsupported command argument type %r in %r", type(c), command
+                    "Rejected unsupported command argument type %r in %r",
+                    type(c),
+                    command,
                 )
                 return False
             if not s:
                 continue
-            # Optionally enforce a reasonable maximum length per argument.
+
             if len(s) > 1024:
-                logger.error("Rejected overlong command argument in %r", command)
+                logger.error(
+                    "Rejected overlong command argument in %r", command
+                )
                 return False
             args.append(s)
         if not args:
@@ -885,16 +870,20 @@ def run_linux(command, silent=False, env=None):
                 errors="replace",
             )
             stdout, stderr = proc.communicate()
+
             if stdout is None:
                 stdout = ""
             if stderr is None:
                 stderr = ""
+
             returncode = proc.returncode
+
             if not silent:
                 if stdout:
                     print(stdout, end="", flush=True)
                 if stderr:
                     print(stderr, end="", flush=True)
+
             if returncode != 0:
                 if not silent:
                     log(f"Script failed [{returncode}]", " ".join(args))
@@ -906,88 +895,11 @@ def run_linux(command, silent=False, env=None):
                 out_lines = stdout.strip().splitlines()
                 ret_lines = [o.strip() for o in out_lines if o.strip() != ""]
                 return ret_lines
+
         except Exception as e:
             catch(e)
             return False
 
-    if isinstance(command, str):
-        import re
-
-        if re.search(r"[;&|`$]", command):
-            log("Unsafe command string detected", command)
-            return False
-    if isinstance(command, list):
-        command = "\n".join(command)
-    in_lines = command.strip().splitlines()
-    cmds = [i.strip() for i in in_lines if i.strip() != ""]
-    if len(cmds) > 0:
-        script = "\n".join(cmds)
-        name = tmp(".sh")
-        try:
-            write(name, "#!/bin/bash --login\n" + script)
-            permit(name)
-            if pty is None:
-                raise OSError(
-                    "pty module unavailable; cannot run complex Linux script"
-                )
-            (master, slave) = pty.openpty()
-            pid = os.fork()
-            if pid == 0:
-                os.setsid()
-                try:
-                    with open(os.devnull) as stdin:
-                        os.dup2(stdin.fileno(), 0)
-                    os.dup2(slave, 1)
-                    os.dup2(slave, 2)
-                    os.close(master)
-                    os.close(slave)
-                    os.environ.update(modified_env)
-                    os.execl(
-                        "/bin/bash", "/bin/bash", "--login", "-c", name, "&"
-                    )
-                except Exception as e:
-                    print(f"Execution Error: {e}")
-                finally:
-                    delete(name)
-                    os.environ.update(original_env)
-                    os._exit(0)
-            else:
-                os.close(slave)
-                output_bytes = b""
-                output = ""
-                while True:
-                    (rlist, _, _) = select.select([master], [], [])
-                    if master in rlist:
-                        try:
-                            chunk = os.read(master, 1024)
-                            if not chunk:
-                                break
-                            output_bytes += chunk
-                            try:
-                                chunk_utf = chunk.decode(
-                                    "utf-8", errors="replace"
-                                )
-                                if not silent:
-                                    print(chunk_utf, end="", flush=True)
-                                output += chunk_utf
-                            except UnicodeDecodeError:
-                                continue
-                        except OSError:
-                            break
-                os.close(master)
-                returncode = os.waitpid(pid, 0)[1] >> 8
-                if returncode != 0:
-                    if not silent:
-                        log(f"Script failed [{returncode}]", script)
-                    return False
-                if not silent:
-                    log("Script completed", script)
-                out_lines = output.strip().splitlines()
-                ret_lines = [o.strip() for o in out_lines if o.strip() != ""]
-                return ret_lines
-        except OSError as e:
-            catch(e)
-            return False
     return False
 
 
@@ -995,12 +907,29 @@ def run_windows(command, silent=False, env=None):
     try:
         if env is None:
             env = {}
-        modified_env = {**os.environ.copy(), **env}
+        original_env = os.environ.copy()
+        modified_env = {**original_env, **env}
+
+        if isinstance(command, str):
+            text_cmd = command.strip()
+            if not text_cmd:
+                return False
+
+            if re.search(r"[;&|`$]", text_cmd):
+                log("Unsafe command string detected", text_cmd)
+                return False
+
+            try:
+                command = shlex.split(text_cmd)
+            except ValueError as e:
+                log("Invalid command string format", str(e))
+                return False
 
         if isinstance(command, list):
             args = [str(c) for c in command if str(c).strip()]
             if not args:
                 return False
+
             process = subprocess.Popen(
                 args,
                 shell=False,
@@ -1012,72 +941,35 @@ def run_windows(command, silent=False, env=None):
                 encoding="utf-8",
                 errors="replace",
             )
-        else:
-            text_cmd = command.strip()
-            if not text_cmd:
-                return False
-            import re
 
-            if re.search(r"[;&|`$]", text_cmd):
-                log("Unsafe command string detected", text_cmd)
-                return False
+            (stdout, stderr) = process.communicate()
 
-            if any(tok in text_cmd for tok in ["&&", "\n", ";"]):
-                process = subprocess.Popen(
-                    text_cmd,
-                    shell=True,
-                    stdin=subprocess.PIPE,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    env=modified_env,
-                    text=True,
-                    encoding="utf-8",
-                    errors="replace",
-                )
+            if stdout is None:
+                stdout = ""
+            if stderr is None:
+                stderr = ""
+
+            returncode = process.returncode
+
+            if not silent:
+                if stdout:
+                    print(stdout, end="", flush=True)
+                if stderr:
+                    print(stderr, end="", flush=True)
+
+            if returncode != 0:
+                if not silent:
+                    log(f"Script failed [{returncode}]", " ".join(args))
+                    log(f"Stderr: {stderr.strip()}", "")
+                return False
             else:
-                import shlex
+                if not silent:
+                    log("Script completed", " ".join(args))
+                out_lines = stdout.strip().splitlines()
+                ret_lines = [o.strip() for o in out_lines if o.strip()]
+                return ret_lines
 
-                args = shlex.split(text_cmd)
-                process = subprocess.Popen(
-                    args,
-                    shell=False,
-                    stdin=subprocess.PIPE,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    env=modified_env,
-                    text=True,
-                    encoding="utf-8",
-                    errors="replace",
-                )
-
-        (stdout, stderr) = process.communicate()
-        if stdout is None:
-            stdout = ""
-        if stderr is None:
-            stderr = ""
-        returncode = process.returncode
-        if not silent:
-            if stdout:
-                print(stdout, end="", flush=True)
-            if stderr:
-                print(stderr, end="", flush=True)
-        if returncode != 0:
-            if not silent:
-                log(
-                    f"Script failed [{returncode}]",
-                    command if isinstance(command, str) else " ".join(command),
-                )
-                log(f"Stderr: {stderr.strip()}", "")
-            return False
-        else:
-            if not silent:
-                log(
-                    "Script completed",
-                    command if isinstance(command, str) else " ".join(command),
-                )
-            out_lines = stdout.strip().splitlines()
-            ret_lines = [o.strip() for o in out_lines if o.strip()]
-            return ret_lines
+        return False
     except Exception as e:
         catch(e)
         return False

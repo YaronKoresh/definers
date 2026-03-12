@@ -81,6 +81,7 @@ from definers._system import (
     paths,
     read,
     run,
+    sanitize_load_path,
     thread,
     tmp,
     wait,
@@ -1697,6 +1698,7 @@ def export_files_rvc(experiment: str):
         return []
 
     now_dir = os.getcwd()
+    now_dir = full_path(sanitize_load_path(now_dir))
     weight_root = os.path.join(now_dir, "assets", "weights")
     index_root = os.path.join(now_dir, "logs")
     exp_path = os.path.join(index_root, experiment)
@@ -1708,15 +1710,18 @@ def export_files_rvc(experiment: str):
     pth_path = os.path.join(weight_root, latest_checkpoint_filename)
     logger.info(f"Found latest checkpoint: {pth_path}")
     index_file = ""
+    exp_path = full_path(sanitize_load_path(exp_path))
     for root, dirs, files in os.walk(exp_path, topdown=False):
         for name in files:
             if name.endswith(".index") and "trained" not in name:
                 index_file = os.path.join(root, name)
+                index_file = full_path(sanitize_load_path(index_file))
                 logger.info(f"Found index file: {index_file}")
                 break
         if index_file:
             break
     onnx_path = rvc_to_onnx(pth_path)
+    onnx_path = full_path(sanitize_load_path(onnx_path))
     exported_files = [pth_path]
     if os.path.exists(onnx_path):
         exported_files.append(onnx_path)
@@ -1830,6 +1835,7 @@ def train_model_rvc(
         default_batch_size = 1
     exp_dir = experiment
     exp_path = os.path.join(index_root, exp_dir)
+    exp_path = full_path(sanitize_load_path(exp_path))
     logger.info(f"Experiment directory: {exp_path}")
     directory(os.path.join(exp_path, "1_16k_wavs"))
     directory(os.path.join(exp_path, "0_gt_wavs"))
@@ -1943,9 +1949,9 @@ def train_model_rvc(
     logger.info("Starting index training...")
     feature_dir = os.path.join(exp_path, "3_feature768")
     listdir_res = []
-    if os.path.exists(feature_dir):
+    if exist(feature_dir):
         listdir_res = os.listdir(feature_dir)
-    if not os.path.exists(feature_dir) or not any(listdir_res):
+    if not exist(feature_dir) or not any(listdir_res):
         error_message = f"Error: Feature directory '{feature_dir}' is missing or empty! Cannot train index."
         catch(error_message)
         return None
@@ -2161,6 +2167,7 @@ def convert_vocal_rvc(experiment: str, path: str):
     path = normalize_audio_to_peak(path)
     (path, music) = separate_stems(path)
     now_dir = os.getcwd()
+    now_dir = full_path(sanitize_load_path(now_dir))
     index_root = os.path.join(now_dir, "logs")
     weight_root = os.path.join(now_dir, "assets", "weights")
     config = Config()

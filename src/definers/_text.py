@@ -89,9 +89,8 @@ def strip_nikud(text: str) -> str:
 
 
 def simple_text(prompt: str) -> str:
-
     from definers import regex_utils
-    from definers._constants import MAX_CONSECUTIVE_SPACES, MAX_INPUT_LENGTH
+    from definers._constants import MAX_INPUT_LENGTH
 
     if prompt is None:
         return ""
@@ -99,21 +98,15 @@ def simple_text(prompt: str) -> str:
 
     if len(prompt) > MAX_INPUT_LENGTH:
         raise ValueError(f"input too long ({len(prompt)} > {MAX_INPUT_LENGTH})")
-    if " " * (MAX_CONSECUTIVE_SPACES + 1) in prompt:
-        raise ValueError("too many consecutive spaces")
-
-    prompt = prompt.replace("	", " ")
 
     lines = prompt.splitlines()
-    collapsed = []
+    cleaned_lines = []
     for line in lines:
-        if collapsed and not line and not collapsed[-1]:
-            continue
-        collapsed.append(line)
-    prompt = "\n".join(collapsed)
+        cleaned_line = " ".join(line.split())
+        if cleaned_line:
+            cleaned_lines.append(cleaned_line)
+    prompt = "\n".join(cleaned_lines)
 
-    while "  " in prompt:
-        prompt = prompt.replace("  ", " ")
     for pat in [" .", ". ", ".."]:
         while pat in prompt:
             prompt = prompt.replace(pat, ".")
@@ -121,25 +114,21 @@ def simple_text(prompt: str) -> str:
         prompt = prompt.replace("--", "-")
 
     prompt = prompt.replace("|", " or ")
-    prompt = regex_utils.sub(r"\s*\?\s*", " I wonder ", prompt)
+    prompt = prompt.replace("?", " I wonder ")
+
     prompt = regex_utils.sub(r"(?<=[A-Za-z0-9])\/(?=[A-Za-z0-9])", " ", prompt)
 
     punc_chars = "\"'!#$%&()*+,/:;<=>?@[\\]^_`{|}~"
     prompt = prompt.translate(str.maketrans("", "", punc_chars))
     prompt = prompt.strip().strip(".")
 
-    prompt = regex_utils.sub(r"\s*\.\s*", " and ", prompt)
-    while "  " in prompt:
-        prompt = prompt.replace("  ", " ")
-    prompt = regex_utils.sub(r"(\n){2,}", "\n", prompt)
+    prompt = prompt.replace(".", " and ")
 
-    lines = prompt.split("\n")
     lines = [
         line.lower().strip().replace(" -", "-").replace("- ", "-")
-        for line in lines
+        for line in prompt.splitlines()
     ]
-    lines = [line for line in lines if line]
-    return "\n".join(lines)
+    return "\n".join([" ".join(l.split()) for l in lines if l.strip()])
 
 
 @lru_cache(maxsize=1024)

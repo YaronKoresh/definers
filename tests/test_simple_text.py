@@ -61,13 +61,6 @@ class TestSimpleText(unittest.TestCase):
         with self.assertRaises(ValueError):
             simple_text(prompt)
 
-    def test_excessive_spaces_raises(self):
-        from definers._constants import MAX_CONSECUTIVE_SPACES
-
-        prompt = "word" + " " * (MAX_CONSECUTIVE_SPACES + 2) + "word"
-        with self.assertRaises(ValueError):
-            simple_text(prompt)
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -6,7 +6,7 @@ from re import Pattern
 MAX_PATTERN_LENGTH = 1000
 
 
-_NESTED_QUANTIFIER_RE = re.compile(r"\([^)]*[+*][^)]*\)[^)]*[+*]")
+_NESTED_QUANTIFIER_RE = re.compile(r"\([^()+*]*[+*][^()]*\)[+*]")
 
 
 def escape(text: str) -> str:
