@@ -14,7 +14,7 @@ class TestTrain(unittest.TestCase):
             "attention_mask": np.array([[1, 1, 1]]),
         }
 
-    @patch("definers._system.sanitize_load_path", side_effect=lambda x: x)
+    @patch("definers._system.secure_path", side_effect=lambda x: x)
     @patch("definers.fetch_dataset")
     @patch("definers.files_to_dataset")
     @patch("definers.init_tokenizer")
@@ -41,7 +41,7 @@ class TestTrain(unittest.TestCase):
         mock_dump.assert_called()
         self.assertIsNotNone(result)
 
-    @patch("definers._system.sanitize_load_path", side_effect=lambda x: x)
+    @patch("definers._system.secure_path", side_effect=lambda x: x)
     @patch("definers.fetch_dataset")
     @patch("definers.init_tokenizer")
     @patch("definers.HybridModel")
@@ -68,7 +68,7 @@ class TestTrain(unittest.TestCase):
         mock_dump.assert_called()
         self.assertRegex(result, "model_.*\\.joblib")
 
-    @patch("definers._system.sanitize_load_path", side_effect=lambda x: x)
+    @patch("definers._system.secure_path", side_effect=lambda x: x)
     @patch("definers.fetch_dataset")
     @patch("definers.init_tokenizer")
     @patch("definers.HybridModel")
@@ -105,7 +105,7 @@ class TestTrain(unittest.TestCase):
         mock_dump.assert_called()
         self.assertRegex(result, "model_.*\\.joblib")
 
-    @patch("definers._system.sanitize_load_path", side_effect=lambda x: x)
+    @patch("definers._system.secure_path", side_effect=lambda x: x)
     @patch("definers.files_to_dataset")
     @patch("definers.init_tokenizer")
     @patch("definers.HybridModel")
@@ -132,7 +132,7 @@ class TestTrain(unittest.TestCase):
         result = train()
         self.assertIsNone(result)
 
-    @patch("definers._system.sanitize_load_path", side_effect=lambda x: x)
+    @patch("definers._system.secure_path", side_effect=lambda x: x)
     @patch("definers.fetch_dataset")
     @patch("definers.init_tokenizer")
     @patch("joblib.dump")

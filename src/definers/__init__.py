@@ -13,8 +13,6 @@ from datetime import datetime
 from glob import glob
 from pathlib import Path
 
-import joblib
-
 try:
     import imageio as iio
 except ImportError:
@@ -336,6 +334,7 @@ from definers._ml import (
     get_model_instructions,
     git,
     infer,
+    init_custom_model,
     init_model_file,
     init_model_repo,
     init_pretrained_model,
@@ -349,6 +348,7 @@ from definers._ml import (
     map_reduce_summary,
     optimize_prompt_realism,
     pipe,
+    predict,
     predict_linear_regression,
     preprocess_prompt,
     rvc_to_onnx,
@@ -413,6 +413,8 @@ from definers._system import (
     runnable,
     save,
     save_temp_text,
+    secure_command,
+    secure_path,
     send_signal_to_process,
     thread,
     tmp,
@@ -499,81 +501,5 @@ try:
 except Exception:
     pass
 set_system_message(name="Phi", role="a helpful chat assistant")
-
-
-def predict(prediction_file, model_path):
-    from definers._system import sanitize_load_path
-
-    try:
-        model_path = sanitize_load_path(model_path)
-    except Exception as e:
-        from definers._system import catch
-
-        catch(e)
-        return None
-    model = joblib.load(model_path)
-    if model is None:
-        return None
-    ext = os.path.splitext(prediction_file)[1].lstrip(".").lower()
-    if ext in common_audio_formats:
-        return predict_audio(model, prediction_file)
-    if ext == "txt":
-        data = read(prediction_file)
-
-        vectorizer = create_vectorizer([data])
-        features = extract_text_features(data, vectorizer)
-    else:
-        features = load_as_numpy(prediction_file)
-        if features is None:
-            return None
-    gpu_features = numpy_to_cupy(features)
-    flat = one_dim_numpy(gpu_features)
-    prediction = model.predict(flat)
-    if prediction is None:
-        return None
-    if is_clusters_model(model):
-        prediction = get_cluster_content(model, int(prediction[0]))
-    output_type = guess_numpy_type(prediction)
-    if output_type == "text":
-        text = features_to_text(prediction)
-        path = random_string() + ".txt"
-        with open(path, "w") as f:
-            f.write(text)
-        return path
-    elif output_type == "image":
-        img = features_to_image(prediction)
-        img_np = cupy_to_numpy(img)
-        path = random_string() + ".png"
-        iio.imwrite(path, img_np)
-        return path
-    return None
-
-
-def init_custom_model(model_type, path):
-
-    from definers._constants import MAX_INPUT_LENGTH
-
-    if not path or model_type not in ("onnx", "pkl"):
-        return None
-    if not isinstance(path, str):
-        raise ValueError("model path must be a string")
-    if len(path) > MAX_INPUT_LENGTH:
-        raise ValueError(
-            f"model path too long ({len(path)} > {MAX_INPUT_LENGTH})"
-        )
-    from definers._system import sanitize_load_path
-
-    try:
-        path = sanitize_load_path(path)
-        with open(path, "rb") as f:
-            if model_type == "onnx":
-                model = onnx.load(f)
-            elif model_type == "pkl":
-                model = pickle.load(f)
-        return model
-    except Exception as e:
-        catch(f"Error initializing model: {e}")
-        return None
-
 
 from . import _chat, _system

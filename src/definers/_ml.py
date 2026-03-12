@@ -81,7 +81,7 @@ from definers._system import (
     paths,
     read,
     run,
-    sanitize_load_path,
+    secure_path,
     thread,
     tmp,
     wait,
@@ -280,10 +280,10 @@ def initialize_linear_regression(input_dim, model_path):
     import torch
 
     import definers as _d
-    from definers._system import sanitize_load_path
+    from definers._system import secure_path
 
     try:
-        model_path = sanitize_load_path(model_path)
+        model_path = secure_path(model_path)
     except Exception as e:
         logger.error(f"Unsafe linear-regression model path: {e}")
         return _d.LinearRegressionTorch(input_dim)
@@ -337,7 +337,7 @@ def init_model_file(task: str, turbo: bool = True, model_type: str = None):
     import torch
     from safetensors.torch import load_file
 
-    from definers._system import sanitize_load_path
+    from definers._system import secure_path
 
     free()
     global MODELS
@@ -352,7 +352,7 @@ def init_model_file(task: str, turbo: bool = True, model_type: str = None):
         temp_model_path = tmp(model_type, keep=False)
         model_path = download_file(model_path, temp_model_path)
     try:
-        model_path = sanitize_load_path(model_path)
+        model_path = secure_path(model_path)
         model = None
         supported_types = ["onnx", "pkl", "pt", "pth", "safetensors", "joblib"]
         if model_type not in supported_types:
@@ -664,7 +664,7 @@ def train(
     import joblib
 
     import definers as _d
-    from definers._system import sanitize_load_path
+    from definers._system import secure_path
 
     tokenizer = _d.init_tokenizer()
 
@@ -680,7 +680,7 @@ def train(
     model = None
     if _d.check_parameter(model_path):
         try:
-            model_path = sanitize_load_path(model_path)
+            model_path = secure_path(model_path)
         except Exception as e:
             print(f"Unsafe model path in train(): {e}")
             return None
@@ -801,10 +801,10 @@ def extract_text_features(text, vectorizer=None):
 def predict_linear_regression(X_new, model_path):
     import torch
 
-    from definers._system import sanitize_load_path
+    from definers._system import secure_path
 
     try:
-        model_path = sanitize_load_path(model_path)
+        model_path = secure_path(model_path)
     except Exception as e:
         print(f"Unsafe model path in predict_linear_regression: {e}")
         return None
@@ -861,17 +861,17 @@ def lang_code_to_name(code):
 
 
 def find_latest_rvc_checkpoint(folder_path: str, model_name: str) -> str | None:
-    from definers._system import sanitize_path
+    from definers._system import secure_path
 
     logger.info(
         f"Searching for latest checkpoint in '{folder_path}' with model name '{model_name}'"
     )
     try:
-        folder_path = sanitize_path(folder_path)
+        folder_path = secure_path(folder_path)
     except Exception as e:
         logger.error(f"Invalid checkpoint folder: {e}")
         return None
-    if not os.path.isdir(folder_path):
+    if not is_directory(folder_path):
         logger.error(f"Error: Folder not found at {folder_path}")
         return None
     pattern = re.compile(f"^{re.escape(model_name)}_e(\\d+)_s(\\d+)\\.pth$")
@@ -1084,16 +1084,92 @@ def summary(text, max_words=20, min_loops=1):
     return text
 
 
+def predict(prediction_file: str, model_path: str | list):
+    import joblib
+
+    try:
+        model_path = secure_path(model_path)
+    except Exception as e:
+        catch(e)
+        return None
+
+    model = joblib.load(model_path)
+    if model is None:
+        return None
+    ext = os.path.splitext(prediction_file)[1].lstrip(".").lower()
+    if ext in common_audio_formats:
+        return predict_audio(model, prediction_file)
+    if ext == "txt":
+        data = read(prediction_file)
+        vectorizer = create_vectorizer([data])
+        features = extract_text_features(data, vectorizer)
+    else:
+        features = load_as_numpy(prediction_file)
+        if features is None:
+            return None
+    gpu_features = numpy_to_cupy(features)
+    flat = one_dim_numpy(gpu_features)
+    prediction = model.predict(flat)
+    if prediction is None:
+        return None
+    if is_clusters_model(model):
+        prediction = get_cluster_content(model, int(prediction[0]))
+    output_type = guess_numpy_type(prediction)
+    if output_type == "text":
+        text = features_to_text(prediction)
+        path = random_string() + ".txt"
+        with open(path, "w") as f:
+            f.write(text)
+        return path
+    elif output_type == "image":
+        import imageio.v3 as iio
+
+        img = features_to_image(prediction)
+        img_np = cupy_to_numpy(img)
+        path = random_string() + ".png"
+        iio.imwrite(path, img_np)
+        return path
+    return None
+
+
+def init_custom_model(model_type: str, path: str | list):
+
+    if not path or model_type not in ("onnx", "pkl"):
+        return None
+
+    if not isinstance(path, str) and not isinstance(path, list):
+        raise ValueError("model path must be a string or a list")
+
+    try:
+        path = secure_path(path)
+
+        with open(path, "rb") as f:
+            if model_type == "onnx":
+                import onnx
+
+                model = onnx.load(f)
+            elif model_type == "pkl":
+                import pickle
+
+                model = pickle.load(f)
+
+        return model
+
+    except Exception as e:
+        catch(f"Error initializing model: {e}")
+        return None
+
+
 def git(user: str, repo: str, branch: str = "main", parent: str = "."):
     import requests
 
-    from definers._system import sanitize_path
+    from definers._system import secure_path
 
     user = user.replace(" ", "_")
     repo = repo.replace(" ", "-")
 
     try:
-        parent = sanitize_path(parent)
+        parent = secure_path(parent)
     except Exception as e:
         raise ValueError(f"Invalid parent path for git(): {e}")
     directory(parent)
@@ -1659,10 +1735,10 @@ def SklearnWrapper(sklearn_model, is_classification=False):
 
 
 def rvc_to_onnx(model_path):
-    from definers._system import sanitize_path
+    from definers._system import secure_path
 
     try:
-        model_path = sanitize_path(model_path)
+        model_path = secure_path(model_path)
     except Exception as e:
         logger.error(f"Unsafe model path in rvc_to_onnx: {e}")
         return None
@@ -1690,15 +1766,15 @@ def rvc_to_onnx(model_path):
 def export_files_rvc(experiment: str):
     logger.info(f"Exporting files for experiment: {experiment}")
     try:
-        from definers._system import sanitize_basename
+        from definers._system import secure_path
 
-        experiment = sanitize_basename(experiment)
+        experiment = secure_path(experiment, basename=True)
     except Exception as e:
         logger.error(f"Invalid experiment name: {e}")
         return []
 
     now_dir = os.getcwd()
-    now_dir = full_path(sanitize_load_path(now_dir))
+    now_dir = full_path(secure_path(now_dir))
     weight_root = os.path.join(now_dir, "assets", "weights")
     index_root = os.path.join(now_dir, "logs")
     exp_path = os.path.join(index_root, experiment)
@@ -1710,25 +1786,25 @@ def export_files_rvc(experiment: str):
     pth_path = os.path.join(weight_root, latest_checkpoint_filename)
     logger.info(f"Found latest checkpoint: {pth_path}")
     index_file = ""
-    exp_path = full_path(sanitize_load_path(exp_path))
+    exp_path = secure_path(exp_path)
     for root, dirs, files in os.walk(exp_path, topdown=False):
         for name in files:
             if name.endswith(".index") and "trained" not in name:
                 index_file = os.path.join(root, name)
-                index_file = full_path(sanitize_load_path(index_file))
+                index_file = secure_path(index_file)
                 logger.info(f"Found index file: {index_file}")
                 break
         if index_file:
             break
     onnx_path = rvc_to_onnx(pth_path)
-    onnx_path = full_path(sanitize_load_path(onnx_path))
+    onnx_path = secure_path(onnx_path)
     exported_files = [pth_path]
-    if os.path.exists(onnx_path):
+    if exist(onnx_path):
         exported_files.append(onnx_path)
         logger.info(f"Added ONNX file to exported list: {onnx_path}")
     else:
         logger.warning(f"ONNX file not found after export attempt: {onnx_path}")
-    if os.path.exists(index_file):
+    if exist(index_file):
         exported_files.append(index_file)
         logger.info(f"Added index file to exported list: {index_file}")
     else:
@@ -1738,17 +1814,17 @@ def export_files_rvc(experiment: str):
 
 
 def find_latest_checkpoint(folder_path: str, model_name: str) -> str | None:
-    from definers._system import sanitize_path
+    from definers._system import secure_path
 
     logger.info(
         f"Searching for latest checkpoint in '{folder_path}' with model name '{model_name}'"
     )
     try:
-        folder_path = sanitize_path(folder_path)
+        folder_path = secure_path(folder_path)
     except Exception as e:
         logger.error(f"Invalid checkpoint folder: {e}")
         return None
-    if not os.path.isdir(folder_path):
+    if not is_directory(folder_path):
         logger.error(f"Error: Folder not found at {folder_path}")
         return None
     pattern = re.compile(f"^{re.escape(model_name)}_e(\\d+)_s(\\d+)\\.pth$")
@@ -1785,18 +1861,18 @@ def find_latest_checkpoint(folder_path: str, model_name: str) -> str | None:
 def train_model_rvc(
     experiment: str, path: str, lvl: int = 1, f0method: str = "crepe"
 ):
-    from definers._system import sanitize_basename, sanitize_path
+    from definers._system import secure_path
 
     logger.info(f"Starting RVC training for experiment: {experiment}")
 
     try:
-        experiment = sanitize_basename(experiment)
+        experiment = secure_path(experiment, basename=True)
     except Exception as e:
         logger.error(f"Invalid experiment name: {e}")
         return None
 
     try:
-        path = sanitize_path(path)
+        path = secure_path(path)
     except Exception as e:
         logger.error(f"Invalid audio path for training: {e}")
         return None
@@ -1833,10 +1909,12 @@ def train_model_rvc(
     )
     if default_batch_size == 0:
         default_batch_size = 1
+
     exp_dir = experiment
     exp_path = os.path.join(index_root, exp_dir)
-    exp_path = full_path(sanitize_load_path(exp_path))
+    exp_path = full_path(secure_path(exp_path))
     logger.info(f"Experiment directory: {exp_path}")
+
     directory(os.path.join(exp_path, "1_16k_wavs"))
     directory(os.path.join(exp_path, "0_gt_wavs"))
     input_root = os.path.join(exp_path, "input_root")
@@ -2029,9 +2107,7 @@ def train_model_rvc(
             f"Creating link from '{added_index_path}' to '{target_link_path}'"
         )
         try:
-            if os.path.exists(target_link_path) or os.path.islink(
-                target_link_path
-            ):
+            if exist(target_link_path) or os.path.islink(target_link_path):
                 os.remove(target_link_path)
                 logger.warning(
                     f"Removed existing file/link at {target_link_path}"
@@ -2141,15 +2217,14 @@ def train_model_rvc(
 
 
 def convert_vocal_rvc(experiment: str, path: str):
-    from definers._system import sanitize_basename
+    from definers._system import secure_path
 
     logger.info(f"Starting vocal conversion for experiment: {experiment}")
     try:
-        experiment = sanitize_basename(experiment)
+        experiment = secure_path(experiment, basename=True)
     except Exception as e:
         logger.error(f"Invalid experiment name: {e}")
         return None
-    from definers._system import sanitize_path
 
     try:
         from .configs.config import Config
@@ -2159,7 +2234,7 @@ def convert_vocal_rvc(experiment: str, path: str):
         return None
 
     try:
-        path = sanitize_path(path)
+        path = secure_path(path)
     except Exception as e:
         logger.error(f"Invalid audio path for conversion: {e}")
         return None
@@ -2167,7 +2242,7 @@ def convert_vocal_rvc(experiment: str, path: str):
     path = normalize_audio_to_peak(path)
     (path, music) = separate_stems(path)
     now_dir = os.getcwd()
-    now_dir = full_path(sanitize_load_path(now_dir))
+    now_dir = secure_path(now_dir)
     index_root = os.path.join(now_dir, "logs")
     weight_root = os.path.join(now_dir, "assets", "weights")
     config = Config()

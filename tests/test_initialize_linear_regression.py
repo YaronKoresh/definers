@@ -25,7 +25,7 @@ from definers import initialize_linear_regression
 
 
 class TestInitializeLinearRegression(unittest.TestCase):
-    @patch("definers._system.sanitize_load_path", side_effect=lambda x: x)
+    @patch("definers._system.secure_path", side_effect=lambda x: x)
     @patch("os.path.exists", return_value=False)
     @patch(patch_target, return_value=DummyModel(10))
     def test_creates_new_model_if_not_exists(
@@ -43,7 +43,7 @@ class TestInitializeLinearRegression(unittest.TestCase):
         mock_model_instance.load_state_dict.assert_not_called()
         self.assertIsInstance(model, DummyModel)
 
-    @patch("definers._system.sanitize_load_path", side_effect=lambda x: x)
+    @patch("definers._system.secure_path", side_effect=lambda x: x)
     @patch("os.path.exists", return_value=True)
     @patch("torch.load")
     @patch(patch_target, return_value=DummyModel(5))

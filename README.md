@@ -54,19 +54,6 @@ At the time of writing, available GUIs include:
 Each GUI is loaded lazily; unknown project names are reported via
 `definers._system.catch()` which may raise or log depending on configuration.
 
-## Security & Path Sanitization
-
-Paths provided to functions that load external resources (models, data,
-experiments, etc.) are checked against a set of **trusted directories**
-to prevent unintended access.  By default the current working directory is
-considered trusted; additional locations may be added via the
-`DEFINERS_TRUSTED_PATHS` environment variable (a platform‑style
-`os.pathsep`–separated list).  During testing temporary directories are
-also automatically trusted, so `tmp_path` fixtures work without extra
-configuration.  If a path is outside the trusted set the library raises a
-`ValueError` and returns `None` from high‑level helpers such as
-`predict()`.
-
 ## Command Execution
 
 All external programs are run through the `definers.run()` helper, which

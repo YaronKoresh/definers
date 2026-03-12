@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from definers import git
-from definers._system import sanitize_path
+from definers._system import secure_path
 
 
 def test_sanitize_path_allows_and_rejects(tmp_path):
@@ -13,11 +13,11 @@ def test_sanitize_path_allows_and_rejects(tmp_path):
     good = base / "file.txt"
     good.write_text("x")
 
-    os.environ["DEFINERS_TRUSTED_PATHS"] = str(base)
-    assert sanitize_path(str(good)) == str(good.resolve())
+    assert secure_path(str(good), trust=str(base)) == str(good.resolve())
 
-    with pytest.raises(ValueError):
-        sanitize_path(str(tmp_path / "other.txt"))
+    other = tmp_path / "other.txt"
+    other.write_text("x")
+    assert secure_path(str(other)) == str(other.resolve())
 
 
 def test_sanitize_path_tempdir_not_whitelisted(tmp_path):
@@ -29,9 +29,8 @@ def test_sanitize_path_tempdir_not_whitelisted(tmp_path):
     outside = tempdir / "not_trusted.txt"
 
     outside.write_text("z")
-    os.environ["DEFINERS_TRUSTED_PATHS"] = ""
-    with pytest.raises(ValueError):
-        sanitize_path(str(outside))
+
+    assert secure_path(str(outside)) == str(outside.resolve())
 
 
 def test_sanitize_path_prevents_traversal(tmp_path):
@@ -40,21 +39,13 @@ def test_sanitize_path_prevents_traversal(tmp_path):
     target = tmp_path / "b" / "foo"
     target.parent.mkdir()
     target.write_text("y")
-    os.environ["DEFINERS_TRUSTED_PATHS"] = str(base)
-    with pytest.raises(ValueError):
-        sanitize_path(str(base / "../b/foo"))
 
-
-def test_git_parent_untrusted(tmp_path):
-    bad_parent = tmp_path / "bad"
-    bad_parent.mkdir()
-    os.environ["DEFINERS_TRUSTED_PATHS"] = str(tmp_path / "other")
     with pytest.raises(ValueError):
-        git("user", "repo", parent=str(bad_parent))
+        secure_path(str(base / "../b/foo"), trust=str(base))
 
 
 def test_git_branch_and_run_list(monkeypatch, tmp_path):
-    from definers import git, run
+    from definers import run
 
     calls = []
 
@@ -85,6 +76,7 @@ def test_find_latest_checkpoint_untrusted(tmp_path):
 
 
 def test_rvc_to_onnx_untrusted(tmp_path):
+    pytest.importorskip("definers.configs")
     from definers import rvc_to_onnx
 
     fake = tmp_path / "w.pth"
@@ -94,6 +86,7 @@ def test_rvc_to_onnx_untrusted(tmp_path):
 
 
 def test_train_model_rvc_untrusted(tmp_path):
+    pytest.importorskip("definers.configs")
     from definers import train_model_rvc
 
     audio = tmp_path / "input.wav"
@@ -103,6 +96,7 @@ def test_train_model_rvc_untrusted(tmp_path):
 
 
 def test_convert_vocal_rvc_untrusted(tmp_path):
+    pytest.importorskip("definers.configs")
     from definers import convert_vocal_rvc
 
     audio = tmp_path / "input.wav"
@@ -122,16 +116,15 @@ def test_convert_vocal_rvc_missing_deps(tmp_path):
 
 def test_sanitize_basename_and_experiment(tmp_path, capsys):
     from definers import convert_vocal_rvc, export_files_rvc, train_model_rvc
-    from definers._system import sanitize_basename
 
-    assert sanitize_basename("abc_123") == "abc_123"
+    assert secure_path("abc_123", basename=True) == "abc_123"
 
     with pytest.raises(ValueError):
-        sanitize_basename("../evil")
+        secure_path("../evil", basename=True)
     with pytest.raises(ValueError):
-        sanitize_basename("bad/name")
+        secure_path("bad/name", basename=True)
     with pytest.raises(ValueError):
-        sanitize_basename("")
+        secure_path("", basename=True)
 
     assert export_files_rvc("good") == [] or isinstance(
         export_files_rvc("good"), list

@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import unicodedata
 import zipfile
 from contextlib import contextmanager
 from datetime import datetime
@@ -447,94 +448,79 @@ def exist(*p):
     return os.path.exists(absolute)
 
 
-def sanitize_load_path(path: str, allow_dirs: list[str] | None = None) -> str:
-    """
-    Normalize and validate a filesystem path against a set of trusted base
-    directories. The returned path is absolute, with user home expanded.
+def secure_path(
+    path: list | str,
+    trust: list | str | None = None,
+    *,
+    basename: bool = False,
+    shell: bool = False,
+) -> str:
+    if not path or not isinstance(path, (str, list)):
+        raise ValueError("Invalid path: must be a non-empty string or list.")
 
-    If allow_dirs is provided, those directories (after expansion and
-    resolution) define the allowed roots. Otherwise, the trusted roots are
-    taken from the DEFINERS_TRUSTED_PATHS environment variable (os.pathsep-
-    separated). If that variable is empty or misconfigured, a project-local
-    directory under the current working directory is used as the sole trusted
-    root.
-    """
-    if not isinstance(path, str) or not path:
-        raise ValueError(f"Invalid path: {path!r}")
+    if isinstance(path, list):
+        path = full_path(*path)
 
-    # Resolve the candidate path to an absolute, normalized form.
-    p = Path(path).expanduser().resolve()
+    clean_str = unicodedata.normalize("NFKC", str(path))
+    clean_str = " ".join(clean_str.split())
 
-    # Build list of trusted base directories.
-    if allow_dirs is None:
-        env = os.environ.get("DEFINERS_TRUSTED_PATHS", "")
-        bases = [
-            Path(b).expanduser().resolve() for b in env.split(os.pathsep) if b
-        ]
+    if not clean_str:
+        raise ValueError("Path is empty after cleaning.")
 
-        # Always consider the current working directory as a potential base.
+    _STRICT_BASENAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
+    _TRAVERSAL_RE = re.compile(r"(?:\.\.[/\\])|(?:\A[/\\]\.\.)")
+
+    if basename:
+        if not _STRICT_BASENAME_RE.fullmatch(clean_str):
+            raise ValueError(
+                f"Security Error: Invalid basename format: {clean_str!r}"
+            )
+        result = clean_str
+
+    else:
+        if _TRAVERSAL_RE.search(clean_str):
+            raise ValueError(
+                "Security Error: Path traversal characters detected."
+            )
+
+        try:
+            result = full_path(clean_str)
+        except Exception as e:
+            raise ValueError(f"Failed to resolve path: {e}")
+
+        p = Path(result)
+
+        if trust is None:
+            trust = []
+        elif isinstance(trust, str):
+            trust = [trust]
+
+        bases = [Path(full_path(b)) for b in trust if b.strip()]
+
         cwd = Path.cwd().resolve()
         if cwd not in bases:
             bases.append(cwd)
-    else:
-        bases = [Path(b).expanduser().resolve() for b in allow_dirs]
 
-    # Filter out obviously unsafe bases (for example filesystem roots or the
-    # user's home directory), since trusting them would effectively disable
-    # path containment.
-    filtered_bases: list[Path] = []
-    home = Path(os.path.expanduser("~")).resolve()
-    for b in bases:
-        try:
-            b_resolved = b.resolve()
-        except Exception:
-            continue
-        # Skip filesystem root ("/" on POSIX, drive root on Windows).
-        if b_resolved == b_resolved.anchor:
-            continue
-        # Skip the user's home directory itself to avoid exposing it in bulk.
-        if b_resolved == home:
-            continue
-        filtered_bases.append(b_resolved)
+        temp_dir = Path(full_path(tempfile.gettempdir())).resolve()
+        if temp_dir not in bases:
+            bases.append(temp_dir)
 
-    bases = filtered_bases
+        is_safe = any(
+            p.is_relative_to(b)
+            if sys.version_info >= (3, 9)
+            else (str(p) == str(b) or str(p).startswith(str(b) + os.path.sep))
+            for b in bases
+        )
 
-    # Ensure we have at least one base directory to compare against. If none of
-    # the configured bases are acceptable, fall back to a project-local root.
-    if not bases:
-        safe_root = Path.cwd().joinpath("definers_data").resolve()
-        try:
-            safe_root.mkdir(parents=True, exist_ok=True)
-        except Exception:
-            # Even if directory creation fails, we still use it as a logical root.
-            pass
-        bases = [safe_root]
+        if not is_safe:
+            raise ValueError(
+                f"Security Error: Path escapes allowed directories: {p}"
+            )
 
-    for b in bases:
-        # On Windows, paths on different drives cannot be related.
-        if hasattr(p, "drive") and getattr(p, "drive", None) and getattr(
-            b, "drive", None
-        ):
-            if p.drive.lower() != b.drive.lower():
-                continue
-        try:
-            # Python 3.9+: use Path.is_relative_to for a reliable containment check.
-            if p.is_relative_to(b):
-                return str(p)
-        except AttributeError:
-            # Fallback for older Python versions: use os.path.commonpath instead
-            # of naive string prefix checks to avoid partial component matches.
-            p_str = str(p)
-            b_str = str(b)
-            try:
-                common = os.path.commonpath([p_str, b_str])
-            except ValueError:
-                # Happens on Windows for paths on different drives.
-                continue
-            if common == b_str:
-                return p_str
+    if shell:
+        result = shlex.quote(result)
 
-    raise ValueError(f"Refusing to load from untrusted path: {p}")
+    return result
 
 
 def add_path(*p):
@@ -571,38 +557,6 @@ def normalize_path(p):
 def full_path(*p):
     joined = os.path.join(*[str(_p).strip() for _p in p])
     return str(Path(joined).expanduser().resolve())
-
-
-def sanitize_basename(name: str, pattern: str = r"[A-Za-z0-9_.-]+") -> str:
-    if not isinstance(name, str) or not name:
-        raise ValueError(f"Invalid name: {name!r}")
-
-    name = name.strip()
-    if not name:
-        raise ValueError("Invalid name: empty or whitespace-only")
-
-    if os.path.sep in name or (os.path.altsep and os.path.altsep in name):
-        raise ValueError(f"Invalid name contains path separator: {name}")
-    if name in {"..", "."}:
-        raise ValueError(f"Invalid name: {name}")
-
-    max_len = 128
-    if len(name) > max_len:
-        raise ValueError(f"Name too long (>{max_len} characters): {name!r}")
-
-    if not re.match(r"[A-Za-z0-9]", name[0]):
-        raise ValueError(
-            f"Name must start with an alphanumeric character: {name!r}"
-        )
-
-    if not re.fullmatch(pattern, name):
-        raise ValueError(f"Name contains disallowed characters: {name!r}")
-
-    return name
-
-
-def sanitize_path(path: str, allow_dirs: list[str] | None = None) -> str:
-    return sanitize_load_path(path, allow_dirs)
 
 
 def paths(*patterns):
@@ -892,78 +846,54 @@ def run_linux(command, silent=False, env=None):
     original_env = os.environ.copy()
     modified_env = {**original_env, **env}
 
-    if isinstance(command, str):
-        try:
-            command = shlex.split(command)
-        except ValueError as e:
-            log("Invalid command string format", str(e))
-            return False
+    try:
+        args = secure_command(command)
+    except ValueError as e:
+        print("Error: Command rejected")
+        catch(e)
+        return False
 
-    if isinstance(command, list):
-        args = []
-        for c in command:
-            if isinstance(c, (str, int, float, bool)):
-                s = str(c).strip()
-            else:
-                logger.error(
-                    "Rejected unsupported command argument type %r in %r",
-                    type(c),
-                    command,
-                )
-                return False
-            if not s:
-                continue
+    try:
+        proc = subprocess.Popen(
+            args,
+            shell=False,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=modified_env,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        stdout, stderr = proc.communicate()
 
-            if len(s) > 1024:
-                logger.error(
-                    "Rejected overlong command argument in %r", command
-                )
-                return False
-            args.append(s)
-        if not args:
-            return False
-        try:
-            proc = subprocess.Popen(
-                args,
-                shell=False,
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                env=modified_env,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-            )
-            stdout, stderr = proc.communicate()
+        if stdout is None:
+            stdout = ""
+        if stderr is None:
+            stderr = ""
 
-            if stdout is None:
-                stdout = ""
-            if stderr is None:
-                stderr = ""
+        returncode = proc.returncode
 
-            returncode = proc.returncode
+        if not silent:
+            if stdout:
+                print(stdout, end="", flush=True)
+            if stderr:
+                print(stderr, end="", flush=True)
 
+        if returncode != 0:
             if not silent:
-                if stdout:
-                    print(stdout, end="", flush=True)
-                if stderr:
-                    print(stderr, end="", flush=True)
-
-            if returncode != 0:
-                if not silent:
-                    log(f"Script failed [{returncode}]", " ".join(args))
-                    log(f"Stderr: {stderr.strip()}", "")
-                return False
-            else:
-                if not silent:
-                    log("Script completed", " ".join(args))
-                out_lines = stdout.strip().splitlines()
-                ret_lines = [o.strip() for o in out_lines if o.strip() != ""]
-                return ret_lines
-
-        except Exception as e:
-            catch(e)
+                log(f"Script failed [{returncode}]", " ".join(args))
+                log(f"Stderr: {stderr.strip()}", "")
             return False
+        else:
+            if not silent:
+                log("Script completed", " ".join(args))
+            out_lines = stdout.strip().splitlines()
+            ret_lines = [o.strip() for o in out_lines if o.strip() != ""]
+            return ret_lines
+
+    except Exception as e:
+        catch(e)
 
     return False
 
@@ -975,69 +905,92 @@ def run_windows(command, silent=False, env=None):
         original_env = os.environ.copy()
         modified_env = {**original_env, **env}
 
-        if isinstance(command, str):
-            text_cmd = command.strip()
-            if not text_cmd:
-                return False
+        try:
+            args = secure_command(command)
+        except ValueError as e:
+            print("Error: Command rejected")
+            catch(e)
+            return False
 
-            if re.search(r"[;&|`$]", text_cmd):
-                log("Unsafe command string detected", text_cmd)
-                return False
+        process = subprocess.Popen(
+            args,
+            shell=False,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=modified_env,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
 
-            try:
-                command = shlex.split(text_cmd)
-            except ValueError as e:
-                log("Invalid command string format", str(e))
-                return False
+        (stdout, stderr) = process.communicate()
 
-        if isinstance(command, list):
-            args = [str(c) for c in command if str(c).strip()]
-            if not args:
-                return False
+        if stdout is None:
+            stdout = ""
+        if stderr is None:
+            stderr = ""
 
-            process = subprocess.Popen(
-                args,
-                shell=False,
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                env=modified_env,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-            )
+        returncode = process.returncode
 
-            (stdout, stderr) = process.communicate()
+        if not silent:
+            if stdout:
+                print(stdout, end="", flush=True)
+            if stderr:
+                print(stderr, end="", flush=True)
 
-            if stdout is None:
-                stdout = ""
-            if stderr is None:
-                stderr = ""
-
-            returncode = process.returncode
-
+        if returncode != 0:
             if not silent:
-                if stdout:
-                    print(stdout, end="", flush=True)
-                if stderr:
-                    print(stderr, end="", flush=True)
+                log(f"Script failed [{returncode}]", " ".join(args))
+                log(f"Stderr: {stderr.strip()}", "")
+            return False
+        else:
+            if not silent:
+                log("Script completed", " ".join(args))
+            out_lines = stdout.strip().splitlines()
+            ret_lines = [o.strip() for o in out_lines if o.strip()]
+            return ret_lines
 
-            if returncode != 0:
-                if not silent:
-                    log(f"Script failed [{returncode}]", " ".join(args))
-                    log(f"Stderr: {stderr.strip()}", "")
-                return False
-            else:
-                if not silent:
-                    log("Script completed", " ".join(args))
-                out_lines = stdout.strip().splitlines()
-                ret_lines = [o.strip() for o in out_lines if o.strip()]
-                return ret_lines
-
-        return False
     except Exception as e:
         catch(e)
-        return False
+
+    return False
+
+
+def secure_command(command: str | list) -> list[str]:
+    if isinstance(command, str):
+        text_cmd = command.strip()
+        if not text_cmd:
+            raise ValueError("Command is empty.")
+
+        if re.search(r"[;&|`$]", text_cmd):
+            raise ValueError(
+                f"Security Error: Unsafe characters in command: {text_cmd}"
+            )
+
+        try:
+            cmd_list = shlex.split(text_cmd)
+        except ValueError as e:
+            raise ValueError(f"Invalid command syntax: {e}")
+
+    elif isinstance(command, list):
+        cmd_list = [str(c).strip() for c in command if str(c).strip()]
+        if not cmd_list:
+            raise ValueError("Command list is empty.")
+
+        for arg in cmd_list:
+            if len(arg) > 1024:
+                raise ValueError(
+                    f"Security Error: Argument too long: {arg[:50]}..."
+                )
+    else:
+        raise TypeError("Command must be a string or a list.")
+
+    executable = cmd_list[0]
+
+    if "/" in executable or "\\" in executable:
+        cmd_list[0] = secure_path(executable)
+    return cmd_list
 
 
 def run(command, silent=False, env=None):

@@ -6,7 +6,7 @@ import gradio as gr
 from definers import regex_utils, run
 from definers._constants import MAX_CONSECUTIVE_SPACES, MAX_INPUT_LENGTH
 from definers._ml import train
-from definers._system import sanitize_load_path
+from definers._system import secure_path
 from definers._web import download_and_unzip, download_file
 
 
@@ -18,28 +18,23 @@ class TestSecurity(unittest.TestCase):
 
         self.assertFalse(run(["echo", "hi; rm -rf /"]))
 
-    def test_sanitize_load_path(self):
-
-        os.environ.pop("DEFINERS_TRUSTED_PATHS", None)
+    def test_secure_path(self):
 
         with self.assertRaises(ValueError):
-            sanitize_load_path("/etc/passwd")
+            secure_path("/etc/passwd")
 
         tmpfile = "temp_test_file.tmp"
         open(tmpfile, "w").close()
         try:
-            result = sanitize_load_path(tmpfile)
+            result = secure_path(tmpfile)
             self.assertTrue(result.endswith(tmpfile))
         finally:
             os.remove(tmpfile)
 
-        os.environ["DEFINERS_TRUSTED_PATHS"] = os.path.abspath(
-            "some/nonexistent"
-        )
         tmpfile2 = "temp_test_file2.tmp"
         open(tmpfile2, "w").close()
         try:
-            result2 = sanitize_load_path(tmpfile2)
+            result2 = secure_path(tmpfile2, os.path.abspath("some/nonexistent"))
             self.assertTrue(result2.endswith(tmpfile2))
         finally:
             os.remove(tmpfile2)

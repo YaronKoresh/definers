@@ -45,7 +45,8 @@ class TestRunLinux(unittest.TestCase):
         result = run_linux(["echo", "hello"], silent=True)
         self.assertEqual(result, ["hello"])
 
-    def test_run_linux_rejects_unsafe_string(self):
+    @patch("definers.log")
+    def test_run_linux_rejects_unsafe_string(self, mock_log):
 
         result = run_linux("echo hi; rm -rf /")
         self.assertFalse(result)
