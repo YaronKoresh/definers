@@ -1,7 +1,8 @@
-import os
 import sys
 import unittest
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from definers import run_linux
 
@@ -38,6 +39,16 @@ class TestRunLinux(unittest.TestCase):
         mock_write.assert_called_once()
         mock_permit.assert_called_once()
         mock_delete.assert_called_once()
+
+    @unittest.skipIf(sys.platform.startswith("win"), "Linux-specific test")
+    def test_run_linux_list_invocation(self):
+        result = run_linux(["echo", "hello"], silent=True)
+        self.assertEqual(result, ["hello"])
+
+    def test_run_linux_rejects_unsafe_string(self):
+
+        result = run_linux("echo hi; rm -rf /")
+        self.assertFalse(result)
 
     @unittest.skipIf(sys.platform.startswith("win"), "Linux-specific test")
     @patch("definers.write")

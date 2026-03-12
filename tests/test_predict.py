@@ -15,6 +15,7 @@ class TestPredict(unittest.TestCase):
         self.prediction_file_image = "test_input.png"
         self.mock_model = MagicMock()
 
+    @patch("definers._system.sanitize_load_path", side_effect=lambda x: x)
     @patch("definers.joblib.load")
     @patch("definers.read")
     @patch("definers.create_vectorizer")
@@ -39,6 +40,7 @@ class TestPredict(unittest.TestCase):
         mock_create_vec,
         mock_read,
         mock_joblib_load,
+        mock_sanitize,
     ):
         mock_joblib_load.return_value = self.mock_model
         mock_read.return_value = "This is a test text."
@@ -53,6 +55,7 @@ class TestPredict(unittest.TestCase):
         mock_features_to_text.return_value = "predicted text"
         result_path = predict(self.prediction_file_txt, self.model_path)
         self.assertEqual(result_path, "random.txt")
+
         mock_joblib_load.assert_called_with(self.model_path)
         mock_read.assert_called_with(self.prediction_file_txt)
         self.mock_model.predict.assert_called_once()
@@ -64,20 +67,23 @@ class TestPredict(unittest.TestCase):
         mock_file_open.assert_called_with("random.txt", "w")
         mock_file_open().write.assert_called_with("predicted text")
 
+    @patch("definers._system.sanitize_load_path", side_effect=lambda x: x)
     @patch("definers.joblib.load")
     @patch("definers.predict_audio")
     def test_predict_audio_direct_call(
-        self, mock_predict_audio, mock_joblib_load
+        self, mock_predict_audio, mock_joblib_load, mock_sanitize
     ):
         mock_joblib_load.return_value = self.mock_model
         mock_predict_audio.return_value = "predicted_audio.wav"
         result_path = predict(self.prediction_file_audio, self.model_path)
         self.assertEqual(result_path, "predicted_audio.wav")
+
         mock_joblib_load.assert_called_with(self.model_path)
         mock_predict_audio.assert_called_with(
             self.mock_model, self.prediction_file_audio
         )
 
+    @patch("definers._system.sanitize_load_path", side_effect=lambda x: x)
     @patch("definers.joblib.load")
     @patch("definers.load_as_numpy")
     @patch("definers.numpy_to_cupy")
@@ -100,6 +106,7 @@ class TestPredict(unittest.TestCase):
         mock_to_cupy,
         mock_load_numpy,
         mock_joblib_load,
+        mock_sanitize,
     ):
         mock_joblib_load.return_value = self.mock_model
         mock_input_data = np.random.rand(100, 100, 3)
@@ -123,24 +130,34 @@ class TestPredict(unittest.TestCase):
         mock_features_to_image.assert_called_once()
         mock_imwrite.assert_called_once()
 
+    @patch("definers._system.sanitize_load_path", side_effect=lambda x: x)
     @patch("definers.joblib.load", return_value=None)
-    def test_predict_model_load_fail(self, mock_joblib_load):
+    def test_predict_model_load_fail(self, mock_joblib_load, mock_sanitize):
         result = predict(self.prediction_file_txt, self.model_path)
         self.assertIsNone(result)
 
+    @patch("definers._system.sanitize_load_path", side_effect=lambda x: x)
     @patch("definers.joblib.load")
     @patch("definers.load_as_numpy", return_value=None)
-    def test_predict_input_load_fail(self, mock_load_numpy, mock_joblib_load):
+    def test_predict_input_load_fail(
+        self, mock_load_numpy, mock_joblib_load, mock_sanitize
+    ):
         mock_joblib_load.return_value = self.mock_model
         result = predict("some_other_file.data", self.model_path)
         self.assertIsNone(result)
 
+    @patch("definers._system.sanitize_load_path", side_effect=lambda x: x)
     @patch("definers.joblib.load")
     @patch("definers.load_as_numpy")
     @patch("definers.numpy_to_cupy")
     @patch("definers.one_dim_numpy")
     def test_predict_prediction_fail(
-        self, mock_one_dim, mock_to_cupy, mock_load_numpy, mock_joblib_load
+        self,
+        mock_one_dim,
+        mock_to_cupy,
+        mock_load_numpy,
+        mock_joblib_load,
+        mock_sanitize,
     ):
         mock_joblib_load.return_value = self.mock_model
         mock_load_numpy.return_value = np.array([1, 2, 3])
@@ -150,6 +167,7 @@ class TestPredict(unittest.TestCase):
         result = predict("some_file.data", self.model_path)
         self.assertIsNone(result)
 
+    @patch("definers._system.sanitize_load_path", side_effect=lambda x: x)
     @patch("definers.joblib.load")
     @patch("definers.load_as_numpy")
     @patch("definers.numpy_to_cupy")
@@ -170,6 +188,7 @@ class TestPredict(unittest.TestCase):
         mock_to_cupy,
         mock_load_numpy,
         mock_joblib_load,
+        mock_sanitize,
     ):
         mock_joblib_load.return_value = self.mock_model
         mock_load_numpy.return_value = np.array([1, 2, 3])

@@ -37,7 +37,7 @@ class TestInstalled(unittest.TestCase):
             "ffmpeg version 4.4.2-0ubuntu0.22.04.1 Copyright (c) 2000-2021 the FFmpeg developers"
         ]
         self.assertTrue(installed("ffmpeg", "4.4.2"))
-        mock_run.assert_any_call("ffmpeg --version", silent=True)
+        mock_run.assert_any_call(["ffmpeg", "--version"], silent=True)
 
     @patch("definers.get_os_name", return_value="linux")
     @patch("definers.run")

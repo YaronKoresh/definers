@@ -25,10 +25,11 @@ from definers import initialize_linear_regression
 
 
 class TestInitializeLinearRegression(unittest.TestCase):
+    @patch("definers._system.sanitize_load_path", side_effect=lambda x: x)
     @patch("os.path.exists", return_value=False)
     @patch(patch_target, return_value=DummyModel(10))
     def test_creates_new_model_if_not_exists(
-        self, mock_model_class, mock_exists
+        self, mock_model_class, mock_exists, mock_sanitize
     ):
         input_dim = 10
         model_path = "non_existent_model.pth"
@@ -42,11 +43,12 @@ class TestInitializeLinearRegression(unittest.TestCase):
         mock_model_instance.load_state_dict.assert_not_called()
         self.assertIsInstance(model, DummyModel)
 
+    @patch("definers._system.sanitize_load_path", side_effect=lambda x: x)
     @patch("os.path.exists", return_value=True)
     @patch("torch.load")
     @patch(patch_target, return_value=DummyModel(5))
     def test_loads_existing_model(
-        self, mock_model_class, mock_torch_load, mock_exists
+        self, mock_model_class, mock_torch_load, mock_exists, mock_sanitize
     ):
         input_dim = 5
         model_path = "existing_model.pth"
@@ -59,6 +61,7 @@ class TestInitializeLinearRegression(unittest.TestCase):
         mock_model_instance.cuda = MagicMock()
         mock_model_instance.load_state_dict = MagicMock()
         model = initialize_linear_regression(input_dim, model_path)
+
         mock_exists.assert_called_once_with(model_path)
         mock_model_class.assert_called_once_with(input_dim)
         mock_torch_load.assert_called_once_with(model_path)

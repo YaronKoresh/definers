@@ -81,18 +81,26 @@ class TestInstallFfmpegLinux(unittest.TestCase):
         )
         mock_exit.assert_called_once_with(1)
 
+    @patch("definers.logger.error")
     @patch("os.geteuid", return_value=0, create=True)
     @patch("shutil.which", return_value="apt-get")
     @patch("definers.subprocess.run", side_effect=Exception("Test error"))
     @patch("definers.sys.exit", side_effect=SystemExit)
     @patch("builtins.print")
     def test_unexpected_error(
-        self, mock_print, mock_exit, mock_run, mock_which, mock_geteuid
+        self,
+        mock_print,
+        mock_exit,
+        mock_run,
+        mock_which,
+        mock_geteuid,
+        mock_logger_error,
     ):
         with self.assertRaises(SystemExit):
             _install_ffmpeg_linux()
-        mock_print.assert_any_call(
-            "\n[ERROR] An unexpected error occurred: Test error"
+
+        mock_logger_error.assert_any_call(
+            "An unexpected error occurred: Test error"
         )
         mock_exit.assert_called_once_with(1)
 

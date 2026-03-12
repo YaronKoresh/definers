@@ -46,7 +46,9 @@ def get_audio_duration(file_path: str) -> float | None:
         audio = AudioSegment.from_file(file_path)
         return audio.duration_seconds
     except Exception as e:
-        print(f"Error getting duration for {file_path} with pydub: {e}")
+        from definers._system import catch
+
+        catch(e)
         return None
 
 
@@ -137,7 +139,9 @@ def split_audio(
     try:
         audio = AudioSegment.from_file(file_path)
     except Exception as e:
-        print(f"Error loading file {file_path}: {e}")
+        from definers._system import catch
+
+        catch(e)
         return []
     duration_ms = duration * 1000
     skip_ms = skip * 1000
@@ -181,7 +185,9 @@ def extract_audio_features(file_path, n_mfcc=20):
     try:
         (y, sr) = librosa.load(file_path, sr=None)
     except Exception as e:
-        print(f"Error loading audio file: {e}")
+        from definers._system import catch
+
+        catch(e)
         return None
     try:
         mfccs = librosa.feature.mfcc(
@@ -205,6 +211,11 @@ def extract_audio_features(file_path, n_mfcc=20):
             (mfccs, spectral_features, zero_crossing_rate, chroma)
         ).astype(_np.float32)
         return all_features
+    except Exception as e:
+        from definers._system import catch
+
+        catch(e)
+        return None
     except Exception as e:
         catch(e)
         return None
@@ -497,9 +508,9 @@ def compact_audio(input_file: str, output_file: str):
                 "-i",
                 input_file,
                 "-ar",
-                "16000",
+                "32000",
                 "-ab",
-                "320k",
+                "96k",
                 "-ac",
                 "1",
                 output_file,
@@ -1653,11 +1664,11 @@ def stretch_audio(input_path, output_path=None, speed_factor=0.85):
         "--tempo",
         str(speed_factor),
         "-q",
-        f'"{input_path}"',
-        f'"{output_path}"',
+        input_path,
+        output_path,
     ]
     try:
-        run(" ".join(command))
+        run(command)
         return normalize_audio_to_peak(output_path)
     except Exception as e:
         catch(f"Error during audio stretching with rubberband: {e}")
@@ -1674,14 +1685,6 @@ def get_scale_notes(key="C", scale="major", start_octave=1, end_octave=9):
         if i % 12 in scale_intervals:
             scale_notes.append(start_note_midi + i)
     return np.array(scale_notes)
-
-
-def enhance_audio(audio_path):
-    audio_path = autotune_song(audio_path)
-    audio_path = master(audio_path, "wav")
-    audio_path = riaa_filter(audio_path, bass_factor=0.01)
-    audio_path = loudness_maximizer(audio_path)
-    return audio_path
 
 
 def autotune_song(
@@ -1764,11 +1767,11 @@ def autotune_song(
                     "--time",
                     "1",
                     "--timemap",
-                    f'"{time_map_path}"',
-                    f'"{vocals_path}"',
-                    f'"{quantized_vocals_path}"',
+                    time_map_path,
+                    vocals_path,
+                    quantized_vocals_path,
                 ]
-                run(" ".join(command))
+                run(command)
                 if exist(quantized_vocals_path):
                     (y_vocals, sr) = librosa.load(quantized_vocals_path, sr=sr)
                     processed_vocals_path = quantized_vocals_path
@@ -1827,11 +1830,11 @@ def autotune_song(
             "rubberband",
             "--formant",
             "--freqmap",
-            f'"{freq_map_path}"',
-            f'"{processed_vocals_path}"',
-            f'"{tuned_vocals_path}"',
+            freq_map_path,
+            processed_vocals_path,
+            tuned_vocals_path,
         ]
-        run(" ".join(command))
+        run(command)
         if not exist(tuned_vocals_path):
             catch("Pitch correction with rubberband failed.")
             return None
@@ -1901,7 +1904,9 @@ def loudness_maximizer(
         (sample_rate, audio) = wavfile.read(input_filename)
         print(f"Reading '{input_filename}' at {sample_rate} Hz.")
     except Exception as e:
-        print(f"Error reading audio file: {e}")
+        from definers._system import catch
+
+        catch(e)
         return None
     original_dtype = audio.dtype
     if original_dtype == np.int16:
@@ -1993,7 +1998,9 @@ def loudness_maximizer(
         print(f"✅ Successfully saved processed audio to '{output_filename}'.")
         return output_filename
     except Exception as e:
-        print(f"Error writing audio file: {e}")
+        from definers._system import catch
+
+        catch(e)
         return None
 
 

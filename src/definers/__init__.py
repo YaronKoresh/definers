@@ -162,7 +162,6 @@ from definers._audio import (
     create_spectrum_visualization,
     detect_silence_mask,
     dj_mix,
-    enhance_audio,
     export_audio,
     export_to_pkl,
     extend_audio,
@@ -503,6 +502,15 @@ set_system_message(name="Phi", role="a helpful chat assistant")
 
 
 def predict(prediction_file, model_path):
+    from definers._system import sanitize_load_path
+
+    try:
+        model_path = sanitize_load_path(model_path)
+    except Exception as e:
+        from definers._system import catch
+
+        catch(e)
+        return None
     model = joblib.load(model_path)
     if model is None:
         return None
@@ -543,7 +551,10 @@ def predict(prediction_file, model_path):
 def init_custom_model(model_type, path):
     if not path or model_type not in ("onnx", "pkl"):
         return None
+    from definers._system import sanitize_load_path
+
     try:
+        path = sanitize_load_path(path)
         with open(path, "rb") as f:
             if model_type == "onnx":
                 model = onnx.load(f)

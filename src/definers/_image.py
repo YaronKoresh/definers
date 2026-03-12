@@ -47,7 +47,9 @@ def extract_image_features(image_path):
         all_features = _np.concatenate((color_hist, lbp, edges))
         return all_features
     except Exception as e:
-        print(f"Error extracting image features: {e}")
+        from definers._system import catch
+
+        catch(e)
         return None
 
 
@@ -101,7 +103,9 @@ def features_to_image(predicted_features, image_shape=(1024, 1024, 3)):
         )
         return reconstructed_image
     except Exception as e:
-        print(f"Error generating image from features: {e}")
+        from definers._system import catch
+
+        catch(e)
         return None
 
 
@@ -699,10 +703,14 @@ def resize_image(image_path, target_width, target_height, anti_aliasing=True):
         pth = save_image(img, tmp("png", keep=False))
         return (pth, img)
     except ValueError as ve:
-        print(f"ValueError: {ve}")
+        from definers._system import catch
+
+        catch(ve)
         return None
     except Exception as e:
-        print(f"An error occurred during resizing: {e}")
+        from definers._system import catch
+
+        catch(e)
         return None
 
 

@@ -42,10 +42,12 @@ class TestExtractImageFeatures(unittest.TestCase):
         self.assertIsNone(features)
 
     @patch("cv2.calcHist")
-    def test_internal_cv2_error(self, mock_calchist):
+    @patch("definers.logger.exception")
+    def test_internal_cv2_error(self, mock_logger_exc, mock_calchist):
         mock_calchist.side_effect = Exception("Simulated CV2 Error")
         features = extract_image_features(self.image_path)
         self.assertIsNone(features)
+        mock_logger_exc.assert_called_once()
 
     def test_output_dtype_is_float32(self):
         features = extract_image_features(self.image_path)

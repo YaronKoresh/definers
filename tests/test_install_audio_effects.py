@@ -12,9 +12,17 @@ class TestInstallAudioEffects(unittest.TestCase):
     @patch("builtins.print")
     def test_install_on_linux(self, mock_print, mock_run, mock_get_os):
         install_audio_effects()
-        mock_run.assert_any_call("apt-get update -y")
+        mock_run.assert_any_call(["apt-get", "update", "-y"])
         mock_run.assert_any_call(
-            "apt-get install -y rubberband-cli fluidsynth fluid-soundfont-gm build-essential"
+            [
+                "apt-get",
+                "install",
+                "-y",
+                "rubberband-cli",
+                "fluidsynth",
+                "fluid-soundfont-gm",
+                "build-essential",
+            ]
         )
         mock_print.assert_any_call("\nInstalling Python packages with pip...")
 

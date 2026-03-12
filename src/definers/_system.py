@@ -144,7 +144,7 @@ def _install_ffmpeg_windows():
             "[INFO] IMPORTANT: You must restart your terminal or PC for the new PATH to be recognized."
         )
     except Exception as e:
-        print(f"\n[ERROR] An error occurred during manual installation: {e}")
+        _d.logger.error(f"An error occurred during manual installation: {e}")
         sys.exit(1)
     finally:
         print("[INFO] Cleaning up temporary files...")
@@ -156,6 +156,8 @@ def _install_ffmpeg_windows():
 
 
 def _install_ffmpeg_linux():
+    import definers as _d
+
     print("[INFO] Running FFmpeg installer for Linux...")
     if os.geteuid() != 0:
         print("[WARN] This script needs sudo privileges to install packages.")
@@ -197,7 +199,7 @@ def _install_ffmpeg_linux():
         )
         sys.exit(1)
     except Exception as e:
-        print(f"\n[ERROR] An unexpected error occurred: {e}")
+        _d.logger.error(f"An unexpected error occurred: {e}")
         sys.exit(1)
 
 
@@ -231,8 +233,13 @@ def install_audio_effects():
             "fluid-soundfont-gm",
             "build-essential",
         ]
-        _d.run("apt-get update -y")
-        _d.run(f"apt-get install -y {' '.join(dependencies_apt)}")
+        _d.run(["apt-get", "update", "-y"])
+        pkg_list = (
+            dependencies_apt
+            if isinstance(dependencies_apt, list)
+            else dependencies_apt.split()
+        )
+        _d.run(["apt-get", "install", "-y"] + pkg_list)
     elif os_name == "windows":
         install_dir = os.path.join(os.path.expanduser("~"), "app_dependencies")
         os.makedirs(install_dir, exist_ok=True)
@@ -287,7 +294,11 @@ def pip_install(packs):
             download_file(pack, temp_path)
             packs_arr[idx] = temp_path
     packs = " ".join(packs_arr)
-    run(f"pip install --upgrade --force-reinstall --no-cache-dir {packs}")
+    pack_list = packs if isinstance(packs, list) else packs.split()
+    run(
+        ["pip", "install", "--upgrade", "--force-reinstall", "--no-cache-dir"]
+        + pack_list
+    )
     for idx, pack in enumerate(packs_arr):
         if pack.endswith(".whl"):
             pack = pack.split("-py3")[0].split("-py2")[0]
@@ -315,35 +326,43 @@ def modify_wheel_requirements(wheel_path: str, requirements_map: dict):
         metadata_path = metadata_files[0]
         with open(metadata_path, encoding="utf-8") as f:
             metadata_content = f.read()
+
+        lines = metadata_content.splitlines()
         for package_name, version_specifier in requirements_map.items():
-            pattern = re.compile(
-                f"^(Requires-Dist:\\s*{re.escape(package_name)}(\\s|\\[|;|$).*)$",
-                re.IGNORECASE | re.MULTILINE,
-            )
-            if version_specifier:
-                replacement = (
+            found = False
+            new_lines: list[str] = []
+            lower_name = package_name.lower()
+            for line in lines:
+                if line.lower().startswith("requires-dist:"):
+                    rest = line[len("Requires-Dist:") :].strip()
+                    pkg = rest.split()[0]
+                    if pkg.lower() == lower_name:
+                        found = True
+                        if version_specifier:
+                            new_lines.append(
+                                f"Requires-Dist: {package_name} ({version_specifier})"
+                            )
+                        else:
+                            print(f"Removed dependency: {package_name}")
+                            continue
+                    else:
+                        new_lines.append(line)
+                else:
+                    new_lines.append(line)
+            if not found and version_specifier:
+                new_lines.append(
                     f"Requires-Dist: {package_name} ({version_specifier})"
                 )
-                found = pattern.search(metadata_content)
-                if found:
-                    metadata_content = pattern.sub(
-                        replacement, metadata_content
-                    )
-                    print(
-                        f"Modified dependency: {package_name} -> {version_specifier}"
-                    )
-                else:
-                    metadata_content += f"\n{replacement}"
-                    print(
-                        f"Added new dependency: {package_name} ({version_specifier})"
-                    )
-            else:
-                (metadata_content, count) = pattern.subn("", metadata_content)
-                if count > 0:
-                    print(f"Removed dependency: {package_name}")
-        metadata_content = "\n".join(
-            line for line in metadata_content.splitlines() if line.strip()
-        )
+                print(
+                    f"Added new dependency: {package_name} ({version_specifier})"
+                )
+            elif found and version_specifier:
+                print(
+                    f"Modified dependency: {package_name} -> {version_specifier}"
+                )
+            lines = new_lines
+
+        metadata_content = "\n".join(line for line in lines if line.strip())
         with open(metadata_path, "w", encoding="utf-8") as f:
             f.write(metadata_content)
         new_wheel_path = os.path.join(output_dir, wheel_filename)
@@ -429,6 +448,39 @@ def exist(*p):
     return os.path.exists(absolute)
 
 
+def sanitize_load_path(path: str, allow_dirs: list[str] | None = None) -> str:
+    if not path or not isinstance(path, str):
+        raise ValueError(f"Invalid path: {path!r}")
+    p = Path(path).expanduser().resolve()
+    if allow_dirs is None:
+        env = os.environ.get("DEFINERS_TRUSTED_PATHS", "")
+        bases = [
+            Path(b).expanduser().resolve() for b in env.split(os.pathsep) if b
+        ]
+
+        if not env:
+            cwd = Path.cwd().resolve()
+            if cwd not in bases:
+                bases.append(cwd)
+
+            try:
+                tmp = Path(tempfile.gettempdir()).resolve()
+                if tmp not in bases:
+                    bases.append(tmp)
+            except Exception:
+                pass
+    else:
+        bases = [Path(b).expanduser().resolve() for b in allow_dirs]
+    for b in bases:
+        try:
+            if p.is_relative_to(b):
+                return str(p)
+        except AttributeError:
+            if str(p) == str(b) or str(p).startswith(str(b) + os.sep):
+                return str(p)
+    raise ValueError(f"Refusing to load from untrusted path: {p}")
+
+
 def add_path(*p):
     import definers as _d
 
@@ -462,6 +514,23 @@ def full_path(*p):
     joined = os.path.join(*[str(_p).strip() for _p in p])
     expanded = os.path.expanduser(joined)
     return os.path.abspath(expanded)
+
+
+def sanitize_basename(name: str, pattern: str = r"[A-Za-z0-9_.-]+") -> str:
+    if not isinstance(name, str) or not name:
+        raise ValueError(f"Invalid name: {name!r}")
+
+    if os.path.sep in name or (os.path.altsep and os.path.altsep in name):
+        raise ValueError(f"Invalid name contains path separator: {name}")
+    if name in {"..", "."}:
+        raise ValueError(f"Invalid name: {name}")
+    if not re.fullmatch(pattern, name):
+        raise ValueError(f"Name contains disallowed characters: {name}")
+    return name
+
+
+def sanitize_path(path: str, allow_dirs: list[str] | None = None) -> str:
+    return sanitize_load_path(path, allow_dirs)
 
 
 def paths(*patterns):
@@ -746,12 +815,65 @@ def save_temp_text(text_content):
 
 
 def run_linux(command, silent=False, env=None):
-    import pty
+
+    try:
+        import pty
+    except ImportError:
+        pty = None
 
     if env is None:
         env = {}
     original_env = os.environ.copy()
     modified_env = {**original_env, **env}
+
+    if isinstance(command, list):
+        args = [str(c) for c in command if str(c).strip()]
+        if not args:
+            return False
+        try:
+            proc = subprocess.Popen(
+                args,
+                shell=False,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env=modified_env,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            )
+            stdout, stderr = proc.communicate()
+            if stdout is None:
+                stdout = ""
+            if stderr is None:
+                stderr = ""
+            returncode = proc.returncode
+            if not silent:
+                if stdout:
+                    print(stdout, end="", flush=True)
+                if stderr:
+                    print(stderr, end="", flush=True)
+            if returncode != 0:
+                if not silent:
+                    log(f"Script failed [{returncode}]", " ".join(args))
+                    log(f"Stderr: {stderr.strip()}", "")
+                return False
+            else:
+                if not silent:
+                    log("Script completed", " ".join(args))
+                out_lines = stdout.strip().splitlines()
+                ret_lines = [o.strip() for o in out_lines if o.strip() != ""]
+                return ret_lines
+        except Exception as e:
+            catch(e)
+            return False
+
+    if isinstance(command, str):
+        import re
+
+        if re.search(r"[;&|`$]", command):
+            log("Unsafe command string detected", command)
+            return False
     if isinstance(command, list):
         command = "\n".join(command)
     in_lines = command.strip().splitlines()
@@ -762,6 +884,10 @@ def run_linux(command, silent=False, env=None):
         try:
             write(name, "#!/bin/bash --login\n" + script)
             permit(name)
+            if pty is None:
+                raise OSError(
+                    "pty module unavailable; cannot run complex Linux script"
+                )
             (master, slave) = pty.openpty()
             pid = os.fork()
             if pid == 0:
@@ -827,31 +953,61 @@ def run_windows(command, silent=False, env=None):
     try:
         if env is None:
             env = {}
+        modified_env = {**os.environ.copy(), **env}
+
         if isinstance(command, list):
-            cmds = command
-            command_to_run = " && ".join([c.strip() for c in cmds if c.strip()])
+            args = [str(c) for c in command if str(c).strip()]
+            if not args:
+                return False
+            process = subprocess.Popen(
+                args,
+                shell=False,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env=modified_env,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            )
         else:
-            cmds = command.strip().splitlines()
-            if len(cmds) > 1:
-                command_to_run = " && ".join(
-                    [c.strip() for c in cmds if c.strip()]
+            text_cmd = command.strip()
+            if not text_cmd:
+                return False
+            import re
+
+            if re.search(r"[;&|`$]", text_cmd):
+                log("Unsafe command string detected", text_cmd)
+                return False
+
+            if any(tok in text_cmd for tok in ["&&", "\n", ";"]):
+                process = subprocess.Popen(
+                    text_cmd,
+                    shell=True,
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    env=modified_env,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
                 )
             else:
-                command_to_run = command.strip()
-        if not command_to_run:
-            return False
-        modified_env = {**os.environ.copy(), **env}
-        process = subprocess.Popen(
-            command_to_run,
-            shell=True,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            env=modified_env,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-        )
+                import shlex
+
+                args = shlex.split(text_cmd)
+                process = subprocess.Popen(
+                    args,
+                    shell=False,
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    env=modified_env,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                )
+
         (stdout, stderr) = process.communicate()
         if stdout is None:
             stdout = ""
@@ -865,12 +1021,18 @@ def run_windows(command, silent=False, env=None):
                 print(stderr, end="", flush=True)
         if returncode != 0:
             if not silent:
-                log(f"Script failed [{returncode}]", command_to_run)
+                log(
+                    f"Script failed [{returncode}]",
+                    command if isinstance(command, str) else " ".join(command),
+                )
                 log(f"Stderr: {stderr.strip()}", "")
             return False
         else:
             if not silent:
-                log("Script completed", command_to_run)
+                log(
+                    "Script completed",
+                    command if isinstance(command, str) else " ".join(command),
+                )
             out_lines = stdout.strip().splitlines()
             ret_lines = [o.strip() for o in out_lines if o.strip()]
             return ret_lines
@@ -926,9 +1088,13 @@ def permit(path):
 
 
 def check_version_wildcard(version_spec, version_actual):
-    version_spec = version_spec.replace(".", "\\.").replace("*", ".*")
-    pattern = re.compile(f"^{version_spec}$")
-    return bool(pattern.match(version_actual))
+
+    import fnmatch
+
+    if version_spec is None or version_actual is None:
+        return version_spec == version_actual
+
+    return fnmatch.fnmatchcase(version_actual, version_spec)
 
 
 def installed(pack, version=None):
@@ -968,9 +1134,9 @@ def installed(pack, version=None):
             if version_lower is None:
                 return True
             try:
-                lines = _d.run(f"{pack} --version", silent=True)
+                lines = _d.run([pack, "--version"], silent=True)
                 if not lines:
-                    lines = _d.run(f"{pack} -v", silent=True)
+                    lines = _d.run([pack, "-v"], silent=True)
                 if lines:
                     match = re.search("(\\d+\\.\\d+(\\.\\d+)*)", lines[0])
                     if match:
@@ -1289,8 +1455,10 @@ def apt_install(upgrade=False):
     basic_apt = "build-essential gcc cmake swig gdebi git git-lfs wget curl libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev libncursesw5-dev xz-utils tk-dev libffi-dev liblzma-dev initramfs-tools libgirepository1.0-dev libdbus-1-dev libdbus-glib-1-dev libsecret-1-0 libmanette-0.2-0 libharfbuzz0b libharfbuzz-icu0 libenchant-2-2 libhyphen0 libwoff1 libgraphene-1.0-0 libxml2-dev libxmlsec1-dev"
     audio_apt = "libportaudio2 libasound2-dev sox libsox-fmt-all praat ffmpeg libavcodec-extra libavif-dev"
     visual_apt = "libopenblas-dev libgflags-dev libgles2 libgtk-3-0 libgtk-4-1 libatk1.0-0 libatk-bridge2.0-0 libcups2 libxcomposite1 libxdamage1 libatspi2.0-0 libgstreamer1.0-0 gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-tools gstreamer1.0-gl"
-    definers.run("apt-get update")
-    definers.run(f"apt-get install -y {basic_apt} {audio_apt} {visual_apt}")
+    definers.run(["apt-get", "update"])
+    pkgstr = f"{basic_apt} {audio_apt} {visual_apt}".strip()
+    pkg_list = pkgstr.split()
+    definers.run(["apt-get", "install", "-y"] + pkg_list)
     if upgrade:
         definers.run("apt-get upgrade -y")
     definers.post_install()

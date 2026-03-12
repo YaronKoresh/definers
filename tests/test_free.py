@@ -15,11 +15,14 @@ class TestFree(unittest.TestCase):
         free()
         mock_empty_cache.assert_called_once()
         expected_run_calls = [
-            call("rm -rf ~/.cache/huggingface/*", silent=True),
-            call("rm -rf /data-nvme/zerogpu-offload/*", silent=True),
-            call("rm -rf /opt/ml/checkpoints/*", silent=True),
-            call("pip cache purge", silent=True),
-            call("/home/user/miniconda3/bin/mamba clean --all", silent=True),
+            call(["rm", "-rf", "~/.cache/huggingface/*"], silent=True),
+            call(["rm", "-rf", "/data-nvme/zerogpu-offload/*"], silent=True),
+            call(["rm", "-rf", "/opt/ml/checkpoints/*"], silent=True),
+            call(["pip", "cache", "purge"], silent=True),
+            call(
+                ["/home/user/miniconda3/bin/mamba", "clean", "--all"],
+                silent=True,
+            ),
         ]
         mock_run.assert_has_calls(expected_run_calls, any_order=True)
 
@@ -34,7 +37,8 @@ class TestFree(unittest.TestCase):
             mock_empty_cache.assert_called_once()
             mock_catch.assert_called_once_with(mock_empty_cache.side_effect)
             self.assertIn(
-                call("pip cache purge", silent=True), mock_run.call_args_list
+                call(["pip", "cache", "purge"], silent=True),
+                mock_run.call_args_list,
             )
 
     @patch("definers.run")
@@ -45,7 +49,12 @@ class TestFree(unittest.TestCase):
     ):
         free()
         mamba_call = call(
-            "/home/user/miniconda3/bin/mamba clean --all", silent=True
+            [
+                "/home/user/miniconda3/bin/mamba",
+                "clean",
+                "--all",
+            ],
+            silent=True,
         )
         self.assertNotIn(mamba_call, mock_run.call_args_list)
 

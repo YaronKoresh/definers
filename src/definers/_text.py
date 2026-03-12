@@ -153,7 +153,9 @@ def ai_translate(text, lang="en"):
             if isinstance(src_code, list):
                 src_code = src_code[0]
         except (KeyError, Exception) as e:
-            print(f"Language detection or mapping failed: {e}")
+            from definers._system import catch
+
+            catch(e)
             translated_paragraphs.append(paragraph)
             continue
         if src_code == tgt_code:
@@ -187,7 +189,9 @@ def ai_translate(text, lang="en"):
                 )
                 translated_paragraphs.append(translated_paragraph)
             except Exception as e:
-                print(f"Error translating short paragraph, skipping: {e}")
+                from definers._system import catch
+
+                catch(e)
                 translated_paragraphs.append(
                     f"[Translation Error: {paragraph[:30]}...]"
                 )
@@ -220,7 +224,9 @@ def ai_translate(text, lang="en"):
                 translated_paragraph = " ".join(translated_sentences)
                 translated_paragraphs.append(translated_paragraph)
             except Exception as e:
-                print(f"Error translating long paragraph chunks, skipping: {e}")
+                from definers._system import catch
+
+                catch(e)
                 translated_paragraphs.append(
                     f"[Translation Error: {paragraph[:30]}...]"
                 )
@@ -237,11 +243,19 @@ def google_translate(text, lang="en"):
     lang = simple_text(lang)
     text = simple_text(text)
     url = f"https://translate.googleapis.com/translate_a/single?client=gtx&dt=t&q={text}&sl={language(text)}&tl={lang}"
-    r = requests.get(url)
-    ret = r.text.split('"')[1]
-    ret = simple_text(ret)
-    print(ret)
-    return ret
+    try:
+        r = requests.get(url)
+        ret = r.text.split('"')[1]
+        ret = simple_text(ret)
+        from definers import logger
+
+        logger.info(ret)
+        return ret
+    except Exception as e:
+        from definers._system import catch
+
+        catch(e)
+        return ""
 
 
 def duck_translate(text, lang="en"):

@@ -8,12 +8,15 @@ from typing import Any
 import numpy as _np
 
 from definers._constants import TOKENIZERS, iio_formats, tasks
+from definers._logger import _init_logger
 from definers._system import catch, delete, log, read, tmp
 
 try:
     import cupy as np
 except Exception:
     import numpy as np
+
+logger = _init_logger()
 
 
 @dataclass
@@ -447,7 +450,9 @@ def files_to_dataset(features_paths: list, labels_paths: list = None):
         for feature_path in features_paths:
             loaded = _d.load_as_numpy(feature_path, training=True)
             if loaded is None:
-                print(f"Error loading feature file: {feature_path}")
+                _d.logger.exception(
+                    f"Error loading feature file: {feature_path}"
+                )
                 return None
             if isinstance(loaded, _np.ndarray) and (
                 _np.issubdtype(loaded.dtype, _np.str_)
@@ -475,7 +480,9 @@ def files_to_dataset(features_paths: list, labels_paths: list = None):
             for label_path in labels_paths:
                 loaded = _d.load_as_numpy(label_path, training=True)
                 if loaded is None:
-                    print(f"Error loading label file: {label_path}")
+                    from definers._system import catch
+
+                    catch(f"Error loading label file: {label_path}")
                     return None
                 if isinstance(loaded, _np.ndarray) and (
                     _np.issubdtype(loaded.dtype, _np.str_)
@@ -500,10 +507,12 @@ def files_to_dataset(features_paths: list, labels_paths: list = None):
                 else:
                     labels.append(_d.cupy_to_numpy(loaded))
     except Exception as e:
-        print(f"Error during data loading: {e}")
+        from definers._system import catch
+
+        catch(e)
         return None
     if not features and (not labels):
-        print("No valid data loaded.")
+        logger.warning("No valid data loaded.")
         return None
     tokenizer = None
     if features_have_strings:
