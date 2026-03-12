@@ -455,8 +455,9 @@ def sanitize_load_path(path: str, allow_dirs: list[str] | None = None) -> str:
     If allow_dirs is provided, those directories (after expansion and
     resolution) define the allowed roots. Otherwise, the trusted roots are
     taken from the DEFINERS_TRUSTED_PATHS environment variable (os.pathsep-
-    separated). If that variable is empty, the current working directory is
-    used as the sole trusted root.
+    separated). If that variable is empty or misconfigured, a project-local
+    directory under the current working directory is used as the sole trusted
+    root.
     """
     if not isinstance(path, str) or not path:
         raise ValueError(f"Invalid path: {path!r}")
@@ -471,17 +472,43 @@ def sanitize_load_path(path: str, allow_dirs: list[str] | None = None) -> str:
             Path(b).expanduser().resolve() for b in env.split(os.pathsep) if b
         ]
 
-        # Always fall back to the current working directory if no bases were
-        # provided via the environment.
+        # Always consider the current working directory as a potential base.
         cwd = Path.cwd().resolve()
         if cwd not in bases:
             bases.append(cwd)
     else:
         bases = [Path(b).expanduser().resolve() for b in allow_dirs]
 
-    # Ensure we have at least one base directory to compare against.
+    # Filter out obviously unsafe bases (for example filesystem roots or the
+    # user's home directory), since trusting them would effectively disable
+    # path containment.
+    filtered_bases: list[Path] = []
+    home = Path(os.path.expanduser("~")).resolve()
+    for b in bases:
+        try:
+            b_resolved = b.resolve()
+        except Exception:
+            continue
+        # Skip filesystem root ("/" on POSIX, drive root on Windows).
+        if b_resolved == b_resolved.anchor:
+            continue
+        # Skip the user's home directory itself to avoid exposing it in bulk.
+        if b_resolved == home:
+            continue
+        filtered_bases.append(b_resolved)
+
+    bases = filtered_bases
+
+    # Ensure we have at least one base directory to compare against. If none of
+    # the configured bases are acceptable, fall back to a project-local root.
     if not bases:
-        raise ValueError("No trusted base directories configured")
+        safe_root = Path.cwd().joinpath("definers_data").resolve()
+        try:
+            safe_root.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            # Even if directory creation fails, we still use it as a logical root.
+            pass
+        bases = [safe_root]
 
     for b in bases:
         # On Windows, paths on different drives cannot be related.
