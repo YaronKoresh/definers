@@ -21,9 +21,9 @@ from glob import glob
 from pathlib import Path
 
 from definers._constants import (
-    ALLOWED_TMP_EXTENSIONS,
     FFMPEG_URL,
-    ai_model_extensions,
+    KNOWN_EXTENSIONS,
+    ai_model_formats,
 )
 
 
@@ -652,7 +652,7 @@ def tmp(suffix: str | None = None, keep: bool = True, dir=False):
 
     suffix = str(suffix).strip().strip(".").lower()
 
-    if suffix in ALLOWED_TMP_EXTENSIONS:
+    if suffix in KNOWN_EXTENSIONS:
         suffix = "." + suffix
 
         with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as temp:
@@ -665,7 +665,7 @@ def tmp(suffix: str | None = None, keep: bool = True, dir=False):
 
     else:
         raise ValueError(
-            f"Invalid suffix for tmp file. Allowed extensions are: {', '.join(ALLOWED_TMP_EXTENSIONS)}"
+            f"Invalid suffix for tmp file. Allowed extensions are: {', '.join(KNOWN_EXTENSIONS)}"
         )
 
 
@@ -781,13 +781,13 @@ def shutil_rmtree_readonly_handler(func, path, exc_info):
 
 
 def delete(path: str | list):
-    safe_path = secure_path(path)
-    expanded = Path(safe_path).expanduser()
+    secure_path(path)
+    expanded = Path(path).expanduser()
     unresolved = Path(os.path.abspath(str(expanded)))
     if unresolved.is_symlink():
         unresolved.unlink()
         return
-    resolved = full_path(safe_path)
+    resolved = full_path(path)
     if not exist(resolved):
         return
     p = Path(resolved)
@@ -1277,12 +1277,19 @@ def cores():
 
 
 def get_ext(input_path):
-    return str(Path(str(input_path)).suffix).strip(".").lower()
+    ext = str(Path(str(input_path)).suffix).strip(".").lower()
+    if not ext:
+        raise ValueError(
+            f"Could not determine file extension for: {input_path}"
+        )
+    if ext in KNOWN_EXTENSIONS:
+        return ext
+    raise ValueError("Unsupported file extension")
 
 
 def is_ai_model(input_path):
     extension = get_ext(input_path)
-    return extension in ai_model_extensions
+    return extension in ai_model_formats
 
 
 def compress(dir: str, format: str = "zip", keep_name: bool = True):
