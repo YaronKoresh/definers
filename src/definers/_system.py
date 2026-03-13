@@ -647,23 +647,26 @@ def tmp(suffix: str | None = None, keep: bool = True, dir=False):
 
         return temp_dir_path
 
-    if suffix is None:
+    if not isinstance(suffix, str) or not suffix.strip():
         suffix = "data"
 
     suffix = str(suffix).strip().strip(".").lower()
 
-    if suffix not in ALLOWED_TMP_EXTENSIONS:
-        suffix = "data"
+    if suffix in ALLOWED_TMP_EXTENSIONS:
+        suffix = "." + suffix
 
-    suffix = "." + suffix
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as temp:
+            temp_name = temp.name
 
-    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as temp:
-        temp_name = temp.name
+        if not keep:
+            _d.delete(temp_name)
 
-    if not keep:
-        _d.delete(temp_name)
+        return temp_name
 
-    return temp_name
+    else:
+        raise ValueError(
+            f"Invalid suffix for tmp file. Allowed extensions are: {', '.join(ALLOWED_TMP_EXTENSIONS)}"
+        )
 
 
 def get_process_pid(process_name):
@@ -777,14 +780,14 @@ def shutil_rmtree_readonly_handler(func, path, exc_info):
         raise
 
 
-def delete(path):
-    str_path = str(path).strip()
-    expanded = Path(str_path).expanduser()
+def delete(path: str | list):
+    safe_path = secure_path(path)
+    expanded = Path(safe_path).expanduser()
     unresolved = Path(os.path.abspath(str(expanded)))
     if unresolved.is_symlink():
         unresolved.unlink()
         return
-    resolved = full_path(str_path)
+    resolved = full_path(safe_path)
     if not exist(resolved):
         return
     p = Path(resolved)
@@ -797,7 +800,7 @@ def delete(path):
         p.unlink(missing_ok=True)
 
 
-def remove(path):
+def remove(path: str | list):
     delete(path)
 
 

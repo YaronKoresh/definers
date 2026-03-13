@@ -467,12 +467,12 @@ common_compressed_formats = [
     "tar.xz",
 ]
 ALLOWED_TMP_EXTENSIONS = [
-    *set(iio_formats),
-    *set(common_audio_formats),
-    *set(common_text_formats),
-    *set(common_video_formats),
-    *set(common_compressed_formats),
-    *set(ai_model_extensions),
+    *iio_formats,
+    *common_audio_formats,
+    *common_text_formats,
+    *common_video_formats,
+    *common_compressed_formats,
+    *ai_model_extensions,
     "data",
     "tmp",
 ]
