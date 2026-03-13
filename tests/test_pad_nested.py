@@ -2,10 +2,10 @@ import unittest
 
 import numpy as _numpy
 
-import definers._data as _data
+import definers.data as data
 
-_data._np = _numpy
-_data.np = _numpy
+data._np = _numpy
+data.np = _numpy
 from definers import pad_nested
 
 

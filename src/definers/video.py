@@ -1,11 +1,8 @@
-from definers._system import catch, tmp
+from definers.system import catch, tmp
 
-try:
-    import cupy as np
-except Exception:
-    import numpy as np
+from definers.data import init_cupy_numpy
 
-import numpy as _np
+np, _np = init_cupy_numpy()
 
 
 def extract_video_features(video_path, frame_interval=10):

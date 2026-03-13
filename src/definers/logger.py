@@ -1,8 +1,7 @@
 import logging
-import warnings
 from typing import ClassVar, Final
 
-from definers._core import enforce_error_boundary
+from definers.core import enforce_error_boundary
 
 
 class UnifiedLoggingSystem:
@@ -28,5 +27,5 @@ class UnifiedLoggingSystem:
         return diagnostic_stream
 
 
-def _init_logger() -> logging.Logger:
+def init_logger() -> logging.Logger:
     return UnifiedLoggingSystem.construct_default_diagnostic_pipeline(__name__)

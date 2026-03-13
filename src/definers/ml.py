@@ -18,7 +18,7 @@ import numpy as _np
 import numpy as np
 
 from definers import regex_utils
-from definers._audio import (
+from definers.audio import (
     audio_preview,
     features_to_audio,
     normalize_audio_to_peak,
@@ -26,12 +26,12 @@ from definers._audio import (
     separate_stems,
     stem_mixer,
 )
-from definers._constants import (
+from definers.constants import (
     MODELS,
     PROCESSORS,
     SYSTEM_MESSAGE,
     TOKENIZERS,
-    _positive_prompt_,
+    general_positive_prompt,
     beam_kwargs,
     common_audio_formats,
     higher_beams,
@@ -39,8 +39,8 @@ from definers._constants import (
     language_codes,
     tasks,
 )
-from definers._cuda import device, free, set_cuda_env
-from definers._data import (
+from definers.cuda import device, free, set_cuda_env
+from definers.data import (
     create_vectorizer,
     cupy_to_numpy,
     dtype,
@@ -50,15 +50,15 @@ from definers._data import (
     numpy_to_cupy,
     one_dim_numpy,
 )
-from definers._image import (
+from definers.image import (
     features_to_image,
     get_max_resolution,
     image_resolution,
     resize_image,
     save_image,
 )
-from definers._logger import _init_logger
-from definers._system import (
+from definers.logger import init_logger
+from definers.system import (
     add_path,
     big_number,
     catch,
@@ -87,17 +87,17 @@ from definers._system import (
     wait,
     write,
 )
-from definers._text import (
+from definers.text import (
     ai_translate,
     language,
     random_string,
     simple_text,
     strip_nikud,
 )
-from definers._video import features_to_video, write_video
-from definers._web import download_file, google_drive_download
+from definers.video import features_to_video, write_video
+from definers.web import download_file, google_drive_download
 
-logger = _init_logger()
+logger = init_logger()
 
 
 def answer(history: list):
@@ -280,7 +280,7 @@ def initialize_linear_regression(input_dim, model_path):
     import torch
 
     import definers as _d
-    from definers._system import secure_path
+    from definers.system import secure_path
 
     try:
         model_path = secure_path(model_path)
@@ -337,7 +337,7 @@ def init_model_file(task: str, turbo: bool = True, model_type: str = None):
     import torch
     from safetensors.torch import load_file
 
-    from definers._system import secure_path
+    from definers.system import secure_path
 
     free()
     global MODELS
@@ -630,7 +630,7 @@ def feed(model, X_new, y_new=None, epochs=1):
     return model
 
 
-from definers._constants import MAX_CONSECUTIVE_SPACES, MAX_INPUT_LENGTH
+from definers.constants import MAX_CONSECUTIVE_SPACES, MAX_INPUT_LENGTH
 
 
 def _validate_str_param(name: str, value: str) -> str:
@@ -664,7 +664,7 @@ def train(
     import joblib
 
     import definers as _d
-    from definers._system import secure_path
+    from definers.system import secure_path
 
     tokenizer = _d.init_tokenizer()
 
@@ -801,7 +801,7 @@ def extract_text_features(text, vectorizer=None):
 def predict_linear_regression(X_new, model_path):
     import torch
 
-    from definers._system import secure_path
+    from definers.system import secure_path
 
     try:
         model_path = secure_path(model_path)
@@ -861,7 +861,7 @@ def lang_code_to_name(code):
 
 
 def find_latest_rvc_checkpoint(folder_path: str, model_name: str) -> str | None:
-    from definers._system import secure_path
+    from definers.system import secure_path
 
     logger.info(
         f"Searching for latest checkpoint in '{folder_path}' with model name '{model_name}'"
@@ -1040,7 +1040,7 @@ def build_faiss():
         catch(f"An unexpected error occurred: {e}")
 
 
-def _summarize(text_to_summarize):
+def summarize(text_to_summarize):
     prefix = "summarize: "
     encoded = TOKENIZERS["summary"](
         prefix + text_to_summarize,
@@ -1063,10 +1063,10 @@ def map_reduce_summary(text, max_words):
         chunk_summaries = []
         for i in range(0, len(words), chunk_size - overlap):
             chunk_text = " ".join(words[i : i + chunk_size])
-            chunk_summary = _summarize(chunk_text)
+            chunk_summary = summarize(chunk_text)
             chunk_summaries.append(chunk_summary)
         text = " ".join(chunk_summaries)
-    final_summary = _summarize(text)
+    final_summary = summarize(text)
     return final_summary
 
 
@@ -1077,7 +1077,7 @@ def summary(text, max_words=20, min_loops=1):
         if words_count > 80:
             text = map_reduce_summary(text, max_words)
         else:
-            text = _summarize(text)
+            text = summarize(text)
         min_loops = min_loops - 1
         words_count = len(text.split())
     log("Summary", text)
@@ -1163,7 +1163,7 @@ def init_custom_model(model_type: str, path: str | list):
 def git(user: str, repo: str, branch: str = "main", parent: str = "."):
     import requests
 
-    from definers._system import secure_path
+    from definers.system import secure_path
 
     user = user.replace(" ", "_")
     repo = repo.replace(" ", "-")
@@ -1257,10 +1257,14 @@ def init_model_repo(task: str, turbo: bool = True):
 
         model = ChatterboxTTS.from_pretrained(device=device())
     elif task in ["svc"]:
-        logger.info("Initializing RVC by downloading necessary files.")
         with cwd():
-            git("YaronKoresh", "definers rvc files")
-        log("RVC initialization", "Initialization complete.", True)
+            if not exist("./infer"):
+                logger.info("Initializing RVC by downloading necessary files.")
+                git("YaronKoresh", "definers rvc files")
+                log("RVC initialization", "Initialization complete.", True)
+            else:
+                log("RVC initialization", "RVC files already exist, skipping initialization.", True)
+        return None
     elif task in ["speech-recognition"]:
         from transformers import pipeline
 
@@ -1523,7 +1527,7 @@ def choose_random_words(word_list, num_words=10):
 
 def optimize_prompt_realism(prompt):
     prompt = preprocess_prompt(prompt)
-    prompt = f"{prompt}, {_positive_prompt_}, {_positive_prompt_}."
+    prompt = f"{prompt}, {general_positive_prompt}, {general_positive_prompt}."
     return prompt
 
 
@@ -1735,7 +1739,7 @@ def SklearnWrapper(sklearn_model, is_classification=False):
 
 
 def rvc_to_onnx(model_path):
-    from definers._system import secure_path
+    from definers.system import secure_path
 
     try:
         model_path = secure_path(model_path)
@@ -1747,26 +1751,33 @@ def rvc_to_onnx(model_path):
         google_drive_download(
             id="1kqMYQskvVKwKglcWQsK2Q5G3yPahnbtH", dest="./infer.zip"
         )
+    
     try:
-        from .infer.modules.onnx.export import export_onnx as eo
+        init_pretrained_model("svc")
+        from .infer.modules.onnx.export import export_onnx
+    except ImportError as ie:
+        log("Import Error", "Failed to import ONNX export function", status=False)
+        catch(ie)
+        return None
+    except Exception as e:
+        catch(e)
+        return None
 
-        eo(model_path, model_path.replace(".pth", "") + ".onnx")
+    try:
+        export_onnx(model_path, model_path.replace(".pth", "") + ".onnx")
         logger.info("ONNX export complete.")
         return model_path.replace(".pth", "") + ".onnx"
-    except ImportError:
-        logger.error(
-            "Failed to import ONNX export module. Ensure 'infer' directory is correctly set up."
-        )
-        catch(ImportError("Failed to import ONNX export module."))
     except Exception as e:
-        logger.error("An error occurred during ONNX export!")
+        log("An error occurred during ONNX export!", status="")
         catch(e)
+    
+    return None
 
 
 def export_files_rvc(experiment: str):
     logger.info(f"Exporting files for experiment: {experiment}")
     try:
-        from definers._system import secure_path
+        from definers.system import secure_path
 
         experiment = secure_path(experiment, basename=True)
     except Exception as e:
@@ -1814,7 +1825,7 @@ def export_files_rvc(experiment: str):
 
 
 def find_latest_checkpoint(folder_path: str, model_name: str) -> str | None:
-    from definers._system import secure_path
+    from definers.system import secure_path
 
     logger.info(
         f"Searching for latest checkpoint in '{folder_path}' with model name '{model_name}'"
@@ -1861,7 +1872,7 @@ def find_latest_checkpoint(folder_path: str, model_name: str) -> str | None:
 def train_model_rvc(
     experiment: str, path: str, lvl: int = 1, f0method: str = "crepe"
 ):
-    from definers._system import secure_path
+    from definers.system import secure_path
 
     logger.info(f"Starting RVC training for experiment: {experiment}")
 
@@ -2217,7 +2228,7 @@ def train_model_rvc(
 
 
 def convert_vocal_rvc(experiment: str, path: str):
-    from definers._system import secure_path
+    from definers.system import secure_path
 
     logger.info(f"Starting vocal conversion for experiment: {experiment}")
     try:

@@ -11,8 +11,8 @@ def _resolve(p):
 
 
 class TestCwd(unittest.TestCase):
-    @patch("definers.os.getcwd", return_value="/original/path")
-    @patch("definers.os.chdir")
+    @patch("os.getcwd", return_value="/original/path")
+    @patch("os.chdir")
     def test_cwd_with_directory_provided(self, mock_chdir, mock_getcwd):
         new_dir = "/new/test/dir"
         expected_new = _resolve(new_dir)
@@ -22,9 +22,9 @@ class TestCwd(unittest.TestCase):
         mock_chdir.assert_called_with(expected_owd)
         self.assertEqual(mock_chdir.call_count, 2)
 
-    @patch("definers.os.getcwd", return_value="/original/path")
-    @patch("definers.os.chdir")
-    @patch("definers.os.path.dirname")
+    @patch("os.getcwd", return_value="/original/path")
+    @patch("os.chdir")
+    @patch("os.path.dirname")
     def test_cwd_with_no_directory_provided(
         self, mock_dirname, mock_chdir, mock_getcwd
     ):

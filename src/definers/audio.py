@@ -4,21 +4,27 @@ import random
 import subprocess
 import sys
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import quote
 
+import librosa
 import numpy as _np
+from numba import njit
+from scipy import signal
+from scipy.ndimage import maximum_filter1d
+from scipy.signal import butter, lfilter, resample_poly, sosfilt, welch
 
-from definers._constants import (
+from definers.constants import (
     MADMOM_AVAILABLE,
     MODELS,
     PROCESSORS,
     language_codes,
 )
-from definers._cuda import device
-from definers._data import cupy_to_numpy, numpy_to_cupy
-from definers._image import get_max_resolution
-from definers._system import (
+from definers.cuda import device
+from definers.data import cupy_to_numpy, numpy_to_cupy
+from definers.image import get_max_resolution
+from definers.system import (
     catch,
     cores,
     delete,
@@ -29,8 +35,8 @@ from definers._system import (
     run,
     tmp,
 )
-from definers._text import random_string
-from definers._web import google_drive_download
+from definers.text import random_string
+from definers.web import google_drive_download
 
 try:
     import cupy as np
@@ -38,23 +44,1404 @@ except Exception:
     import numpy as np
 
 
-def get_audio_duration(file_path: str) -> float | None:
-    from pydub import AudioSegment
+@dataclass
+class SmartMasteringConfig:
+    num_bands: int = 16
+    intensity: float = 1.0
 
-    file_path = full_path(file_path)
+    bass_ratio: float = 2.0
+    bass_attack_ms: float = 0.1
+    bass_release_ms: float = 70.0
+    bass_threshold_db: float = -20.0
+
+    treb_ratio: float = 2.0
+    treb_attack_ms: float = 0.1
+    treb_release_ms: float = 30.0
+    treb_threshold_db: float = -20.0
+
+    sample_rate: int | None = None
+    slope_db: float = 3.0
+    slope_hz: float = 1000.0
+    smoothing_fraction: float = 1.0 / 3.0
+    target_lufs: float = -9.0
+    correction_strength: float = 1.0
+    low_cut: int | None = None
+    high_cut: int | None = None
+    phase_type: str = "minimal"
+    drive_db: float = 0.0
+    ceil_db: float = -0.1
+
+    @classmethod
+    def make_bands_from_fcs(
+        cls, fcs: list[float], freq_min: int, freq_max: int
+    ) -> list[dict]:
+        if not fcs:
+            return []
+
+        fcs_arr = np.array(fcs, dtype=float)
+
+        ref_min = np.log2(freq_min)
+        ref_max = np.log2(freq_max)
+
+        fcs_safe = np.clip(fcs_arr, freq_min, freq_max)
+
+        fcs_log = np.log2(fcs_safe)
+        positions = (fcs_log - ref_min) / (ref_max - ref_min)
+
+        base_thr = (
+            cls.bass_threshold_db
+            + (cls.treb_threshold_db - cls.bass_threshold_db) * positions
+        )
+        ratios = cls.bass_ratio + (cls.treb_ratio - cls.bass_ratio) * positions
+        attacks = (
+            cls.bass_attack_ms
+            + (cls.treb_attack_ms - cls.bass_attack_ms) * positions
+        )
+        releases = (
+            cls.bass_release_ms
+            + (cls.treb_release_ms - cls.bass_release_ms) * positions
+        )
+
+        thr = np.mean(base_thr) + (base_thr - np.mean(base_thr)) * cls.intensity
+
+        makeups = np.zeros_like(fcs_arr, dtype=float)
+
+        ratios = 1.0 + (ratios - 1.0) * cls.intensity
+        attacks *= 1.0 - 0.5 * cls.intensity
+        releases *= 1.0 + 0.5 * cls.intensity
+
+        knees = np.full_like(fcs, 6.0, dtype=float)
+
+        return [
+            {
+                "fc": float(fcs_arr[i]),
+                "base_threshold": float(thr[i]),
+                "ratio": float(ratios[i]),
+                "attack_ms": float(attacks[i]),
+                "release_ms": float(releases[i]),
+                "makeup_db": float(makeups[i]),
+                "knee_db": float(knees[i]),
+            }
+            for i in range(len(fcs_arr))
+        ]
+
+
+def resample(y, sr, target_sr=44100):
+    if np.issubdtype(y.dtype, np.integer):
+        y = librosa.util.buf_to_float(y)
+    else:
+        y = y.astype(np.float64)
+
+    y_out = librosa.resample(y, orig_sr=sr, target_sr=target_sr)
+    return y_out
+
+
+@njit(cache=True)
+def decoupled_envelope(env_db, attack_coef, release_coef):
+    out = np.empty_like(env_db)
+    prev = env_db[0]
+    for i in range(len(env_db)):
+        coef = attack_coef if env_db[i] > prev else release_coef
+        prev = coef * prev + (1.0 - coef) * env_db[i]
+        out[i] = prev
+    return out
+
+
+@njit(cache=True)
+def limiter_smooth_env(env, attack_coef, release_coef):
+    out = np.empty_like(env)
+    prev = env[0]
+
+    is_adaptive = release_coef.ndim > 0
+
+    for i in range(len(env)):
+        rc = release_coef[i] if is_adaptive else release_coef
+
+        coef = attack_coef if env[i] > prev else rc
+
+        prev = coef * prev + (1.0 - coef) * env[i]
+        out[i] = prev
+
+    return out
+
+
+def calculate_dynamic_cutoff(
+    y: np.ndarray, sr: int, rolloff_percent: float
+) -> float:
+    y_mono = np.mean(y, axis=0) if y.ndim > 1 else y
+
+    freqs, psd = welch(y_mono, fs=sr, nperseg=4096)
+
+    cumulative_energy = np.cumsum(psd)
+    total_energy = cumulative_energy[-1]
+
+    rolloff_index = np.argmax(
+        cumulative_energy >= (rolloff_percent * total_energy)
+    )
+    optimal_cutoff_hz = freqs[rolloff_index]
+
+    optimal_cutoff_hz = np.clip(optimal_cutoff_hz, 4000.0, 12000.0)
+
+    print(
+        f"Calculated dynamic exciter cutoff: {optimal_cutoff_hz:.1f} Hz (rolloff at {rolloff_percent * 100:.1f}%)"
+    )
+    print(
+        f"Total energy: {total_energy:.6e}, Rolloff energy: {cumulative_energy[rolloff_index]:.6e}"
+    )
+    print(
+        f"Rolloff frequency: {freqs[rolloff_index]:.1f} Hz, PSD at rolloff: {psd[rolloff_index]:.6e}"
+    )
+
+    return float(optimal_cutoff_hz)
+
+
+def apply_exciter(
+    y: np.ndarray,
+    sr: int,
+    cutoff_hz: float = None,
+    drive: float = None,
+    oversample: int = 2,
+    mix: float = 1.0,
+) -> np.ndarray:
+    nyquist = sr / 2.0
+
+    if cutoff_hz is None:
+        cutoff_hz = calculate_dynamic_cutoff(y, sr, rolloff_percent=0.7)
+
+    sos = butter(
+        4, cutoff_hz / nyquist * oversample, btype="high", output="sos"
+    )
+    high_band = sosfilt(sos, y)
+
+    print(
+        f"Extracted high band for exciter. Cutoff: {cutoff_hz:.1f} Hz, High band stats - min: {high_band.min():.6f}, max: {high_band.max():.6f}"
+    )
+
+    if drive is None:
+        peak_highs = np.max(np.abs(high_band))
+        drive = np.clip(4.0 / (peak_highs + 1e-6), 1.0, 50.0)
+
+        print(f"Calculated drive for exciter: {drive:.2f}")
+
+    y_up = resample_poly(high_band, up=oversample, down=1, axis=-1)
+
+    print(
+        f"Oversampled high band. Oversample factor: {oversample}, Shape: {y_up.shape}, dtype: {y_up.dtype}, max: {np.max(np.abs(y_up)):.6f}"
+    )
+
+    distorted_up = np.tanh(y_up * drive)
+    distorted_up *= peak_highs / (np.max(np.abs(distorted_up)) + 1e-6)
+
+    distorted_highs = resample_poly(
+        distorted_up, up=1, down=oversample, axis=-1
+    )
+
+    if distorted_highs.shape[-1] > high_band.shape[-1]:
+        print(
+            f"Trimming distorted highs from {distorted_highs.shape[-1]} to {high_band.shape[-1]} samples"
+        )
+
+        distorted_highs = distorted_highs[..., : high_band.shape[-1]]
+
+    pure_air = sosfilt(sos, distorted_highs)
+
+    print(
+        f"Generated pure air signal. Shape: {pure_air.shape}, dtype: {pure_air.dtype}, max: {np.max(np.abs(pure_air)):.6f}"
+    )
+
+    y, pure_air = pad_audio(y, pure_air)
+    y_enhanced = y + (pure_air * mix)
+
+    print(
+        f"Exciter applied with cutoff {cutoff_hz:.1f} Hz, drive {drive:.2f}, mix {mix:.2f}"
+    )
+    print(f"Peak of pure air signal: {np.max(np.abs(pure_air)):.6f}")
+    print(f"Peak of enhanced signal: {np.max(np.abs(y_enhanced)):.6f}")
+
+    return y_enhanced
+
+
+def stereo(*y_s, lr=True, sr=44100):
+    stereo_result = None
+
+    if lr and len(y_s) == 2:
+        print("Processing stereo pair with LR mode")
+        a, b = y_s
+        a = stereo(a)
+        b = stereo(b)
+        _l, _r = pad_audio(a, b)
+        y_s = [np.vstack([_l[0], _r[1]])]
+
+    for y in y_s:
+        if y.ndim == 1:
+            print(
+                f"Input is mono, converting to stereo. Original shape: {y.shape}, dtype: {y.dtype}"
+            )
+            y = y[np.newaxis, :]
+            y = np.vstack([y, y])
+        if y.ndim > 2:
+            print(
+                f"Input has more than 2 channels, taking first two. Original shape: {y.shape}, dtype: {y.dtype}"
+            )
+            y = np.vstack([y[0], y[1]])
+        if y.shape[1] < y.shape[0]:
+            print(
+                f"Transposing input to have shape (channels, samples). Original shape: {y.shape}, dtype: {y.dtype}"
+            )
+            y = y.T
+
+        y = np.asarray(y, dtype=np.float64)
+
+        if stereo_result is None:
+            print(
+                f"Initializing stereo result with first input. Shape: {y.shape}, dtype: {y.dtype}"
+            )
+            stereo_result = y
+        else:
+            print(
+                f"Mixing input into stereo result. Input shape: {y.shape}, dtype: {y.dtype}, Current stereo result shape: {stereo_result.shape}, dtype: {stereo_result.dtype}"
+            )
+            stereo_result = mix_audio(stereo_result, y, sr, weight=0.5)
+
+    print(
+        f"Final stereo result shape: {stereo_result.shape}, dtype: {stereo_result.dtype}, max: {np.max(np.abs(stereo_result)):.6f}"
+    )
+    return stereo_result
+
+
+def pad_audio(y1: np.ndarray, y2: np.ndarray):
+    y1 = stereo(y1)
+    y2 = stereo(y2)
+
+    max_len = max(y1.shape[1], y2.shape[1])
+
+    y1_padded = np.zeros((y1.shape[0], max_len), dtype=np.float64)
+    y2_padded = np.zeros((y2.shape[0], max_len), dtype=np.float64)
+    y1_padded[:, : y1.shape[1]] = y1
+    y2_padded[:, : y2.shape[1]] = y2
+
+    print(
+        f"Padded audio to length {max_len}. Y1 shape: {y1_padded.shape}, dtype: {y1_padded.dtype}, Y2 shape: {y2_padded.shape}, dtype: {y2_padded.dtype}"
+    )
+    print(
+        f"Y1 stats after padding - min: {y1_padded.min():.6f}, max: {y1_padded.max():.6f}, mean: {y1_padded.mean():.6f}"
+    )
+    print(
+        f"Y2 stats after padding - min: {y2_padded.min():.6f}, max: {y2_padded.max():.6f}, mean: {y2_padded.mean():.6f}"
+    )
+
+    return y1_padded, y2_padded
+
+
+def mix_audio(
+    y1: np.ndarray,
+    y2: np.ndarray,
+    sr: int,
+    weight: float = 0.3,
+    fade_duration: float = 2.0,
+    duck_depth: float = 0.3,
+    cutoff_hz: int | None = None,
+):
+    y1 = np.asarray(y1, dtype=np.float64)
+    y2 = np.asarray(y2, dtype=np.float64)
+
+    y1, y2 = stereo(y1), stereo(y2)
+    y1_padded, y2_padded = pad_audio(y1, y2)
+
+    y1_padded = y1_padded.T
+    y2_padded = y2_padded.T
+
+    if cutoff_hz is None:
+        y1_filtered = y1_padded
+    else:
+        nyquist = 0.5 * sr
+        normal_cutoff = cutoff_hz / nyquist
+        b, a = butter(4, normal_cutoff, btype="low", analog=False)
+        y1_filtered = lfilter(b, a, y1_padded, axis=0)
+
+    print(
+        f"Applied low-pass filter to Y1 with cutoff {cutoff_hz} Hz. Filtered Y1 stats - min: {y1_filtered.min():.6f}, max: {y1_filtered.max():.6f}, mean: {y1_filtered.mean():.6f}"
+    )
+
+    window_size = int(sr * 0.1)
+    envelope = np.abs(y2_padded.mean(axis=1))
+    envelope = np.convolve(
+        envelope, np.ones(window_size) / window_size, mode="same"
+    )
+
+    if np.max(envelope) > 0:
+        envelope = envelope / np.max(envelope)
+    envelope = envelope[:, np.newaxis]
+
+    print(
+        f"Computed envelope for Y2. Envelope stats - min: {envelope.min():.6f}, max: {envelope.max():.6f}, mean: {envelope.mean():.6f}"
+    )
+
+    y1_processed = (y1_padded * (1 - envelope)) + (y1_filtered * envelope)
+
+    duck_mask = 1.0 - (envelope * (1.0 - duck_depth))
+
+    y_length = len(y1_padded)
+
+    fade_samples = min(int(fade_duration * sr), y_length)
+    t = np.linspace(0, np.pi / 2, fade_samples).reshape(-1, 1)
+    fade_in, fade_out = np.sin(t), np.cos(t)
+
+    print(
+        f"Fade in stats - min: {fade_in.min():.6f}, max: {fade_in.max():.6f}, mean: {fade_in.mean():.6f}"
+    )
+    print(
+        f"Fade out stats - min: {fade_out.min():.6f}, max: {fade_out.max():.6f}, mean: {fade_out.mean():.6f}"
+    )
+
+    mask1 = np.ones((y_length, 1)) * weight
+    mask1[-fade_samples:] *= fade_out
+
+    mask2 = np.zeros((y_length, 1))
+    mask2[:fade_samples] = (1.0 - weight) * fade_in
+    mask2[fade_samples:] = 1.0 - weight
+
+    y1_weighted = y1_processed * mask1 * duck_mask
+    y2_weighted = y2_padded * mask2
+
+    print("Applied mixing masks")
+    print(
+        f"Y1 weighted stats - min: {y1_weighted.min():.6f}, max: {y1_weighted.max():.6f}, mean: {y1_weighted.mean():.6f}"
+    )
+    print(
+        f"Y2 weighted stats - min: {y2_weighted.min():.6f}, max: {y2_weighted.max():.6f}, mean: {y2_weighted.mean():.6f}"
+    )
+
+    y_mixed = y1_weighted + y2_weighted
+
+    max_val = np.max(np.abs(y_mixed))
+    if max_val > 1.0:
+        print(
+            f"Normalizing mixed audio. Max value before normalization: {max_val:.6f}"
+        )
+        y_mixed /= max_val
+
+    if y_mixed.shape[0] > y_mixed.shape[1]:
+        print(
+            f"Transposing mixed audio to have shape (channels, samples). Original shape: {y_mixed.shape}, dtype: {y_mixed.dtype}"
+        )
+        y_mixed = y_mixed.T
+
+    print(
+        f"Final mixed audio stats - min: {y_mixed.min():.6f}, max: {y_mixed.max():.6f}, mean: {y_mixed.mean():.6f}"
+    )
+    print(
+        f"Mixing parameters - weight: {weight:.2f}, fade_duration: {fade_duration:.2f} s, duck_depth: {duck_depth:.2f}, cutoff_hz: {cutoff_hz}"
+    )
+
+    return y_mixed
+
+
+def freq_cut(y: np.ndarray, sr: int, low_cut: int | None, high_cut: int | None):
+    y = np.asarray(y, dtype=np.float64)
+    original_length = y.shape[-1]
+
+    if y.ndim > 1:
+        for i in range(y.shape[0]):
+            y[i] -= np.mean(y[i])
+    else:
+        y -= np.mean(y)
+
+    original_length = y.shape[-1]
+
+    if high_cut:
+        target_high_sr = high_cut * 2
+
+        y_high_cut_resampled = resample(y, sr, target_high_sr)
+        y_main = resample(y_high_cut_resampled, target_high_sr, sr)
+
+        if y_main.shape[-1] > original_length:
+            y = y_main[..., :original_length]
+        elif y_main.shape[-1] < original_length:
+            pad_width = original_length - y_main.shape[-1]
+            y = np.pad(y_main, (*((0, 0),) * (y_main.ndim - 1), (0, pad_width)))
+
+    if low_cut:
+        target_low_sr = low_cut * 2
+        y_low_only_resampled = resample(y, sr, target_low_sr)
+        y_low_reconstructed = resample(y_low_only_resampled, target_low_sr, sr)
+
+        if y_low_reconstructed.shape[-1] > original_length:
+            y_low_reconstructed = y_low_reconstructed[..., :original_length]
+        elif y_low_reconstructed.shape[-1] < original_length:
+            pad_width = original_length - y_low_reconstructed.shape[-1]
+            y_low_reconstructed = np.pad(
+                y_low_reconstructed,
+                (*((0, 0),) * (y_low_reconstructed.ndim - 1), (0, pad_width)),
+            )
+
+        y -= y_low_reconstructed
+
+    print(
+        f"Applied frequency cuts. Low cut: {low_cut} Hz, High cut: {high_cut} Hz"
+    )
+    print(
+        f"Output shape after freq cut: {y.shape}, dtype: {y.dtype}, max: {np.max(np.abs(y)):.6f}"
+    )
+
+    return y
+
+
+class SmartMastering:
+    @property
+    def slope_db(self) -> float:
+        return self._slope_db
+
+    @slope_db.setter
+    def slope_db(self, value: float) -> None:
+        self._slope_db = value
+        self.update_bands()
+
+    def __init__(
+        self,
+        config: SmartMasteringConfig | dict | None = None,
+    ) -> None:
+        cfg = config or SmartMasteringConfig()
+
+        self.config = cfg
+
+        self.resampling_target = 44100
+
+        self.drive_db = (
+            cfg.drive_db
+            if cfg.drive_db is not None
+            else SmartMasteringConfig().drive_db
+        )
+
+        self.ceil_db = (
+            cfg.ceil_db
+            if cfg.ceil_db is not None
+            else SmartMasteringConfig().ceil_db
+        )
+
+        self.sr = (
+            cfg.sample_rate
+            if cfg.sample_rate is not None
+            else self.resampling_target
+        )
+
+        self.num_bands = (
+            cfg.num_bands
+            if cfg.num_bands is not None
+            else SmartMasteringConfig().num_bands
+        )
+
+        self._slope_db = (
+            cfg.slope_db
+            if cfg.slope_db is not None
+            else SmartMasteringConfig().slope_db
+        )
+
+        self.slope_hz = (
+            cfg.slope_hz
+            if cfg.slope_hz is not None
+            else SmartMasteringConfig().slope_hz
+        )
+        self.smoothing_fraction = (
+            cfg.smoothing_fraction
+            if cfg.smoothing_fraction is not None
+            else SmartMasteringConfig().smoothing_fraction
+        )
+        self.target_lufs = (
+            cfg.target_lufs
+            if cfg.target_lufs is not None
+            else SmartMasteringConfig().target_lufs
+        )
+        self.low_cut = (
+            cfg.low_cut
+            if cfg.low_cut is not None
+            else SmartMasteringConfig().low_cut
+        )
+        self.high_cut = (
+            cfg.high_cut
+            if cfg.high_cut is not None
+            else SmartMasteringConfig().high_cut
+        )
+        self.correction_strength = (
+            cfg.correction_strength
+            if cfg.correction_strength is not None
+            else SmartMasteringConfig().correction_strength
+        )
+        self.phase_type = (
+            cfg.phase_type
+            if cfg.phase_type is not None
+            else SmartMasteringConfig().phase_type
+        )
+
+        self.update_bands()
+
+        self.nperseg = int(2 ** np.ceil(np.log2(self.sr / 5)))
+
+        self.target_freqs_hz = np.array(
+            generate_bands(0.1, self.sr / 2.0, self.nperseg),
+            dtype=float,
+        )
+
+    def update_bands(self) -> None:
+        count = self.num_bands
+        fcs = generate_bands(
+            self.low_cut or 0.1,
+            self.high_cut or (self.resampling_target / 2 - 0.1),
+            count,
+        )
+        self.bands = SmartMasteringConfig.make_bands_from_fcs(
+            fcs,
+            self.low_cut or 0.1,
+            self.high_cut or (self.resampling_target / 2 - 0.1),
+        )
+
+    def measure_spectrum(self, y_mono: np.ndarray) -> np.ndarray:
+        NPERSEG = self.nperseg
+        FLOOR_DB = -120.0
+        CEILING_DB = 20.0
+
+        if len(y_mono) < NPERSEG:
+            y_mono_padded = np.pad(y_mono, (0, NPERSEG - len(y_mono)))
+        else:
+            y_mono_padded = y_mono
+
+        f_axis, psd = signal.welch(
+            y_mono_padded,
+            fs=self.sr,
+            nperseg=NPERSEG,
+            noverlap=int(NPERSEG * 0.75),
+            window=("kaiser", 18),
+            scaling="density",
+            average="median",
+            detrend="constant",
+        )
+
+        print(
+            f"Welch method completed. Frequency bins: {len(f_axis)}, PSD bins: {len(psd)}"
+        )
+
+        psd_db = 10.0 * np.log10(np.maximum(psd, 1e-24))
+        psd_db = np.clip(psd_db, FLOOR_DB, CEILING_DB)
+
+        print(
+            f"Measured spectrum. Frequency axis shape: {f_axis.shape}, PSD shape: {psd_db.shape}"
+        )
+        print(
+            f"Frequency axis stats - min: {f_axis.min():.1f} Hz, max: {f_axis.max():.1f} Hz, mean: {f_axis.mean():.1f} Hz"
+        )
+        print(
+            f"PSD stats - min: {psd_db.min():.2f} dB, max: {psd_db.max():.2f} dB, mean: {psd_db.mean():.2f} dB"
+        )
+
+        return psd_db, f_axis
+
+    def compute_spectrum(self, f_axis: np.ndarray) -> np.ndarray:
+        min_freq = self.low_cut if self.low_cut else 0.1
+        max_freq = self.high_cut if self.high_cut else f_axis[-1]
+
+        f_axis_safe = np.maximum(f_axis, min_freq)
+        f_axis_safe = np.minimum(f_axis_safe, max_freq)
+
+        octaves = np.log2(f_axis_safe / self.slope_hz)
+
+        target_db = -self.slope_db * octaves
+
+        print(
+            f"Built spectrum. Shape: {target_db.shape}, dtype: {target_db.dtype}, min: {target_db.min():.2f} dB, max: {target_db.max():.2f} dB, mean: {target_db.mean():.2f} dB"
+        )
+        print(
+            f"Spectrum frequency axis stats - min: {f_axis.min():.1f} Hz, max: {f_axis.max():.1f} Hz, mean: {f_axis.mean():.1f} Hz"
+        )
+        print(
+            f"Spectrum parameters - slope_db: {self.slope_db:.2f} dB/octave, slope_hz: {self.slope_hz:.1f} Hz, low_cut: {self.low_cut}, high_cut: {self.high_cut}"
+        )
+
+        return target_db
+
+    def smooth_curve(
+        self,
+        curve: np.ndarray,
+        f_axis: np.ndarray,
+        smoothing_fraction: float | None = None,
+    ) -> np.ndarray:
+        if smoothing_fraction is None:
+            smoothing_fraction = self.smoothing_fraction
+
+        smoothed = np.copy(curve)
+
+        for i, f in enumerate(f_axis):
+            bandwidth = f * (2**smoothing_fraction - 2 ** (-smoothing_fraction))
+
+            low_f = f - bandwidth / 2
+            high_f = f + bandwidth / 2
+
+            mask = (f_axis >= low_f) & (f_axis <= high_f)
+
+            if np.any(mask):
+                smoothed[i] = np.mean(curve[mask])
+
+        print(
+            f"Smoothed spectrum. Shape: {smoothed.shape}, dtype: {smoothed.dtype}"
+        )
+        print(
+            f"Smoothed spectrum stats - min: {smoothed.min():.2f} dB, max: {smoothed.max():.2f} dB, mean: {smoothed.mean():.2f} dB"
+        )
+
+        return smoothed
+
+    def apply_phase_correction(self, y: np.ndarray, tp: str) -> np.ndarray:
+        start = __import__("time").perf_counter()
+
+        orig_len = y.shape[-1]
+        y_mono = np.mean(y, axis=0) if y.ndim > 1 else y
+
+        print(
+            f"Measuring spectrum for phase correction. Input shape: {y_mono.shape}, dtype: {y_mono.dtype}, sample rate: {self.sr} Hz"
+        )
+
+        input_db, f_axis = self.measure_spectrum(y_mono)
+        target_db = self.compute_spectrum(f_axis)
+
+        print(
+            f"Measured input spectrum. Shape: {input_db.shape}, dtype: {input_db.dtype}"
+        )
+        print(
+            f"Built target spectrum. Shape: {target_db.shape}, dtype: {target_db.dtype}"
+        )
+
+        if not np.all(np.isfinite(target_db)):
+            target_db = np.nan_to_num(
+                target_db, nan=0.0, posinf=0.0, neginf=0.0
+            )
+
+        target_db = self.smooth_curve(
+            target_db, f_axis, self.smoothing_fraction
+        )
+
+        print(
+            f"Smoothed target spectrum. Shape: {target_db.shape}, dtype: {target_db.dtype}"
+        )
+        print(
+            f"Target spectrum stats - min: {target_db.min():.2f} dB, max: {target_db.max():.2f} dB, mean: {target_db.mean():.2f} dB"
+        )
+
+        min_len = min(len(target_db), len(input_db))
+
+        target_db = target_db[:min_len]
+        input_db = input_db[:min_len]
+
+        print(
+            f"Padded spectra. Target shape: {target_db.shape}, Input shape: {input_db.shape}"
+        )
+
+        mean_target = np.mean(target_db)
+        mean_input = np.mean(input_db)
+        target_db = target_db - mean_target + mean_input
+
+        correction_db = target_db - input_db
+        correction_db = (target_db - input_db) * self.correction_strength
+
+        print(
+            f"Calculated correction curve. Shape: {correction_db.shape}, dtype: {correction_db.dtype}, min: {correction_db.min():.2f} dB, max: {correction_db.max():.2f} dB, mean: {correction_db.mean():.2f} dB"
+        )
+
+        correction_db_norm = correction_db - np.max(correction_db)
+        H_lin = 10.0 ** (correction_db_norm / 20.0)
+
+        print(
+            f"Converted correction to linear scale. Shape: {H_lin.shape}, dtype: {H_lin.dtype}, min: {H_lin.min():.6f}, max: {H_lin.max():.6f}"
+        )
+
+        out = None
+
+        if tp == "minimal":
+            log_mag = np.log(np.maximum(H_lin, 1e-12))
+
+            cepstrum = np.fft.irfft(log_mag)
+            n = len(cepstrum)
+
+            lifter = np.zeros(n)
+            lifter[0] = 1.0
+            lifter[1 : n // 2] = 2.0
+            if n % 2 == 0:
+                lifter[n // 2] = 1.0
+
+            print(
+                f"Applying minimal phase correction. Cepstrum length: {n}, lifter shape: {lifter.shape}"
+            )
+
+            causal_cepstrum = cepstrum * lifter
+
+            min_phase_spectrum = np.exp(np.fft.rfft(causal_cepstrum))
+
+            h_ir = np.fft.irfft(min_phase_spectrum)
+
+            FIR_LEN = min(len(h_ir), 8192)
+            h_ir_cut = h_ir[:FIR_LEN]
+
+            window = np.ones(FIR_LEN)
+            fade_size = FIR_LEN // 2
+            if fade_size > 0:
+                window[-fade_size:] = np.hamming(fade_size * 2)[fade_size:]
+
+            print(
+                f"Applied windowing to impulse response. Window shape: {window.shape}"
+            )
+
+            h_ir_final = h_ir_cut * window
+
+            h_ir_final = h_ir_final[np.newaxis, :]
+
+            out = signal.oaconvolve(y, h_ir_final, mode="full")
+
+            if not np.all(np.isfinite(out)):
+                out = np.nan_to_num(out, nan=0.0, posinf=0.0, neginf=0.0)
+            assert np.all(np.isfinite(out)), (
+                "minimal_phase output contains non-finite values"
+            )
+            end = __import__("time").perf_counter()
+            self._profile("minimal_phase", end - start)
+
+            print(
+                f"Applied minimal phase correction. Output shape: {out.shape}, dtype: {out.dtype}, max: {np.max(np.abs(out)):.6f}"
+            )
+            print(
+                f"Correction curve stats - min: {correction_db.min():.2f} dB, max: {correction_db.max():.2f} dB, mean: {correction_db.mean():.2f} dB"
+            )
+            print(
+                f"Impulse response stats - min: {h_ir_final.min():.6f}, max: {h_ir_final.max():.6f}, mean: {h_ir_final.mean():.6f}"
+            )
+
+        elif tp == "linear":
+            H_full = np.concatenate([H_lin, H_lin[-2:0:-1]])
+
+            h = np.real(np.fft.ifft(H_full))
+
+            print(
+                f"Calculated linear phase impulse response. Length: {len(h)}, dtype: {h.dtype}, max: {np.max(np.abs(h)):.6f}"
+            )
+
+            h_centered = np.fft.fftshift(h)
+            FIR_LEN = min(len(h), 8192)
+
+            print(
+                f"Centered impulse response. Length: {len(h_centered)}, dtype: {h_centered.dtype}, max: {np.max(np.abs(h_centered)):.6f}"
+            )
+
+            center = len(h_centered) // 2
+            half_len = FIR_LEN // 2
+            h_final = h_centered[center - half_len : center + half_len]
+
+            print(
+                f"Extracted central portion of impulse response. Length: {len(h_final)}, dtype: {h_final.dtype}, max: {np.max(np.abs(h_final)):.6f}"
+            )
+
+            h_final *= signal.windows.hamming(len(h_final))
+            h_final = h_final[np.newaxis, :]
+
+            out = signal.oaconvolve(y, h_final, mode="same")
+            if not np.all(np.isfinite(out)):
+                out = np.nan_to_num(out, nan=0.0, posinf=0.0, neginf=0.0)
+            assert np.all(np.isfinite(out)), (
+                "linear_phase output contains non-finite values"
+            )
+            end = __import__("time").perf_counter()
+            self._profile("linear_phase", end - start)
+
+            print(
+                f"Applied linear phase correction. Output shape: {out.shape}, dtype: {out.dtype}, max: {np.max(np.abs(out)):.6f}"
+            )
+            print(
+                f"Correction curve stats - min: {correction_db.min():.2f} dB, max: {correction_db.max():.2f} dB, mean: {correction_db.mean():.2f} dB"
+            )
+            print(
+                f"Impulse response stats - min: {h_final.min():.6f}, max: {h_final.max():.6f}, mean: {h_final.mean():.6f}"
+            )
+
+        else:
+            raise ValueError(f"Unknown phase type: {tp}")
+
+        if out is None:
+            raise RuntimeError("Phase correction failed to produce output")
+
+        print(
+            f"Output before final length adjustment. Shape: {out.shape}, dtype: {out.dtype}, max: {np.max(np.abs(out)):.6f}"
+        )
+
+        out = (
+            out[..., :orig_len]
+            if out.shape[-1] > orig_len
+            else np.pad(
+                out,
+                (*((0, 0),) * (out.ndim - 1), (0, orig_len - out.shape[-1])),
+            )
+        )
+
+        print(
+            f"Final output after phase correction. Shape: {out.shape}, dtype: {out.dtype}, max: {np.max(np.abs(out)):.6f}"
+        )
+
+        return out
+
+    def multiband_compress(self, y: np.ndarray) -> np.ndarray:
+
+        if hasattr(self, "_profile"):
+            start = __import__("time").perf_counter()
+
+        def lr4(x, fc):
+
+            if x.shape[-1] <= 9:
+                return x, x
+
+            sr2 = self.sr / 2.0
+            sos_l = signal.butter(2, fc / sr2, btype="low", output="sos")
+            sos_h = signal.butter(2, fc / sr2, btype="high", output="sos")
+            lp = signal.sosfiltfilt(sos_l, x)
+            hp = signal.sosfiltfilt(sos_h, x)
+
+            print(
+                f"Applied LR4 crossover at {fc:.1f} Hz. LP max: {np.max(np.abs(lp)):.6f}, HP max: {np.max(np.abs(hp)):.6f}"
+            )
+            print(
+                f"LP stats - min: {lp.min():.6f}, max: {lp.max():.6f}, mean: {lp.mean():.6f}"
+            )
+            print(
+                f"HP stats - min: {hp.min():.6f}, max: {hp.max():.6f}, mean: {hp.mean():.6f}"
+            )
+
+            return lp, hp
+
+        def compress(
+            x,
+            threshold_db,
+            ratio,
+            attack_ms,
+            release_ms,
+            makeup_db,
+            knee_db=3.0,
+        ):
+            ac = np.exp(-1.0 / (self.sr * attack_ms / 1000.0 + 1e-9))
+            rc = np.exp(-1.0 / (self.sr * release_ms / 1000.0 + 1e-9))
+            mk = 10.0 ** (makeup_db / 20.0)
+            env = decoupled_envelope(20.0 * np.log10(np.abs(x) + 1e-12), ac, rc)
+            hk = knee_db / 2.0
+            gain = np.zeros_like(env)
+            above = env > threshold_db + hk
+            in_kn = (env > threshold_db - hk) & ~above
+            gain[above] = -(env[above] - threshold_db) * (1.0 - 1.0 / ratio)
+            ki = env[in_kn] - threshold_db + hk
+            gain[in_kn] = -(ki**2) / (2.0 * knee_db) * (1.0 - 1.0 / ratio)
+
+            print(
+                f"Compressor applied. Threshold: {threshold_db:.2f} dB, Ratio: {ratio:.2f}, Attack: {attack_ms:.2f} ms, Release: {release_ms:.2f} ms, Makeup: {makeup_db:.2f} dB, Knee: {knee_db:.2f} dB"
+            )
+            print(
+                f"Envelope stats - min: {env.min():.2f} dB, max: {env.max():.2f} dB, mean: {env.mean():.2f} dB"
+            )
+            print(
+                f"Gain stats - min: {gain.min():.2f} dB, max: {gain.max():.2f} dB, mean: {gain.mean():.2f} dB"
+            )
+            print(
+                f"Input signal stats - min: {x.min():.6f}, max: {x.max():.6f}, mean: {x.mean():.6f}"
+            )
+            print(
+                f"Output signal stats - min: {(x * 10.0 ** (gain / 20.0) * mk).min():.6f}, max: {(x * 10.0 ** (gain / 20.0) * mk).max():.6f}, mean: {(x * 10.0 ** (gain / 20.0) * mk).mean():.6f}"
+            )
+
+            return x * 10.0 ** (gain / 20.0) * mk
+
+        def split_bands(ch, fcs):
+            bands = []
+            current = ch
+            for fc in fcs[:-1]:
+                lo, current = lr4(current, fc)
+                bands.append(lo)
+            bands.append(current)
+            return bands
+
+        def process_ch(ch):
+
+            fcs = [b.fc for b in self.bands if b.fc > 0]
+            if not fcs:
+                return ch
+
+            sorted_bands = sorted(self.bands, key=lambda b: b.fc)
+            fcs_sorted = [b.fc for b in sorted_bands if b.fc > 0]
+            signal_parts = split_bands(ch, fcs_sorted)
+
+            comps: list[np.ndarray] = []
+            for band_cfg, sig in zip(sorted_bands, signal_parts, strict=False):
+                thr = band_cfg.base_threshold + band_cfg.makeup_db
+                comps.append(
+                    compress(
+                        sig,
+                        thr,
+                        band_cfg.ratio,
+                        band_cfg.attack_ms,
+                        band_cfg.release_ms,
+                        band_cfg.makeup_db,
+                        knee_db=band_cfg.knee_db,
+                    )
+                )
+            print(
+                f"Processed multiband compression for one channel. Number of bands: {len(comps)}"
+            )
+            print(
+                f"Band thresholds: {[b.base_threshold for b in sorted_bands]}"
+            )
+            print(f"Band ratios: {[b.ratio for b in sorted_bands]}")
+            print(
+                f"Band attack times: {[b.attack_ms for b in sorted_bands]} ms"
+            )
+            print(
+                f"Band release times: {[b.release_ms for b in sorted_bands]} ms"
+            )
+            print(
+                f"Band makeup gains: {[b.makeup_db for b in sorted_bands]} dB"
+            )
+            print(f"Band knee values: {[b.knee_db for b in sorted_bands]} dB")
+            print(
+                f"First band stats - min: {comps[0].min():.6f}, max: {comps[0].max():.6f}, mean: {comps[0].mean():.6f}"
+            )
+            print(
+                f"Last band stats - min: {comps[-1].min():.6f}, max: {comps[-1].max():.6f}, mean: {comps[-1].mean():.6f}"
+            )
+            print(
+                f"Sum of bands stats - min: {np.sum(comps, axis=0).min():.6f}, max: {np.sum(comps, axis=0).max():.6f}, mean: {np.sum(comps, axis=0).mean():.6f}"
+            )
+            print(
+                f"Original channel stats - min: {ch.min():.6f}, max: {ch.max():.6f}, mean: {ch.mean():.6f}"
+            )
+
+            return sum(comps)
+
+        if y.ndim > 1:
+            out = np.stack([process_ch(ch) for ch in y])
+        else:
+            out = process_ch(y)
+        if hasattr(self, "_profile"):
+            end = __import__("time").perf_counter()
+            self._profile("multiband_compress", end - start)
+        return out
+
+    def apply_stereo_widening(
+        self, y: np.ndarray, width: float = 1.5
+    ) -> np.ndarray:
+        if y.ndim < 2 or y.shape[0] != 2:
+            return y
+        coef = np.sqrt(2.0 / (1.0 + width**2))
+        mid = (y[0] + y[1]) * 0.5
+        side = (y[0] - y[1]) * 0.5 * width
+
+        print(
+            f"Applying stereo widening. Width: {width:.2f}, Coefficient: {coef:.4f}"
+        )
+        print(
+            f"Mid signal stats - min: {mid.min():.6f}, max: {mid.max():.6f}, mean: {mid.mean():.6f}"
+        )
+        print(
+            f"Side signal stats - min: {side.min():.6f}, max: {side.max():.6f}, mean: {side.mean():.6f}"
+        )
+        print(
+            f"Output left channel stats - min: {(mid + side).min():.6f}, max: {(mid + side).max():.6f}, mean: {(mid + side).mean():.6f}"
+        )
+        print(
+            f"Output right channel stats - min: {(mid - side).min():.6f}, max: {(mid - side).max():.6f}, mean: {(mid - side).mean():.6f}"
+        )
+        print(
+            f"Original left channel stats - min: {y[0].min():.6f}, max: {y[0].max():.6f}, mean: {y[0].mean():.6f}"
+        )
+        print(
+            f"Original right channel stats - min: {y[1].min():.6f}, max: {y[1].max():.6f}, mean: {y[1].mean():.6f}"
+        )
+        print(f"Width factor applied to side signal: {width:.2f}")
+        print(f"Energy of mid signal before widening: {np.sum(mid**2):.6f}")
+        print(f"Energy of side signal before widening: {np.sum(side**2):.6f}")
+
+        return np.stack([(mid + side) * coef, (mid - side) * coef])
+
+    def apply_limiter(
+        self,
+        y: np.ndarray,
+        drive_db: float,
+        ceil_db: float,
+        os_factor: int = 2,
+        lookahead_ms: float = 4.0,
+        attack_ms: float = 0.1,
+        release_ms_min: float = 30.0,
+        release_ms_max: float = 70.0,
+        soft_clip_ratio: float = 0.5,
+        up_beta: float = 12.0,
+        down_beta: float = 18.0,
+    ) -> np.ndarray:
+
+        if hasattr(self, "_profile"):
+            start = __import__("time").perf_counter()
+
+        orig_len = y.shape[-1]
+        limit_lin = 10.0 ** (ceil_db / 20.0)
+        drive_lin = 10.0 ** (drive_db / 20.0)
+        sr_os = self.sr * os_factor
+
+        y_os = signal.resample_poly(
+            y, os_factor, 1, axis=-1, window=("kaiser", up_beta)
+        )
+        y_driven = y_os * drive_lin
+
+        y_env = (
+            np.max(np.abs(y_driven), axis=0)
+            if y_driven.ndim > 1
+            else np.abs(y_driven)
+        )
+        lookahead_samp = int(lookahead_ms * sr_os / 1000.0)
+        peak_env = maximum_filter1d(y_env, size=lookahead_samp)
+
+        rms_win = int(sr_os * 0.05)
+        rms_env = np.sqrt(maximum_filter1d(y_env**2, size=rms_win))
+        crest = peak_env / (rms_env + 1e-12)
+
+        rel_ms = np.clip(
+            release_ms_max / (crest + 1e-12), release_ms_min, release_ms_max
+        )
+        ac = np.exp(-1.0 / (sr_os * attack_ms / 1000.0))
+        rc = np.exp(-1.0 / (sr_os * rel_ms / 1000.0))
+
+        peak_smooth = limiter_smooth_env(peak_env, ac, rc)
+
+        gain = np.where(
+            peak_smooth > limit_lin, limit_lin / (peak_smooth + 1e-12), 1.0
+        )
+
+        y_delayed = np.roll(y_driven, lookahead_samp, axis=-1)
+        if y_delayed.ndim > 1:
+            y_delayed[:, :lookahead_samp] = 0
+        else:
+            y_delayed[:lookahead_samp] = 0
+
+        y_lim = y_delayed * gain
+        y_sat = (
+            y_lim * (1.0 - soft_clip_ratio)
+            + np.tanh(y_lim / limit_lin) * limit_lin * soft_clip_ratio
+        )
+
+        y_down = signal.resample_poly(
+            y_sat, 1, os_factor, axis=-1, window=("kaiser", down_beta)
+        )
+
+        delay_samp = int(lookahead_ms * self.sr / 1000.0)
+        out = y_down[..., delay_samp : delay_samp + orig_len]
+
+        out -= (
+            np.mean(out, axis=-1, keepdims=True)
+            if out.ndim > 1
+            else np.mean(out)
+        )
+
+        out = np.clip(out, -limit_lin, limit_lin)
+
+        if hasattr(self, "_profile"):
+            self._profile("limiter", __import__("time").perf_counter() - start)
+
+        print(
+            f"Applied limiter. Drive: {drive_db} dB, Ceiling: {ceil_db} dB, Lookahead: {lookahead_ms} ms, Attack: {attack_ms} ms, Release: {release_ms_min}-{release_ms_max} ms, Soft clip ratio: {soft_clip_ratio}, Up beta: {up_beta}, Down beta: {down_beta}"
+        )
+        print(
+            f"Limiter input stats - min: {y.min():.6f}, max: {y.max():.6f}, mean: {y.mean():.6f}"
+        )
+        print(
+            f"Limiter output stats - min: {out.min():.6f}, max: {out.max():.6f}, mean: {out.mean():.6f}"
+        )
+        print(
+            f"Limiter gain stats - min: {10.0 * np.log10(gain.min() + 1e-12):.2f} dB, max: {10.0 * np.log10(gain.max() + 1e-12):.2f} dB, mean: {10.0 * np.log10(gain.mean() + 1e-12):.2f} dB"
+        )
+        print(
+            f"Limiter peak envelope stats - min: {peak_env.min():.6f}, max: {peak_env.max():.6f}, mean: {peak_env.mean():.6f}"
+        )
+        print(
+            f"Limiter RMS envelope stats - min: {rms_env.min():.6f}, max: {rms_env.max():.6f}, mean: {rms_env.mean():.6f}"
+        )
+        print(
+            f"Limiter crest stats - min: {crest.min():.6f}, max: {crest.max():.6f}, mean: {crest.mean():.6f}"
+        )
+        print(
+            f"Limiter smoothed peak envelope stats - min: {peak_smooth.min():.6f}, max: {peak_smooth.max():.6f}, mean: {peak_smooth.mean():.6f}"
+        )
+        print(
+            f"Limiter delayed signal stats - min: {y_delayed.min():.6f}, max: {y_delayed.max():.6f}, mean: {y_delayed.mean():.6f}"
+        )
+        print(
+            f"Limiter driven signal stats - min: {y_driven.min():.6f}, max: {y_driven.max():.6f}, mean: {y_driven.mean():.6f}"
+        )
+
+        return out
+
+    def apply_rms(self, y: np.ndarray, rms: float):
+        y *= rms / (
+            (
+                np.max(np.sqrt(np.mean(y**2, axis=1)))
+                if y.ndim > 1
+                else np.sqrt(np.mean(y**2))
+            )
+            + 1e-12
+        )
+
+        print(
+            f"Applied RMS normalization. Target RMS: {rms:.6f}, Output stats - min: {y.min():.6f}, max: {y.max():.6f}, mean: {y.mean():.6f}"
+        )
+        print(
+            f"Original signal stats - min: {y.min():.6f}, max: {y.max():.6f}, mean: {y.mean():.6f}"
+        )
+
+        return y
+
+    def apply_lufs(self, y: np.ndarray, target_lufs: float) -> np.ndarray:
+        if hasattr(self, "_profile"):
+            start = __import__("time").perf_counter()
+
+        b1, a1 = (
+            [1.5309096471, -2.6511690392, 1.1691662955],
+            [1.0, -1.6906592931, 0.7324805897],
+        )
+        b2, a2 = [1.0, -2.0, 1.0], [1.0, -1.9900474541, 0.9900722501]
+
+        y_filt = signal.lfilter(b1, a1, y, axis=-1)
+        y_filt = signal.lfilter(b2, a2, y_filt, axis=-1)
+
+        win_size = int(self.sr * 0.4)
+        hop_size = int(self.sr * 0.1)
+
+        if y_filt.ndim > 1:
+            y_sq = np.sum(y_filt**2, axis=0)
+            n_samples = y_filt.shape[1]
+        else:
+            y_sq = y_filt**2
+            n_samples = len(y_sq)
+
+        shape = ((n_samples - win_size) // hop_size + 1, win_size)
+        strides = (y_sq.strides[0] * hop_size, y_sq.strides[0])
+        y_strided = np.lib.stride_tricks.as_strided(
+            y_sq, shape=shape, strides=strides
+        )
+        ms = np.mean(y_strided, axis=-1)
+
+        abs_threshold = 10.0 ** (-70.0 / 10.0)
+        ms_gated = ms[ms > abs_threshold]
+
+        if len(ms_gated) == 0:
+            return y
+
+        gamma_rel = 0.1 * np.mean(ms_gated)
+        ms_final = ms_gated[ms_gated > gamma_rel]
+
+        loudness_ms = (
+            np.mean(ms_final) if len(ms_final) > 0 else np.mean(ms_gated)
+        )
+
+        current_lufs = -0.691 + 10.0 * np.log10(np.maximum(loudness_ms, 1e-12))
+
+        gain_lin = 10.0 ** ((target_lufs - current_lufs) / 20.0)
+        out = y * gain_lin
+
+        if hasattr(self, "_profile"):
+            self._profile("lufs", __import__("time").perf_counter() - start)
+
+        print(
+            f"Applied LUFS normalization. Target LUFS: {target_lufs:.2f}, Current LUFS: {current_lufs:.2f}, Gain applied: {gain_lin:.4f} ({20.0 * np.log10(gain_lin):.2f} dB)"
+        )
+        print(
+            f"Input signal stats - min: {y.min():.6f}, max: {y.max():.6f}, mean: {y.mean():.6f}"
+        )
+        print(
+            f"Output signal stats - min: {out.min():.6f}, max: {out.max():.6f}, mean: {out.mean():.6f}"
+        )
+        print(
+            f"Measured loudness stats - min: {loudness_ms:.6f}, max: {loudness_ms:.6f}, mean: {loudness_ms:.6f}"
+        )
+        print(
+            f"Number of frames used for loudness measurement: {len(ms_final)}"
+        )
+        print(
+            f"Absolute threshold for gating: {abs_threshold:.6e}, Relative threshold for gating: {gamma_rel:.6e}"
+        )
+        print(
+            f"LUFS normalization applied with biquad filters. Filter 1 - b: {b1}, a: {a1}, Filter 2 - b: {b2}, a: {a2}"
+        )
+
+        return out
+
+    def process(self, y: np.ndarray, sr: int = None) -> np.ndarray:
+        orig_len = y.shape[-1]
+
+        print(
+            f"Starting processing with input shape: {y.shape}, dtype: {y.dtype}, sample rate: {sr if sr is not None else self.sr} Hz"
+        )
+
+        if sr is not None:
+            self.sr = sr
+
+        y_resamp = y
+
+        if self.sr != self.resampling_target:
+            print(
+                f"Resampling to {self.resampling_target} Hz for processing..."
+            )
+
+            y_resamp = resample(y_resamp, self.sr, self.resampling_target)
+            self.sr = self.resampling_target
+
+        print(
+            f"Resampled shape: {y_resamp.shape}, dtype: {y_resamp.dtype}, sample rate: {self.sr} Hz"
+        )
+
+        y_stereo = stereo(y_resamp)
+
+        y_exciter = apply_exciter(y_stereo, self.sr)
+
+        print(
+            f"Applied exciter. Shape: {y_exciter.shape}, dtype: {y_exciter.dtype}, sample rate: {self.sr} Hz"
+        )
+
+        y_mbc = self.multiband_compress(y_exciter)
+
+        print(
+            f"Applied multiband compression. Shape: {y_mbc.shape}, dtype: {y_mbc.dtype}, sample rate: {self.sr} Hz"
+        )
+
+        self.update_bands()
+
+        print(
+            f"Updated multiband compressor bands based on current slope settings. Bands: {[(b.fc, b.base_threshold, b.ratio) for b in self.bands]}"
+        )
+
+        p = self.apply_phase_correction(y_mbc, self.phase_type)
+
+        y_stereo2 = stereo(p)
+
+        y_widen = self.apply_stereo_widening(y_stereo2)
+
+        print(
+            f"Applied stereo widening. Shape: {y_widen.shape}, dtype: {y_widen.dtype}, sample rate: {self.sr} Hz"
+        )
+
+        y_cut = freq_cut(
+            y_widen, self.sr, low_cut=self.low_cut, high_cut=self.high_cut
+        )
+
+        y_lufs = self.apply_lufs(y_cut, self.target_lufs)
+
+        print(
+            f"Applied LUFS normalization. Shape: {y_lufs.shape}, dtype: {y_lufs.dtype}, sample rate: {self.sr} Hz"
+        )
+
+        y_limiter = self.apply_limiter(
+            y_lufs, drive_db=self.drive_db, ceil_db=self.ceil_db
+        )
+
+        print(
+            f"Applied limiter with drive {self.drive_db} dB and ceiling {self.ceil_db} dB. Shape: {y_limiter.shape}, dtype: {y_limiter.dtype}, sample rate: {self.sr} Hz"
+        )
+
+        y_lufs2 = self.apply_lufs(y_limiter, self.target_lufs)
+
+        y_cut2 = freq_cut(
+            y_lufs2, self.sr, low_cut=self.low_cut, high_cut=self.high_cut
+        )
+
+        lin_amp = 10 ** (self.ceil_db / 20.0)
+
+        print(
+            f"Applied final LUFS normalization and frequency cut. Shape: {y_cut2.shape}, dtype: {y_cut2.dtype}, sample rate: {self.sr} Hz"
+        )
+
+        y_clip = np.clip(y_cut2, -lin_amp, lin_amp)
+
+        print(
+            f"Applied final clipping to ceiling of {self.ceil_db} dB. Shape: {y_clip.shape}, dtype: {y_clip.dtype}, sample rate: {self.sr} Hz"
+        )
+
+        if y_clip.shape[-1] != orig_len:
+            if y_clip.shape[-1] > orig_len:
+                print(
+                    f"Output is longer than original by {y_clip.shape[-1] - orig_len} samples, trimming to original length."
+                )
+                y_clip = y_clip[..., :orig_len]
+            else:
+                print(
+                    f"Output is shorter than original by {orig_len - y_clip.shape[-1]} samples, padding with zeros to original length."
+                )
+                y_clip = np.pad(
+                    y_clip,
+                    (
+                        *((0, 0),) * (y_clip.ndim - 1),
+                        (0, orig_len - y_clip.shape[-1]),
+                    ),
+                )
+
+        print(f"Final output peak: {np.max(np.abs(y_clip)):.6f}")
+        print(
+            f"Final output spectrum (dB): {10.0 * np.log10(np.maximum(np.mean(y_clip**2, axis=-1), 1e-12))}"
+        )
+        print(f"Final output shape: {y_clip.shape}, dtype: {y_clip.dtype}")
+        print(
+            f"Limiter settings - Drive: {self.drive_db} dB, Ceiling: {self.ceil_db} dB"
+        )
+        print(f"Sample rate: {self.sr} Hz, Original length: {orig_len} samples")
+        print(
+            f"Multiband compression settings: {[(b.fc, b.base_threshold, b.ratio, b.attack_ms, b.release_ms, b.makeup_db) for b in self.bands]}"
+        )
+        print(
+            f"Phase correction settings: Slope dB/octave: {self.slope_db}, Slope reference frequency: {self.slope_hz} Hz, Smoothing fraction: {self.smoothing_fraction}"
+        )
+        print(
+            f"Frequency cut settings: Low cut: {self.low_cut} Hz, High cut: {self.high_cut} Hz"
+        )
+        print(f"Target LUFS: {self.target_lufs} LUFS")
+        print(
+            f"Output stats - Mean: {np.mean(y_clip):.6e}, Std: {np.std(y_clip):.6e}, Max: {np.max(y_clip):.6f}, Min: {np.min(y_clip):.6f}"
+        )
+        print(
+            f"Output clipping - Samples at ceiling: {(y_clip >= lin_amp).sum()}, Samples at floor: {(y_clip <= -lin_amp).sum()}"
+        )
+        print(
+            f"Output headroom: {10.0 * np.log10(lin_amp / (np.max(np.abs(y_clip)) + 1e-12)):.2f} dB"
+        )
+        print(
+            f"Output spectrum after final processing (dB): {10.0 * np.log10(np.maximum(np.mean(y_clip**2, axis=-1), 1e-12))}"
+        )
+        print(f"Output shape: {y_clip.shape}, dtype: {y_clip.dtype}")
+        print("Processing steps completed successfully without errors.")
+
+        return y_clip, self.sr
+
+
+def generate_bands(
+    start_freq: float, end_freq: float, num_bands: int
+) -> list[float]:
+    if num_bands < 2:
+        return [start_freq]
+
+    bands = []
+    factor = (end_freq / start_freq) ** (1 / (num_bands - 1))
+
+    for i in range(num_bands):
+        freq = start_freq * (factor**i)
+        bands.append(freq)
+
+    return bands
+
+
+def get_audio_duration(file_path: str) -> float | None:
     try:
-        audio = AudioSegment.from_file(file_path)
-        return audio.duration_seconds
+        sr, audio = read_audio(file_path)
+        return len(audio) / sr
     except Exception as e:
-        from definers._system import catch
+        from definers.system import catch
 
         catch(e)
         return None
 
 
 def audio_preview(file_path: str, max_duration: float = 30) -> str | None:
-    from pydub import AudioSegment
-
     file_path = full_path(file_path)
     if not exist(file_path):
         catch(f"Error: Audio file not found at {file_path}")
@@ -71,7 +1458,7 @@ def audio_preview(file_path: str, max_duration: float = 30) -> str | None:
         if total_duration <= max_duration:
             log("Audio duration <= max_duration", "Returning copy of original.")
             preview_paths = split_audio(
-                file_path, duration=total_duration, count=1, skip=0
+                file_path, chunk_duration=total_duration, chunks_limit=1, skip_time=0
             )
             return preview_paths[0] if preview_paths else None
         start_time = 0.0
@@ -108,7 +1495,7 @@ def audio_preview(file_path: str, max_duration: float = 30) -> str | None:
             f"Start: {start_time:.2f}s, Duration: {max_duration:.2f}s",
         )
         preview_paths = split_audio(
-            file_path, duration=max_duration, count=1, skip=start_time
+            file_path, chunk_duration=max_duration, chunks_limit=1, skip_time=start_time
         )
         if preview_paths:
             log("Preview extraction successful", preview_paths[0])
@@ -123,69 +1510,13 @@ def audio_preview(file_path: str, max_duration: float = 30) -> str | None:
         return None
 
 
-def split_audio(
-    file_path: str,
-    duration: float = 5,
-    count: int = None,
-    skip: float = 0,
-    resample: int = None,
-) -> list[str]:
-    from pydub import AudioSegment
-
-    file_path = full_path(file_path)
-    if not exist(file_path):
-        print(f"Error: File not found at {file_path}")
-        return []
-    try:
-        audio = AudioSegment.from_file(file_path)
-    except Exception as e:
-        from definers._system import catch
-
-        catch(e)
-        return []
-    duration_ms = duration * 1000
-    skip_ms = skip * 1000
-    if skip_ms >= len(audio):
-        print(
-            f"Warning: Skip time ({skip}s) exceeds audio duration ({len(audio) / 1000.0:.2f}s). No chunks will be created."
-        )
-        return []
-    max_possible_chunks = math.ceil((len(audio) - skip_ms) / duration_ms)
-    if count is None:
-        num_chunks_to_process = max_possible_chunks
-    else:
-        num_chunks_to_process = min(count, max_possible_chunks)
-    output_dir = tmp(dir=True)
-    res_paths = []
-    print(
-        f"Splitting audio into chunks of {duration}s, starting after {skip}s..."
-    )
-    for i in range(num_chunks_to_process):
-        chunk_start = skip_ms + i * duration_ms
-        chunk_end = chunk_start + duration_ms
-        if chunk_start >= len(audio):
-            break
-        chunk_end = min(chunk_end, len(audio))
-        chunk = audio[chunk_start:chunk_end]
-        if len(chunk) > 0:
-            if resample:
-                chunk = chunk.set_frame_rate(resample)
-            chunk_path = full_path(output_dir, f"chunk_{i:04d}.mp3")
-            chunk.export(chunk_path, format="mp3", bitrate="192k")
-            res_paths.append(chunk_path)
-        else:
-            print(f"Skipping zero-length chunk at index {i}")
-    print(f"Successfully created {len(res_paths)} chunks in {output_dir}")
-    return res_paths
-
-
 def extract_audio_features(file_path, n_mfcc=20):
     import librosa
 
     try:
         (y, sr) = librosa.load(file_path, sr=None)
     except Exception as e:
-        from definers._system import catch
+        from definers.system import catch
 
         catch(e)
         return None
@@ -212,7 +1543,7 @@ def extract_audio_features(file_path, n_mfcc=20):
         ).astype(_np.float32)
         return all_features
     except Exception as e:
-        from definers._system import catch
+        from definers.system import catch
 
         catch(e)
         return None
@@ -405,73 +1736,157 @@ def predict_audio(model, audio_file):
         return None
 
 
-def master(source_path, strength=1, format_choice="mp3"):
-    import definers as _d
+def save_audio(
+    destination_path: str,
+    audio_signal: np.ndarray,
+    sample_rate: int = 44100,
+    output_format: str = "mp3",
+    *,
+    audio_bit_depth: int = 32,
+    audio_bitrate: int = 320,
+) -> None:
 
+    import lameenc
+    import soundfile as sf
+
+    ceiling_db = -0.1
+    lin_amp = 10 ** (ceiling_db / 20.0)
+
+    audio_signal = np.clip(audio_signal * lin_amp, -lin_amp, lin_amp)
+
+    base_path = os.path.splitext(destination_path)[0]
+
+    if output_format.lower() == "mp3":
+        final_path = f"{base_path}.mp3"
+
+        INT16_MAX = np.iinfo(np.int16).max
+        y_scaled = (audio_signal * INT16_MAX).astype(np.int16)
+
+        if y_scaled.ndim == 1:
+            channels = 1
+            y_interleaved = y_scaled
+        else:
+            y_interleaved = np.ascontiguousarray(
+                y_scaled.T
+                if y_scaled.shape[0] < y_scaled.shape[1]
+                else y_scaled
+            )
+            channels = y_interleaved.shape[1]
+
+        encoder = lameenc.Encoder()
+        encoder.set_bit_rate(audio_bitrate)
+        encoder.set_in_sample_rate(sample_rate)
+        encoder.set_channels(channels)
+        encoder.set_quality(2)
+
+        mp3_data = encoder.encode(y_interleaved.tobytes())
+        mp3_data += encoder.flush()
+
+        with open(final_path, "wb") as f:
+            f.write(mp3_data)
+        return
+
+    final_path = f"{base_path}.wav"
+    if audio_bit_depth == 16:
+        INT16_MIN = np.iinfo(np.int16).min
+        INT16_MAX = np.iinfo(np.int16).max
+        y_scaled = audio_signal * float(INT16_MAX)
+
+        tpdf = (
+            np.random.uniform(-1.0, 1.0, y_scaled.shape)
+            + np.random.uniform(-1.0, 1.0, y_scaled.shape)
+        ) * 0.5
+
+        y_dithered = y_scaled + tpdf
+        audio_signal = np.clip(np.rint(y_dithered), INT16_MIN, INT16_MAX).astype(np.int16)
+
+    elif audio_bit_depth == 32:
+        audio_signal = audio_signal.astype(np.float32)
+
+    elif audio_bit_depth == 64:
+        audio_signal = audio_signal.astype(np.float64)
+
+    else:
+        raise ValueError(f"Unsupported bit depth: {audio_bit_depth}. Use 16, 32, or 64.")
+
+    if audio_signal.ndim == 2 and audio_signal.shape[0] < audio_signal.shape[1]:
+        audio_signal = audio_signal.T
+
+    subtype_map = {16: "PCM_16", 32: "FLOAT", 64: "DOUBLE"}
+    sf.write(destination_path, audio_signal, sample_rate, subtype=subtype_map[audio_bit_depth], format="RF64")
+
+
+def master(
+    audio_file_path: str,
+    audio_format: str = "mp3"
+) -> str | None:
     try:
-        output_stem = _d.Path(source_path).with_name(
-            f"{_d.Path(source_path).stem}_mastered"
-        )
-        with _d.tempfile.TemporaryDirectory() as temp_dir:
-            reference_path = _d.Path(temp_dir) / "reference.wav"
-            _d.google_drive_download(
-                "1UF_FIuq4vbCdDfCVLHvD_9fXzJDoredh", str(reference_path)
-            )
-
-            def _master(current_source_path):
-                result_wav_path = _d.tmp("wav", keep=False)
-                _d.mg.process(
-                    target=str(current_source_path),
-                    reference=str(reference_path),
-                    results=[_d.mg.pcm24(str(result_wav_path))],
-                    config=_d.mg.Config(
-                        max_length=60 * 60 * 24,
-                        threshold=0.9,
-                        internal_sample_rate=44100,
-                    ),
-                )
-                return result_wav_path
-
-            processed_path = source_path
-            repeats = int(strength) if strength > 1 else 0
-            for _ in range(repeats):
-                processed_path = _master(processed_path)
-            final_sound = _d.pydub.AudioSegment.from_file(processed_path)
-            gain_db = round((float(strength) - 1.0) * 6.0, 1)
-            final_sound = final_sound + gain_db
-            output_path = _d.export_audio(
-                final_sound, output_stem, format_choice
-            )
-            if repeats > 0:
-                _d.delete(processed_path)
-            return output_path
+        sr, y = read_audio(audio_file_path)
+        y_mastered = SmartMastering().process(y, sr)
+        output_path = tmp(audio_format, keep=False)
+        save_audio(destination_path=output_path, audio_signal=y_mastered, sample_rate=sr, output_format=audio_format)
+        return output_path
     except Exception as e:
-        _d.catch(e)
+        catch(e)
         return None
 
 
-def split_mp3(path: str, chunk_seconds: float):
-    from pydub import AudioSegment
+def split_audio(
+    audio_file_path: str,
+    chunk_duration: float = 5.0,
+    audio_format: str = "mp3",
+    *,
+    chunks_limit: int | None = None,
+    skip_time: float = 0.0,
+    target_sample_rate: int | None = None,
+    output_folder: str | None = None,
+) -> list[str]:
+    audio_file_path = full_path(audio_file_path)
+    if not exist(audio_file_path):
+        return []
 
-    import definers as _d
+    try:
+        sr, audio = read_audio(audio_file_path)
+    except Exception:
+        catch(f"Failed to load audio file: {audio_file_path}")
+        return []
 
-    sound = AudioSegment.from_mp3(path)
-    chunk_ms = chunk_seconds * 1000
-    chunks = [
-        sound[chunk_ms * i : chunk_ms * (i + 1)]
-        for i in range(math.ceil(len(sound) / (chunk_seconds * 1000)))
-    ]
-    export_path = (
-        f"{os.getcwd()}/mp3_segments_{str(_d.random.random()).split('.')[1]}"
-    )
-    _d.Path(export_path).mkdir(parents=True, exist_ok=True)
-    i = 0
-    for chunk_idx in range(len(chunks)):
-        chunk = chunks[chunk_idx]
-        chunk.export(export_path + f"/{str(chunk_idx)}.mp3", format="mp3")
-        i = chunk_idx
-    i = i + 1
-    return (export_path, i)
+    total_ms = len(audio)
+    skip_ms = int(skip_time * 1000.0)
+    if skip_ms >= total_ms:
+        return []
+
+    duration_ms = int(chunk_duration * 1000.0)
+    if duration_ms <= 0:
+        return []
+
+    remaining_ms = total_ms - skip_ms
+    max_chunks = math.ceil(remaining_ms / duration_ms)
+    num_chunks = min(chunks_limit, max_chunks) if chunks_limit is not None else max_chunks
+
+    if output_folder:
+        output_folder = full_path(output_folder)
+        os.makedirs(output_folder, exist_ok=True)
+    else:
+        output_folder = tmp(dir=True)
+
+    res_paths: list[str] = []
+    for i in range(num_chunks):
+        start_ms = skip_ms + i * duration_ms
+        if start_ms >= total_ms:
+            break
+        end_ms = min(start_ms + duration_ms, total_ms)
+        chunk = audio[start_ms:end_ms]
+        if target_sample_rate:
+            chunk = chunk.set_frame_rate(target_sample_rate)
+        chunk_path = full_path(output_folder, f"chunk_{i:04d}.{audio_format}")
+        export_kwargs = {}
+        if audio_format.lower() == "mp3":
+            export_kwargs["bitrate"] = "192k"
+        chunk.export(chunk_path, format=audio_format, **export_kwargs)
+        res_paths.append(chunk_path)
+
+    return res_paths
 
 
 def remove_silence(input_file: str, output_file: str):
@@ -522,10 +1937,10 @@ def compact_audio(input_file: str, output_file: str):
         _d.catch(e)
 
 
-def read_mp3(file, normalized=False):
+def read_audio(audio_file, normalized=False):
     import pydub
 
-    audio_segment = pydub.AudioSegment.from_mp3(file)
+    audio_segment = pydub.AudioSegment.from_file(audio_file)
     samples = np.array(audio_segment.get_array_of_samples())
     if audio_segment.channels == 2:
         audio_data = samples.reshape((-1, 2)).T
@@ -653,24 +2068,6 @@ def detect_silence_mask(
     return silence_mask_filtered
 
 
-def export_audio(audio_segment, output_path_stem, format_choice):
-    format_lower = format_choice.lower()
-    if "mp3" in format_lower:
-        (file_format, bitrate, suffix) = ("mp3", "320k", ".mp3")
-    elif "wav" in format_lower:
-        (file_format, bitrate, suffix) = ("wav", None, ".wav")
-    elif "flac" in format_lower:
-        (file_format, bitrate, suffix) = ("flac", None, ".flac")
-    else:
-        raise ValueError(f"Unsupported format: {format_choice}")
-    output_path = str(Path(str(output_path_stem)).with_suffix(suffix))
-    params = ["-acodec", "pcm_s16le"] if file_format == "wav" else None
-    audio_segment.export(
-        output_path, format=file_format, bitrate=bitrate, parameters=params
-    )
-    return output_path
-
-
 def create_share_links(hf_username, space_name, file_path, text_description):
     file_url = f"https://{hf_username}-{space_name}.hf.space/gradio_api/file={file_path}"
     encoded_text = quote(text_description)
@@ -761,7 +2158,7 @@ def value_to_keys(dictionary, target_value):
 
 
 def transcribe_audio(audio_path, language):
-    from definers._ml import init_pretrained_model
+    from definers.ml import init_pretrained_model
 
     if MODELS["speech-recognition"] is None:
         init_pretrained_model("speech-recognition")
@@ -778,7 +2175,7 @@ def generate_voice(text, reference_audio, format_choice):
     import pydub
     import soundfile as sf
 
-    from definers._ml import init_pretrained_model
+    from definers.ml import init_pretrained_model
 
     if not MODELS["tts"]:
         init_pretrained_model("tts")
@@ -791,7 +2188,9 @@ def generate_voice(text, reference_audio, format_choice):
         sf.write(temp_wav_path, wav, 24000)
         sound = pydub.AudioSegment.from_file(temp_wav_path)
         output_stem = tmp(keep=False).replace(".data", "")
-        final_output_path = export_audio(sound, output_stem, format_choice)
+        final_output_path = save_audio(
+            destination_path=output_stem, audio_signal=sound, sample_rate=24000, output_format=format_choice
+        )
         return final_output_path
     except Exception as e:
         catch(f"Generation failed: {e}")
@@ -817,7 +2216,9 @@ def generate_music(prompt, duration_s, format_choice):
     write_wav(temp_wav_path, rate=sampling_rate, data=wav_output)
     sound = pydub.AudioSegment.from_file(temp_wav_path)
     output_stem = Path(temp_wav_path).with_name(f"generated_{random_string()}")
-    output_path = export_audio(sound, output_stem, format_choice)
+    output_path = save_audio(
+        destination_path=output_stem, audio_signal=sound, sample_rate=32000, output_format=format_choice
+    )
     delete(temp_wav_path)
     return output_path
 
@@ -894,7 +2295,9 @@ def dj_mix(
             processed_tracks[i], crossfade=transition_ms
         )
     output_stem = tmp("dj_mix", keep=False)
-    final_output_path = export_audio(final_mix, output_stem, format_choice)
+    final_output_path = save_audio(
+        destination_path=output_stem, audio_signal=final_mix, output_format=format_choice
+    )
     return final_output_path
 
 
@@ -1235,15 +2638,15 @@ def change_audio_speed(audio_path, speed_factor, preserve_pitch, format_choice):
                 f"{Path(audio_path).stem}_speed_{speed_factor}x"
             )
         )
-        return export_audio(sound_out, output_stem, format_choice)
+        return save_audio(
+            destination_path=output_stem, audio_signal=sound_out, sample_rate=24000, output_format=format_choice
+        )
     else:
         catch("Could not process audio speed change.")
         return None
 
 
 def separate_stems(audio_path, separation_type=None, format_choice="wav"):
-    import pydub
-
     output_dir = tmp(dir=True)
     run(
         f'"{sys.executable}" -m demucs.separate -n hdemucs_mmi --shifts=2 --two-stems=vocals -o "{output_dir}" "{audio_path}"'
@@ -1257,11 +2660,13 @@ def separate_stems(audio_path, separation_type=None, format_choice="wav"):
         return None
 
     def _export_stem(chosen_stem_path, suffix):
-        sound = pydub.AudioSegment.from_file(chosen_stem_path)
+        sr, sound = read_audio(chosen_stem_path)
         output_stem = str(
             Path(audio_path).with_name(Path(audio_path).stem + suffix)
         )
-        final_output_path = export_audio(sound, output_stem, format_choice)
+        final_output_path = save_audio(
+            audio_signal=sound, destination_path=output_stem, sample_rate=sr, output_format=format_choice
+        )
         return final_output_path
 
     if "acapella" == separation_type:
@@ -1314,7 +2719,9 @@ def pitch_shift_vocals(
             f"{Path(audio_path).stem}_vocal_pitch_shifted"
         )
     )
-    final_output_path = export_audio(combined, output_stem, format_choice)
+    final_output_path = save_audio(
+        audio_signal=combined, destination_path=output_stem, output_format=format_choice
+    )
     delete(str(Path(vocals_path).parent))
     delete(shifted_vocals_path)
     return final_output_path
@@ -1440,7 +2847,9 @@ def stem_mixer(files, format_choice):
     write_wav(temp_wav_path, target_sr, (mixed_y * 32767).astype(np.int16))
     sound = pydub.AudioSegment.from_file(temp_wav_path)
     output_stem = Path(temp_wav_path).with_name(f"stem_mix_{random_string()}")
-    output_path = export_audio(sound, output_stem, format_choice)
+    output_path = save_audio(
+        audio_signal=sound, destination_path=output_stem, output_format=format_choice
+    )
     delete(temp_wav_path)
     print(f"--- Success! Mix saved to: {output_path} ---")
     return output_path
@@ -1521,15 +2930,17 @@ def extend_audio(audio_path, extend_duration_s, format_choice):
         extension_wav,
         MODELS["music"].config.audio_encoder.sampling_rate,
     )
-    original_sound = pydub.AudioSegment.from_file(audio_path)
-    extension_sound = pydub.AudioSegment.from_file(temp_extension_path)
+    original_sr, original_sound = read_audio(audio_path)
+    extension_sr, extension_sound = read_audio(temp_extension_path)
     if original_sound.channels != extension_sound.channels:
         extension_sound = extension_sound.set_channels(original_sound.channels)
     final_sound = original_sound + extension_sound
     output_stem = str(
         Path(audio_path).with_name(f"{Path(audio_path).stem}_extended")
     )
-    final_output_path = export_audio(final_sound, output_stem, format_choice)
+    final_output_path = save_audio(
+        audio_signal=final_sound, destination_path=output_stem, output_format=format_choice
+    )
     delete(temp_extension_path)
     return final_output_path
 
@@ -1582,11 +2993,13 @@ def midi_to_audio(midi_path, format_choice):
     fs = FluidSynth(sound_font=soundfont_file)
     temp_wav_path = tmp(".wav")
     fs.midi_to_audio(midi_path, temp_wav_path)
-    sound = pydub.AudioSegment.from_file(temp_wav_path)
+    sr, sound = read_audio(temp_wav_path)
     output_stem = str(
         Path(midi_path).with_name(f"{Path(midi_path).stem}_render")
     )
-    final_output_path = export_audio(sound, output_stem, format_choice)
+    final_output_path = save_audio(
+        audio_signal=sound, destination_path=output_stem, sample_rate=sr, output_format=format_choice
+    )
     delete(temp_wav_path)
     return final_output_path
 
@@ -1624,29 +3037,30 @@ def normalize_audio_to_peak(
 ):
     from pydub import AudioSegment
 
-    if not 0.0 <= target_level <= 1.0:
+    if not 0.0 < target_level <= 1.0:
         catch("target_level must be between 0.0 and 1.0")
         return None
     if format is None:
         format = get_ext(input_path) or "wav"
     output_path = tmp(format)
     try:
-        audio = AudioSegment.from_file(input_path)
+        sr, audio = read_audio(input_path)
     except FileNotFoundError:
         catch(f"Input file not found at {input_path}")
         return None
     if target_level == 0.0 or audio.max_dBFS == -float("inf"):
         silent_audio = AudioSegment.silent(duration=len(audio))
         silent_audio.export(output_path, format=format)
-        print(
-            f"Target level is 0 or audio is silent. Saved silent file to '{output_path}'"
+        log(
+            "Exported silent file"
+            f"Silent audio detected or target level is 0. Saved silent file to '{output_path}'"
         )
         return output_path
     target_dbfs = 20 * math.log10(target_level)
     gain_to_apply = target_dbfs - audio.max_dBFS
     normalized_audio = audio.apply_gain(gain_to_apply)
     normalized_audio.export(output_path, format=format)
-    print(
+    log(
         f"Successfully normalized '{input_path}' to a peak of {target_dbfs:.2f} dBFS."
     )
     print(f"Saved result to '{output_path}'")
@@ -1904,7 +3318,7 @@ def loudness_maximizer(
         (sample_rate, audio) = wavfile.read(input_filename)
         print(f"Reading '{input_filename}' at {sample_rate} Hz.")
     except Exception as e:
-        from definers._system import catch
+        from definers.system import catch
 
         catch(e)
         return None
@@ -1998,7 +3412,7 @@ def loudness_maximizer(
         print(f"✅ Successfully saved processed audio to '{output_filename}'.")
         return output_filename
     except Exception as e:
-        from definers._system import catch
+        from definers.system import catch
 
         catch(e)
         return None

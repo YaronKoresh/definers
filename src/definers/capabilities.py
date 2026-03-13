@@ -7,7 +7,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from enum import Enum
 from threading import Lock
-from typing import Any, Protocol, TypeAlias, TypeVar
+from typing import Any, TypeAlias, TypeVar
 
 T = TypeVar("T")
 ExceptionType: TypeAlias = type[BaseException] | tuple[type[BaseException], ...]

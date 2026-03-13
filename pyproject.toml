@@ -44,7 +44,6 @@ Issues = "https://github.com/YaronKoresh/definers/issues"
 audio = [
     "demucs>=4.0.0",
     "librosa>=0.10.0",
-    "matchering<=2.0.6",
     "numba>=0.57.0",
     "openai-whisper>=20231117",
     "pydub>=0.25.1",
@@ -58,7 +57,6 @@ audio = [
     "stable-ts @ git+https://github.com/jianfch/stable-ts@d89c6250fd4745115b44b83a8a3f7ebfd0e2a1f1",
 ]
 image = [
-    "diffusers>=0.35.0",
     "imageio>=2.30.0",
     "imageio-ffmpeg>=0.4.0",
     "opencv-contrib-python-headless>=4.8.0",
@@ -74,6 +72,7 @@ video = [
     "scikit-image>=0.21.0",
 ]
 ml = [
+    "diffusers>=0.35.0",
     "accelerate>=1.10.0",
     "datasets>=2.14.0",
     "faiss-cpu>=1.7.4",
@@ -107,12 +106,8 @@ web = [
     "matplotlib>=3.7.0",
     "playwright>=1.40.0",
 ]
-gpu = [
-    "cuda-python>=12.0.0",
-    "nvidia-ml-py>=13.590.48",
-]
 all = [
-    "definers[audio,image,video,ml,nlp,web,gpu]",
+    "definers[audio,image,video,ml,nlp,web]",
 ]
 dev = [
     "pytest>=7.4.0",
@@ -128,6 +123,8 @@ dev = [
     "vulture>=2.10",
 ]
 cuda = [
+    "cuda-python>=12.0.0",
+    "nvidia-ml-py>=13.590.48",
     "distributed-ucxx-cu12==0.48.0",
     "raft-dask-cu12==26.2.0",
     "rapids-dask-dependency==26.2.0",

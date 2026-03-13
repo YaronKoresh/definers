@@ -3,8 +3,8 @@ import io
 import zipfile
 from pathlib import Path
 
-from src.definers._capabilities import CircuitBreaker
-from src.definers._web import (
+from definers.capabilities import CircuitBreaker
+from definers.web import (
     HttpChunkedTransferStrategy,
     ResourceRetrievalOrchestrator,
     ZipExtractTransferStrategy,

@@ -11,13 +11,13 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
-from definers._capabilities import (
+from definers.capabilities import (
     CircuitBreaker,
     CircuitBreakerOpenException,
     with_retry,
 )
-from definers._constants import user_agents
-from definers._system import log
+from definers.constants import user_agents
+from definers.system import log
 
 
 def google_drive_download(id, dest, unzip=True):
@@ -43,13 +43,6 @@ def linked_url(url):
     base64_encoded_html = base64.b64encode(html_bytes).decode("utf-8")
     data_url = f"data:text/html;charset=utf-8;base64,{base64_encoded_html}"
     return data_url
-
-
-def geo_new_york():
-    return {
-        "latitude": random.uniform(40.5, 40.9),
-        "longitude": random.uniform(-74.2, -73.7),
-    }
 
 
 try:
@@ -269,7 +262,7 @@ def _execute_async_operation(coroutine: Any) -> Any:
 
 def download_file(url: str, destination: str) -> str | None:
 
-    from definers._constants import MAX_INPUT_LENGTH
+    from definers.constants import MAX_INPUT_LENGTH
 
     if not isinstance(url, str):
         raise ValueError("url must be a string")
@@ -290,7 +283,7 @@ def download_file(url: str, destination: str) -> str | None:
 
 def download_and_unzip(url: str, extract_to: str) -> bool:
 
-    from definers._constants import MAX_INPUT_LENGTH
+    from definers.constants import MAX_INPUT_LENGTH
 
     if not isinstance(url, str):
         raise ValueError("url must be a string")

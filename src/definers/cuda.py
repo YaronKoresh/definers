@@ -5,7 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from definers._system import (
+from definers.system import (
     catch,
     get_os_name,
     run,

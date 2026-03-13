@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-import definers._text as text_module
+import definers.text as text_module
 
 
 class TestTranslateWithCode(unittest.TestCase):

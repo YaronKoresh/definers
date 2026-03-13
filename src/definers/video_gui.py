@@ -1,14 +1,12 @@
 import os
 import tempfile
 
-from definers._audio import analyze_audio, get_color_palette
-from definers._constants import STYLES_DB
+from definers.audio import analyze_audio, get_color_palette
+from definers.constants import STYLES_DB
 
-try:
-    import cupy as np
-except Exception:
-    import numpy as np
+from definers.data import init_cupy_numpy
 
+np, _ = init_cupy_numpy()
 
 def render_frame_base(
     style, t, width, height, audio_data, params, rms, is_beat, img_array=None

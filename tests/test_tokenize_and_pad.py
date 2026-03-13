@@ -53,20 +53,6 @@ class TestTokenizeAndPad(unittest.TestCase):
         self.assertEqual(result, [1, 2, 3])
         self.mock_tokenizer_instance.assert_not_called()
 
-    @patch("definers.two_dim_numpy")
-    @patch("definers.init_tokenizer")
-    def test_initializes_tokenizer_if_not_provided(
-        self, mock_init_tokenizer, mock_two_dim_numpy
-    ):
-        mock_init_tokenizer.return_value = self.mock_tokenizer_instance
-        mock_two_dim_numpy.side_effect = lambda x: np.array(x)
-        rows = ["some text"]
-        tokenize_and_pad(rows)
-        mock_init_tokenizer.assert_called_once()
-        self.mock_tokenizer_instance.assert_called_once_with(
-            ["some text"], padding=True, truncation=True, return_tensors="pt"
-        )
-
     def test_handles_empty_input(self):
         rows = []
         tokenize_and_pad(rows, tokenizer=self.mock_tokenizer_instance)

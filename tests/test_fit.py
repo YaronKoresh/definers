@@ -15,7 +15,7 @@ class TestFit(unittest.TestCase):
         self.mock_model_unsupervised.X_all = np.array([[5, 6], [7, 8]])
         del self.mock_model_unsupervised.y_all
 
-    @patch("definers._ml.log")
+    @patch("definers.ml.log")
     @patch("definers.get_max_shapes", return_value=[(2, 2), (2,)])
     @patch("definers.reshape_numpy", side_effect=lambda x, lengths: x)
     @patch("definers.numpy_to_cupy", side_effect=lambda x: x)
@@ -39,7 +39,7 @@ class TestFit(unittest.TestCase):
         )
         self.assertIs(returned_model, self.mock_model_supervised)
 
-    @patch("definers._ml.log")
+    @patch("definers.ml.log")
     @patch("definers.get_max_shapes", return_value=[(2, 2)])
     @patch("definers.reshape_numpy", side_effect=lambda x, lengths: x)
     @patch("definers.numpy_to_cupy", side_effect=lambda x: x)
@@ -62,12 +62,12 @@ class TestFit(unittest.TestCase):
         )
         self.assertIs(returned_model, self.mock_model_unsupervised)
 
-    @patch("definers._ml.log")
+    @patch("definers.ml.log")
     @patch("definers.get_max_shapes", return_value=[(2, 2), (2,)])
     @patch("definers.reshape_numpy", side_effect=lambda x, lengths: x)
     @patch("definers.numpy_to_cupy", side_effect=lambda x: x)
     @patch("definers.cupy_to_numpy", side_effect=lambda x: x)
-    @patch("definers._ml.catch")
+    @patch("definers.ml.catch")
     def test_fit_supervised_exception(
         self,
         mock_catch,
@@ -84,12 +84,12 @@ class TestFit(unittest.TestCase):
         mock_catch.assert_called_once()
         self.assertIsInstance(mock_catch.call_args[0][0], Exception)
 
-    @patch("definers._ml.log")
+    @patch("definers.ml.log")
     @patch("definers.get_max_shapes", return_value=[(2, 2)])
     @patch("definers.reshape_numpy", side_effect=lambda x, lengths: x)
     @patch("definers.numpy_to_cupy", side_effect=lambda x: x)
     @patch("definers.cupy_to_numpy", side_effect=lambda x: x)
-    @patch("definers._ml.catch")
+    @patch("definers.ml.catch")
     def test_fit_unsupervised_exception(
         self,
         mock_catch,

@@ -18,8 +18,8 @@ class TestPermit(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.test_dir)
 
-    @patch("definers._system.get_os_name", return_value="linux")
-    @patch("definers.subprocess.run")
+    @patch("definers.system.get_os_name", return_value="linux")
+    @patch("subprocess.run")
     def test_permit_calls_chmod(self, mock_subprocess_run, mock_get_os_name):
         path = self.test_file
         permit(path)
@@ -27,11 +27,11 @@ class TestPermit(unittest.TestCase):
             ["chmod", "-R", "a+xrw", path], check=True
         )
 
-    @patch("definers.subprocess.run", return_value=True)
+    @patch("subprocess.run", return_value=True)
     def test_permit_success(self, mock_subprocess_run):
         self.assertTrue(permit(self.test_file))
 
-    @patch("definers.subprocess.run", side_effect=Exception("chmod failed"))
+    @patch("subprocess.run", side_effect=Exception("chmod failed"))
     def test_permit_failure(self, mock_subprocess_run):
         self.assertFalse(permit(self.test_file))
 

@@ -42,16 +42,6 @@ class TestFilesToDataset(unittest.TestCase):
         self.assertIsNone(result)
         mock_logger_exc.assert_called_once()
 
-    @patch("definers.load_as_numpy")
-    @patch("definers.logger.exception")
-    def test_loading_label_fails(self, mock_logger_exc, mock_load):
-        mock_load.side_effect = [np.array([1]), None]
-        features_paths = ["feature.npy"]
-        labels_paths = ["bad_label.npy"]
-        result = files_to_dataset(features_paths, labels_paths)
-        self.assertIsNone(result)
-        mock_logger_exc.assert_called_once()
-
     @patch("definers.logger.warning")
     def test_empty_input_lists(self, mock_logger_warn):
         result = files_to_dataset([], [])

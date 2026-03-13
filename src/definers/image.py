@@ -6,10 +6,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from definers._constants import MODELS, _negative_prompt_, _positive_prompt_
-from definers._cuda import device
-from definers._data import dtype
-from definers._system import exist, full_path, tmp
+from definers.constants import MODELS, general_negative_prompt, general_positive_prompt
+from definers.cuda import device
+from definers.data import dtype
+from definers.system import exist, full_path, tmp
 
 try:
     import cupy as np
@@ -47,7 +47,7 @@ def extract_image_features(image_path):
         all_features = _np.concatenate((color_hist, lbp, edges))
         return all_features
     except Exception as e:
-        from definers._system import catch
+        from definers.system import catch
 
         catch(e)
         return None
@@ -103,7 +103,7 @@ def features_to_image(predicted_features, image_shape=(1024, 1024, 3)):
         )
         return reconstructed_image
     except Exception as e:
-        from definers._system import catch
+        from definers.system import catch
 
         catch(e)
         return None
@@ -583,8 +583,8 @@ def init_upscale():
 def upscale(
     path,
     upscale_factor: int = 2,
-    prompt: str = _positive_prompt_,
-    negative_prompt: str = _negative_prompt_,
+    prompt: str = general_positive_prompt,
+    negative_prompt: str = general_negative_prompt,
     seed: int = None,
     controlnet_scale: float = 0.8,
     controlnet_decay: float = 0.8,
@@ -703,12 +703,12 @@ def resize_image(image_path, target_width, target_height, anti_aliasing=True):
         pth = save_image(img, tmp("png", keep=False))
         return (pth, img)
     except ValueError as ve:
-        from definers._system import catch
+        from definers.system import catch
 
         catch(ve)
         return None
     except Exception as e:
-        from definers._system import catch
+        from definers.system import catch
 
         catch(e)
         return None

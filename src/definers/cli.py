@@ -71,7 +71,7 @@ def main(argv: list[str] | None = None) -> int:
     p_lv.add_argument("--stroke-width", type=int, default=2)
     p_lv.add_argument("--fade", type=float, default=0.5)
 
-    from ._chat import lyric_video, music_video, start
+    from .chat import lyric_video, music_video, start
 
     args = parser.parse_args(argv)
     cmd = args.command

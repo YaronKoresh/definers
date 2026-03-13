@@ -5,7 +5,7 @@ from definers import autotune_song, stretch_audio
 
 
 class TestAudioRunCalls(unittest.TestCase):
-    @patch("definers._audio.run")
+    @patch("definers.audio.run")
     def test_stretch_audio_uses_list(self, mock_run):
         import tempfile
 
@@ -18,19 +18,19 @@ class TestAudioRunCalls(unittest.TestCase):
         self.assertIsInstance(args, list)
         self.assertEqual(args[0], "rubberband")
 
-    @patch("definers._audio.normalize_audio_to_peak", side_effect=lambda p: p)
-    @patch("definers._audio.run")
+    @patch("definers.audio.normalize_audio_to_peak", side_effect=lambda p: p)
+    @patch("definers.audio.run")
     @patch("madmom.features.beats.BeatTrackingProcessor")
     @patch("madmom.features.beats.RNNBeatProcessor")
     @patch(
-        "definers._audio.separate_stems",
+        "definers.audio.separate_stems",
         return_value=("vocals.wav", "instr.wav"),
     )
     @patch(
-        "definers._audio.analyze_audio_features",
+        "definers.audio.analyze_audio_features",
         return_value=("C", "major", 120),
     )
-    @patch("definers._audio.exist", return_value=True)
+    @patch("definers.audio.exist", return_value=True)
     @patch("librosa.onset.onset_detect", return_value=[0.1, 0.2])
     @patch("librosa.load")
     def test_autotune_song_uses_list(

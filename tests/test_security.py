@@ -4,10 +4,10 @@ import unittest
 import gradio as gr
 
 from definers import regex_utils, run
-from definers._constants import MAX_CONSECUTIVE_SPACES, MAX_INPUT_LENGTH
-from definers._ml import train
-from definers._system import secure_path
-from definers._web import download_and_unzip, download_file
+from definers.constants import MAX_CONSECUTIVE_SPACES, MAX_INPUT_LENGTH
+from definers.ml import train
+from definers.system import secure_path
+from definers.web import download_and_unzip, download_file
 
 
 class TestSecurity(unittest.TestCase):

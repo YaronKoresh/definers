@@ -2,13 +2,13 @@ import unittest
 
 import gradio as gr
 
-import definers._text as _text
-from definers._chat import get_chat_response
-from definers._constants import MAX_CONSECUTIVE_SPACES, MAX_INPUT_LENGTH
+import definers.text as text
+from definers.chat import get_chat_response
+from definers.constants import MAX_CONSECUTIVE_SPACES, MAX_INPUT_LENGTH
 
-_text.language = lambda txt: "en"
-_text.ai_translate = lambda txt: txt
-_text.simple_text = lambda txt: txt
+text.language = lambda txt: "en"
+text.ai_translate = lambda txt: txt
+text.simple_text = lambda txt: txt
 
 
 class TestChatValidation(unittest.TestCase):

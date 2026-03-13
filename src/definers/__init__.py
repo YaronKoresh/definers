@@ -1,59 +1,28 @@
 import collections
 import collections.abc
-import importlib
-import os
-import pickle
-import random
-import shutil
-import site
-import subprocess
-import sys
-import tempfile
-from datetime import datetime
-from glob import glob
-from pathlib import Path
-
-try:
-    import imageio as iio
-except ImportError:
-    iio = None
-try:
-    import onnx
-except ImportError:
-    onnx = None
-try:
-    import matchering as mg
-except ImportError:
-    mg = None
-try:
-    import pydub
-except ImportError:
-    pydub = None
-
 import contextlib
+import importlib
 import io
+from importlib.metadata import PackageNotFoundError, version as _pkg_version
+from types import ModuleType
+from typing import Any
+
+collections.MutableSequence = collections.abc.MutableSequence
 
 
-class _MissingTransformer:
+class MissingTransformer:
     def __init__(self, *args: object, **kwargs: object) -> None:
         raise ImportError("sox is not available")
 
 
-from types import ModuleType
-from typing import Any
-
-
-class _SoxProxy:
-    Transformer = _MissingTransformer
+class SoxProxy:
+    Transformer = MissingTransformer
 
     def __getattr__(self, name: str) -> Any:
         raise ImportError("sox module is not available")
 
 
-from typing import Optional
-
-
-def _load_sox_module() -> ModuleType | None:
+def load_sox_module() -> ModuleType | None:
     try:
         buf = io.StringIO()
         import subprocess
@@ -89,82 +58,41 @@ def _load_sox_module() -> ModuleType | None:
         return None
 
 
-sox = _load_sox_module() or _SoxProxy()
+sox = load_sox_module() or SoxProxy()
 
 
 def has_sox() -> bool:
-    return not isinstance(sox, _SoxProxy)
+    return not isinstance(sox, SoxProxy)
 
 
-try:
-    from huggingface_hub import hf_hub_download
-except ImportError:
-    hf_hub_download = None
-try:
-    import pillow_heif
-except ImportError:
-    pillow_heif = None
-try:
-    from torch.utils.data import TensorDataset
-except ImportError:
-    TensorDataset = None
-try:
-    from sklearn.preprocessing import StandardScaler
-except ImportError:
-    StandardScaler = None
-try:
-    from sklearn.preprocessing import Normalizer
-except ImportError:
-    Normalizer = None
-try:
-    from sklearn.impute import SimpleImputer
-except ImportError:
-    SimpleImputer = None
-try:
-    from sklearn.cluster import KMeans
-except ImportError:
-    KMeans = None
-try:
-    from sklearn.metrics import (
-        calinski_harabasz_score,
-        davies_bouldin_score,
-        silhouette_score,
-    )
-except ImportError:
-    calinski_harabasz_score = None
-    davies_bouldin_score = None
-    silhouette_score = None
-try:
-    from transformers import AutoTokenizer
-except ImportError:
-    AutoTokenizer = None
-collections.MutableSequence = collections.abc.MutableSequence
-from importlib.metadata import PackageNotFoundError, version as _pkg_version
-
-import numpy as _np
-
-from definers._audio import (
+from definers.audio import (
+    SmartMastering,
+    SmartMasteringConfig,
     analyze_audio,
     analyze_audio_features,
     apply_compressor,
+    apply_exciter,
     audio_preview,
     audio_to_midi,
     autotune_song,
     beat_visualizer,
     calculate_active_rms,
+    calculate_dynamic_cutoff,
     change_audio_speed,
     compact_audio,
     compute_gain_envelope,
     create_sample_audio,
     create_share_links,
     create_spectrum_visualization,
+    decoupled_envelope,
     detect_silence_mask,
     dj_mix,
-    export_audio,
     export_to_pkl,
     extend_audio,
     extract_audio_features,
     features_to_audio,
+    freq_cut,
+    generate_bands,
     generate_music,
     generate_voice,
     get_active_audio_timeline,
@@ -174,27 +102,32 @@ from definers._audio import (
     get_scale_notes,
     humanize_vocals,
     identify_instruments,
+    limiter_smooth_env,
     loudness_maximizer,
     master,
     midi_to_audio,
+    mix_audio,
     normalize_audio_to_peak,
+    pad_audio,
     pitch_shift_vocals,
     predict_audio,
     process_audio_chunks,
-    read_mp3,
+    read_audio,
     remove_silence,
+    resample,
     riaa_filter,
+    save_audio,
     separate_stems,
     split_audio,
-    split_mp3,
     stem_mixer,
+    stereo,
     stretch_audio,
     subdivide_beats,
     transcribe_audio,
     value_to_keys,
     write_mp3,
 )
-from definers._video_gui import (
+from definers.video_gui import (
     apply_global_overlays,
     apply_post_fx,
     draw_custom_element,
@@ -213,7 +146,15 @@ try:
 except PackageNotFoundError:
     __version__ = "0.0.0"
 
-from definers._chat import (
+from definers.capabilities import (
+    CircuitBreaker,
+    CircuitBreakerOpenException,
+    CircuitSnapshot,
+    CircuitState,
+    ExponentialBackoffDelay,
+    with_retry,
+)
+from definers.chat import (
     css,
     get_chat_response,
     init_chat,
@@ -224,18 +165,19 @@ from definers._chat import (
     strip_nikud,
     theme,
 )
-from definers._constants import (
+from definers.cli import main
+from definers.constants import (
     CONFIGS,
     FFMPEG_URL,
     KNOWN_EXTENSIONS,
     MADMOM_AVAILABLE,
+    MAX_PATTERN_LENGTH,
     MODELS,
+    NESTED_QUANTIFIER_RE,
     PROCESSORS,
     STYLES_DB,
     SYSTEM_MESSAGE,
     TOKENIZERS,
-    _negative_prompt_,
-    _positive_prompt_,
     ai_model_formats,
     beam_kwargs,
     binary_formats,
@@ -244,6 +186,8 @@ from definers._constants import (
     common_text_formats,
     common_video_formats,
     compiled_code_formats,
+    general_negative_prompt,
+    general_positive_prompt,
     higher_beams,
     iio_formats,
     language_codes,
@@ -253,17 +197,21 @@ from definers._constants import (
     unesco_mapping,
     user_agents,
 )
-from definers._cuda import (
+from definers.core import (
+    BaseDiagnosticTracker,
+    CriticalSystemFailure,
+    SystemDiagnosticsFactory,
+    enforce_error_boundary,
+)
+from definers.cuda import (
     cuda_toolkit,
     cuda_version,
     device,
     free,
     set_cuda_env,
 )
-from definers._data import (
+from definers.data import (
     TrainingData,
-    _find_spec,
-    _init_cupy_numpy,
     check_onnx,
     convert_tensor_dtype,
     create_vectorizer,
@@ -272,10 +220,12 @@ from definers._data import (
     dtype,
     fetch_dataset,
     files_to_dataset,
+    find_spec,
     get_max_shapes,
     get_prediction_file_extension,
     guess_numpy_sample_rate,
     guess_numpy_type,
+    init_cupy_numpy,
     init_tokenizer,
     is_gpu,
     load_as_numpy,
@@ -287,7 +237,7 @@ from definers._data import (
     order_dataset,
     pad_nested,
     pad_sequences,
-    patch_cupy_numpy,
+    patch_dask,
     patch_torch_proxy_mode,
     prepare_data,
     process_rows,
@@ -307,7 +257,7 @@ from definers._data import (
     unvectorize,
     vectorize,
 )
-from definers._image import (
+from definers.image import (
     extract_image_features,
     features_to_image,
     get_max_resolution,
@@ -318,12 +268,11 @@ from definers._image import (
     upscale,
     write_on_image,
 )
-from definers._logger import _init_logger
-from definers._ml import (
+from definers.logger import init_logger
+from definers.ml import (
     HybridModel,
     LinearRegressionTorch,
     SklearnWrapper,
-    _summarize,
     answer,
     build_faiss,
     check_parameter,
@@ -361,14 +310,21 @@ from definers._ml import (
     preprocess_prompt,
     rvc_to_onnx,
     simple_text,
+    summarize,
     summary,
     train,
     train_linear_regression,
     train_model_rvc,
 )
-from definers._system import (
-    _install_ffmpeg_linux,
-    _install_ffmpeg_windows,
+from definers.regex_utils import (
+    check_complexity,
+    compile,
+    escape,
+    escape_and_compile,
+    fullmatch,
+    sub,
+)
+from definers.system import (
     add_path,
     apt_install,
     big_number,
@@ -393,6 +349,8 @@ from definers._system import (
     install_audio_effects,
     install_faiss,
     install_ffmpeg,
+    install_ffmpeg_linux,
+    install_ffmpeg_windows,
     installed,
     is_admin_windows,
     is_ai_model,
@@ -430,7 +388,7 @@ from definers._system import (
     wait,
     write,
 )
-from definers._text import (
+from definers.text import (
     Database,
     ai_translate,
     camel_case,
@@ -447,7 +405,7 @@ from definers._text import (
     string_to_sha3_512,
     translate_with_code,
 )
-from definers._video import (
+from definers.video import (
     convert_video_fps,
     extract_video_features,
     features_to_video,
@@ -455,59 +413,360 @@ from definers._video import (
     resize_video,
     write_video,
 )
-from definers._web import (
+from definers.web import (
     add_to_path_windows,
     download_and_unzip,
     download_file,
     extract_text,
-    geo_new_york,
     google_drive_download,
     linked_url,
 )
 
+logger = init_logger()
+
+importlib.util.find_spec = find_spec
+
 try:
-    import cupy as np
+    patch_dask()
 except Exception:
-    import numpy as np
-logger = _init_logger()
-importlib.util.find_spec = _find_spec
-if _find_spec("dask"):
-    import dask
-    import dask.array
-    import dask.dataframe
-    import dask.diagnostics
-    from dask import base
-    from dask.graph_manipulation import bind, checkpoint, clone, wait_on
-    from dask.optimization import cull, fuse, inline, inline_functions
-    from dask.utils import key_split
+    pass
 
-    dask.dataframe.core = dask.dataframe
-    dask.diagnostics.core = dask.diagnostics
-    dask.array.core = dask.array
-    sys.modules["dask.dataframe.core"] = sys.modules["dask.dataframe"]
-    sys.modules["dask.diagnostics.core"] = sys.modules["dask.diagnostics"]
-    sys.modules["dask.array.core"] = sys.modules["dask.array"]
-    dask.core = base
-    dask.core.fuse = fuse
-    dask.core.cull = cull
-    dask.core.inline = inline
-    dask.core.inline_functions = inline_functions
-    dask.core.key_split = key_split
-    dask.core.checkpoint = checkpoint
-    dask.core.bind = bind
-    dask.core.wait_on = wait_on
-    dask.core.clone = clone
-    dask.core.get = dask.get
-
-    def _visualize_wrapper(dsk, **kwargs):
-        return dask.visualize(dsk, **kwargs)
-
-    dask.core.visualize = _visualize_wrapper
-    dask.core.to_graphviz = _visualize_wrapper
 try:
     patch_torch_proxy_mode()
 except Exception:
     pass
+
 set_system_message(name="Phi", role="a helpful chat assistant")
 
-from . import _chat, _system
+cupy, numpy = init_cupy_numpy()
+
+__all__ = [
+    "__version__",
+    "add_path",
+    "add_to_path_windows",
+    "ai_model_formats",
+    "ai_translate",
+    "analyze_audio",
+    "analyze_audio_features",
+    "answer",
+    "apply_compressor",
+    "apply_exciter",
+    "apply_global_overlays",
+    "apply_post_fx",
+    "apt_install",
+    "audio_preview",
+    "audio_to_midi",
+    "autotune_song",
+    "BaseDiagnosticTracker",
+    "beam_kwargs",
+    "beat_visualizer",
+    "big_number",
+    "binary_formats",
+    "build_faiss",
+    "calculate_active_rms",
+    "calculate_dynamic_cutoff",
+    "camel_case",
+    "catch",
+    "change_audio_speed",
+    "check_complexity",
+    "check_onnx",
+    "check_parameter",
+    "check_version_wildcard",
+    "choose_random_words",
+    "CircuitBreaker",
+    "CircuitBreakerOpenException",
+    "CircuitSnapshot",
+    "CircuitState",
+    "common_audio_formats",
+    "common_compressed_formats",
+    "common_text_formats",
+    "common_video_formats",
+    "compact_audio",
+    "compile",
+    "compile_model",
+    "compiled_code_formats",
+    "compress",
+    "compute_gain_envelope",
+    "CONFIGS",
+    "convert_tensor_dtype",
+    "convert_video_fps",
+    "convert_vocal_rvc",
+    "copy",
+    "cores",
+    "create_sample_audio",
+    "create_share_links",
+    "create_spectrum_visualization",
+    "create_vectorizer",
+    "CriticalSystemFailure",
+    "css",
+    "cuda_toolkit",
+    "cuda_version",
+    "cupy",
+    "cupy_to_numpy",
+    "cwd",
+    "Database",
+    "decoupled_envelope",
+    "delete",
+    "detect_silence_mask",
+    "device",
+    "directory",
+    "dj_mix",
+    "download_and_unzip",
+    "download_file",
+    "draw_custom_element",
+    "draw_star_of_david",
+    "drop_columns",
+    "dtype",
+    "duck_translate",
+    "enforce_error_boundary",
+    "escape",
+    "escape_and_compile",
+    "exist",
+    "ExponentialBackoffDelay",
+    "export_files_rvc",
+    "export_to_pkl",
+    "extend_audio",
+    "extract",
+    "extract_audio_features",
+    "extract_image_features",
+    "extract_text",
+    "extract_text_features",
+    "extract_video_features",
+    "features_to_audio",
+    "features_to_image",
+    "features_to_text",
+    "features_to_video",
+    "feed",
+    "fetch_dataset",
+    "FFMPEG_URL",
+    "file_to_sha3_512",
+    "files_to_dataset",
+    "filter_styles",
+    "find_latest_checkpoint",
+    "find_latest_rvc_checkpoint",
+    "find_package_paths",
+    "find_spec",
+    "fit",
+    "free",
+    "freq_cut",
+    "full_path",
+    "fullmatch",
+    "general_negative_prompt",
+    "general_positive_prompt",
+    "generate_bands",
+    "generate_music",
+    "generate_preview_handler",
+    "generate_song",
+    "generate_video_handler",
+    "generate_voice",
+    "get_active_audio_timeline",
+    "get_audio_duration",
+    "get_audio_feedback",
+    "get_chat_response",
+    "get_cluster_content",
+    "get_color_palette",
+    "get_ext",
+    "get_linux_distribution",
+    "get_max_resolution",
+    "get_max_shapes",
+    "get_model_instructions",
+    "get_os_name",
+    "get_prediction_file_extension",
+    "get_process_pid",
+    "get_python_version",
+    "get_rms_and_beat",
+    "get_scale_notes",
+    "git",
+    "google_drive_download",
+    "google_translate",
+    "guess_numpy_sample_rate",
+    "guess_numpy_type",
+    "has_sox",
+    "higher_beams",
+    "humanize_vocals",
+    "HybridModel",
+    "identify_instruments",
+    "iio_formats",
+    "image_resolution",
+    "importable",
+    "infer",
+    "init_chat",
+    "init_cupy_numpy",
+    "init_custom_model",
+    "init_logger",
+    "init_model_file",
+    "init_model_repo",
+    "init_pretrained_model",
+    "init_stable_whisper",
+    "init_tokenizer",
+    "init_upscale",
+    "initialize_linear_regression",
+    "install_audio_effects",
+    "install_faiss",
+    "install_ffmpeg",
+    "install_ffmpeg_linux",
+    "install_ffmpeg_windows",
+    "installed",
+    "is_admin_windows",
+    "is_ai_model",
+    "is_clusters_model",
+    "is_directory",
+    "is_gpu",
+    "is_huggingface_repo",
+    "is_package_path",
+    "is_symlink",
+    "keep_alive",
+    "kmeans_k_suggestions",
+    "KNOWN_EXTENSIONS",
+    "lang_code_to_name",
+    "language",
+    "language_codes",
+    "limiter_smooth_env",
+    "linear_regression",
+    "LinearRegressionTorch",
+    "linked_url",
+    "load",
+    "load_as_numpy",
+    "load_sox_module",
+    "log",
+    "logger",
+    "loudness_maximizer",
+    "lyric_video",
+    "MADMOM_AVAILABLE",
+    "main",
+    "map_reduce_summary",
+    "master",
+    "MAX_PATTERN_LENGTH",
+    "merge_columns",
+    "midi_to_audio",
+    "mix_audio",
+    "MODELS",
+    "modify_wheel_requirements",
+    "move",
+    "music_video",
+    "NESTED_QUANTIFIER_RE",
+    "normalize_arr",
+    "normalize_audio_to_peak",
+    "normalize_path",
+    "number_to_hex",
+    "numpy",
+    "numpy_to_cupy",
+    "numpy_to_list",
+    "numpy_to_str",
+    "one_dim_numpy",
+    "optimize_prompt_realism",
+    "order_dataset",
+    "pad_audio",
+    "pad_nested",
+    "pad_sequences",
+    "parent_directory",
+    "patch_dask",
+    "patch_torch_proxy_mode",
+    "path_end",
+    "path_ext",
+    "path_name",
+    "paths",
+    "permit",
+    "pip_install",
+    "pipe",
+    "pitch_shift_vocals",
+    "pkg_file_formats",
+    "post_install",
+    "pre_install",
+    "pre_install",
+    "predict",
+    "predict_audio",
+    "predict_linear_regression",
+    "prepare_common_resources",
+    "prepare_data",
+    "preprocess_prompt",
+    "process_audio_chunks",
+    "process_rows",
+    "PROCESSORS",
+    "pytorch_to_onnx",
+    "random_number",
+    "random_salt",
+    "random_string",
+    "read",
+    "read_as_numpy",
+    "read_audio",
+    "read_video",
+    "remove",
+    "remove_silence",
+    "render_frame_base",
+    "resample",
+    "reshape_numpy",
+    "resize_image",
+    "resize_video",
+    "riaa_filter",
+    "run",
+    "run_linux",
+    "run_windows",
+    "runnable",
+    "rvc_to_onnx",
+    "save",
+    "save_audio",
+    "save_image",
+    "save_temp_text",
+    "script_formats",
+    "secure_command",
+    "secure_path",
+    "select_columns",
+    "select_rows",
+    "send_signal_to_process",
+    "separate_stems",
+    "set_cuda_env",
+    "set_system_message",
+    "simple_text",
+    "SklearnWrapper",
+    "SmartMastering",
+    "SmartMasteringConfig",
+    "sox",
+    "split_audio",
+    "split_columns",
+    "split_dataset",
+    "start",
+    "stem_mixer",
+    "stereo",
+    "str_to_numpy",
+    "stretch_audio",
+    "string_to_bytes",
+    "string_to_sha3_512",
+    "strip_nikud",
+    "STYLES_DB",
+    "sub",
+    "subdivide_beats",
+    "summarize",
+    "summary",
+    "SYSTEM_MESSAGE",
+    "SystemDiagnosticsFactory",
+    "tasks",
+    "tensor_length",
+    "theme",
+    "thread",
+    "three_dim_numpy",
+    "tmp",
+    "to_loader",
+    "tokenize_and_pad",
+    "TOKENIZERS",
+    "train",
+    "train_linear_regression",
+    "train_model_rvc",
+    "TrainingData",
+    "transcribe_audio",
+    "translate_with_code",
+    "two_dim_numpy",
+    "unesco_mapping",
+    "unique",
+    "unvectorize",
+    "upscale",
+    "user_agents",
+    "value_to_keys",
+    "vectorize",
+    "wait",
+    "with_retry",
+    "write",
+    "write_mp3",
+    "write_on_image",
+    "write_video",
+]

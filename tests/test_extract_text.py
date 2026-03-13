@@ -9,8 +9,8 @@ from definers import extract_text
 class TestExtractText(unittest.TestCase):
     @patch("playwright.sync_api.expect")
     @patch("playwright.sync_api.sync_playwright")
-    @patch("definers._web.fromstring")
-    @patch("definers._web.CSSSelector")
+    @patch("definers.web.fromstring")
+    @patch("definers.web.CSSSelector")
     def test_extract_text_successfully(
         self, mock_css, mock_fromstring, mock_sync_playwright, mock_expect
     ):
@@ -42,8 +42,8 @@ class TestExtractText(unittest.TestCase):
 
     @patch("playwright.sync_api.expect")
     @patch("playwright.sync_api.sync_playwright")
-    @patch("definers._web.fromstring")
-    @patch("definers._web.CSSSelector")
+    @patch("definers.web.fromstring")
+    @patch("definers.web.CSSSelector")
     def test_selector_not_found(
         self, mock_css, mock_fromstring, mock_sync_playwright, mock_expect
     ):
@@ -73,8 +73,8 @@ class TestExtractText(unittest.TestCase):
 
     @patch("playwright.sync_api.expect")
     @patch("playwright.sync_api.sync_playwright")
-    @patch("definers._web.fromstring")
-    @patch("definers._web.CSSSelector")
+    @patch("definers.web.fromstring")
+    @patch("definers.web.CSSSelector")
     def test_empty_page_content(
         self, mock_css, mock_fromstring, mock_sync_playwright, mock_expect
     ):

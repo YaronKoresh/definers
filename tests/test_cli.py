@@ -42,7 +42,7 @@ def test_version():
 
 def test_start_dispatch(monkeypatch, tmp_path):
 
-    import definers._chat as chat
+    import definers.chat as chat
 
     called = {}
 
@@ -61,7 +61,7 @@ def test_start_dispatch(monkeypatch, tmp_path):
 
 
 def test_music_video(monkeypatch):
-    import definers._chat as chat
+    import definers.chat as chat
 
     monkeypatch.setattr(chat, "music_video", lambda a, w, h, f: "/tmp/x.mp4")
     code, out = run_cli(["music-video", "foo.mp3", "320", "240", "15"])
@@ -70,7 +70,7 @@ def test_music_video(monkeypatch):
 
 
 def test_lyric_video(monkeypatch, tmp_path, capsys):
-    import definers._chat as chat
+    import definers.chat as chat
 
     monkeypatch.setattr(chat, "lyric_video", lambda *args, **k: "/tmp/y.mp4")
 

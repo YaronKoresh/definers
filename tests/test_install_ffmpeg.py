@@ -13,7 +13,7 @@ class TestInstallFfmpeg(unittest.TestCase):
 
     @patch("definers.installed", return_value=False)
     @patch("definers.get_os_name", return_value="windows")
-    @patch("definers._install_ffmpeg_windows")
+    @patch("definers.install_ffmpeg_windows")
     def test_install_on_windows(
         self, mock_install_windows, mock_get_os, mock_installed
     ):
@@ -22,7 +22,7 @@ class TestInstallFfmpeg(unittest.TestCase):
 
     @patch("definers.installed", return_value=False)
     @patch("definers.get_os_name", return_value="linux")
-    @patch("definers._install_ffmpeg_linux")
+    @patch("definers.install_ffmpeg_linux")
     def test_install_on_linux(
         self, mock_install_linux, mock_get_os, mock_installed
     ):

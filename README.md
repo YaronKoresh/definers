@@ -1,13 +1,25 @@
 # Definers
 
-Definers is a Python toolkit for AI workflows, media processing, data operations, and system utilities.
+Definers is a modular Python framework designed for building and orchestrating AI-driven pipelines, media transformation workflows, and data processing tasks. It provides:
+
+- A consistent API for handling audio, image, video, and machine‑learning workloads.
+- Resilient execution primitives with built‑in retry and circuit‑breaker support.
+- Safe system and subprocess management with explicit guardrails to prevent injection and platform‑specific pitfalls.
+- Extensible utilities for feature extraction, preprocessing, and end‑to‑end model training, with a focus on predictable behavior and reproducible results.
+
+The library emphasizes performance, security, and maintainability, making it suitable for both experimentation and production deployment.
 
 ## Core Modules
 
-- `definers._capabilities` provides retry policies and circuit-breaker resilience boundaries.
-- `definers._web` contains retrieval and transfer orchestration utilities.
-- `definers._audio`, `definers._image`, `definers._video`, and `definers._ml` provide domain processing capabilities.
-- `definers._system` and related utility modules provide environment and runtime helpers.
+## Core Modules
+
+- `definers.capabilities` defines execution resilience primitives. It exports retry policies, circuit‑breaker guards, and standardized error categories that let higher‑level workflows tolerate transient failures while preserving observability.
+
+- `definers.web` implements safe HTTP retrieval and upload orchestration. It centralizes request retries, rate‑limit backoff, content validation, and proxy/credential handling so data transfer logic is consistent across tools.
+
+- `definers.audio`, `definers.image`, `definers.video`, and `definers.ml` are the domain engines. Each exposes a stable processing pipeline API, including I/O normalization, augmentation utilities, and model inference helpers, while isolating format‑specific dependencies and runtime constraints.
+
+- `definers.system` and its companion utilities provide environment introspection, platform‑aware subprocess execution, and guarded system calls. They supply the shared foundation for safe process spawning (`run`, `run_linux`, `run_windows`), deterministic path handling, and configuration sanitization used throughout the package.
 
 ## Security & Performance
 
@@ -34,7 +46,7 @@ internal or external command" no longer see it when simply running
 
 ## Available GUIs
 
-The package exposes a simple launcher in `definers._chat.start()` which
+The package exposes a simple launcher in `definers.chat.start()` which
 brings up a lightweight Gradio interface for various subprojects.  The list
 of valid project names is computed dynamically from the available `_gui_`
 helpers in the module; new interfaces can be added without any changes to
@@ -52,7 +64,7 @@ At the time of writing, available GUIs include:
 - `train` – train or predict with custom models (formerly "teachless")
 
 Each GUI is loaded lazily; unknown project names are reported via
-`definers._system.catch()` which may raise or log depending on configuration.
+`definers.system.catch()` which may raise or log depending on configuration.
 
 ## Command Execution
 
@@ -130,3 +142,7 @@ This project is licensed under the MIT License.
 	- Warranty, liability coverage, or fitness guarantees.
 
 See `LICENSE` for the full legal text.
+
+### Maintainer
+
+This project is owned and maintained by Yaron Koresh. Contributions are welcome via pull requests or issues.

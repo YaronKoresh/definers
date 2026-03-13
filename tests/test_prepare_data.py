@@ -117,7 +117,7 @@ class TestPrepareDataHelpers(unittest.TestCase):
             calls.append(1)
             return [1, 2, 3]
 
-        with patch("definers._data.load_source", side_effect=fake_load_source):
+        with patch("definers.data.load_source", side_effect=fake_load_source):
             td1 = prepare_data(features=["a"], batch_size=1)
             td2 = prepare_data(features=["a"], batch_size=1)
         self.assertIs(td1, td2)

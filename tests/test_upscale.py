@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 from PIL import Image
 
-from definers import MODELS, _negative_prompt_, upscale
+from definers import MODELS, general_negative_prompt, upscale
 
 
 class TestUpscale(unittest.TestCase):

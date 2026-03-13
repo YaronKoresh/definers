@@ -10,7 +10,7 @@ from datetime import datetime
 from functools import lru_cache
 from time import time
 
-from definers._constants import (
+from definers.constants import (
     MODELS,
     SYSTEM_MESSAGE,
     TOKENIZERS,
@@ -19,9 +19,9 @@ from definers._constants import (
     language_codes,
     unesco_mapping,
 )
-from definers._cuda import device
-from definers._system import read
-from definers._web import extract_text
+from definers.cuda import device
+from definers.system import read
+from definers.web import extract_text
 
 
 def set_system_message(
@@ -90,7 +90,7 @@ def strip_nikud(text: str) -> str:
 
 def simple_text(prompt: str) -> str:
     from definers import regex_utils
-    from definers._constants import MAX_INPUT_LENGTH
+    from definers.constants import MAX_INPUT_LENGTH
 
     if prompt is None:
         return ""
@@ -176,7 +176,7 @@ def ai_translate(text, lang="en"):
             if isinstance(src_code, list):
                 src_code = src_code[0]
         except (KeyError, Exception) as e:
-            from definers._system import catch
+            from definers.system import catch
 
             catch(e)
             translated_paragraphs.append(paragraph)
@@ -212,7 +212,7 @@ def ai_translate(text, lang="en"):
                 )
                 translated_paragraphs.append(translated_paragraph)
             except Exception as e:
-                from definers._system import catch
+                from definers.system import catch
 
                 catch(e)
                 translated_paragraphs.append(
@@ -247,7 +247,7 @@ def ai_translate(text, lang="en"):
                 translated_paragraph = " ".join(translated_sentences)
                 translated_paragraphs.append(translated_paragraph)
             except Exception as e:
-                from definers._system import catch
+                from definers.system import catch
 
                 catch(e)
                 translated_paragraphs.append(
@@ -275,7 +275,7 @@ def google_translate(text, lang="en"):
         logger.info(ret)
         return ret
     except Exception as e:
-        from definers._system import catch
+        from definers.system import catch
 
         catch(e)
         return ""

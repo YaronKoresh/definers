@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from definers import git
-from definers._system import secure_path
+from definers.system import secure_path
 
 
 def test_sanitize_path_allows_and_rejects(tmp_path):
@@ -53,7 +53,7 @@ def test_git_branch_and_run_list(monkeypatch, tmp_path):
         calls.append(arg)
         return []
 
-    monkeypatch.setattr("definers._ml.run", fake_run)
+    monkeypatch.setattr("definers.ml.run", fake_run)
 
     os.environ["DEFINERS_TRUSTED_PATHS"] = str(tmp_path)
     git("u", "r", branch="feature/x", parent=str(tmp_path))

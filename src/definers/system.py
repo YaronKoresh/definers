@@ -20,7 +20,7 @@ from datetime import datetime
 from glob import glob
 from pathlib import Path
 
-from definers._constants import (
+from definers.constants import (
     FFMPEG_URL,
     KNOWN_EXTENSIONS,
     SAFE_EXTENSIONS,
@@ -28,20 +28,57 @@ from definers._constants import (
 )
 
 
-def _init_logger():
-    logger = logging.getLogger(__name__)
-    logger.setLevel(logging.DEBUG)
-    console_handler = logging.StreamHandler()
+def init_logger(
+    level: str | int | None = None,
+    log_file: str | None = None,
+    *,
+    enable_console: bool = True,
+) -> logging.Logger:
+    def _parse_level(value: str | int | None) -> int:
+        if value is None:
+            return logging.INFO
+        if isinstance(value, int):
+            return value
+        name = str(value).strip().upper()
+        if name.isdigit():
+            return int(name)
+        return getattr(logging, name, logging.INFO)
+
+    env_level = os.environ.get("DEFINERS_LOG_LEVEL") or os.environ.get("LOGLEVEL")
+    final_level = _parse_level(level or env_level)
+
+    logger = logging.getLogger("definers")
+    logger.propagate = False
+    logger.setLevel(final_level)
+
+    if log_file is None:
+        log_file = os.environ.get("DEFINERS_LOG_FILE")
+
     formatter = logging.Formatter(
         "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
-    console_handler.setFormatter(formatter)
-    if not logger.handlers:
-        logger.addHandler(console_handler)
+
+    existing_handlers = {type(h): h for h in logger.handlers}
+
+    if enable_console and logging.StreamHandler not in existing_handlers:
+        stream_handler = logging.StreamHandler()
+        stream_handler.setFormatter(formatter)
+        stream_handler.setLevel(final_level)
+        logger.addHandler(stream_handler)
+
+    if log_file and logging.FileHandler not in existing_handlers:
+        file_handler = logging.FileHandler(log_file, encoding="utf-8")
+        file_handler.setFormatter(formatter)
+        file_handler.setLevel(final_level)
+        logger.addHandler(file_handler)
+
+    for handler in logger.handlers:
+        handler.setLevel(final_level)
+
     return logger
 
 
-logger = _init_logger()
+logger = init_logger()
 
 
 def get_os_name():
@@ -55,7 +92,7 @@ def is_admin_windows():
         return False
 
 
-def _install_ffmpeg_windows():
+def install_ffmpeg_windows():
     import requests
 
     import definers as _d
@@ -160,7 +197,7 @@ def _install_ffmpeg_windows():
         print("[INFO] Cleanup complete.")
 
 
-def _install_ffmpeg_linux():
+def install_ffmpeg_linux():
     import definers as _d
 
     print("[INFO] Running FFmpeg installer for Linux...")
@@ -215,10 +252,10 @@ def install_ffmpeg():
         return True
     system = _d.get_os_name()
     if system == "windows":
-        _d._install_ffmpeg_windows()
+        _d.install_ffmpeg_windows()
         return True
     elif system == "linux":
-        _d._install_ffmpeg_linux()
+        _d.install_ffmpeg_linux()
         return True
     else:
         print(f"[ERROR] Unsupported operating system: {system}.")
@@ -708,34 +745,35 @@ def cwd(dir=None):
             pass
 
 
-def log(subject, data, status=None):
+def log(subject: str, data: str | int | None = None, status: bool | str | None = None):
     import definers as _d
 
-    now = _d.datetime.now().time()
+    if data is None:
+        data = "No data provided"
+
+    now = datetime.now().time()
+    payload = str(data)
+
     if status is True:
-        print(
-            f"\n >>> {now} <<< \nOK OK OK OK OK OK OK\n{str(data)}\nOK OK OK OK OK OK OK\n >>> {subject} <<< \n"
-        )
+        _d.logger.info(f"[{now}] SUCCESS - {subject}\n{payload}")
     elif status is False:
-        print(
-            f"\n >>> {now} <<< \nx ERR x ERR x ERR x\n{str(data)}\nx ERR x ERR x ERR x\n >>> {subject} <<< \n"
-        )
-    elif status is None:
-        print(
-            f"\n >>> {now} <<< \n===================\n{str(data)}\n===================\n >>> {subject} <<< \n"
-        )
-    elif isinstance(status, str) and status.strip() != "":
-        print(
-            f"\n >>> {now} <<< \n{status}\n{str(data)}\n{status}\n >>> {subject} <<< \n"
-        )
+        _d.logger.error(f"[{now}] ERROR - {subject}\n{payload}")
+    elif isinstance(status, str) and status.strip():
+        _d.logger.info(f"[{now}] {status.strip()} - {subject}\n{payload}")
     else:
-        print(f"\n{now}\n{str(data)}\n{subject}\n")
+        _d.logger.info(f"[{now}] {subject}\n{payload}")
 
 
-def catch(e):
+def catch(error: object, message: str | None = None, reraise: bool = False) -> None:
     import definers as _d
-
-    _d.logger.exception(e)
+    if message:
+        _d.logger.error(message)
+    if isinstance(error, BaseException):
+        _d.logger.exception(error)
+    else:
+        _d.logger.error(str(error))
+    if reraise and isinstance(error, BaseException):
+        raise error
 
 
 def directory(dir, exist_ok=True):
@@ -814,7 +852,7 @@ def load(path):
         return sorted([p.name for p in Path(path).iterdir()])
     else:
         raw = Path(path).read_bytes()
-        if b"\x00" in raw or not _is_text(raw):
+        if b"\x00" in raw or not is_text(raw):
             return raw
         try:
             return raw.decode("utf-8").replace("\r\n", "\n")
@@ -822,7 +860,7 @@ def load(path):
             return raw
 
 
-def _is_text(data):
+def is_text(data):
     if not data:
         return True
     text_chars = set(range(32, 127)) | {9, 10, 13} | set(range(128, 256))

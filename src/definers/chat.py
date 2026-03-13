@@ -3,30 +3,31 @@ import math
 import random
 import re
 
-import definers._text as _text
-from definers._audio import value_to_keys
-from definers._constants import (
+import definers.text as text
+from definers import system
+from definers.audio import value_to_keys
+from definers.constants import (
     MAX_CONSECUTIVE_SPACES,
     MAX_INPUT_LENGTH,
     MODELS,
     STYLES_DB,
     language_codes,
 )
-from definers._cuda import device
-from definers._image import (
+from definers.cuda import device
+from definers.image import (
     get_max_resolution,
     init_upscale,
     upscale,
     write_on_image,
 )
-from definers._ml import (
+from definers.ml import (
     answer,
     build_faiss,
     init_pretrained_model,
     optimize_prompt_realism,
     pipe,
 )
-from definers._system import (
+from definers.system import (
     catch,
     cores,
     delete,
@@ -36,7 +37,7 @@ from definers._system import (
     tmp,
     unique,
 )
-from definers._video_gui import (
+from definers.video_gui import (
     draw_star_of_david,
     filter_styles,
     generate_video_handler,
@@ -91,7 +92,7 @@ def validate_text_input(s):
     if " " * (MAX_CONSECUTIVE_SPACES + 1) in s:
         log("Validation reject", "input has excessive consecutive spaces")
         raise gr.Error("Input contains too many consecutive spaces")
-    return _text.simple_text(s)
+    return text.simple_text(s)
 
 
 def get_chat_response(message, history: list):
@@ -105,9 +106,9 @@ def get_chat_response(message, history: list):
             history.append({"role": "user", "content": {"path": file_path}})
     if message["text"]:
         including.append("text")
-        orig_lang = _text.language(message["text"])
+        orig_lang = text.language(message["text"])
         if orig_lang != "en":
-            message["text"] = _text.ai_translate(message["text"])
+            message["text"] = text.ai_translate(message["text"])
 
         message["text"] = validate_text_input(message["text"])
         history.append({"role": "user", "content": message["text"]})
@@ -397,7 +398,7 @@ def lyric_video(
     audio_clip = AudioFileClip(audio_path)
     duration = audio_clip.duration
     lyrics_text = strip_nikud(lyrics_text)
-    detected_lang = _text.language(lyrics_text)
+    detected_lang = text.language(lyrics_text)
     print(f"🌍 Detected language: {detected_lang}")
     print("🎤 Starting automatic lyric synchronization...")
     timed_lyrics = []
@@ -578,7 +579,7 @@ def _gui_translate():
         return write_on_image(image_path, top, middle, bottom)
 
     def handle_translate(txt, tgt_lang):
-        return _text.ai_translate(
+        return text.ai_translate(
             txt, value_to_keys(language_codes, tgt_lang)[0]
         )
 
@@ -815,7 +816,7 @@ def _gui_image():
         if " " * (MAX_CONSECUTIVE_SPACES + 1) in s:
             log("Validation reject", "input has excessive consecutive spaces")
             raise gr.Error("Input contains too many consecutive spaces")
-        return _text.simple_text(s)
+        return text.simple_text(s)
 
     init_pretrained_model("translate", True)
     init_pretrained_model("summary", True)
@@ -902,12 +903,12 @@ def _gui_image():
 def _gui_chat():
     import gradio as gr
 
-    from definers import _system
+    from definers import system
 
     init_pretrained_model("summary", True)
     init_pretrained_model("answer", True)
     init_pretrained_model("translate", True)
-    _system.install_ffmpeg()
+    system.install_ffmpeg()
 
     def _get_chat_response(message, history):
         return get_chat_response(message, history)
@@ -2440,14 +2441,13 @@ def _gui_train():
     import gradio as gr
 
     from definers import (
-        _system,
         css,
         infer,
         theme,
         train,
     )
 
-    _system.install_ffmpeg()
+    system.install_ffmpeg()
 
     def handle_training(
         features,
@@ -2462,7 +2462,7 @@ def _gui_train():
     ):
 
         if selected_rows is not None:
-            from definers._ml import simple_text
+            from definers.ml import simple_text
 
             if len(selected_rows) > MAX_INPUT_LENGTH:
                 raise gr.Error(

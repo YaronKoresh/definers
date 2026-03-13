@@ -6,7 +6,7 @@ from definers import set_cuda_env
 
 
 class TestSetCudaEnv(unittest.TestCase):
-    @patch("definers._cuda.get_os_name", return_value="linux")
+    @patch("definers.cuda.get_os_name", return_value="linux")
     @patch("definers.log")
     @patch("definers.paths")
     @patch.dict(os.environ, {}, clear=True)
@@ -26,7 +26,7 @@ class TestSetCudaEnv(unittest.TestCase):
         ]
         mock_log.assert_has_calls(expected_calls)
 
-    @patch("definers._cuda.get_os_name", return_value="linux")
+    @patch("definers.cuda.get_os_name", return_value="linux")
     @patch("definers.log")
     @patch("definers.paths")
     @patch.dict(os.environ, {}, clear=True)
@@ -39,7 +39,7 @@ class TestSetCudaEnv(unittest.TestCase):
             "Cuda not found", "Failed setting CUDA environment", status=False
         )
 
-    @patch("definers._cuda.get_os_name", return_value="linux")
+    @patch("definers.cuda.get_os_name", return_value="linux")
     @patch("definers.log")
     @patch("definers.paths")
     @patch.dict(os.environ, {}, clear=True)
@@ -52,7 +52,7 @@ class TestSetCudaEnv(unittest.TestCase):
             "Cuda not found", "Failed setting CUDA environment", status=False
         )
 
-    @patch("definers._cuda.get_os_name", return_value="linux")
+    @patch("definers.cuda.get_os_name", return_value="linux")
     @patch("definers.log")
     @patch("definers.paths")
     @patch.dict(os.environ, {}, clear=True)

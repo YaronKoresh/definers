@@ -6,17 +6,17 @@ Definers provides a modular utility toolkit with extension-oriented boundaries f
 
 ### Capabilities
 
-- `definers._capabilities.CircuitBreaker`
+- `definers.capabilities.CircuitBreaker`
 	- Sync and async operation gates.
 	- Explicit state machine: `CLOSED`, `OPEN`, `HALF_OPEN`.
 	- Snapshot API for runtime diagnostics.
-- `definers._capabilities.ExponentialBackoffDelay`
+- `definers.capabilities.ExponentialBackoffDelay`
 	- Configurable base delay, multiplier, max delay, and jitter.
 	- Retry spacing strategy abstraction through `RetryDelayStrategy` protocol.
-- `definers._capabilities.with_retry`
+- `definers.capabilities.with_retry`
 	- Async retry decorator.
 	- Selective exception retry boundaries with deterministic failure re-raise.
-- `definers._web.ResourceRetrievalOrchestrator`
+- `definers.web.ResourceRetrievalOrchestrator`
 	- Strategy-driven transfer execution with integration error boundaries.
 
 ## Execution Patterns
@@ -33,16 +33,6 @@ Definers provides a modular utility toolkit with extension-oriented boundaries f
 
 ### Data preparation helpers
 
-- `prepare_data(remote_src=None, features=None, labels=None, url_type=None,
-  revision=None, drop=None, order_by=None, stratify=None, val_frac=0.0,
-  test_frac=0.0, batch_size=1)`
-  loads a dataset from a HuggingFace source or local feature/label files,
-  applies optional column drops, orders the examples (shuffle, sort, or
-  user-supplied key), and returns a ``TrainingData`` object containing one or
-  more ``torch.utils.data.DataLoader`` instances. Splitting into train/val/
-  test sets with stratification and configurable fractions is supported.
-
-- `TrainingData`
-  dataclass returned by ``prepare_data``; fields are ``train``, ``val``,
-  ``test`` (each a DataLoader) and ``metadata`` (a dict recording split
-  parameters).
+- `prepare_data(remote_src=None, features=None, labels=None, url_type=None, revision=None, drop=None, order_by=None, stratify=None, val_frac=0.0, test_frac=0.0, batch_size=1)` loads a dataset from a HuggingFace source or local feature/label files, applies optional column drops, orders the examples (shuffle, sort, or user-supplied key), and returns a `TrainingData` object containing one or more `torch.utils.data.DataLoader` instances. Splitting into train/val/ test sets with stratification and configurable fractions is supported.
+- `TrainingData` dataclass returned by `prepare_data`; fields are `train`, `val`,
+  `test` (each a DataLoader) and `metadata` (a dict recording split parameters).

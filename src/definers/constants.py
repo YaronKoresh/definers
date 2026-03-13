@@ -1,5 +1,6 @@
 import collections
 import collections.abc
+import re
 
 collections.MutableSequence = collections.abc.MutableSequence
 SYSTEM_MESSAGE = None
@@ -151,7 +152,6 @@ unesco_mapping = {
 }
 
 MAX_INPUT_LENGTH = 1024
-
 
 MAX_CONSECUTIVE_SPACES = 3
 
@@ -321,7 +321,11 @@ MODELS = {
     "tts": None,
     "stable-whisper": None,
 }
-TOKENIZERS = {"summary": None, "translate": None, "general-tokenizer": None}
+TOKENIZERS = {
+    "summary": {"tokenizer": None, "model_name": None},
+    "translate": {"tokenizer": None, "model_name": None},
+    "general": {"tokenizer": None, "model_name": None}
+}
 PROCESSORS = {"answer": None, "music": None}
 CONFIGS = {"answer": None}
 user_agents = {
@@ -738,5 +742,8 @@ KNOWN_EXTENSIONS = [
     "data",
     "tmp",
 ]
-_negative_prompt_ = "glamour, makeup, airbrushed, smooth, retouching, polished, perfect, oversaturated, CGI, 3d, vfx, SFX, rendered, painted, unreal, octane, cinematic, bokeh, blurry, cropped, mutated, duplicated"
-_positive_prompt_ = "journalism, realism, national geographic, minimalism, rough, grainy, messy, natural, correct structure, correct anatomy"
+general_negative_prompt = "glamour, makeup, airbrushed, smooth, retouching, polished, perfect, oversaturated, CGI, 3d, vfx, SFX, rendered, painted, unreal, octane, cinematic, bokeh, blurry, cropped, mutated, duplicated"
+general_positive_prompt = "journalism, realism, national geographic, minimalism, rough, grainy, messy, natural, correct structure, correct anatomy"
+
+MAX_PATTERN_LENGTH = 1000
+NESTED_QUANTIFIER_RE = re.compile(r"\([^()+*]*[+*][^()]*\)[+*]")

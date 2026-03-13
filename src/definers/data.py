@@ -5,18 +5,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-import numpy as _np
+from definers.constants import TOKENIZERS, iio_formats, tasks
+from definers.logger import init_logger
+from definers.system import catch, delete, log, read, tmp
 
-from definers._constants import TOKENIZERS, iio_formats, tasks
-from definers._logger import _init_logger
-from definers._system import catch, delete, log, read, tmp
 
-try:
-    import cupy as np
-except Exception:
-    import numpy as np
-
-logger = _init_logger()
+logger = init_logger()
 
 
 @dataclass
@@ -27,9 +21,28 @@ class TrainingData:
     metadata: dict[str, Any] = None
 
 
-def patch_cupy_numpy():
-    import numpy as np
+def find_spec(mod_name):
+    try:
+        mod = importlib.import_module(mod_name)
+        return mod.__spec__
+    except:
+        return None
+
+
+def init_cupy_numpy():
+    import numpy as _numpy_module
     from numpy.lib import recfunctions
+
+    np_module = None
+    cupy_in_sys = sys.modules.get("cupy")
+    if cupy_in_sys is not None and find_spec("cupy"):
+        np_module = cupy_in_sys
+    if np_module is None:
+        np_module = _numpy_module
+    if "float" not in getattr(np_module, "__dict__", {}):
+        np_module.float = np_module.float64
+    if "int" not in getattr(np_module, "__dict__", {}):
+        np_module.int = np_module.int64
 
     def _set_aliases(module, aliases):
         for alias, target in aliases.items():
@@ -37,34 +50,34 @@ def patch_cupy_numpy():
                 setattr(module, alias, target)
 
     type_aliases = {
-        "intp": np.int_,
-        "float": np.float64,
-        "int": np.int64,
-        "bool": np.bool_,
-        "complex": np.complex128,
-        "object": np.object_,
-        "str": np.str_,
-        "str_": np.str_,
-        "string_": np.bytes_,
-        "strings": np.bytes_,
-        "unicode": np.str_,
+        "intp": _numpy_module.int_,
+        "float": _numpy_module.float64,
+        "int": _numpy_module.int64,
+        "bool": _numpy_module.bool_,
+        "complex": _numpy_module.complex128,
+        "object": _numpy_module.object_,
+        "str": _numpy_module.str_,
+        "str_": _numpy_module.str_,
+        "string_": _numpy_module.bytes_,
+        "strings": _numpy_module.bytes_,
+        "unicode": _numpy_module.str_,
         "inf": float("inf"),
         "Inf": float("inf"),
     }
     func_aliases = {
-        "round_": np.round,
-        "product": np.prod,
-        "cumproduct": np.cumprod,
-        "alltrue": np.all,
-        "sometrue": np.any,
-        "rank": np.ndim,
+        "round_": _numpy_module.round,
+        "product": _numpy_module.prod,
+        "cumproduct": _numpy_module.cumprod,
+        "alltrue": _numpy_module.all,
+        "sometrue": _numpy_module.any,
+        "rank": _numpy_module.ndim,
     }
-    _set_aliases(np, type_aliases)
-    _set_aliases(np, func_aliases)
-    if "char" not in getattr(np, "__dict__", {}):
+    _set_aliases(_numpy_module, type_aliases)
+    _set_aliases(_numpy_module, func_aliases)
+    if "char" not in getattr(_numpy_module, "__dict__", {}):
         import types
 
-        setattr(np, "char", types.SimpleNamespace())
+        setattr(_numpy_module, "char", types.SimpleNamespace())
     char_funcs = {
         "encode": lambda s, encoding=None: bytes(s, encoding or "utf-8"),
         "decode": lambda b, encoding=None: b.decode(encoding or "utf-8"),
@@ -161,11 +174,11 @@ def patch_cupy_numpy():
         "less_equal": lambda a, b: a <= b,
     }
     for name, func in char_funcs.items():
-        if not hasattr(np.char, name):
-            setattr(np.char, name, func)
-    if "asscalar" not in getattr(np, "__dict__", {}):
-        np.asscalar = lambda a: a.item()
-    if "rec" not in getattr(np, "__dict__", {}):
+        if not hasattr(_numpy_module.char, name):
+            setattr(_numpy_module.char, name, func)
+    if "asscalar" not in getattr(_numpy_module, "__dict__", {}):
+        _numpy_module.asscalar = lambda a: a.item()
+    if "rec" not in getattr(_numpy_module, "__dict__", {}):
 
         class NumpyRec:
             @staticmethod
@@ -188,40 +201,78 @@ def patch_cupy_numpy():
                     arrays, fill_value=fill_value, flatten=flatten
                 )
 
-        np.rec = NumpyRec()
-    if "machar" not in getattr(np, "__dict__", {}):
+        _numpy_module.rec = NumpyRec()
+
+    if "machar" not in getattr(_numpy_module, "__dict__", {}):
 
         class MachAr:
-            pass
+            def __init__(self, dtype=None):
+                dtype = dtype or _numpy_module.float64
+                info = _numpy_module.finfo(dtype)
+                self.dtype = dtype
+                self.bits = info.bits
+                self.eps = info.eps
+                self.epsneg = getattr(info, "epsneg", None)
+                self.machep = getattr(info, "machep", None)
+                self.negep = getattr(info, "negep", None)
+                self.iexp = getattr(info, "iexp", None)
+                self.maxexp = getattr(info, "maxexp", None)
+                self.minexp = getattr(info, "minexp", None)
+                self.max = info.max
+                self.min = info.min
+                self.tiny = info.tiny
+                self.resolution = getattr(info, "resolution", None)
 
-        np.core.machar = MachAr
-    if hasattr(np, "testing") and (not hasattr(np.testing, "Tester")):
+            @classmethod
+            def from_dtype(cls, dtype):
+                return cls(dtype)
+
+            def get_finfo(self):
+                return _numpy_module.finfo(self.dtype)
+
+            def __repr__(self):
+                return f"<MachAr dtype={self.dtype}>"
+
+            @staticmethod
+            def apply_patches(target, patches, overwrite=False):
+                for name, value in patches.items():
+                    if overwrite or not hasattr(target, name):
+                        setattr(target, name, value)
+                return target
+
+        _numpy_module.core.machar = MachAr()
+
+    if hasattr(_numpy_module, "testing") and (not hasattr(_numpy_module.testing, "Tester")):
 
         class Tester:
             def test(self, label="fast", _extra_argv=None):
                 return True
 
-        np.testing.Tester = Tester
-    if "distutils" not in getattr(np, "__dict__", {}):
+        _numpy_module.testing.Tester = Tester
+
+    if "distutils" not in getattr(_numpy_module, "__dict__", {}):
 
         class DummyDistutils:
             class MiscUtils:
                 def get_info(self, *args, **kwargs):
                     return {}
 
-        np.distutils = DummyDistutils()
-    if "set_string_function" not in getattr(np, "__dict__", {}):
-        np.set_string_function = lambda *args, **kwargs: None
-    _original_finfo = np.finfo
+        _numpy_module.distutils = DummyDistutils()
+
+    if "set_string_function" not in getattr(_numpy_module, "__dict__", {}):
+        _numpy_module.set_string_function = lambda *args, **kwargs: None
+
+    _original_finfo = _numpy_module.finfo
 
     def patched_finfo(dtype):
         try:
             return _original_finfo(dtype)
         except TypeError:
-            return np.iinfo(dtype)
+            return _numpy_module.iinfo(dtype)
 
-    np.finfo = patched_finfo
-    if "_no_nep50_warning" not in getattr(np, "__dict__", {}):
+    _numpy_module.finfo = patched_finfo
+
+    if "_no_nep50_warning" not in getattr(_numpy_module, "__dict__", {}):
 
         def dummy_npwarn_decorator_factory():
 
@@ -230,37 +281,48 @@ def patch_cupy_numpy():
 
             return npwarn_decorator
 
-        np._no_nep50_warning = dummy_npwarn_decorator_factory
-    try:
-        import cupy
+        _numpy_module._no_nep50_warning = dummy_npwarn_decorator_factory
 
-        return (cupy, np)
-    except ImportError:
-        return (np, np)
-
-
-def _find_spec(mod_name):
-    try:
-        mod = importlib.import_module(mod_name)
-        return mod.__spec__
-    except:
-        return None
-
-
-def _init_cupy_numpy():
-    import numpy as _numpy_module
-
-    np_module = None
-    cupy_in_sys = sys.modules.get("cupy")
-    if cupy_in_sys is not None and importlib.util.find_spec("cupy"):
-        np_module = cupy_in_sys
-    if np_module is None:
-        np_module = _numpy_module
-    if "float" not in getattr(np_module, "__dict__", {}):
-        np_module.float = np_module.float64
-    if "int" not in getattr(np_module, "__dict__", {}):
-        np_module.int = np_module.int64
     return (np_module, _numpy_module)
+
+
+np, _np = init_cupy_numpy()
+
+
+def patch_dask():
+    if find_spec("dask"):
+        import dask
+        import dask.array
+        import dask.dataframe
+        import dask.diagnostics
+        from dask import base
+        from dask.graph_manipulation import bind, checkpoint, clone, wait_on
+        from dask.optimization import cull, fuse, inline, inline_functions
+        from dask.utils import key_split
+
+        dask.dataframe.core = dask.dataframe
+        dask.diagnostics.core = dask.diagnostics
+        dask.array.core = dask.array
+        sys.modules["dask.dataframe.core"] = sys.modules["dask.dataframe"]
+        sys.modules["dask.diagnostics.core"] = sys.modules["dask.diagnostics"]
+        sys.modules["dask.array.core"] = sys.modules["dask.array"]
+        dask.core = base
+        dask.core.fuse = fuse
+        dask.core.cull = cull
+        dask.core.inline = inline
+        dask.core.inline_functions = inline_functions
+        dask.core.key_split = key_split
+        dask.core.checkpoint = checkpoint
+        dask.core.bind = bind
+        dask.core.wait_on = wait_on
+        dask.core.clone = clone
+        dask.core.get = dask.get
+
+        def _visualize_wrapper(dsk, **kwargs):
+            return dask.visualize(dsk, **kwargs)
+
+        dask.core.visualize = _visualize_wrapper
+        dask.core.to_graphviz = _visualize_wrapper
 
 
 def patch_torch_proxy_mode():
@@ -391,18 +453,14 @@ def split_columns(data, labels, is_batch=False):
             y_batch.append(y)
         return (X_batch, y_batch)
     else:
-        features = _d.drop_columns(data, labels)
-        labels_data = _d.select_columns(data, labels)
+        features = drop_columns(data, labels)
+        labels_data = select_columns(data, labels)
         return (features, labels_data)
 
 
 def tokenize_and_pad(rows, tokenizer=None):
-    import numpy as np
-
-    import definers as _d
-
     if not tokenizer:
-        tokenizer = _d.init_tokenizer()
+        tokenizer = init_tokenizer()
     features_list = []
     for row in rows:
         if isinstance(row, dict):
@@ -423,17 +481,20 @@ def tokenize_and_pad(rows, tokenizer=None):
     return two_dim_numpy(tokenized_inputs["input_ids"])
 
 
-def init_tokenizer(mod="google-bert/bert-base-multilingual-cased"):
-    import definers as _d
-
-    model_name = mod or "google-bert/bert-base-multilingual-cased"
-    current_model = TOKENIZERS.get("general-tokenizer-model")
-    if (not TOKENIZERS["general-tokenizer"]) or (current_model != model_name):
-        TOKENIZERS["general-tokenizer"] = _d.AutoTokenizer.from_pretrained(
-            model_name
-        )
-        TOKENIZERS["general-tokenizer-model"] = model_name
-    return TOKENIZERS["general-tokenizer"]
+def init_tokenizer(
+    model_name: str | None = None,
+    tokenizer_type: str | None = None
+):
+    model_name = model_name or "google-bert/bert-base-multilingual-cased"
+    tokenizer_type = tokenizer_type or "general"
+    current_model = TOKENIZERS.get(tokenizer_type, {}).get("model_name", None)
+    if (not TOKENIZERS[tokenizer_type]["tokenizer"]) or (current_model != model_name):
+        from transformers import AutoTokenizer
+        TOKENIZERS[tokenizer_type] = {
+            "tokenizer": AutoTokenizer.from_pretrained(model_name),
+            "model_name": model_name
+        }
+    return TOKENIZERS[tokenizer_type]["tokenizer"]
 
 
 def files_to_dataset(features_paths: list, labels_paths: list = None):
@@ -480,7 +541,7 @@ def files_to_dataset(features_paths: list, labels_paths: list = None):
             for label_path in labels_paths:
                 loaded = _d.load_as_numpy(label_path, training=True)
                 if loaded is None:
-                    from definers._system import catch
+                    from definers.system import catch
 
                     catch(f"Error loading label file: {label_path}")
                     return None
@@ -507,7 +568,7 @@ def files_to_dataset(features_paths: list, labels_paths: list = None):
                 else:
                     labels.append(_d.cupy_to_numpy(loaded))
     except Exception as e:
-        from definers._system import catch
+        from definers.system import catch
 
         catch(e)
         return None
