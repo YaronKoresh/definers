@@ -25,7 +25,7 @@ dependencies = [
     "pandas>=2.0.0",
     "pillow>=10.0.0",
     "scipy>=1.11.0,<2",
-    "setuptools<81",
+    "setuptools<83",
 ]
 
 [project.license]
