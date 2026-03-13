@@ -35,7 +35,7 @@ jobs:
             const fileExtensions = [...new Set(files.map(f => f.filename.includes('.') ? f.filename.split('.').pop() : '(none)'))];
             const topDirs = [...new Set(files.map(f => { const parts = f.filename.split('/'); parts.pop(); return parts.length > 0 ? parts.slice(0, 2).join('/') : '(root)'; }))];
             const { data: rawDiff } = await github.rest.pulls.get({ owner, repo, pull_number: pr.number, mediaType: { format: 'diff' } });
-            const MAX_DIFF_CHARS = 48000;
+            const MAX_DIFF_CHARS = 20000;
             let diff = rawDiff;
             if (diff.length > MAX_DIFF_CHARS) {
               const segments = diff.split(/^diff --git /m).filter(Boolean);
@@ -145,9 +145,9 @@ jobs:
         id: ai-summary
         uses: actions/ai-inference@v2
         with:
-          model: openai/gpt-4.1
+          model: openai/gpt-4o
           prompt-file: /tmp/summary_prompt.txt
-          max-tokens: 4000
+          max-completion-tokens: 4000
       - name: Build Label Prompt
         if: steps.collect.outputs.has_changes == 'true'
         id: label-prompt
@@ -246,9 +246,9 @@ jobs:
         id: ai-labels
         uses: actions/ai-inference@v2
         with:
-          model: openai/gpt-4.1-mini
+          model: openai/gpt-4o
           prompt-file: /tmp/label_prompt.txt
-          max-tokens: 400
+          max-completion-tokens: 400
       - name: Manage Project
         env:
           AI_SUMMARY: ${{ steps.ai-summary.outputs.response }}

@@ -1,6 +1,9 @@
 import os
 import re
+import shutil
 import subprocess
+import sys
+from pathlib import Path
 
 from definers._system import (
     catch,
@@ -18,15 +21,23 @@ def cuda_toolkit():
     _d.permit("/usr/bin")
     _d.permit("/usr/lib")
     _d.permit("/usr/local")
-    _d.run("apt-get update")
-    _d.run("apt-get install -y curl")
+    _d.run(["apt-get", "update"])
+    _d.run(["apt-get", "install", "-y", "curl"])
     _d.run(
-        '\n        export PATH=/sbin:$PATH\n        apt-get update\n        apt-get purge nvidia-*\n        echo "blacklist nouveau" > /etc/modprobe.d/blacklist-nouveau.conf\n        echo "options nouveau modeset=0" >> /etc/modprobe.d/blacklist-nouveau.conf\n        apt-get install -y --reinstall dkms\n        apt-get install -f\n        curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/cuda-keyring_1.1-1_all.deb > /usr/share/keyrings/cuda.deb\n        cd /usr/share/keyrings/\n        ar vx cuda.deb\n        tar xvf data.tar.xz\n        mv /usr/share/keyrings/usr/share/keyrings/cuda-archive-keyring.gpg /usr/share/keyrings/cuda-archive-keyring.gpg\n        rm -r /usr/share/keyrings/usr/\n        rm -r /usr/share/keyrings/etc/\n        echo "deb [signed-by=/usr/share/keyrings/cuda-archive-keyring.gpg] https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/ /" > /etc/apt/sources.list.d/CUDA.list\n    '
+        [
+            "bash",
+            "-lc",
+            '\n        export PATH=/sbin:$PATH\n        apt-get update\n        apt-get purge nvidia-*\n        echo "blacklist nouveau" > /etc/modprobe.d/blacklist-nouveau.conf\n        echo "options nouveau modeset=0" >> /etc/modprobe.d/blacklist-nouveau.conf\n        apt-get install -y --reinstall dkms\n        apt-get install -f\n        curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/cuda-keyring_1.1-1_all.deb > /usr/share/keyrings/cuda.deb\n        cd /usr/share/keyrings/\n        ar vx cuda.deb\n        tar xvf data.tar.xz\n        mv /usr/share/keyrings/usr/share/keyrings/cuda-archive-keyring.gpg /usr/share/keyrings/cuda-archive-keyring.gpg\n        rm -r /usr/share/keyrings/usr/\n        rm -r /usr/share/keyrings/etc/\n        echo "deb [signed-by=/usr/share/keyrings/cuda-archive-keyring.gpg] https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/ /" > /etc/apt/sources.list.d/CUDA.list\n    ',
+        ]
     )
     _d.permit("/usr/share/keyrings/cuda-archive-keyring.gpg")
     _d.permit("/etc/apt/sources.list.d/CUDA.list")
     _d.run(
-        "\n        apt-get update\n        apt-get install -y cuda-toolkit\n    "
+        [
+            "bash",
+            "-lc",
+            "\n        apt-get update\n        apt-get install -y cuda-toolkit\n    ",
+        ]
     )
 
 
@@ -79,13 +90,35 @@ def free():
         torch.cuda.empty_cache()
     except Exception as e:
         _d.catch(e)
-    _d.run("rm -rf ~/.cache/huggingface/*", silent=True)
-    _d.run("rm -rf /data-nvme/zerogpu-offload/*", silent=True)
-    _d.run("rm -rf /opt/ml/checkpoints/*", silent=True)
-    _d.run("pip cache purge", silent=True)
+    hf_home = os.environ.get("HF_HOME")
+    cache_dir = (
+        Path(hf_home) if hf_home else Path.home() / ".cache" / "huggingface"
+    )
+    if cache_dir.exists():
+        for entry in cache_dir.iterdir():
+            try:
+                if entry.is_dir():
+                    shutil.rmtree(entry)
+                else:
+                    entry.unlink()
+            except Exception as exc:
+                _d.catch(exc)
+
+    for path_str in ("/data-nvme/zerogpu-offload", "/opt/ml/checkpoints"):
+        path = Path(path_str)
+        if path.exists():
+            try:
+                shutil.rmtree(path)
+            except Exception as exc:
+                _d.catch(exc)
+
+    try:
+        _d.run([sys.executable, "-m", "pip", "cache", "purge"], silent=True)
+    except Exception as exc:
+        _d.catch(exc)
     mamba_path = os.path.expanduser("~/miniconda3/bin/mamba")
     if os.path.exists(mamba_path):
-        _d.run(f"{mamba_path} clean --all", silent=True)
+        _d.run([mamba_path, "clean", "--all"], silent=True)
 
 
 def device():

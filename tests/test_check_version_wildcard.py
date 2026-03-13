@@ -46,6 +46,15 @@ class TestCheckVersionWildcard(unittest.TestCase):
         self.assertTrue(check_version_wildcard("2.5.*-alpha", "2.5.0-alpha"))
         self.assertFalse(check_version_wildcard("2.5.*-beta", "2.5.0-alpha"))
 
+    def test_long_patterns(self):
+
+        long_spec = "1." + "*" * 1000 + ".0"
+        long_actual = "1." + "9" * 1000 + ".0"
+        self.assertTrue(check_version_wildcard(long_spec, long_actual))
+        self.assertFalse(
+            check_version_wildcard(long_spec, "2." + "9" * 1000 + ".0")
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -73,7 +73,6 @@ def set_system_message(
     import definers as _d
 
     _d.SYSTEM_MESSAGE = SYSTEM_MESSAGE
-    _d.log("System Message Updated", SYSTEM_MESSAGE)
 
 
 def language(text):
@@ -90,31 +89,46 @@ def strip_nikud(text: str) -> str:
 
 
 def simple_text(prompt: str) -> str:
+    from definers import regex_utils
+    from definers._constants import MAX_INPUT_LENGTH
+
     if prompt is None:
         return ""
-    punc = "[\"\\'!#$%&()*+,/:;<=>?@\\[\\\\\\]^_`\\{\\|\\}~]"
-    prompt = re.sub("[\t]", " ", str(prompt))
-    prompt = re.sub("(\n){2,}", "\n", prompt)
-    prompt = re.sub("( ){2,}", " ", prompt)
-    prompt = re.sub(r"(?=([ ]*))\1\.(?:(?=([ ]*))\2\.)+", ".", prompt)
-    prompt = re.sub("(-){2,}", "-", prompt)
+    prompt = str(prompt)
+
+    if len(prompt) > MAX_INPUT_LENGTH:
+        raise ValueError(f"input too long ({len(prompt)} > {MAX_INPUT_LENGTH})")
+
+    lines = prompt.splitlines()
+    cleaned_lines = []
+    for line in lines:
+        cleaned_line = " ".join(line.split())
+        if cleaned_line:
+            cleaned_lines.append(cleaned_line)
+    prompt = "\n".join(cleaned_lines)
+
+    for pat in [" .", ". ", ".."]:
+        while pat in prompt:
+            prompt = prompt.replace(pat, ".")
+    while "--" in prompt:
+        prompt = prompt.replace("--", "-")
+
     prompt = prompt.replace("|", " or ")
-    prompt = re.sub(r"(?=([ !]+))\1\?[! ?]*", " I wonder ", prompt)
-    prompt = re.sub("(?<=[a-zA-Z0-9])\\/(?=[a-zA-Z0-9])", " ", prompt)
-    prompt = re.sub(punc, "", prompt)
+    prompt = prompt.replace("?", " I wonder ")
+
+    prompt = regex_utils.sub(r"(?<=[A-Za-z0-9])\/(?=[A-Za-z0-9])", " ", prompt)
+
+    punc_chars = "\"'!#$%&()*+,/:;<=>?@[\\]^_`{|}~"
+    prompt = prompt.translate(str.maketrans("", "", punc_chars))
     prompt = prompt.strip().strip(".")
-    prompt = re.sub(
-        "\\s*(?:(?<!\\d)(?<!\x08[a-zA-Z])\\.)+\\s*", " and ", prompt
-    )
-    prompt = re.sub("(\n){2,}", "\n", prompt)
-    prompt = re.sub("( ){2,}", " ", prompt)
-    lines = prompt.split("\n")
+
+    prompt = prompt.replace(".", " and ")
+
     lines = [
         line.lower().strip().replace(" -", "-").replace("- ", "-")
-        for line in lines
+        for line in prompt.splitlines()
     ]
-    lines = [line for line in lines if line]
-    return "\n".join(lines)
+    return "\n".join([" ".join(l.split()) for l in lines if l.strip()])
 
 
 @lru_cache(maxsize=1024)
@@ -130,7 +144,15 @@ def camel_case(txt: str) -> str:
 def ai_translate(text, lang="en"):
     import torch
     from sacremoses import MosesPunctNormalizer
-    from stopes.pipelines.monolingual.utils.sentence_split import get_split_algo
+
+    try:
+        from stopes.pipelines.monolingual.utils.sentence_split import (
+            get_split_algo,
+        )
+    except ImportError:
+
+        def get_split_algo(*_args, **_kwargs):
+            return lambda s: [s]
 
     if not text or not text.strip():
         return ""
@@ -154,7 +176,9 @@ def ai_translate(text, lang="en"):
             if isinstance(src_code, list):
                 src_code = src_code[0]
         except (KeyError, Exception) as e:
-            print(f"Language detection or mapping failed: {e}")
+            from definers._system import catch
+
+            catch(e)
             translated_paragraphs.append(paragraph)
             continue
         if src_code == tgt_code:
@@ -188,7 +212,9 @@ def ai_translate(text, lang="en"):
                 )
                 translated_paragraphs.append(translated_paragraph)
             except Exception as e:
-                print(f"Error translating short paragraph, skipping: {e}")
+                from definers._system import catch
+
+                catch(e)
                 translated_paragraphs.append(
                     f"[Translation Error: {paragraph[:30]}...]"
                 )
@@ -221,7 +247,9 @@ def ai_translate(text, lang="en"):
                 translated_paragraph = " ".join(translated_sentences)
                 translated_paragraphs.append(translated_paragraph)
             except Exception as e:
-                print(f"Error translating long paragraph chunks, skipping: {e}")
+                from definers._system import catch
+
+                catch(e)
                 translated_paragraphs.append(
                     f"[Translation Error: {paragraph[:30]}...]"
                 )
@@ -238,11 +266,19 @@ def google_translate(text, lang="en"):
     lang = simple_text(lang)
     text = simple_text(text)
     url = f"https://translate.googleapis.com/translate_a/single?client=gtx&dt=t&q={text}&sl={language(text)}&tl={lang}"
-    r = requests.get(url)
-    ret = r.text.split('"')[1]
-    ret = simple_text(ret)
-    print(ret)
-    return ret
+    try:
+        r = requests.get(url)
+        ret = r.text.split('"')[1]
+        ret = simple_text(ret)
+        from definers import logger
+
+        logger.info(ret)
+        return ret
+    except Exception as e:
+        from definers._system import catch
+
+        catch(e)
+        return ""
 
 
 def duck_translate(text, lang="en"):

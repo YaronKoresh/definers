@@ -78,6 +78,16 @@ class TestLoadAsNumpy(unittest.TestCase):
         self.assertEqual(result.shape, (1, 2))
         np.testing.assert_array_equal(result, np.array([[1, 2]]))
 
+    def test_load_csv_single_value(self):
+
+        path = os.path.join(self.test_dir, "single.csv")
+        with open(path, "w") as f:
+            f.write("42")
+        result = load_as_numpy(path)
+        self.assertIsInstance(result, np.ndarray)
+        self.assertEqual(result.shape, (1, 1))
+        self.assertEqual(result[0, 0], 42)
+
     @patch("pandas.read_excel")
     def test_load_xlsx(self, mock_read_excel):
         mock_read_excel.return_value = pd.DataFrame({"a": [1]})

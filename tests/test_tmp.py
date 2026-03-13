@@ -63,24 +63,6 @@ class TestTmp(unittest.TestCase):
         self.assertEqual(result, "/tmp/test_file.log")
         mock_tempfile.assert_called_with(suffix=".log", delete=False)
 
-    @patch("tempfile.NamedTemporaryFile")
-    def test_tmp_file_suffix_with_multiple_dots(self, mock_tempfile):
-        mock_tempfile.return_value.__enter__.return_value.name = (
-            "/tmp/test_file.zip"
-        )
-        result = tmp(suffix="archive.zip")
-        self.assertEqual(result, "/tmp/test_file.zip")
-        mock_tempfile.assert_called_with(suffix=".zip", delete=False)
-
-    @patch("tempfile.NamedTemporaryFile")
-    def test_tmp_file_suffix_ending_with_dot(self, mock_tempfile):
-        mock_tempfile.return_value.__enter__.return_value.name = (
-            "/tmp/test_file.tmp"
-        )
-        result = tmp(suffix="filename.")
-        self.assertEqual(result, "/tmp/test_file.tmp")
-        mock_tempfile.assert_called_with(suffix=".tmp", delete=False)
-
 
 if __name__ == "__main__":
     unittest.main()

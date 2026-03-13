@@ -52,10 +52,19 @@ def geo_new_york():
     }
 
 
-def extract_text(url, selector):
+try:
     from lxml.cssselect import CSSSelector
     from lxml.html import fromstring
+except ImportError:
+    CSSSelector = None
+    fromstring = None
+
+
+def extract_text(url, selector):
     from playwright.sync_api import expect, sync_playwright
+
+    if CSSSelector is None or fromstring is None:
+        raise ImportError("lxml with cssselect is required for extract_text")
 
     xpath = CSSSelector(selector).path
     log("URL", url)
@@ -260,6 +269,15 @@ def _execute_async_operation(coroutine: Any) -> Any:
 
 def download_file(url: str, destination: str) -> str | None:
 
+    from definers._constants import MAX_INPUT_LENGTH
+
+    if not isinstance(url, str):
+        raise ValueError("url must be a string")
+    if len(url) > MAX_INPUT_LENGTH:
+        raise ValueError(f"url too long ({len(url)} > {MAX_INPUT_LENGTH})")
+    if not (url.startswith("http://") or url.startswith("https://")):
+        raise ValueError(f"unsupported URL scheme: {url}")
+
     async def _async_runner() -> bool:
         orchestrator = ResourceRetrievalOrchestrator(
             HttpChunkedTransferStrategy()
@@ -271,6 +289,15 @@ def download_file(url: str, destination: str) -> str | None:
 
 
 def download_and_unzip(url: str, extract_to: str) -> bool:
+
+    from definers._constants import MAX_INPUT_LENGTH
+
+    if not isinstance(url, str):
+        raise ValueError("url must be a string")
+    if len(url) > MAX_INPUT_LENGTH:
+        raise ValueError(f"url too long ({len(url)} > {MAX_INPUT_LENGTH})")
+    if not (url.startswith("http://") or url.startswith("https://")):
+        raise ValueError(f"unsupported URL scheme: {url}")
 
     async def _async_runner() -> bool:
         orchestrator = ResourceRetrievalOrchestrator(

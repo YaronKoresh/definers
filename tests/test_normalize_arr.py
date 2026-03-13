@@ -20,7 +20,7 @@ class TestNormalizeArr(unittest.TestCase):
     def test_constant_array(self):
         arr = np.array([5.0, 5.0, 5.0])
         result = normalize_arr(arr)
-        self.assertIsNotNone(result)
+        np.testing.assert_array_equal(result, np.zeros_like(arr))
 
 
 if __name__ == "__main__":

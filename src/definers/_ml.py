@@ -3,7 +3,6 @@ import json
 import logging
 import math
 import os
-import platform
 import random
 import re
 import shutil
@@ -18,6 +17,7 @@ from time import sleep, time
 import numpy as _np
 import numpy as np
 
+from definers import regex_utils
 from definers._audio import (
     audio_preview,
     features_to_audio,
@@ -70,6 +70,7 @@ from definers._system import (
     exist,
     full_path,
     get_ext,
+    get_os_name,
     is_directory,
     log,
     modify_wheel_requirements,
@@ -80,12 +81,19 @@ from definers._system import (
     paths,
     read,
     run,
+    secure_path,
     thread,
     tmp,
     wait,
     write,
 )
-from definers._text import ai_translate, language, random_string, strip_nikud
+from definers._text import (
+    ai_translate,
+    language,
+    random_string,
+    simple_text,
+    strip_nikud,
+)
 from definers._video import features_to_video, write_video
 from definers._web import download_file, google_drive_download
 
@@ -272,14 +280,21 @@ def initialize_linear_regression(input_dim, model_path):
     import torch
 
     import definers as _d
+    from definers._system import secure_path
+
+    try:
+        model_path = secure_path(model_path)
+    except Exception as e:
+        logger.error(f"Unsafe linear-regression model path: {e}")
+        return _d.LinearRegressionTorch(input_dim)
 
     model_exists = os.path.exists(model_path)
     model_torch = _d.LinearRegressionTorch(input_dim)
     if model_exists:
         model_torch.load_state_dict(torch.load(model_path))
-        print("Loaded existing model.")
+        logger.info("Loaded existing model.")
     else:
-        print("Created new model.")
+        logger.info("Created new model.")
     if hasattr(model_torch, "cuda"):
         model_torch.cuda()
     else:
@@ -310,17 +325,19 @@ def train_linear_regression(X, y, model_path, learning_rate=0.01):
     loss.backward()
     optimizer.step()
     torch.save(model_torch.state_dict(), model_path)
-    print("Model saved.")
+    logger.info("Model saved.")
     return model_torch
 
 
-def init_model_file(task: str, turbo: bool = False, model_type: str = None):
+def init_model_file(task: str, turbo: bool = True, model_type: str = None):
     import pickle
 
     import joblib
     import onnxruntime
     import torch
     from safetensors.torch import load_file
+
+    from definers._system import secure_path
 
     free()
     global MODELS
@@ -330,18 +347,20 @@ def init_model_file(task: str, turbo: bool = False, model_type: str = None):
     if not model_type:
         model_type = get_ext(model_path)
     model_type = model_type.lower()
+
     if model_path.startswith("https://") or model_path.startswith("https://"):
         temp_model_path = tmp(model_type, keep=False)
         model_path = download_file(model_path, temp_model_path)
     try:
+        model_path = secure_path(model_path)
         model = None
         supported_types = ["onnx", "pkl", "pt", "pth", "safetensors", "joblib"]
         if model_type not in supported_types:
-            print(
+            logger.error(
                 f'Error: Model type "{model_type}" is not supported. Must be one of {supported_types}'
             )
             return None
-        print(
+        logger.info(
             f"Attempting to load a {model_type.upper()} model from: {model_path}"
         )
         if model_type == "joblib":
@@ -358,8 +377,8 @@ def init_model_file(task: str, turbo: bool = False, model_type: str = None):
                 model = load_file(model_path, map_location=device())
             if hasattr(model, "eval"):
                 model.eval()
-                print("Model set to evaluation mode.")
-        if not turbo:
+                logger.info("Model set to evaluation mode.")
+        if turbo:
             try:
                 model.vae.enable_slicing()
             except:
@@ -384,14 +403,16 @@ def init_model_file(task: str, turbo: bool = False, model_type: str = None):
                 except AttributeError:
                     pass
                 except Exception as e:
-                    print(f"Could not apply optimization {opt}: {e}")
-        print("✅ Model loaded successfully.")
+                    logger.warning(f"Could not apply optimization {opt}: {e}")
+        logger.info("✅ Model loaded successfully.")
         MODELS[task] = model
     except FileNotFoundError:
-        print(f"Error: The file was not found at '{model_path}'")
+        logger.error(f"Error: The file was not found at '{model_path}'")
         return None
     except Exception as e:
-        print(f"An unexpected error occurred while loading the model: {e}")
+        logger.error(
+            f"An unexpected error occurred while loading the model: {e}"
+        )
         return None
     finally:
         free()
@@ -609,6 +630,21 @@ def feed(model, X_new, y_new=None, epochs=1):
     return model
 
 
+from definers._constants import MAX_CONSECUTIVE_SPACES, MAX_INPUT_LENGTH
+
+
+def _validate_str_param(name: str, value: str) -> str:
+    if value is None:
+        return value
+    if not isinstance(value, str):
+        raise ValueError(f"{name} must be a string")
+    if len(value) > MAX_INPUT_LENGTH:
+        raise ValueError(f"{name} too long ({len(value)} > {MAX_INPUT_LENGTH})")
+    if " " * (MAX_CONSECUTIVE_SPACES + 1) in value:
+        raise ValueError(f"{name} contains too many consecutive spaces")
+    return value
+
+
 def train(
     model_path=None,
     remote_src=None,
@@ -619,18 +655,35 @@ def train(
     dataset_label_columns=None,
     drop_list=None,
     selected_rows=None,
+    order_by=None,
+    stratify=None,
+    val_frac: float = 0.0,
+    test_frac: float = 0.0,
+    batch_size: int = 1,
 ):
     import joblib
 
     import definers as _d
+    from definers._system import secure_path
 
     tokenizer = _d.init_tokenizer()
+
+    if _d.check_parameter(remote_src):
+        remote_src = _validate_str_param("remote_src", remote_src)
     got_inp = _d.check_parameter(features) or _d.check_parameter(remote_src)
+
+    if _d.check_parameter(selected_rows):
+        selected_rows = _validate_str_param("selected_rows", selected_rows)
     is_supv = _d.check_parameter(dataset_label_columns) or _d.check_parameter(
         labels
     )
     model = None
     if _d.check_parameter(model_path):
+        try:
+            model_path = secure_path(model_path)
+        except Exception as e:
+            print(f"Unsafe model path in train(): {e}")
+            return None
         model = joblib.load(model_path)
         print(f"cuML model loaded from {model_path}")
         if model is None:
@@ -639,14 +692,16 @@ def train(
     model_path = f"model_{_d.random_string()}.joblib"
     if not got_inp:
         return None
-    if _d.check_parameter(remote_src):
-        dataset = _d.fetch_dataset(remote_src, url_type, revision)
-    else:
-        dataset = _d.files_to_dataset(features, labels)
-    dataset = _d.drop_columns(dataset, drop_list)
-    _d.log("Full dataset length", len(dataset))
+
     loaders = []
     if _d.check_parameter(selected_rows):
+        selected_rows = _validate_str_param("selected_rows", selected_rows)
+        if _d.check_parameter(remote_src):
+            dataset = _d.fetch_dataset(remote_src, url_type, revision)
+        else:
+            dataset = _d.files_to_dataset(features, labels)
+        dataset = _d.drop_columns(dataset, drop_list)
+        _d.log("Full dataset length", len(dataset))
         selected_rows = simple_text(selected_rows).split()
         for part in selected_rows:
             if "-" in part:
@@ -665,12 +720,38 @@ def train(
                     )
                 )
     else:
-        loaders.append(_d.to_loader(dataset))
+        td = _d.prepare_data(
+            remote_src=remote_src,
+            features=features,
+            labels=labels,
+            url_type=url_type,
+            revision=revision,
+            drop=drop_list,
+            order_by=order_by,
+            stratify=stratify,
+            val_frac=val_frac,
+            test_frac=test_frac,
+            batch_size=batch_size,
+        )
+        if td is None:
+            return None
+
+        loaders.append(td.train)
+        if td.val is not None:
+            loaders.append(td.val)
+        if td.test is not None:
+            loaders.append(td.test)
+        try:
+            dataset_len = len(td.train.dataset)
+        except Exception:
+            dataset_len = None
+        if dataset_len is not None:
+            _d.log("Full dataset length", dataset_len)
     if is_supv:
         for l, loader in enumerate(loaders):
-            print(f"Loader {l + 1}")
+            logger.info(f"Loader {l + 1}")
             for i, b in enumerate(loader):
-                print(f"Batch {i + 1}: {b}")
+                logger.info(f"Batch {i + 1}: {b}")
                 (X, y) = _d.split_columns(
                     b, dataset_label_columns, is_batch=True
                 )
@@ -679,19 +760,19 @@ def train(
                 X = _d.pad_sequences(X)
                 X = _d.numpy_to_cupy(X)
                 y = _d.numpy_to_cupy(y)
-                print("Feeding model")
+                logger.info("Feeding model")
                 model = feed(model, X, y)
     else:
         for l, loader in enumerate(loaders):
-            print(f"Loader {l + 1}")
+            logger.info(f"Loader {l + 1}")
             for i, b in enumerate(loader):
-                print(f"Batch {i + 1}: {b}")
+                logger.info(f"Batch {i + 1}: {b}")
                 X = _d.tokenize_and_pad(b, tokenizer)
                 X = _d.pad_sequences(X)
                 X = _d.numpy_to_cupy(X)
-                print("Feeding model")
+                logger.info("Feeding model")
                 model = feed(model, X)
-    print("Fitting model")
+    logger.info("Fitting model")
     fit(model)
     try:
         joblib.dump(model, model_path)
@@ -719,6 +800,14 @@ def extract_text_features(text, vectorizer=None):
 
 def predict_linear_regression(X_new, model_path):
     import torch
+
+    from definers._system import secure_path
+
+    try:
+        model_path = secure_path(model_path)
+    except Exception as e:
+        print(f"Unsafe model path in predict_linear_regression: {e}")
+        return None
 
     try:
         input_dim = X_new.shape[1]
@@ -772,10 +861,17 @@ def lang_code_to_name(code):
 
 
 def find_latest_rvc_checkpoint(folder_path: str, model_name: str) -> str | None:
+    from definers._system import secure_path
+
     logger.info(
         f"Searching for latest checkpoint in '{folder_path}' with model name '{model_name}'"
     )
-    if not os.path.isdir(folder_path):
+    try:
+        folder_path = secure_path(folder_path)
+    except Exception as e:
+        logger.error(f"Invalid checkpoint folder: {e}")
+        return None
+    if not is_directory(folder_path):
         logger.error(f"Error: Folder not found at {folder_path}")
         return None
     pattern = re.compile(f"^{re.escape(model_name)}_e(\\d+)_s(\\d+)\\.pth$")
@@ -845,12 +941,47 @@ def build_faiss():
         with cwd("./xfaiss"):
             print("faiss - stage 1")
             run(
-                f"{cmake} -B build -DBUILD_TESTING=OFF -DCMAKE_BUILD_TYPE=Release -DFAISS_ENABLE_MKL=OFF -DFAISS_ENABLE_C_API=ON -DFAISS_ENABLE_GPU=ON -DFAISS_ENABLE_PYTHON=ON -DPython_EXECUTABLE={sys.executable} -DPython_INCLUDE_DIR={sys.prefix}/include/python{sys.version_info.major}.{sys.version_info.minor} -DPython_LIBRARY={sys.prefix}/lib/libpython{sys.version_info.major}.{sys.version_info.minor}.so -DPython_NumPy_INCLUDE_DIRS={sys.prefix}/lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages/numpy/core/include ."
+                [
+                    cmake,
+                    "-B",
+                    "build",
+                    "-DBUILD_TESTING=OFF",
+                    "-DCMAKE_BUILD_TYPE=Release",
+                    "-DFAISS_ENABLE_MKL=OFF",
+                    "-DFAISS_ENABLE_C_API=ON",
+                    "-DFAISS_ENABLE_GPU=ON",
+                    "-DFAISS_ENABLE_PYTHON=ON",
+                    f"-DPython_EXECUTABLE={sys.executable}",
+                    f"-DPython_INCLUDE_DIR={sys.prefix}/include/python{sys.version_info.major}.{sys.version_info.minor}",
+                    f"-DPython_LIBRARY={sys.prefix}/lib/libpython{sys.version_info.major}.{sys.version_info.minor}.so",
+                    f"-DPython_NumPy_INCLUDE_DIRS={sys.prefix}/lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages/numpy/core/include",
+                    ".",
+                ]
             )
             print("faiss - stage 2")
-            run(f"{cmake} --build build -j {cores()} --target faiss")
+            run(
+                [
+                    cmake,
+                    "--build",
+                    "build",
+                    "-j",
+                    str(cores()),
+                    "--target",
+                    "faiss",
+                ]
+            )
             print("faiss - stage 3")
-            run(f"{cmake} --build build -j {cores()} --target swigfaiss")
+            run(
+                [
+                    cmake,
+                    "--build",
+                    "build",
+                    "-j",
+                    str(cores()),
+                    "--target",
+                    "swigfaiss",
+                ]
+            )
         temp_dir = tmp(dir=True)
         with cwd("./xfaiss/build/faiss/python"):
             print(
@@ -861,7 +992,17 @@ def build_faiss():
                 constraints_path = reqs.name
             try:
                 run(
-                    f"{sys.executable} -m pip wheel . -w {temp_dir} -c {constraints_path}"
+                    [
+                        sys.executable,
+                        "-m",
+                        "pip",
+                        "wheel",
+                        ".",
+                        "-w",
+                        temp_dir,
+                        "-c",
+                        constraints_path,
+                    ]
                 )
             finally:
                 os.remove(constraints_path)
@@ -872,7 +1013,15 @@ def build_faiss():
         repaired_wheel_dir = tmp(dir=True)
         print("faiss - stage 5: Repairing wheel")
         run(
-            f"{sys.executable} -m auditwheel repair {any_wheel_path} -w {repaired_wheel_dir}"
+            [
+                sys.executable,
+                "-m",
+                "auditwheel",
+                "repair",
+                any_wheel_path,
+                "-w",
+                repaired_wheel_dir,
+            ]
         )
         repaired_wheel_path = paths(f"{repaired_wheel_dir}/faiss-*.whl")[0]
         print(
@@ -889,33 +1038,6 @@ def build_faiss():
         catch(f"File not found error: {e}")
     except Exception as e:
         catch(f"An unexpected error occurred: {e}")
-
-
-def simple_text(prompt):
-    punc = "[\"\\'!#$%&()*+,/:;<=>?@\\[\\\\\\]^_`\\{\\|\\}~]"
-    prompt = re.sub("[\t]", " ", prompt)
-    prompt = re.sub("(\n){2,}", "\n", prompt)
-    prompt = re.sub("( ){2,}", " ", prompt)
-    prompt = re.sub("[\\. ]+\\.[\\.]*|[\\. ]*\\.[\\.]+", ".", prompt)
-    prompt = re.sub("(-){2,}", "-", prompt)
-    prompt = prompt.replace("|", " or ")
-    prompt = re.sub("([ !]){1,}\\?([ !?]){1,}", " I wonder ", prompt)
-    prompt = re.sub("(?<=[a-zA-Z0-9])\\/(?=[a-zA-Z0-9])", " ", prompt)
-    prompt = re.sub(punc, "", prompt)
-    prompt = prompt.strip().strip(".")
-    prompt = re.sub(
-        "\\s*(?:(?<!\\d)(?<!\x08[a-zA-Z])\\.)+\\s*", " and ", prompt
-    )
-    prompt = re.sub("(\n){2,}", "\n", prompt)
-    prompt = re.sub("( ){2,}", " ", prompt)
-    lines = prompt.split("\n")
-    lines = [
-        line.lower().strip().replace(" -", "-").replace("- ", "-")
-        for line in lines
-    ]
-    lines = [line for line in lines if line]
-    prompt = "\n".join(lines)
-    return prompt
 
 
 def _summarize(text_to_summarize):
@@ -962,21 +1084,122 @@ def summary(text, max_words=20, min_loops=1):
     return text
 
 
+def predict(prediction_file: str, model_path: str | list):
+    import joblib
+
+    try:
+        model_path = secure_path(model_path)
+    except Exception as e:
+        catch(e)
+        return None
+
+    model = joblib.load(model_path)
+    if model is None:
+        return None
+    ext = os.path.splitext(prediction_file)[1].lstrip(".").lower()
+    if ext in common_audio_formats:
+        return predict_audio(model, prediction_file)
+    if ext == "txt":
+        data = read(prediction_file)
+        vectorizer = create_vectorizer([data])
+        features = extract_text_features(data, vectorizer)
+    else:
+        features = load_as_numpy(prediction_file)
+        if features is None:
+            return None
+    gpu_features = numpy_to_cupy(features)
+    flat = one_dim_numpy(gpu_features)
+    prediction = model.predict(flat)
+    if prediction is None:
+        return None
+    if is_clusters_model(model):
+        prediction = get_cluster_content(model, int(prediction[0]))
+    output_type = guess_numpy_type(prediction)
+    if output_type == "text":
+        text = features_to_text(prediction)
+        path = random_string() + ".txt"
+        with open(path, "w") as f:
+            f.write(text)
+        return path
+    elif output_type == "image":
+        import imageio.v3 as iio
+
+        img = features_to_image(prediction)
+        img_np = cupy_to_numpy(img)
+        path = random_string() + ".png"
+        iio.imwrite(path, img_np)
+        return path
+    return None
+
+
+def init_custom_model(model_type: str, path: str | list):
+
+    if not path or model_type not in ("onnx", "pkl"):
+        return None
+
+    if not isinstance(path, str) and not isinstance(path, list):
+        raise ValueError("model path must be a string or a list")
+
+    try:
+        path = secure_path(path)
+
+        with open(path, "rb") as f:
+            if model_type == "onnx":
+                import onnx
+
+                model = onnx.load(f)
+            elif model_type == "pkl":
+                import pickle
+
+                model = pickle.load(f)
+
+        return model
+
+    except Exception as e:
+        catch(f"Error initializing model: {e}")
+        return None
+
+
 def git(user: str, repo: str, branch: str = "main", parent: str = "."):
     import requests
 
+    from definers._system import secure_path
+
     user = user.replace(" ", "_")
     repo = repo.replace(" ", "-")
-    parent = full_path(parent)
+
+    try:
+        parent = secure_path(parent)
+    except Exception as e:
+        raise ValueError(f"Invalid parent path for git(): {e}")
     directory(parent)
     clone_dir = tmp(dir=True)
     repo_url = f"https://github.com/{user}/{repo}.git"
     env = os.environ.copy()
     env["GIT_LFS_SKIP_SMUDGE"] = "1"
-    run(f"git clone --branch {branch} {repo_url} {clone_dir}", env=env)
+
+    if not isinstance(branch, str) or not re.fullmatch(
+        r"[A-Za-z0-9._/\-]+", branch
+    ):
+        raise ValueError(f"Invalid git branch name: {branch!r}")
+
+    run(
+        [
+            "git",
+            "clone",
+            "--branch",
+            branch,
+            repo_url,
+            clone_dir,
+        ],
+        env=env,
+    )
 
     def _lfs(_dir):
-        for p in read(_dir):
+        entries = read(_dir)
+        if entries is None:
+            return
+        for p in entries:
             if is_directory(p) and path_end(p) == ".git":
                 continue
             if is_directory(p):
@@ -1015,7 +1238,7 @@ def git(user: str, repo: str, branch: str = "main", parent: str = "."):
     delete(clone_dir)
 
 
-def init_model_repo(task: str, turbo: bool = False):
+def init_model_repo(task: str, turbo: bool = True):
     import torch
 
     global MODELS
@@ -1103,11 +1326,13 @@ def init_model_repo(task: str, turbo: bool = False):
 
         package_name = "phi4_package"
         print(f"Downloading source files for {tasks[task]}...")
+        not_win = get_os_name() != "windows"
         snapshot_dir = Path(
             snapshot_download(
                 repo_id=tasks[task],
                 allow_patterns=["*.txt", "*.py", "*.json", "*.safetensors"],
                 revision="33e62acdd07cd7d6635badd529aa0a3467bb9c6a",
+                local_dir_use_symlinks=not_win,
             )
         )
         print(f"Source files downloaded to: {snapshot_dir}")
@@ -1141,9 +1366,11 @@ def init_model_repo(task: str, turbo: bool = False):
                 )
         print("Rewriting relative imports to absolute...")
         for py_file in snapshot_dir.glob("*.py"):
-            content = py_file.read_text()
-            modified_content = re.sub("from \\.([\\w_]+)", "from \\1", content)
-            modified_content = re.sub(
+            content = py_file.read_text(encoding="utf-8")
+            modified_content = regex_utils.sub(
+                r"from \\.(\\w_+)", "from \\1", content
+            )
+            modified_content = regex_utils.sub(
                 "import \\.([\\w_]+)", "import \\1", modified_content
             )
             if content != modified_content:
@@ -1219,7 +1446,7 @@ def init_model_repo(task: str, turbo: bool = False):
         model = AutoModel.from_pretrained(
             task, torch_dtype=dtype(), trust_remote_code=True
         ).to(device())
-    if not turbo:
+    if turbo:
         try:
             model.vae.enable_slicing()
         except:
@@ -1250,14 +1477,24 @@ def init_model_repo(task: str, turbo: bool = False):
 
 
 def is_huggingface_repo(repo_id: str) -> bool:
+
     if not isinstance(repo_id, str) or not repo_id:
         return False
     repo_id = repo_id.strip()
-    pattern = re.compile("^[a-zA-Z0-9.\\-_]+/[a-zA-Z0-9.\\-_]+$")
-    return bool(pattern.fullmatch(repo_id))
+    if "/" not in repo_id:
+        return False
+    user, name = repo_id.split("/", 1)
+    if not user or not name:
+        return False
+    allowed_chars = set(
+        "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-"
+    )
+    return all(c in allowed_chars for c in user) and all(
+        c in allowed_chars for c in name
+    )
 
 
-def init_pretrained_model(task: str, turbo: bool = False):
+def init_pretrained_model(task: str, turbo: bool = True):
     repo_tasks_override = ["svc", "tts"]
     if task in MODELS and MODELS[task]:
         return
@@ -1498,6 +1735,13 @@ def SklearnWrapper(sklearn_model, is_classification=False):
 
 
 def rvc_to_onnx(model_path):
+    from definers._system import secure_path
+
+    try:
+        model_path = secure_path(model_path)
+    except Exception as e:
+        logger.error(f"Unsafe model path in rvc_to_onnx: {e}")
+        return None
     if not os.path.exists("infer") and (not os.path.exists("infer/")):
         logger.info("Infer module not found, downloading...")
         google_drive_download(
@@ -1521,7 +1765,16 @@ def rvc_to_onnx(model_path):
 
 def export_files_rvc(experiment: str):
     logger.info(f"Exporting files for experiment: {experiment}")
+    try:
+        from definers._system import secure_path
+
+        experiment = secure_path(experiment, basename=True)
+    except Exception as e:
+        logger.error(f"Invalid experiment name: {e}")
+        return []
+
     now_dir = os.getcwd()
+    now_dir = full_path(secure_path(now_dir))
     weight_root = os.path.join(now_dir, "assets", "weights")
     index_root = os.path.join(now_dir, "logs")
     exp_path = os.path.join(index_root, experiment)
@@ -1533,22 +1786,25 @@ def export_files_rvc(experiment: str):
     pth_path = os.path.join(weight_root, latest_checkpoint_filename)
     logger.info(f"Found latest checkpoint: {pth_path}")
     index_file = ""
+    exp_path = secure_path(exp_path)
     for root, dirs, files in os.walk(exp_path, topdown=False):
         for name in files:
             if name.endswith(".index") and "trained" not in name:
                 index_file = os.path.join(root, name)
+                index_file = secure_path(index_file)
                 logger.info(f"Found index file: {index_file}")
                 break
         if index_file:
             break
     onnx_path = rvc_to_onnx(pth_path)
+    onnx_path = secure_path(onnx_path)
     exported_files = [pth_path]
-    if os.path.exists(onnx_path):
+    if exist(onnx_path):
         exported_files.append(onnx_path)
         logger.info(f"Added ONNX file to exported list: {onnx_path}")
     else:
         logger.warning(f"ONNX file not found after export attempt: {onnx_path}")
-    if os.path.exists(index_file):
+    if exist(index_file):
         exported_files.append(index_file)
         logger.info(f"Added index file to exported list: {index_file}")
     else:
@@ -1558,10 +1814,17 @@ def export_files_rvc(experiment: str):
 
 
 def find_latest_checkpoint(folder_path: str, model_name: str) -> str | None:
+    from definers._system import secure_path
+
     logger.info(
         f"Searching for latest checkpoint in '{folder_path}' with model name '{model_name}'"
     )
-    if not os.path.isdir(folder_path):
+    try:
+        folder_path = secure_path(folder_path)
+    except Exception as e:
+        logger.error(f"Invalid checkpoint folder: {e}")
+        return None
+    if not is_directory(folder_path):
         logger.error(f"Error: Folder not found at {folder_path}")
         return None
     pattern = re.compile(f"^{re.escape(model_name)}_e(\\d+)_s(\\d+)\\.pth$")
@@ -1598,7 +1861,21 @@ def find_latest_checkpoint(folder_path: str, model_name: str) -> str | None:
 def train_model_rvc(
     experiment: str, path: str, lvl: int = 1, f0method: str = "crepe"
 ):
+    from definers._system import secure_path
+
     logger.info(f"Starting RVC training for experiment: {experiment}")
+
+    try:
+        experiment = secure_path(experiment, basename=True)
+    except Exception as e:
+        logger.error(f"Invalid experiment name: {e}")
+        return None
+
+    try:
+        path = secure_path(path)
+    except Exception as e:
+        logger.error(f"Invalid audio path for training: {e}")
+        return None
     import pydub
     import torch
 
@@ -1632,9 +1909,12 @@ def train_model_rvc(
     )
     if default_batch_size == 0:
         default_batch_size = 1
+
     exp_dir = experiment
     exp_path = os.path.join(index_root, exp_dir)
+    exp_path = full_path(secure_path(exp_path))
     logger.info(f"Experiment directory: {exp_path}")
+
     directory(os.path.join(exp_path, "1_16k_wavs"))
     directory(os.path.join(exp_path, "0_gt_wavs"))
     input_root = os.path.join(exp_path, "input_root")
@@ -1662,6 +1942,8 @@ def train_model_rvc(
     gpus_rmvpe = f"{gpus}-{gpus}"
     log_file_f0_feature = os.path.join(exp_path, "extract_f0_feature.log")
     logger.info("Starting preprocessing...")
+    import shlex
+
     try:
         with open(log_file_preprocess, "w") as f_preprocess:
             cmd_preprocess = [
@@ -1674,7 +1956,7 @@ def train_model_rvc(
                 exp_path,
             ]
             logger.info("Execute: " + " ".join(cmd_preprocess))
-            run(" ".join(cmd_preprocess))
+            run(cmd_preprocess)
         with open(log_file_preprocess) as f_preprocess:
             log_content = f_preprocess.read()
             logger.info("Preprocessing Log:\n" + log_content)
@@ -1698,6 +1980,8 @@ def train_model_rvc(
     logger.info("Starting feature extraction...")
     try:
         with open(log_file_f0_feature, "w") as f_f0_feature:
+            import shlex
+
             if if_f0:
                 logger.info(f"Extracting F0 using method: {f0method}")
                 if torch.cuda.is_available() and f0method == "rmvpe":
@@ -1705,7 +1989,8 @@ def train_model_rvc(
                 if f0method != "rmvpe_gpu":
                     cmd_f0 = f'"{config.python_cmd}" -m infer.modules.train.extract.extract_f0_print "{exp_path}" {n_p} {f0method}'
                     logger.info("Execute: " + cmd_f0)
-                    run(cmd_f0)
+
+                    run(shlex.split(cmd_f0))
                 else:
                     gpus_rmvpe_split = gpus_rmvpe.split("-")
                     leng = len(gpus_rmvpe_split)
@@ -1716,7 +2001,7 @@ def train_model_rvc(
                     for idx, n_g in enumerate(gpus_rmvpe_split):
                         cmd_f0_rmvpe = f'"{config.python_cmd}" -m infer.modules.train.extract.extract_f0_rmvpe {leng} {idx} {n_g} "{exp_path}" {config.is_half}'
                         logger.info(f"Execute (GPU {n_g}): " + cmd_f0_rmvpe)
-                        p = thread(run, cmd_f0_rmvpe)
+                        p = thread(run, shlex.split(cmd_f0_rmvpe))
                         ps.append(p)
                     wait(*ps)
             logger.info("Extracting features...")
@@ -1728,7 +2013,7 @@ def train_model_rvc(
             for idx, n_g in enumerate(gpus.split("-")):
                 cmd_feature_print = f'"{config.python_cmd}" -m infer.modules.train.extract_feature_print {config.device} {leng} {idx} "{exp_path}" v2'
                 logger.info(f"Execute (GPU {n_g}): " + cmd_feature_print)
-                p = thread(run, cmd_feature_print)
+                p = thread(run, shlex.split(cmd_feature_print))
                 ps.append(p)
             wait(*ps)
         with open(log_file_f0_feature) as f_f0_feature:
@@ -1742,9 +2027,9 @@ def train_model_rvc(
     logger.info("Starting index training...")
     feature_dir = os.path.join(exp_path, "3_feature768")
     listdir_res = []
-    if os.path.exists(feature_dir):
+    if exist(feature_dir):
         listdir_res = os.listdir(feature_dir)
-    if not os.path.exists(feature_dir) or not any(listdir_res):
+    if not exist(feature_dir) or not any(listdir_res):
         error_message = f"Error: Feature directory '{feature_dir}' is missing or empty! Cannot train index."
         catch(error_message)
         return None
@@ -1822,14 +2107,12 @@ def train_model_rvc(
             f"Creating link from '{added_index_path}' to '{target_link_path}'"
         )
         try:
-            if os.path.exists(target_link_path) or os.path.islink(
-                target_link_path
-            ):
+            if exist(target_link_path) or os.path.islink(target_link_path):
                 os.remove(target_link_path)
                 logger.warning(
                     f"Removed existing file/link at {target_link_path}"
                 )
-            if platform.system() != "Windows":
+            if get_os_name() != "windows":
                 os.symlink(added_index_path, target_link_path)
             else:
                 shutil.copy(added_index_path, target_link_path)
@@ -1873,8 +2156,38 @@ def train_model_rvc(
         log_file_train = os.path.join(exp_path, "train.log")
         logger.info("Executing training command...")
         with open(log_file_train, "w") as f_train:
-            cmd_train = f'"{config.python_cmd}" -m infer.modules.train.train -e "{exp_dir}" -sr 96k -f0 1 -bs {batch_size} -g {gpus_str} -te {total_epoch} -se {save_epoch} -pg "{pretrained_G}" -pd "{pretrained_D}" -l {if_save_latest} -c {if_cache_gpu} -sw {if_save_every_weights} -v v2'
-            logger.info("Execute: " + cmd_train)
+            cmd_train = [
+                config.python_cmd,
+                "-m",
+                "infer.modules.train.train",
+                "-e",
+                exp_dir,
+                "-sr",
+                "96k",
+                "-f0",
+                "1",
+                "-bs",
+                str(batch_size),
+                "-g",
+                gpus_str,
+                "-te",
+                str(total_epoch),
+                "-se",
+                str(save_epoch),
+                "-pg",
+                pretrained_G,
+                "-pd",
+                pretrained_D,
+                "-l",
+                str(if_save_latest),
+                "-c",
+                str(if_cache_gpu),
+                "-sw",
+                str(if_save_every_weights),
+                "-v",
+                "v2",
+            ]
+            logger.info("Execute: " + " ".join(cmd_train))
             run(cmd_train)
         with open(log_file_train) as f_train:
             log_content = f_train.read()
@@ -1904,13 +2217,32 @@ def train_model_rvc(
 
 
 def convert_vocal_rvc(experiment: str, path: str):
+    from definers._system import secure_path
+
     logger.info(f"Starting vocal conversion for experiment: {experiment}")
-    from .configs.config import Config
-    from .infer.modules.vc.modules import VC
+    try:
+        experiment = secure_path(experiment, basename=True)
+    except Exception as e:
+        logger.error(f"Invalid experiment name: {e}")
+        return None
+
+    try:
+        from .configs.config import Config
+        from .infer.modules.vc.modules import VC
+    except ImportError as e:
+        logger.error(f"Vocal conversion feature unavailable: {e}")
+        return None
+
+    try:
+        path = secure_path(path)
+    except Exception as e:
+        logger.error(f"Invalid audio path for conversion: {e}")
+        return None
 
     path = normalize_audio_to_peak(path)
     (path, music) = separate_stems(path)
     now_dir = os.getcwd()
+    now_dir = secure_path(now_dir)
     index_root = os.path.join(now_dir, "logs")
     weight_root = os.path.join(now_dir, "assets", "weights")
     config = Config()

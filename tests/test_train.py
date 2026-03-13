@@ -14,6 +14,7 @@ class TestTrain(unittest.TestCase):
             "attention_mask": np.array([[1, 1, 1]]),
         }
 
+    @patch("definers._system.secure_path", side_effect=lambda x: x)
     @patch("definers.fetch_dataset")
     @patch("definers.files_to_dataset")
     @patch("definers.init_tokenizer")
@@ -26,6 +27,7 @@ class TestTrain(unittest.TestCase):
         mock_init_tokenizer,
         mock_files_to_dataset,
         mock_fetch_dataset,
+        mock_sanitize,
     ):
         mock_init_tokenizer.return_value = self.mock_tokenizer
         mock_fetch_dataset.return_value = [{"feature": "data"}]
@@ -39,6 +41,7 @@ class TestTrain(unittest.TestCase):
         mock_dump.assert_called()
         self.assertIsNotNone(result)
 
+    @patch("definers._system.secure_path", side_effect=lambda x: x)
     @patch("definers.fetch_dataset")
     @patch("definers.init_tokenizer")
     @patch("definers.HybridModel")
@@ -49,6 +52,7 @@ class TestTrain(unittest.TestCase):
         mock_hybrid_model,
         mock_init_tokenizer,
         mock_fetch_dataset,
+        mock_sanitize,
     ):
         mock_init_tokenizer.return_value = self.mock_tokenizer
         mock_fetch_dataset.return_value = [
@@ -64,6 +68,44 @@ class TestTrain(unittest.TestCase):
         mock_dump.assert_called()
         self.assertRegex(result, "model_.*\\.joblib")
 
+    @patch("definers._system.secure_path", side_effect=lambda x: x)
+    @patch("definers.fetch_dataset")
+    @patch("definers.init_tokenizer")
+    @patch("definers.HybridModel")
+    @patch("joblib.dump")
+    def test_train_order_and_split(
+        self,
+        mock_dump,
+        mock_hybrid_model,
+        mock_init_tokenizer,
+        mock_fetch_dataset,
+        mock_sanitize,
+    ):
+
+        mock_init_tokenizer.return_value = self.mock_tokenizer
+
+        mock_fetch_dataset.return_value = [
+            {"feature": "a", "label": 0},
+            {"feature": "b", "label": 1},
+            {"feature": "c", "label": 0},
+        ]
+        mock_model_instance = MagicMock()
+        mock_hybrid_model.return_value = mock_model_instance
+        result = train(
+            remote_src="remote_data",
+            dataset_label_columns=["label"],
+            order_by=lambda x: x["feature"],
+            stratify="label",
+            val_frac=0.1,
+            test_frac=0.1,
+            batch_size=1,
+        )
+        mock_fetch_dataset.assert_called_with("remote_data", "parquet", None)
+        mock_model_instance.fit.assert_called()
+        mock_dump.assert_called()
+        self.assertRegex(result, "model_.*\\.joblib")
+
+    @patch("definers._system.secure_path", side_effect=lambda x: x)
     @patch("definers.files_to_dataset")
     @patch("definers.init_tokenizer")
     @patch("definers.HybridModel")
@@ -74,6 +116,7 @@ class TestTrain(unittest.TestCase):
         mock_hybrid_model,
         mock_init_tokenizer,
         mock_files_to_dataset,
+        mock_sanitize,
     ):
         mock_init_tokenizer.return_value = self.mock_tokenizer
         mock_files_to_dataset.return_value = [{"feature": "local data"}]
@@ -89,11 +132,12 @@ class TestTrain(unittest.TestCase):
         result = train()
         self.assertIsNone(result)
 
+    @patch("definers._system.secure_path", side_effect=lambda x: x)
     @patch("definers.fetch_dataset")
     @patch("definers.init_tokenizer")
     @patch("joblib.dump")
     def test_train_save_error(
-        self, mock_dump, mock_init_tokenizer, mock_fetch_dataset
+        self, mock_dump, mock_init_tokenizer, mock_fetch_dataset, mock_sanitize
     ):
         mock_init_tokenizer.return_value = self.mock_tokenizer
         mock_fetch_dataset.return_value = [{"feature": "data"}]

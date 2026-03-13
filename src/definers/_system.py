@@ -1,24 +1,31 @@
 import ctypes
+import errno
 import importlib
 import logging
 import os
 import platform
 import re
-import select
 import shlex
 import shutil
 import site
+import stat
 import subprocess
 import sys
 import tempfile
 import threading
+import unicodedata
 import zipfile
 from contextlib import contextmanager
 from datetime import datetime
 from glob import glob
 from pathlib import Path
 
-from definers._constants import FFMPEG_URL, ai_model_extensions
+from definers._constants import (
+    FFMPEG_URL,
+    KNOWN_EXTENSIONS,
+    SAFE_EXTENSIONS,
+    ai_model_formats,
+)
 
 
 def _init_logger():
@@ -142,7 +149,7 @@ def _install_ffmpeg_windows():
             "[INFO] IMPORTANT: You must restart your terminal or PC for the new PATH to be recognized."
         )
     except Exception as e:
-        print(f"\n[ERROR] An error occurred during manual installation: {e}")
+        _d.logger.error(f"An error occurred during manual installation: {e}")
         sys.exit(1)
     finally:
         print("[INFO] Cleaning up temporary files...")
@@ -154,6 +161,8 @@ def _install_ffmpeg_windows():
 
 
 def _install_ffmpeg_linux():
+    import definers as _d
+
     print("[INFO] Running FFmpeg installer for Linux...")
     if os.geteuid() != 0:
         print("[WARN] This script needs sudo privileges to install packages.")
@@ -195,7 +204,7 @@ def _install_ffmpeg_linux():
         )
         sys.exit(1)
     except Exception as e:
-        print(f"\n[ERROR] An unexpected error occurred: {e}")
+        _d.logger.error(f"An unexpected error occurred: {e}")
         sys.exit(1)
 
 
@@ -229,21 +238,28 @@ def install_audio_effects():
             "fluid-soundfont-gm",
             "build-essential",
         ]
-        _d.run("apt-get update -y")
-        _d.run(f"apt-get install -y {' '.join(dependencies_apt)}")
+        _d.run(["apt-get", "update", "-y"])
+        pkg_list = (
+            dependencies_apt
+            if isinstance(dependencies_apt, list)
+            else dependencies_apt.split()
+        )
+        _d.run(["apt-get", "install", "-y"] + pkg_list)
     elif os_name == "windows":
         install_dir = os.path.join(os.path.expanduser("~"), "app_dependencies")
         os.makedirs(install_dir, exist_ok=True)
         print("Detected Windows. Automating dependency installation...")
         print(f"Dependencies will be installed in: {install_dir}")
-        rubberband_url = "https://breakfastquay.com/files/releases/rubberband-3.3.0-gpl-executable-windows.zip"
-        fluidsynth_url = "https://github.com/FluidSynth/fluidsynth/releases/download/v2.3.5/fluidsynth-2.3.5-win64.zip"
-        soundfont_url = "https://github.com/FluidSynth/fluidsynth/raw/master/sf2/FluidR3_GM.sf2"
+        rubberband_url = "https://breakfastquay.com/files/releases/rubberband-4.0.0-gpl-executable-windows.zip"
+        fluidsynth_url = "https://github.com/FluidSynth/fluidsynth/releases/download/v2.5.2/fluidsynth-v2.5.2-win10-x64-glib.zip"
+        soundfont_url = "https://raw.githubusercontent.com/FluidSynth/fluidsynth/master/sf2/VintageDreamsWaves-v2.sf3"
         soundfont_path = os.path.join(
-            install_dir, "soundfonts", "FluidR3_GM.sf2"
+            install_dir, "soundfonts", "VintageDreamsWaves-v2.sf3"
         )
         rubberband_extract_path = os.path.join(install_dir, "rubberband")
-        if "rubberband" not in os.environ.get("PATH", ""):
+        if "rubberband" not in os.environ.get("PATH", "") or not exist(
+            rubberband_extract_path
+        ):
             if _d.download_and_unzip(rubberband_url, rubberband_extract_path):
                 extracted_dirs = os.listdir(rubberband_extract_path)
                 if extracted_dirs:
@@ -252,13 +268,15 @@ def install_audio_effects():
                     )
                     _d.add_to_path_windows(rubberband_bin_path)
         fluidsynth_extract_path = os.path.join(install_dir, "fluidsynth")
-        if not any("fluidsynth" in s for s in os.environ.get("PATH", "")):
+        if "fluidsynth" not in os.environ.get("PATH", "") or not exist(
+            fluidsynth_extract_path
+        ):
             if _d.download_and_unzip(fluidsynth_url, fluidsynth_extract_path):
                 fluidsynth_bin_path = os.path.join(
                     fluidsynth_extract_path, "bin"
                 )
                 _d.add_to_path_windows(fluidsynth_bin_path)
-        if not os.path.exists(soundfont_path):
+        if not exist(soundfont_path):
             os.makedirs(os.path.dirname(soundfont_path), exist_ok=True)
             print("Downloading SoundFont for MIDI playback...")
             _d.download_file(soundfont_url, soundfont_path)
@@ -281,7 +299,11 @@ def pip_install(packs):
             download_file(pack, temp_path)
             packs_arr[idx] = temp_path
     packs = " ".join(packs_arr)
-    run(f"pip install --upgrade --force-reinstall --no-cache-dir {packs}")
+    pack_list = packs if isinstance(packs, list) else packs.split()
+    run(
+        ["pip", "install", "--upgrade", "--force-reinstall", "--no-cache-dir"]
+        + pack_list
+    )
     for idx, pack in enumerate(packs_arr):
         if pack.endswith(".whl"):
             pack = pack.split("-py3")[0].split("-py2")[0]
@@ -309,35 +331,43 @@ def modify_wheel_requirements(wheel_path: str, requirements_map: dict):
         metadata_path = metadata_files[0]
         with open(metadata_path, encoding="utf-8") as f:
             metadata_content = f.read()
+
+        lines = metadata_content.splitlines()
         for package_name, version_specifier in requirements_map.items():
-            pattern = re.compile(
-                f"^(Requires-Dist:\\s*{re.escape(package_name)}(\\s|\\[|;|$).*)$",
-                re.IGNORECASE | re.MULTILINE,
-            )
-            if version_specifier:
-                replacement = (
+            found = False
+            new_lines: list[str] = []
+            lower_name = package_name.lower()
+            for line in lines:
+                if line.lower().startswith("requires-dist:"):
+                    rest = line[len("Requires-Dist:") :].strip()
+                    pkg = rest.split()[0]
+                    if pkg.lower() == lower_name:
+                        found = True
+                        if version_specifier:
+                            new_lines.append(
+                                f"Requires-Dist: {package_name} ({version_specifier})"
+                            )
+                        else:
+                            print(f"Removed dependency: {package_name}")
+                            continue
+                    else:
+                        new_lines.append(line)
+                else:
+                    new_lines.append(line)
+            if not found and version_specifier:
+                new_lines.append(
                     f"Requires-Dist: {package_name} ({version_specifier})"
                 )
-                found = pattern.search(metadata_content)
-                if found:
-                    metadata_content = pattern.sub(
-                        replacement, metadata_content
-                    )
-                    print(
-                        f"Modified dependency: {package_name} -> {version_specifier}"
-                    )
-                else:
-                    metadata_content += f"\n{replacement}"
-                    print(
-                        f"Added new dependency: {package_name} ({version_specifier})"
-                    )
-            else:
-                (metadata_content, count) = pattern.subn("", metadata_content)
-                if count > 0:
-                    print(f"Removed dependency: {package_name}")
-        metadata_content = "\n".join(
-            line for line in metadata_content.splitlines() if line.strip()
-        )
+                print(
+                    f"Added new dependency: {package_name} ({version_specifier})"
+                )
+            elif found and version_specifier:
+                print(
+                    f"Modified dependency: {package_name} -> {version_specifier}"
+                )
+            lines = new_lines
+
+        metadata_content = "\n".join(line for line in lines if line.strip())
         with open(metadata_path, "w", encoding="utf-8") as f:
             f.write(metadata_content)
         new_wheel_path = os.path.join(output_dir, wheel_filename)
@@ -423,6 +453,81 @@ def exist(*p):
     return os.path.exists(absolute)
 
 
+def secure_path(
+    path: list | str,
+    trust: list | str | None = None,
+    *,
+    basename: bool = False,
+    shell: bool = False,
+) -> str:
+    if not path or not isinstance(path, (str, list)):
+        raise ValueError("Invalid path: must be a non-empty string or list.")
+
+    if isinstance(path, list):
+        path = full_path(*path)
+
+    clean_str = unicodedata.normalize("NFKC", str(path))
+    clean_str = " ".join(clean_str.split())
+
+    if not clean_str:
+        raise ValueError("Path is empty after cleaning.")
+
+    _STRICT_BASENAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
+    _TRAVERSAL_RE = re.compile(r"(?:\.\.[/\\])|(?:\A[/\\]\.\.)")
+
+    if basename:
+        if not _STRICT_BASENAME_RE.fullmatch(clean_str):
+            raise ValueError(
+                f"Security Error: Invalid basename format: {clean_str!r}"
+            )
+        result = clean_str
+
+    else:
+        if _TRAVERSAL_RE.search(clean_str):
+            raise ValueError(
+                "Security Error: Path traversal characters detected."
+            )
+
+        try:
+            result = full_path(clean_str)
+        except Exception as e:
+            raise ValueError(f"Failed to resolve path: {e}")
+
+        p = Path(result)
+
+        if trust is None:
+            trust = []
+        elif isinstance(trust, str):
+            trust = [trust]
+
+        bases = [Path(full_path(b)) for b in trust if b.strip()]
+
+        cwd = Path.cwd().resolve()
+        if cwd not in bases:
+            bases.append(cwd)
+
+        temp_dir = Path(full_path(tempfile.gettempdir())).resolve()
+        if temp_dir not in bases:
+            bases.append(temp_dir)
+
+        is_safe = any(
+            p.is_relative_to(b)
+            if sys.version_info >= (3, 9)
+            else (str(p) == str(b) or str(p).startswith(str(b) + os.path.sep))
+            for b in bases
+        )
+
+        if not is_safe:
+            raise ValueError(
+                f"Security Error: Path escapes allowed directories: {p}"
+            )
+
+    if shell:
+        result = shlex.quote(result)
+
+    return result
+
+
 def add_path(*p):
     import definers as _d
 
@@ -449,13 +554,14 @@ def add_path(*p):
 
 
 def normalize_path(p):
-    return os.path.normpath(p)
+    normalized = os.path.normpath(p)
+    expanded = os.path.expanduser(normalized)
+    return expanded
 
 
 def full_path(*p):
     joined = os.path.join(*[str(_p).strip() for _p in p])
-    expanded = os.path.expanduser(joined)
-    return os.path.abspath(expanded)
+    return str(Path(joined).expanduser().resolve())
 
 
 def paths(*patterns):
@@ -530,27 +636,38 @@ def unique(arr):
     return sorted(list(set(arr)))
 
 
-def tmp(suffix: str = ".data", keep: bool = True, dir=False):
+def tmp(suffix: str | None = None, keep: bool = True, dir=False):
     import definers as _d
 
     if dir:
         temp_dir_path = tempfile.TemporaryDirectory()
         temp_dir_path = temp_dir_path.__enter__()
+
         if not keep:
             _d.delete(temp_dir_path)
+
         return temp_dir_path
-    if not suffix.startswith("."):
-        if len(suffix.split(".")) > 1:
-            suffix = suffix.split(".")
-            suffix = suffix[len(suffix) - 1]
-            if len(suffix) < 1:
-                suffix = "tmp"
+
+    if not isinstance(suffix, str) or not suffix.strip():
+        suffix = "data"
+
+    suffix = str(suffix).strip().strip(".").lower()
+
+    if suffix in SAFE_EXTENSIONS:
         suffix = "." + suffix
-    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as temp:
-        temp_name = temp.name
-    if not keep:
-        _d.delete(temp_name)
-    return temp_name
+
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as temp:
+            temp_name = temp.name
+
+        if not keep:
+            _d.delete(temp_name)
+
+        return temp_name
+
+    else:
+        raise ValueError(
+            f"Invalid suffix for tmp file. Allowed extensions are: {', '.join(SAFE_EXTENSIONS)}"
+        )
 
 
 def get_process_pid(process_name):
@@ -642,21 +759,49 @@ def is_symlink(*p):
     return Path(os.path.join(*[str(_p).strip() for _p in p])).is_symlink()
 
 
-def delete(path):
-    resolved = full_path(str(path))
-    p = Path(resolved)
-    if p.is_symlink():
-        p.unlink()
+def remove_readonly(func, path, excinfo):
+    exception_instance = excinfo[1]
+
+    if exception_instance.errno == errno.EACCES:
+        os.chmod(path, stat.S_IWRITE)
+        func(path)
+    else:
+        raise
+
+
+def shutil_rmtree_readonly_handler(func, path, exc_info):
+    exception_instance = (
+        exc_info[1] if isinstance(exc_info, tuple) else exc_info
+    )
+
+    if exception_instance.errno == errno.EACCES:
+        os.chmod(path, stat.S_IWRITE)
+        func(path)
+    else:
+        raise
+
+
+def delete(path: str | list):
+    secure_path(path)
+    expanded = Path(path).expanduser()
+    unresolved = Path(os.path.abspath(str(expanded)))
+    if unresolved.is_symlink():
+        unresolved.unlink()
         return
+    resolved = full_path(path)
     if not exist(resolved):
         return
+    p = Path(resolved)
     if is_directory(resolved):
-        shutil.rmtree(resolved)
+        try:
+            shutil.rmtree(resolved, on_exc=shutil_rmtree_readonly_handler)
+        except TypeError:
+            shutil.rmtree(resolved, onerror=shutil_rmtree_readonly_handler)
     else:
         p.unlink(missing_ok=True)
 
 
-def remove(path):
+def remove(path: str | list):
     delete(path)
 
 
@@ -715,80 +860,60 @@ def save_temp_text(text_content):
 
 
 def run_linux(command, silent=False, env=None):
-    import pty
-
     if env is None:
         env = {}
     original_env = os.environ.copy()
     modified_env = {**original_env, **env}
-    if isinstance(command, list):
-        command = "\n".join(command)
-    in_lines = command.strip().splitlines()
-    cmds = [i.strip() for i in in_lines if i.strip() != ""]
-    if len(cmds) > 0:
-        script = "\n".join(cmds)
-        name = tmp(".sh")
-        try:
-            write(name, "#!/bin/bash --login\n" + script)
-            permit(name)
-            (master, slave) = pty.openpty()
-            pid = os.fork()
-            if pid == 0:
-                os.setsid()
-                try:
-                    with open(os.devnull) as stdin:
-                        os.dup2(stdin.fileno(), 0)
-                    os.dup2(slave, 1)
-                    os.dup2(slave, 2)
-                    os.close(master)
-                    os.close(slave)
-                    os.environ.update(modified_env)
-                    os.execl(
-                        "/bin/bash", "/bin/bash", "--login", "-c", name, "&"
-                    )
-                except Exception as e:
-                    print(f"Execution Error: {e}")
-                finally:
-                    delete(name)
-                    os.environ.update(original_env)
-                    os._exit(0)
-            else:
-                os.close(slave)
-                output_bytes = b""
-                output = ""
-                while True:
-                    (rlist, _, _) = select.select([master], [], [])
-                    if master in rlist:
-                        try:
-                            chunk = os.read(master, 1024)
-                            if not chunk:
-                                break
-                            output_bytes += chunk
-                            try:
-                                chunk_utf = chunk.decode(
-                                    "utf-8", errors="replace"
-                                )
-                                if not silent:
-                                    print(chunk_utf, end="", flush=True)
-                                output += chunk_utf
-                            except UnicodeDecodeError:
-                                continue
-                        except OSError:
-                            break
-                os.close(master)
-                returncode = os.waitpid(pid, 0)[1] >> 8
-                if returncode != 0:
-                    if not silent:
-                        log(f"Script failed [{returncode}]", script)
-                    return False
-                if not silent:
-                    log("Script completed", script)
-                out_lines = output.strip().splitlines()
-                ret_lines = [o.strip() for o in out_lines if o.strip() != ""]
-                return ret_lines
-        except OSError as e:
-            catch(e)
+
+    try:
+        args = secure_command(command)
+    except ValueError as e:
+        print("Error: Command rejected")
+        catch(e)
+        return False
+
+    try:
+        proc = subprocess.Popen(
+            args,
+            shell=False,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=modified_env,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        stdout, stderr = proc.communicate()
+
+        if stdout is None:
+            stdout = ""
+        if stderr is None:
+            stderr = ""
+
+        returncode = proc.returncode
+
+        if not silent:
+            if stdout:
+                print(stdout, end="", flush=True)
+            if stderr:
+                print(stderr, end="", flush=True)
+
+        if returncode != 0:
+            if not silent:
+                log(f"Script failed [{returncode}]", " ".join(args))
+                log(f"Stderr: {stderr.strip()}", "")
             return False
+        else:
+            if not silent:
+                log("Script completed", " ".join(args))
+            out_lines = stdout.strip().splitlines()
+            ret_lines = [o.strip() for o in out_lines if o.strip() != ""]
+            return ret_lines
+
+    except Exception as e:
+        catch(e)
+
     return False
 
 
@@ -796,50 +921,95 @@ def run_windows(command, silent=False, env=None):
     try:
         if env is None:
             env = {}
-        if isinstance(command, list):
-            cmds = command
-            command_to_run = " && ".join([c.strip() for c in cmds if c.strip()])
-        else:
-            cmds = command.strip().splitlines()
-            if len(cmds) > 1:
-                command_to_run = " && ".join(
-                    [c.strip() for c in cmds if c.strip()]
-                )
-            else:
-                command_to_run = command.strip()
-        if not command_to_run:
+        original_env = os.environ.copy()
+        modified_env = {**original_env, **env}
+
+        try:
+            args = secure_command(command)
+        except ValueError as e:
+            print("Error: Command rejected")
+            catch(e)
             return False
-        modified_env = {**os.environ.copy(), **env}
+
         process = subprocess.Popen(
-            command_to_run,
-            shell=True,
+            args,
+            shell=False,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             env=modified_env,
-            universal_newlines=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
         )
+
         (stdout, stderr) = process.communicate()
+
+        if stdout is None:
+            stdout = ""
+        if stderr is None:
+            stderr = ""
+
         returncode = process.returncode
+
         if not silent:
             if stdout:
                 print(stdout, end="", flush=True)
             if stderr:
                 print(stderr, end="", flush=True)
+
         if returncode != 0:
             if not silent:
-                log(f"Script failed [{returncode}]", command_to_run)
+                log(f"Script failed [{returncode}]", " ".join(args))
                 log(f"Stderr: {stderr.strip()}", "")
             return False
         else:
             if not silent:
-                log("Script completed", command_to_run)
+                log("Script completed", " ".join(args))
             out_lines = stdout.strip().splitlines()
             ret_lines = [o.strip() for o in out_lines if o.strip()]
             return ret_lines
+
     except Exception as e:
         catch(e)
-        return False
+
+    return False
+
+
+def secure_command(command: str | list) -> list[str]:
+    if isinstance(command, str):
+        text_cmd = command.strip()
+        if not text_cmd:
+            raise ValueError("Command is empty.")
+
+        if re.search(r"[;&|`$]", text_cmd):
+            raise ValueError(
+                f"Security Error: Unsafe characters in command: {text_cmd}"
+            )
+
+        try:
+            cmd_list = shlex.split(text_cmd)
+        except ValueError as e:
+            raise ValueError(f"Invalid command syntax: {e}")
+
+    elif isinstance(command, list):
+        cmd_list = [str(c).strip() for c in command if str(c).strip()]
+        if not cmd_list:
+            raise ValueError("Command list is empty.")
+
+        for arg in cmd_list:
+            if len(arg) > 1024:
+                raise ValueError(
+                    f"Security Error: Argument too long: {arg[:50]}..."
+                )
+    else:
+        raise TypeError("Command must be a string or a list.")
+
+    executable = cmd_list[0]
+
+    if "/" in executable or "\\" in executable:
+        cmd_list[0] = secure_path(executable)
+    return cmd_list
 
 
 def run(command, silent=False, env=None):
@@ -854,7 +1024,14 @@ def run(command, silent=False, env=None):
 
 
 def thread(func, *args, **kwargs):
-    t = threading.Thread(target=func, args=args, kwargs=kwargs, daemon=True)
+
+    def _wrapper(*a, **kw):
+        try:
+            func(*a, **kw)
+        except Exception as e:
+            catch(e)
+
+    t = threading.Thread(target=_wrapper, args=args, kwargs=kwargs, daemon=True)
     t.start()
     return t
 
@@ -882,9 +1059,13 @@ def permit(path):
 
 
 def check_version_wildcard(version_spec, version_actual):
-    version_spec = version_spec.replace(".", "\\.").replace("*", ".*")
-    pattern = re.compile(f"^{version_spec}$")
-    return bool(pattern.match(version_actual))
+
+    import fnmatch
+
+    if version_spec is None or version_actual is None:
+        return version_spec == version_actual
+
+    return fnmatch.fnmatchcase(version_actual, version_spec)
 
 
 def installed(pack, version=None):
@@ -924,9 +1105,9 @@ def installed(pack, version=None):
             if version_lower is None:
                 return True
             try:
-                lines = _d.run(f"{pack} --version", silent=True)
+                lines = _d.run([pack, "--version"], silent=True)
                 if not lines:
-                    lines = _d.run(f"{pack} -v", silent=True)
+                    lines = _d.run([pack, "-v"], silent=True)
                 if lines:
                     match = re.search("(\\d+\\.\\d+(\\.\\d+)*)", lines[0])
                     if match:
@@ -944,7 +1125,9 @@ def installed(pack, version=None):
         lines = _d.run("pip list", silent=True)
         if lines:
             for line in lines:
-                parts = re.sub("( ){2,}", ";", line).split(";")
+                from definers import regex_utils
+
+                parts = regex_utils.sub(r"( ){2,}", ";", line).split(";")
                 if len(parts) == 2:
                     n = parts[0].lower().strip()
                     v = parts[1].lower().strip()
@@ -1095,12 +1278,19 @@ def cores():
 
 
 def get_ext(input_path):
-    return str(Path(str(input_path)).suffix).strip(".").lower()
+    ext = str(Path(str(input_path)).suffix).strip(".").lower()
+    if not ext:
+        raise ValueError(
+            f"Could not determine file extension for: {input_path}"
+        )
+    if ext in KNOWN_EXTENSIONS:
+        return ext
+    raise ValueError("Unsupported file extension")
 
 
 def is_ai_model(input_path):
     extension = get_ext(input_path)
-    return extension in ai_model_extensions
+    return extension in ai_model_formats
 
 
 def compress(dir: str, format: str = "zip", keep_name: bool = True):
@@ -1245,8 +1435,10 @@ def apt_install(upgrade=False):
     basic_apt = "build-essential gcc cmake swig gdebi git git-lfs wget curl libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev libncursesw5-dev xz-utils tk-dev libffi-dev liblzma-dev initramfs-tools libgirepository1.0-dev libdbus-1-dev libdbus-glib-1-dev libsecret-1-0 libmanette-0.2-0 libharfbuzz0b libharfbuzz-icu0 libenchant-2-2 libhyphen0 libwoff1 libgraphene-1.0-0 libxml2-dev libxmlsec1-dev"
     audio_apt = "libportaudio2 libasound2-dev sox libsox-fmt-all praat ffmpeg libavcodec-extra libavif-dev"
     visual_apt = "libopenblas-dev libgflags-dev libgles2 libgtk-3-0 libgtk-4-1 libatk1.0-0 libatk-bridge2.0-0 libcups2 libxcomposite1 libxdamage1 libatspi2.0-0 libgstreamer1.0-0 gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-tools gstreamer1.0-gl"
-    definers.run("apt-get update")
-    definers.run(f"apt-get install -y {basic_apt} {audio_apt} {visual_apt}")
+    definers.run(["apt-get", "update"])
+    pkgstr = f"{basic_apt} {audio_apt} {visual_apt}".strip()
+    pkg_list = pkgstr.split()
+    definers.run(["apt-get", "install", "-y"] + pkg_list)
     if upgrade:
         definers.run("apt-get upgrade -y")
     definers.post_install()

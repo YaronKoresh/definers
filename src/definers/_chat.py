@@ -1,12 +1,17 @@
 import gc
 import math
-import os
 import random
 import re
-import tempfile
 
-from definers._audio import analyze_audio, get_color_palette, value_to_keys
-from definers._constants import MODELS, STYLES_DB, language_codes
+import definers._text as _text
+from definers._audio import value_to_keys
+from definers._constants import (
+    MAX_CONSECUTIVE_SPACES,
+    MAX_INPUT_LENGTH,
+    MODELS,
+    STYLES_DB,
+    language_codes,
+)
 from definers._cuda import device
 from definers._image import (
     get_max_resolution,
@@ -18,7 +23,6 @@ from definers._ml import (
     answer,
     build_faiss,
     init_pretrained_model,
-    keep_alive,
     optimize_prompt_realism,
     pipe,
 )
@@ -26,15 +30,17 @@ from definers._system import (
     catch,
     cores,
     delete,
+    exist,
     full_path,
-    install_ffmpeg,
     log,
-    pip_install,
-    run,
     tmp,
     unique,
 )
-from definers._text import ai_translate, language, simple_text
+from definers._video_gui import (
+    draw_star_of_david,
+    filter_styles,
+    generate_video_handler,
+)
 
 try:
     import cupy as np
@@ -71,7 +77,25 @@ def css():
     return '\n\nvideo {\n    border-radius: 20px;\n}\n\ndiv:has(>video) {\n    padding: 20px 20px 0px 20px !important;\n}\n\nspan {\n    margin-block: 0 !important;\n}\n\nlabel.container > span {\n    width: 100% !important;\n}\n\nhtml > body .gradio-container > main *:not(img, svg, span, :has(>svg)):is(*, *::placeholder) {\n    scrollbar-width: none !important;\n    text-align: center !important;\n    max-width: 100% !important;\n}\n\ndiv:not(.styler) > :is(.block:has(+ .block), .block + .block):has(:not(span, div, h1, h2, h3, h4, h5, h6, p, strong)) {\n    border: 1px dotted slategray !important;\n    margin-block: 10px !important;\n}\n\n.row {\n    padding-block: 20px !important;\n}\n\nlabel > input[type="radio"] {\n    border: 2px ridge black !important;\n    flex-grow: 0 !important;\n}\n\nlabel.selected > input[type="radio"] {\n    background: lime !important;\n}\n\nlabel:has(>input[type="radio"]) {\n    flex-grow: 0 !important;\n}\n\ndiv.form:has(>fieldset.block) {\n    margin-block: 10px !important;\n}\n\ndiv.controls {\n    width: 100% !important;\n}\n\ndiv.controls > * {\n    flex-grow: 1 !important;\n}\n\n    html > body .gradio-container {\n        padding: 0 !important;\n    }\n\n        html > body footer {\n            opacity: 0 !important;\n            visibility: hidden !important;\n            width: 0px !important;\n            height: 0px !important;\n        }\n\n    tr.file > td.download {\n        min-width: unset !important;\n        width: auto !important;\n    }\n\nhtml > body main {\n    padding-inline: 20px !important;\n}\n\n    button {\n        border-radius: 2mm !important;\n        border: none !important;\n        cursor: pointer !important;\n        margin-inline: 8px !important;\n    }\n\n    button:not(:has(svg)) {\n        width: auto !important;\n    }\n\n    textarea {\n        border: 1px solid #ccc !important;\n        border-radius: 5px !important;\n        padding: 8px !important;\n    }\n\n    textarea:focus{\n        border-color: #4CAF50 !important;\n        outline: none !important;\n        box-shadow: 0 0 5px rgba(76, 175, 80, 0.5) !important;\n    }\n\n    h1 {\n        color: #333 !important;\n    }\n\n    h2 {\n        color: #444 !important;\n    }\n\n    h3{\n        color: #555 !important;\n    }\n\n    '
 
 
+def validate_text_input(s):
+    import gradio as gr
+
+    if s is None:
+        return ""
+    if len(s) > MAX_INPUT_LENGTH:
+        log(
+            "Validation reject",
+            f"input length {len(s)} exceeds {MAX_INPUT_LENGTH}",
+        )
+        raise gr.Error(f"Input too long ({len(s)} > {MAX_INPUT_LENGTH})")
+    if " " * (MAX_CONSECUTIVE_SPACES + 1) in s:
+        log("Validation reject", "input has excessive consecutive spaces")
+        raise gr.Error("Input contains too many consecutive spaces")
+    return _text.simple_text(s)
+
+
 def get_chat_response(message, history: list):
+
     history = list(history)
     orig_lang = None
     including = []
@@ -81,10 +105,11 @@ def get_chat_response(message, history: list):
             history.append({"role": "user", "content": {"path": file_path}})
     if message["text"]:
         including.append("text")
-        orig_lang = language(message["text"])
+        orig_lang = _text.language(message["text"])
         if orig_lang != "en":
-            message["text"] = ai_translate(message["text"])
-        message["text"] = simple_text(message["text"])
+            message["text"] = _text.ai_translate(message["text"])
+
+        message["text"] = validate_text_input(message["text"])
         history.append({"role": "user", "content": message["text"]})
         if message["files"]:
             history.append(
@@ -116,528 +141,10 @@ def init_chat(title="Chatbot", handler=get_chat_response):
         type="messages",
         chatbot=chatbot,
         multimodal=True,
-        theme=theme(),
         title=title,
-        css=css(),
         save_history=True,
         show_progress="hidden",
         concurrency_limit=None,
-    )
-
-
-def render_frame_base(
-    style, t, width, height, audio_data, params, rms, is_beat, img_array=None
-):
-    import cv2
-
-    colors = get_color_palette(params["palette"])
-    (cx, cy) = (width // 2, height // 2)
-    frame = np.zeros((height, width, 3), dtype=np.uint8)
-    if style == "Psychedelic Geometry":
-        bg_color = np.array(colors[0]) * (0.1 + 0.1 * np.sin(t * 0.5))
-        frame[:] = bg_color
-        (grid_x, grid_y) = np.meshgrid(np.arange(width), np.arange(height))
-        dist = np.sqrt((grid_x - cx) ** 2 + (grid_y - cy) ** 2)
-        angle = np.arctan2(grid_y - cy, grid_x - cx)
-        num_arms = int(5 + 10 * rms)
-        pattern = np.sin(
-            dist / (30 - 10 * rms) + angle * num_arms - t * (5 + 10 * rms)
-        )
-        pattern_rgb = np.zeros_like(frame)
-        mask = pattern > 0
-        pattern_rgb[mask] = colors[1]
-        pattern_rgb[~mask] = np.array(colors[2]) * rms
-        frame = cv2.addWeighted(
-            frame, 0.6, pattern_rgb.astype(np.uint8), 0.4 * rms, 0
-        )
-        radius = int(height * 0.15 + rms * (height * 0.25))
-        if is_beat:
-            cv2.circle(
-                frame,
-                (cx, cy),
-                int(radius * 1.4),
-                (255, 255, 255),
-                2,
-                cv2.LINE_AA,
-            )
-        cv2.circle(frame, (cx, cy), radius, colors[2], 4)
-    elif style == "Spectrum Bars":
-        frame[:] = (10, 10, 15)
-        total_frames = audio_data["stft"].shape[1]
-        frame_idx = int(t * audio_data["sr"] / audio_data["hop_length"])
-        safe_idx = min(frame_idx, total_frames - 1)
-        stft_col = audio_data["stft"][:, safe_idx]
-        num_bars = 64
-        bar_w = width // num_bars
-        for i in range(num_bars):
-            val = np.mean(stft_col[i * 2 : (i + 1) * 2]) * params["sensitivity"]
-            bar_h = int(val * height * 0.8)
-            c = colors[i % len(colors)]
-            if is_beat and i % 4 == 0:
-                c = (200, 200, 255)
-            cv2.rectangle(
-                frame,
-                (i * bar_w, height),
-                ((i + 1) * bar_w - 2, height - bar_h),
-                c,
-                -1,
-            )
-    elif style == "Particle Tunnel":
-        for i in range(60):
-            seed = i * 13
-            speed_boost = 3.0 if is_beat else 1.0
-            dist_base = (t * 200 * speed_boost + seed * 10) % (
-                max(width, height) / 1.1
-            )
-            angle = i * (360 / 60) + t * 20
-            rad = np.deg2rad(angle)
-            px = int(cx + dist_base * np.cos(rad))
-            py = int(cy + dist_base * np.sin(rad))
-            c = colors[i % len(colors)]
-            size = int(3 + dist_base / (width / 2) * 10 * rms)
-            cv2.circle(frame, (px, py), size, c, -1)
-    elif style == "Glitch Art":
-        noise = np.random.randint(
-            0, 50 + int(100 * rms), (height, width, 3), dtype=np.uint8
-        )
-        frame = noise
-        if rms > 0.2:
-            (x, y) = (np.random.randint(0, width), np.random.randint(0, height))
-            (w, h) = (np.random.randint(50, 400), np.random.randint(10, 100))
-            cv2.rectangle(frame, (x, y), (x + w, y + h), colors[0], -1)
-    elif style == "Liquid Bass":
-        frame[:] = (0, 0, 20)
-        for i in range(10):
-            y_off = np.sin(t * 2 + i) * 50 * rms
-            pts = []
-            for x in range(0, width, 20):
-                y = (
-                    cy
-                    + np.sin(x * 0.01 + t * (1 + i * 0.2)) * (100 + rms * 200)
-                    + y_off
-                )
-                pts.append((x, int(y)))
-            cv2.polylines(
-                frame, [np.array(pts)], False, colors[i % 3], 2 + int(rms * 5)
-            )
-    elif style == "Image Pulse" and img_array is not None:
-        scale = 1.0 + (0.2 if is_beat else 0.0) + rms * 0.15
-        (h, w_img) = img_array.shape[:2]
-        (new_w, new_h) = (int(w_img / scale), int(h / scale))
-        (sx, sy) = (max(0, (w_img - new_w) // 2), max(0, (h - new_h) // 2))
-        crop = img_array[sy : sy + new_h, sx : sx + new_w]
-        if crop.size > 0:
-            frame = cv2.resize(crop, (width, height))
-        if is_beat:
-            frame = cv2.addWeighted(
-                frame, 0.7, np.full_like(frame, 255), 0.3, 0
-            )
-    return frame
-
-
-def draw_custom_element(frame, element_type, config, t, width, height, rms):
-    import cv2
-
-    if element_type == "None":
-        return frame
-    pos_x = int(config.get("x", 0.5) * width)
-    pos_y = int(config.get("y", 0.5) * height)
-    scale = config.get("scale", 1.0)
-    opacity = config.get("opacity", 1.0)
-    overlay = frame.copy()
-    if element_type == "Custom Text":
-        text = config.get("text_content", "AI VIDEO")
-        font_scale = 2 * scale + rms * 0.5
-        color = (255, 255, 255)
-        thickness = 2
-        text_size = cv2.getTextSize(
-            text, cv2.FONT_HERSHEY_SIMPLEX, font_scale, thickness
-        )[0]
-        tx = pos_x - text_size[0] // 2
-        ty = pos_y + text_size[1] // 2
-        cv2.putText(
-            overlay,
-            text,
-            (tx, ty),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            font_scale,
-            color,
-            thickness,
-        )
-    elif element_type == "Logo Image" and config.get("logo_path"):
-        try:
-            logo = cv2.imread(config["logo_path"], cv2.IMREAD_UNCHANGED)
-            if logo is not None:
-                target_h = int(height * 0.2 * scale)
-                ratio = target_h / logo.shape[0]
-                target_w = int(logo.shape[1] * ratio)
-                logo = cv2.resize(logo, (target_w, target_h))
-                y1 = pos_y - target_h // 2
-                x1 = pos_x - target_w // 2
-                if (
-                    x1 >= 0
-                    and y1 >= 0
-                    and (x1 + target_w <= width)
-                    and (y1 + target_h <= height)
-                ):
-                    if logo.shape[2] == 4:
-                        alpha = logo[:, :, 3] / 255.0
-                        bg_patch = frame[y1 : y1 + target_h, x1 : x1 + target_w]
-                        for c in range(3):
-                            bg_patch[:, :, c] = (1.0 - alpha) * bg_patch[
-                                :, :, c
-                            ] + alpha * logo[:, :, c] * opacity
-                        frame[y1 : y1 + target_h, x1 : x1 + target_w] = bg_patch
-                        return frame
-                    else:
-                        frame[y1 : y1 + target_h, x1 : x1 + target_w] = logo
-        except Exception as e:
-            print(f"Error drawing logo: {e}")
-    elif element_type == "Spectrum Circle":
-        radius = int(100 * scale * (1 + rms))
-        color = (0, 255, 255)
-        cv2.circle(overlay, (pos_x, pos_y), radius, color, 2)
-        cv2.circle(overlay, (pos_x, pos_y), int(radius * 0.8), (255, 0, 255), 1)
-    if element_type != "Logo Image":
-        cv2.addWeighted(overlay, opacity, frame, 1 - opacity, 0, frame)
-    return frame
-
-
-def apply_global_overlays(
-    frame, t, width, height, active_features, rms, is_beat, duration
-):
-    import cv2
-
-    if "Neon Border" in active_features:
-        thickness = int(10 + 20 * rms)
-        color = (int(255 * abs(np.sin(t))), 50, 255)
-        cv2.rectangle(frame, (0, 0), (width, height), color, thickness)
-    if "Progress Bar" in active_features and duration > 0:
-        bar_height = 10
-        progress = t / duration
-        bar_width = int(width * progress)
-        cv2.rectangle(
-            frame, (0, height - bar_height), (width, height), (50, 50, 50), -1
-        )
-        cv2.rectangle(
-            frame,
-            (0, height - bar_height),
-            (bar_width, height),
-            (0, 255, 0),
-            -1,
-        )
-    if "Audio Waveform" in active_features:
-        center_y = height - 100
-        pts = []
-        for x in range(0, width, 5):
-            amp = rms * 50 * np.sin(x * 0.1 + t * 10)
-            pts.append((x, int(center_y + amp)))
-        cv2.polylines(frame, [np.array(pts)], False, (255, 255, 255), 2)
-    if "Timer" in active_features:
-        (m, s) = (int(t // 60), int(t % 60))
-        cv2.putText(
-            frame,
-            f"{m:02d}:{s:02d}",
-            (30, 60),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            1,
-            (255, 255, 255),
-            2,
-        )
-    return frame
-
-
-def normalize_arr(a):
-    import numpy as np
-
-    return (a - np.min(a)) / np.ptp(a)
-
-
-def apply_post_fx(frame, effects, rms):
-    import cv2
-
-    if "Vignette" in effects:
-        (rows, cols) = frame.shape[:2]
-        (Y, X) = np.ogrid[:rows, :cols]
-        (center_y, center_x) = (rows / 2, cols / 2)
-        dist_from_center = np.sqrt((X - center_x) ** 2 + (Y - center_y) ** 2)
-        mask = 1 - normalize_arr(dist_from_center)
-        mask = np.clip(mask * 1.5, 0, 1)
-        mask = np.dstack([mask] * 3)
-        frame = (frame * mask).astype(np.uint8)
-    if "Scanlines" in effects:
-        frame[::4, :] = (frame[::4, :] * 0.7).astype(np.uint8)
-    if "Noise" in effects:
-        noise = np.random.normal(0, 10 + 20 * rms, frame.shape).astype(np.uint8)
-        frame = cv2.addWeighted(frame, 0.9, noise, 0.1, 0)
-    return frame
-
-
-def get_rms_and_beat(t, adata, reactivity_band, sensitivity):
-    total_frames = adata["stft"].shape[1]
-    frame_idx = int(t * adata["sr"] / adata["hop_length"])
-    safe_idx = min(frame_idx, total_frames - 1)
-    if reactivity_band == "Low":
-        raw_rms = adata["rms_low"][safe_idx]
-    elif reactivity_band == "Mid":
-        raw_rms = adata["rms_mid"][safe_idx]
-    elif reactivity_band == "High":
-        raw_rms = adata["rms_high"][safe_idx]
-    else:
-        raw_rms = adata["rms"][safe_idx]
-    rms = raw_rms * sensitivity
-    is_beat = any(abs(frame_idx - bf) < 3 for bf in adata["beat_frames"])
-    return (rms, is_beat)
-
-
-def prepare_common_resources(audio, image, resolution):
-    import cv2
-    from PIL import Image, ImageOps
-
-    if not audio:
-        return (None, None, None, "Error: No Audio File")
-    res_map = {
-        "Square (1:1)": (720, 720),
-        "Portrait (9:16)": (720, 1280),
-        "Landscape (16:9)": (1280, 720),
-    }
-    (w, h) = res_map.get(resolution, (1280, 720))
-    img_array = None
-    if image:
-        try:
-            pil = Image.open(image).convert("RGB")
-            pil = ImageOps.fit(pil, (w, h), Image.Resampling.LANCZOS)
-            img_array = cv2.cvtColor(np.array(pil), cv2.COLOR_RGB2BGR)
-        except:
-            print("Failed to load background image")
-    return (w, h, img_array, None)
-
-
-def generate_preview_handler(
-    audio,
-    image,
-    style,
-    resolution,
-    sensitivity,
-    reactivity_band,
-    palette,
-    active_overlays,
-    post_effects,
-    custom_elem_type,
-    ce_x,
-    ce_y,
-    ce_scale,
-    ce_opacity,
-    ce_text,
-    ce_logo,
-):
-    import cv2
-
-    (w, h, img_array, error) = prepare_common_resources(
-        audio, image, resolution
-    )
-    if error:
-        return (None, error)
-    try:
-        adata = analyze_audio(audio, duration=10)
-        preview_t = 3.0 if adata["duration"] > 3 else adata["duration"] / 2
-    except Exception as e:
-        return (None, f"Audio Analysis Failed: {e}")
-    params = {"sensitivity": sensitivity, "palette": palette}
-    (rms, is_beat) = get_rms_and_beat(
-        preview_t, adata, reactivity_band, sensitivity
-    )
-    custom_config = {
-        "x": ce_x,
-        "y": ce_y,
-        "scale": ce_scale,
-        "opacity": ce_opacity,
-        "text_content": ce_text,
-        "logo_path": ce_logo,
-    }
-    frame = render_frame_base(
-        style, preview_t, w, h, adata, params, rms, is_beat, img_array
-    )
-    frame = draw_custom_element(
-        frame, custom_elem_type, custom_config, preview_t, w, h, rms
-    )
-    frame = apply_global_overlays(
-        frame, preview_t, w, h, active_overlays, rms, is_beat, adata["duration"]
-    )
-    frame = apply_post_fx(frame, post_effects, rms)
-    return (
-        cv2.cvtColor(frame, cv2.COLOR_BGR2RGB),
-        f"Preview at {preview_t:.2f}s | BPM: {adata['bpm']}",
-    )
-
-
-def calculate_gpu_duration(
-    audio,
-    image,
-    style,
-    resolution,
-    fps,
-    sensitivity,
-    reactivity_band,
-    palette,
-    active_overlays,
-    post_effects,
-    custom_elem_type,
-    ce_x,
-    ce_y,
-    ce_scale,
-    ce_opacity,
-    ce_text,
-    ce_logo,
-):
-    from moviepy import AudioFileClip
-
-    try:
-        if not audio:
-            return False
-        clip = AudioFileClip(audio)
-        audio_dur = clip.duration
-        clip.close()
-        res_factor = 1.0
-        if resolution != "Square (1:1)":
-            res_factor = 1.5
-        fps_factor = fps / 20.0
-        estimated_time = audio_dur * res_factor * fps_factor + 20
-        final_duration = int(max(60, min(int(estimated_time), 360)))
-        print(
-            f"ZeroGPU Timeout: {final_duration}s (Audio: {audio_dur}s, FPS: {fps}, Res: {resolution})"
-        )
-        return final_duration
-    except Exception as e:
-        print(f"Error calculating duration: {e}")
-        return False
-
-
-def generate_video_handler(
-    audio,
-    image,
-    style,
-    resolution,
-    fps,
-    sensitivity,
-    reactivity_band,
-    palette,
-    active_overlays,
-    post_effects,
-    custom_elem_type,
-    ce_x,
-    ce_y,
-    ce_scale,
-    ce_opacity,
-    ce_text,
-    ce_logo,
-):
-    import cv2
-    from moviepy import AudioFileClip, VideoClip
-
-    (w, h, img_array, error) = prepare_common_resources(
-        audio, image, resolution
-    )
-    if error:
-        return (None, error)
-    print("Analyzing full audio...")
-    adata = analyze_audio(audio)
-    params = {"sensitivity": sensitivity, "palette": palette}
-    custom_config = {
-        "x": ce_x,
-        "y": ce_y,
-        "scale": ce_scale,
-        "opacity": ce_opacity,
-        "text_content": ce_text,
-        "logo_path": ce_logo,
-    }
-
-    def make_frame(t):
-        (rms, is_beat) = get_rms_and_beat(
-            t, adata, reactivity_band, sensitivity
-        )
-        frame = render_frame_base(
-            style, t, w, h, adata, params, rms, is_beat, img_array
-        )
-        frame = draw_custom_element(
-            frame, custom_elem_type, custom_config, t, w, h, rms
-        )
-        frame = apply_global_overlays(
-            frame, t, w, h, active_overlays, rms, is_beat, adata["duration"]
-        )
-        frame = apply_post_fx(frame, post_effects, rms)
-        return cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-    clip = VideoClip(make_frame, duration=adata["duration"])
-    clip = clip.with_audio(AudioFileClip(audio))
-
-    tmp = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
-    output = tmp.name
-
-    try:
-        tmp.close()
-
-        print("Rendering...")
-        clip.write_videofile(
-            output,
-            fps=fps,
-            codec="libx264",
-            audio_codec="aac",
-            preset="ultrafast",
-            logger=None,
-        )
-        return (output, f"Render Complete! Duration: {adata['duration']:.2f}s")
-    finally:
-        if os.path.exists(output):
-            try:
-                os.remove(output)
-                print("Temporary file cleaned up successfully.")
-            except OSError as e:
-                print(f"Error cleaning up: {e}")
-
-
-def filter_styles(query, category):
-    import gradio as gr
-
-    filtered = []
-    for name, data in STYLES_DB.items():
-        text_match = (
-            query.lower() in name.lower()
-            or query.lower() in data["desc"].lower()
-        )
-        tag_match = category == "All" or category in data["tags"]
-        if text_match and tag_match:
-            filtered.append(name)
-    return gr.update(choices=filtered, value=filtered[0] if filtered else None)
-
-
-def draw_star_of_david(frame, center, radius, angle, color, thickness):
-    import cv2
-
-    (center_x, center_y) = center
-    points = []
-    for i in range(6):
-        point_angle = np.deg2rad(60 * i + 30 + angle)
-        x = center_x + radius * np.cos(point_angle)
-        y = center_y + radius * np.sin(point_angle)
-        points.append((int(x), int(y)))
-    triangle1 = np.array([points[0], points[2], points[4]], np.int32)
-    triangle2 = np.array([points[1], points[3], points[5]], np.int32)
-    cv2.polylines(
-        frame,
-        [triangle1],
-        isClosed=True,
-        color=color,
-        thickness=thickness,
-        lineType=cv2.LINE_AA,
-    )
-    cv2.polylines(
-        frame,
-        [triangle2],
-        isClosed=True,
-        color=color,
-        thickness=thickness,
-        lineType=cv2.LINE_AA,
     )
 
 
@@ -865,7 +372,6 @@ def lyric_video(
     background_path,
     lyrics_text,
     text_position,
-    *,
     max_dim=640,
     font_size=70,
     text_color="white",
@@ -891,7 +397,7 @@ def lyric_video(
     audio_clip = AudioFileClip(audio_path)
     duration = audio_clip.duration
     lyrics_text = strip_nikud(lyrics_text)
-    detected_lang = language(lyrics_text)
+    detected_lang = _text.language(lyrics_text)
     print(f"🌍 Detected language: {detected_lang}")
     print("🎤 Starting automatic lyric synchronization...")
     timed_lyrics = []
@@ -1063,540 +569,2024 @@ def lyric_video(
     return output_path
 
 
-def start(proj: str):
+def _gui_translate():
     import gradio as gr
-    import spaces
 
-    proj = proj.strip().lower()
-    if proj == "translate":
-        init_pretrained_model("translate", True)
+    init_pretrained_model("translate", True)
 
-        def title(image_path, top, middle, bottom):
-            return write_on_image(image_path, top, middle, bottom)
+    def title(image_path, top, middle, bottom):
+        return write_on_image(image_path, top, middle, bottom)
 
-        @spaces.GPU(duration=20)
-        def handle_translate(txt, tgt_lang):
-            return ai_translate(txt, value_to_keys(language_codes, tgt_lang)[0])
+    def handle_translate(txt, tgt_lang):
+        return _text.ai_translate(
+            txt, value_to_keys(language_codes, tgt_lang)[0]
+        )
 
-        with gr.Blocks(theme=theme(), css=css()) as app:
-            gr.Markdown("# AI Translator")
-            gr.Markdown(
-                "### An AI-based translation software for the community"
-            )
-            with gr.Row():
-                with gr.Column():
-                    txt = gr.Textbox(
-                        placeholder="Some text...",
-                        value="",
-                        lines=4,
-                        label="Input",
-                        container=True,
-                        max_length=2000,
-                    )
-                    lang = gr.Dropdown(
-                        choices=unique(language_codes.values()), value="english"
-                    )
-                with gr.Column():
-                    res = gr.Textbox(
-                        label="Results",
-                        container=True,
-                        value="",
-                        lines=6,
-                        show_copy_button=True,
-                    )
-            with gr.Row():
-                btn = gr.Button(value="Translate")
-            btn.click(fn=handle_translate, inputs=[txt, lang], outputs=[res])
-        app.launch(server_name="0.0.0.0", server_port=7860)
-    elif proj == "animation":
-        import torch
-        from diffusers.utils import export_to_gif
-        from PIL import Image, ImageOps
-
-        init_pretrained_model("video", True)
-        init_pretrained_model("summary")
-        init_pretrained_model("translate")
-        FRAMES_PER_CHUNK = 5
-        fps = 20
-        steps = 30
-
-        @spaces.GPU(duration=120)
-        def generate_chunk(
-            chunks_path,
-            txt,
-            img,
-            dur,
-            seed,
-            chunk_state,
-            progress=gr.Progress(),
-        ):
-            txt = optimize_prompt_realism(txt)
-            total_frames = int(dur * fps)
-            total_chunks = math.ceil(total_frames / FRAMES_PER_CHUNK)
-            current_chunk_index = chunk_state["current_chunk"]
-            if current_chunk_index > total_chunks:
-                raise gr.Error(
-                    "All chunks have been generated. Please combine them now."
+    with gr.Blocks() as app:
+        gr.Markdown("# AI Translator")
+        gr.Markdown("### An AI-based translation software for the community")
+        with gr.Row():
+            with gr.Column():
+                txt = gr.Textbox(
+                    placeholder="Some text...",
+                    value="",
+                    lines=4,
+                    label="Input",
+                    container=True,
+                    max_length=2000,
                 )
-            if current_chunk_index == 1:
-                input_image = ImageOps.fit(
-                    img, (1024, 576), Image.Resampling.LANCZOS
+                lang = gr.Dropdown(
+                    choices=unique(language_codes.values()), value="english"
                 )
-                gr.Info("Generating first chunk using the initial image...")
-            else:
-                previous_chunk_path = chunk_state["chunk_paths"][-1]
-                with Image.open(previous_chunk_path) as gif:
-                    gif.seek(gif.n_frames - 1)
-                    last_frame = gif.copy()
-                input_image = last_frame
-                gr.Info(
-                    f"Generating chunk {current_chunk_index}/{total_chunks} using context from previous chunk..."
+            with gr.Column():
+                res = gr.Textbox(
+                    label="Results",
+                    container=True,
+                    value="",
+                    lines=6,
+                    show_copy_button=True,
                 )
-            if input_image.mode == "RGBA":
-                input_image = input_image.convert("RGB")
-            if seed == -1:
-                seed = random.randint(0, 2**32 - 1)
-            generator = torch.Generator(device()).manual_seed(
-                int(seed) + current_chunk_index
-            )
-            output = MODELS["video"](
-                prompt=txt,
-                image=input_image,
-                generator=generator,
-                num_inference_steps=steps,
-                num_frames=FRAMES_PER_CHUNK,
-            )
-            chunk_path = full_path(
-                chunks_path, f"chunk_{current_chunk_index}.gif"
-            )
-            export_to_gif(output.frames[0], chunk_path, fps=fps)
-            chunk_state["chunk_paths"].append(chunk_path)
-            chunk_state["current_chunk"] += 1
-            progress_text = f"Finished chunk {current_chunk_index - 1}/{total_chunks}. Ready for next chunk."
-            if current_chunk_index - 1 == total_chunks:
-                progress_text = (
-                    "All chunks generated! You can now combine them."
-                )
-            return (
-                chunk_path,
-                chunk_state,
-                gr.update(value=progress_text),
-                gr.update(visible=True),
-            )
+        with gr.Row():
+            btn = gr.Button(value="Translate")
+        btn.click(fn=handle_translate, inputs=[txt, lang], outputs=[res])
+    app.launch(
+        server_name="0.0.0.0", theme=theme(), css=css(), server_port=7860
+    )
 
-        def combine_chunks(chunk_state):
-            if not chunk_state["chunk_paths"]:
-                raise gr.Error("No chunks to combine.")
+
+def _gui_animation():
+    import gradio as gr
+    import torch
+    from diffusers.utils import export_to_gif
+    from PIL import Image, ImageOps
+
+    init_pretrained_model("video", True)
+    init_pretrained_model("summary")
+    init_pretrained_model("translate")
+    FRAMES_PER_CHUNK = 5
+    fps = 20
+    steps = 30
+
+    def generate_chunk(
+        txt,
+        img,
+        dur,
+        seed,
+        chunk_state,
+        progress=gr.Progress(),
+    ):
+        txt = validate_text_input(txt)
+        txt = optimize_prompt_realism(txt)
+        total_frames = int(dur * fps)
+        total_chunks = math.ceil(total_frames / FRAMES_PER_CHUNK)
+        current_chunk_index = chunk_state["current_chunk"]
+        if current_chunk_index > total_chunks:
+            raise gr.Error(
+                "All chunks have been generated. Please combine them now."
+            )
+        if current_chunk_index == 1:
+            input_image = ImageOps.fit(
+                img, (1024, 576), Image.Resampling.LANCZOS
+            )
+            gr.Info("Generating first chunk using the initial image...")
+        else:
+            previous_chunk_path = chunk_state["chunk_paths"][-1]
+            with Image.open(previous_chunk_path) as gif:
+                gif.seek(gif.n_frames - 1)
+                last_frame = gif.copy()
+            input_image = last_frame
             gr.Info(
-                f"Combining {len(chunk_state['chunk_paths'])} chunks into final GIF..."
+                f"Generating chunk {current_chunk_index}/{total_chunks} using context from previous chunk..."
             )
-            all_frames = []
-            for chunk_path in chunk_state["chunk_paths"]:
-                with Image.open(chunk_path) as gif:
-                    for i in range(gif.n_frames):
-                        gif.seek(i)
-                        all_frames.append(gif.copy().convert("RGBA"))
-            final_gif_path = "final_animation.gif"
-            all_frames[0].save(
-                final_gif_path,
-                save_all=True,
-                append_images=all_frames[1:],
-                loop=0,
-                duration=int(1000 / fps),
-                optimize=True,
-            )
-            return (final_gif_path, gr.update(visible=False))
+        if input_image.mode == "RGBA":
+            input_image = input_image.convert("RGB")
+        if seed == -1:
+            seed = random.randint(0, 2**32 - 1)
+        generator = torch.Generator(device()).manual_seed(
+            int(seed) + current_chunk_index
+        )
+        output = MODELS["video"](
+            prompt=txt,
+            image=input_image,
+            generator=generator,
+            num_inference_steps=steps,
+            num_frames=FRAMES_PER_CHUNK,
+        )
+        chunk_path = full_path(
+            chunk_state["chunks_path"], f"chunk_{current_chunk_index}.gif"
+        )
+        export_to_gif(output.frames[0], chunk_path, fps=fps)
+        chunk_state["chunk_paths"].append(chunk_path)
+        chunk_state["current_chunk"] += 1
+        progress_text = f"Finished chunk {current_chunk_index - 1}/{total_chunks}. Ready for next chunk."
+        if current_chunk_index - 1 == total_chunks:
+            progress_text = "All chunks generated! You can now combine them."
+        return (
+            chunk_path,
+            chunk_state,
+            gr.update(value=progress_text),
+            gr.update(visible=True),
+        )
 
-        def reset_state(chunks_path):
-            delete(chunks_path)
-            chunks_path = tmp(dir=True)
-            initial_state = {"current_chunk": 1, "chunk_paths": []}
-            return (
-                chunks_path,
-                initial_state,
-                None,
-                "Ready to generate the first chunk.",
-                gr.update(visible=False),
-                gr.update(interactive=True),
-            )
+    def combine_chunks(chunk_state):
+        if not chunk_state["chunk_paths"]:
+            raise gr.Error("No chunks to combine.")
+        gr.Info(
+            f"Combining {len(chunk_state['chunk_paths'])} chunks into final GIF..."
+        )
+        all_frames = []
+        for chunk_path in chunk_state["chunk_paths"]:
+            with Image.open(chunk_path) as gif:
+                for i in range(gif.n_frames):
+                    gif.seek(i)
+                    all_frames.append(gif.copy().convert("RGBA"))
+        final_gif_path = "final_animation.gif"
+        all_frames[0].save(
+            final_gif_path,
+            save_all=True,
+            append_images=all_frames[1:],
+            loop=0,
+            duration=int(1000 / fps),
+            optimize=True,
+        )
+        return (final_gif_path, gr.update(visible=False))
 
-        with gr.Blocks(theme=theme(), css=css()) as app:
-            chunk_state = gr.State({"current_chunk": 1, "chunk_paths": []})
-            gr.Markdown("# Image to Animation: Manual Chunking Method")
-            gr.Markdown(
-                "This app generates long animations piece-by-piece to avoid timeouts on free services. **You must click 'Generate Next Chunk' repeatedly** until all chunks are created, then click 'Combine'."
-            )
-            with gr.Row():
-                with gr.Column(scale=1):
-                    img = gr.Image(label="Input Image", type="pil", height=420)
-                    txt = gr.Textbox(
-                        placeholder="Describe the scene",
-                        value="",
-                        lines=4,
-                        label="Prompt",
-                        container=True,
-                    )
-                    dur = gr.Slider(
-                        minimum=1,
-                        maximum=30,
-                        value=3,
-                        step=1,
-                        label="Total Duration (s)",
-                    )
-                    with gr.Accordion("Advanced Settings", open=False):
-                        seed = gr.Number(
-                            label="Seed (-1 for random)", minimum=-1, value=-1
-                        )
-                with gr.Column(scale=1):
-                    out = gr.Image(
-                        label="Latest Generated Chunk / Final Animation",
-                        interactive=False,
-                        height=420,
-                    )
-                    prog = gr.Markdown("Ready to generate the first chunk.")
-            with gr.Row():
-                generate_button = gr.Button(
-                    "Generate Next Chunk", variant="primary"
+    def reset_state(chunk_state):
+        chunk_state["current_chunk"] = 1
+        chunk_state["chunk_paths"] = []
+        chunk_state["chunks_path"] = tmp(dir=True)
+        return (
+            chunk_state,
+            None,
+            "Ready to generate the first chunk.",
+            gr.update(visible=False),
+            gr.update(interactive=True),
+        )
+
+    with gr.Blocks() as app:
+        chunk_state = gr.State(
+            {
+                "current_chunk": 1,
+                "chunk_paths": [],
+                "chunks_path": tmp(dir=True),
+            }
+        )
+        gr.Markdown("# Image to Animation: Manual Chunking Method")
+        gr.Markdown(
+            "This app generates long animations piece-by-piece to avoid timeouts on free services. **You must click 'Generate Next Chunk' repeatedly** until all chunks are created, then click 'Combine'."
+        )
+        with gr.Row():
+            with gr.Column(scale=1):
+                img = gr.Image(label="Input Image", type="pil", height=420)
+                txt = gr.Textbox(
+                    placeholder="Describe the scene",
+                    value="",
+                    lines=4,
+                    label="Prompt",
+                    container=True,
+                    max_length=MAX_INPUT_LENGTH,
                 )
-                combine_button = gr.Button(
-                    "Combine Chunks into Final GIF",
-                    variant="stop",
-                    visible=False,
+                dur = gr.Slider(
+                    minimum=1,
+                    maximum=30,
+                    value=3,
+                    step=1,
+                    label="Total Duration (s)",
                 )
-                reset_button = gr.Button("Start Over")
-            with gr.Row(visible=False):
-                chunks_path = gr.Textbox(value=tmp(dir=True))
-            generate_button.click(
-                fn=keep_alive(generate_chunk, 4),
-                inputs=[chunks_path, txt, img, dur, seed, chunk_state],
-                outputs=[out, chunk_state, prog, combine_button],
+                with gr.Accordion("Advanced Settings", open=False):
+                    seed = gr.Number(
+                        label="Seed (-1 for random)", minimum=-1, value=-1
+                    )
+            with gr.Column(scale=1):
+                out = gr.Image(
+                    label="Latest Generated Chunk / Final Animation",
+                    interactive=False,
+                    height=420,
+                )
+                prog = gr.Markdown("Ready to generate the first chunk.")
+        with gr.Row():
+            generate_button = gr.Button(
+                "Generate Next Chunk", variant="primary"
             )
-            combine_button.click(
-                fn=combine_chunks,
-                inputs=[chunk_state],
-                outputs=[out, combine_button],
+            combine_button = gr.Button(
+                "Combine Chunks into Final GIF",
+                variant="stop",
+                visible=False,
             )
-            reset_button.click(
-                fn=reset_state,
-                inputs=[chunks_path],
-                outputs=[
-                    chunks_path,
-                    chunk_state,
-                    out,
-                    prog,
-                    combine_button,
-                    generate_button,
-                ],
+            reset_button = gr.Button("Start Over")
+        generate_button.click(
+            fn=generate_chunk,
+            inputs=[txt, img, dur, seed, chunk_state],
+            outputs=[out, chunk_state, prog, combine_button],
+        )
+        combine_button.click(
+            fn=combine_chunks,
+            inputs=[chunk_state],
+            outputs=[out, combine_button],
+        )
+        reset_button.click(
+            fn=reset_state,
+            inputs=[chunk_state],
+            outputs=[
+                chunk_state,
+                out,
+                prog,
+                combine_button,
+                generate_button,
+            ],
+        )
+    app.launch(
+        server_name="0.0.0.0", theme=theme(), css=css(), server_port=7860
+    )
+
+
+def _gui_image():
+    import gradio as gr
+
+    def validate_text_input(s):
+        if s is None:
+            return ""
+        if len(s) > MAX_INPUT_LENGTH:
+            log(
+                "Validation reject",
+                f"input length {len(s)} exceeds {MAX_INPUT_LENGTH}",
             )
-        app.launch(server_name="0.0.0.0", server_port=7860)
-    elif proj == "image":
-        init_pretrained_model("translate", True)
-        init_pretrained_model("summary", True)
-        init_pretrained_model("image", True)
-        init_upscale()
+            raise gr.Error(f"Input too long ({len(s)} > {MAX_INPUT_LENGTH})")
+        if " " * (MAX_CONSECUTIVE_SPACES + 1) in s:
+            log("Validation reject", "input has excessive consecutive spaces")
+            raise gr.Error("Input contains too many consecutive spaces")
+        return _text.simple_text(s)
 
-        def title(image_path, top, middle, bottom):
-            return write_on_image(image_path, top, middle, bottom)
+    init_pretrained_model("translate", True)
+    init_pretrained_model("summary", True)
+    init_pretrained_model("image", True)
+    init_upscale()
 
-        @spaces.GPU(duration=150)
-        def handle_generation(text, w, h):
-            (w, h) = get_max_resolution(w, h, mega_pixels=2.5)
-            text = optimize_prompt_realism(text)
-            return pipe("image", prompt=text, resolution=f"{w}x{h}")
+    def title(image_path, top, middle, bottom):
+        return write_on_image(image_path, top, middle, bottom)
 
-        @spaces.GPU(duration=150)
-        def handle_upscaling(path):
-            return upscale(path)
+    def handle_generation(text, w, h):
+        text = validate_text_input(text)
+        (w, h) = get_max_resolution(w, h, mega_pixels=2.5)
+        text = optimize_prompt_realism(text)
+        return pipe("image", prompt=text, resolution=f"{w}x{h}")
 
-        with gr.Blocks(theme=theme(), css=css()) as app:
-            gr.Markdown("# Text-to-Image generator")
-            gr.Markdown("### Realistic. Upscalable. Multilingual.")
-            with gr.Row():
-                with gr.Column(scale=1):
-                    width_input = gr.Slider(
-                        minimum=1, maximum=16, step=1, label="Width"
-                    )
-                    height_input = gr.Slider(
-                        minimum=1, maximum=16, step=1, label="Height"
-                    )
-                    data = gr.Textbox(
-                        placeholder="Input data",
-                        value="",
-                        max_length=1000,
-                        lines=4,
-                        label="Prompt",
-                        container=True,
-                    )
-                    top = gr.Textbox(
-                        placeholder="Top title",
-                        value="",
-                        max_lines=1,
-                        label="Top Title",
-                    )
-                    middle = gr.Textbox(
-                        placeholder="Middle title",
-                        value="",
-                        max_lines=1,
-                        label="Middle Title",
-                    )
-                    bottom = gr.Textbox(
-                        placeholder="Bottom title",
-                        value="",
-                        max_lines=1,
-                        label="Bottom Title",
-                    )
-                with gr.Column(scale=1):
-                    cover = gr.Image(
-                        interactive=False,
-                        label="Result",
-                        type="filepath",
-                        show_share_button=False,
-                        container=True,
-                        show_download_button=True,
-                    )
-                    generate_image = gr.Button("Generate")
-                    upscale_now = gr.Button("Upscale")
-                    add_titles = gr.Button("Add title(s)")
-            generate_image.click(
-                fn=keep_alive(handle_generation),
-                inputs=[data, width_input, height_input],
-                outputs=[cover],
-            )
-            upscale_now.click(
-                fn=keep_alive(handle_upscaling), inputs=[cover], outputs=[cover]
-            )
-            add_titles.click(
-                fn=keep_alive(title),
-                inputs=[cover, top, middle, bottom],
-                outputs=[cover],
-            )
-        app.launch(server_name="0.0.0.0", server_port=7860)
-    elif proj == "chat":
-        init_pretrained_model("summary", True)
-        init_pretrained_model("answer", True)
-        init_pretrained_model("translate", True)
-        install_ffmpeg()
+    def handle_upscaling(path):
+        return upscale(path)
 
-        @spaces.GPU(duration=70)
-        def _get_chat_response(message, history):
-            return get_chat_response(message, history)
+    with gr.Blocks() as app:
+        gr.Markdown("# Text-to-Image generator")
+        gr.Markdown("### Realistic. Upscalable. Multilingual.")
+        with gr.Row():
+            with gr.Column(scale=1):
+                width_input = gr.Slider(
+                    minimum=1, maximum=16, step=1, label="Width"
+                )
+                height_input = gr.Slider(
+                    minimum=1, maximum=16, step=1, label="Height"
+                )
+                data = gr.Textbox(
+                    placeholder="Input data",
+                    value="",
+                    max_length=MAX_INPUT_LENGTH,
+                    lines=4,
+                    label="Prompt",
+                    container=True,
+                )
+                top = gr.Textbox(
+                    placeholder="Top title",
+                    value="",
+                    max_lines=1,
+                    label="Top Title",
+                )
+                middle = gr.Textbox(
+                    placeholder="Middle title",
+                    value="",
+                    max_lines=1,
+                    label="Middle Title",
+                )
+                bottom = gr.Textbox(
+                    placeholder="Bottom title",
+                    value="",
+                    max_lines=1,
+                    label="Bottom Title",
+                )
+            with gr.Column(scale=1):
+                cover = gr.Image(
+                    interactive=False,
+                    label="Result",
+                    type="filepath",
+                    show_share_button=False,
+                    container=True,
+                    show_download_button=True,
+                )
+                generate_image = gr.Button("Generate")
+                upscale_now = gr.Button("Upscale")
+                add_titles = gr.Button("Add title(s)")
+        generate_image.click(
+            fn=handle_generation,
+            inputs=[data, width_input, height_input],
+            outputs=[cover],
+        )
+        upscale_now.click(fn=handle_upscaling, inputs=[cover], outputs=[cover])
+        add_titles.click(
+            fn=title,
+            inputs=[cover, top, middle, bottom],
+            outputs=[cover],
+        )
+    app.launch(
+        server_name="0.0.0.0", theme=theme(), css=css(), server_port=7860
+    )
 
-        with gr.Blocks(theme=theme(), title="AI Chatbot", css=css()) as app:
-            init_chat("AI Chatbot", _get_chat_response)
-        app.launch(server_name="0.0.0.0", server_port=7860)
-    elif proj == "faiss":
-        whl = build_faiss()
 
-        @spaces.GPU(duration=10)
-        def nop():
-            return None
+def _gui_chat():
+    import gradio as gr
 
-        with gr.Blocks() as app:
-            gr.File(label="Download faiss wheel", value=whl)
-        app.launch(server_name="0.0.0.0", server_port=7860)
-    elif proj == "video":
-        import gradio as gr
-        import spaces
+    from definers import _system
 
-        custom_css = "\n        body { color: #00ff41; font-family: monospace; }\n        .gr-button.primary { background: #00f3ff; color: black; font-weight: bold; box-shadow: 0 0 10px #00f3ff; }\n        .gr-button.secondary { background: #222; color: white; border: 1px solid #444; }\n        .section-header { color: #ff003c; font-weight: bold; margin-bottom: 5px; border-bottom: 1px solid #333; padding-bottom: 5px; }\n        textarea { overflow-y: auto !important; }\n        "
-        video_theme = gr.themes.Base(primary_hue="cyan", neutral_hue="slate")
+    init_pretrained_model("summary", True)
+    init_pretrained_model("answer", True)
+    init_pretrained_model("translate", True)
+    _system.install_ffmpeg()
 
-        @spaces.GPU(duration=calculate_gpu_duration)
-        def _generate_video_handler_gpu(*args):
-            return generate_video_handler(*args)
+    def _get_chat_response(message, history):
+        return get_chat_response(message, history)
 
-        with gr.Blocks(
-            title="AI VIDEO ARCHITECT", css=custom_css, theme=video_theme
-        ) as app:
-            gr.Markdown("# 🏗️ AI VIDEO ARCHITECT")
-            gr.Markdown("### Advanced Composition & Layout Engine")
-            with gr.Row():
-                with gr.Column(scale=2):
-                    with gr.Group():
-                        gr.Markdown(
-                            "### 📂 Media & Style",
-                            elem_classes="section-header",
-                        )
-                        audio_in = gr.Audio(label="Audio File", type="filepath")
-                        with gr.Row():
-                            search_txt = gr.Textbox(
-                                placeholder="Search styles...",
-                                label="Search",
-                                scale=2,
-                            )
-                            cat_filter = gr.Dropdown(
-                                [
-                                    "All",
-                                    "Abstract",
-                                    "Cyberpunk",
-                                    "Retro",
-                                    "Simple",
-                                    "Sci-Fi",
-                                ],
-                                value="All",
-                                label="Category Filter",
-                                scale=1,
-                            )
-                        style_dd = gr.Dropdown(
-                            choices=list(STYLES_DB.keys()),
-                            value="Psychedelic Geometry",
-                            label="Select Style (Base Layer)",
-                        )
-                        search_txt.change(
-                            filter_styles, [search_txt, cat_filter], style_dd
-                        )
-                        cat_filter.change(
-                            filter_styles, [search_txt, cat_filter], style_dd
-                        )
-                    with gr.Tabs():
-                        with gr.TabItem("✨ Custom Element"):
+    with gr.Blocks(title="AI Chatbot") as app:
+        init_chat("AI Chatbot", _get_chat_response)
+    app.launch(
+        server_name="0.0.0.0", theme=theme(), css=css(), server_port=7860
+    )
+
+
+def _gui_faiss():
+    import gradio as gr
+
+    whl = build_faiss()
+
+    def nop():
+        return None
+
+    with gr.Blocks() as app:
+        gr.File(label="Download faiss wheel", value=whl)
+    app.launch(
+        server_name="0.0.0.0", theme=theme(), css=css(), server_port=7860
+    )
+
+
+def _gui_video():
+    import gradio as gr
+
+    custom_css = "\n        body { color: #00ff41; font-family: monospace; }\n        .gr-button.primary { background: #00f3ff; color: black; font-weight: bold; box-shadow: 0 0 10px #00f3ff; }\n        .gr-button.secondary { background: #222; color: white; border: 1px solid #444; }\n        .section-header { color: #ff003c; font-weight: bold; margin-bottom: 5px; border-bottom: 1px solid #333; padding-bottom: 5px; }\n        textarea { overflow-y: auto !important; }\n        "
+    video_theme = gr.themes.Base(primary_hue="cyan", neutral_hue="slate")
+
+    with gr.Blocks(title="AI VIDEO ARCHITECT") as app:
+        gr.Markdown("# 🏗️ AI VIDEO ARCHITECT")
+        with gr.Tabs():
+            with gr.TabItem("Composer"):
+                gr.Markdown("### Advanced Composition & Layout Engine")
+                with gr.Row():
+                    with gr.Column(scale=2):
+                        with gr.Group():
                             gr.Markdown(
-                                "Add a single element with full transform control"
+                                "### 📂 Media & Style",
+                                elem_classes="section-header",
+                            )
+                            audio_in = gr.Audio(
+                                label="Audio File", type="filepath"
                             )
                             with gr.Row():
-                                ce_type = gr.Dropdown(
+                                search_txt = gr.Textbox(
+                                    placeholder="Search styles...",
+                                    label="Search",
+                                    scale=2,
+                                )
+                                cat_filter = gr.Dropdown(
                                     [
-                                        "None",
-                                        "Custom Text",
-                                        "Logo Image",
-                                        "Spectrum Circle",
+                                        "All",
+                                        "Abstract",
+                                        "Cyberpunk",
+                                        "Retro",
+                                        "Simple",
+                                        "Sci-Fi",
                                     ],
-                                    value="None",
-                                    label="Element Type",
+                                    value="All",
+                                    label="Category Filter",
+                                    scale=1,
                                 )
-                                ce_text = gr.Textbox(
-                                    value="MY MUSIC", label="Text Content"
-                                )
-                            gr.Markdown("Transform")
+                            style_dd = gr.Dropdown(
+                                choices=list(STYLES_DB.keys()),
+                                value="Psychedelic Geometry",
+                                label="Select Style (Base Layer)",
+                            )
+                            search_txt.change(
+                                filter_styles,
+                                [search_txt, cat_filter],
+                                style_dd,
+                            )
+                            cat_filter.change(
+                                filter_styles,
+                                [search_txt, cat_filter],
+                                style_dd,
+                            )
+
                             with gr.Row():
-                                ce_x = gr.Slider(
-                                    0, 1, 0.5, 0.05, label="Position X"
-                                )
-                                ce_y = gr.Slider(
-                                    0, 1, 0.5, 0.05, label="Position Y"
-                                )
+                                with gr.Column():
+                                    image_in = gr.Image(
+                                        label="Background Image",
+                                        type="filepath",
+                                    )
+                                    resolution = gr.Dropdown(
+                                        [
+                                            "Square (1:1)",
+                                            "Portrait (9:16)",
+                                            "Landscape (16:9)",
+                                        ],
+                                        value="Landscape (16:9)",
+                                        label="Resolution",
+                                    )
+                                    fps = gr.Slider(
+                                        minimum=1,
+                                        maximum=60,
+                                        value=20,
+                                        label="FPS",
+                                    )
+                                    sensitivity = gr.Slider(
+                                        minimum=0.1,
+                                        maximum=5,
+                                        value=1,
+                                        label="Sensitivity",
+                                    )
+                                    reactivity = gr.Dropdown(
+                                        ["Low", "Mid", "High", "Full"],
+                                        value="Full",
+                                        label="Reactivity Band",
+                                    )
+                                with gr.Column():
+                                    palette = gr.Dropdown(
+                                        choices=list(STYLES_DB.keys()),
+                                        value=list(STYLES_DB.keys())[0],
+                                        label="Color Palette",
+                                    )
+                                    overlays = gr.CheckboxGroup(
+                                        [
+                                            "Neon Border",
+                                            "Progress Bar",
+                                            "Audio Waveform",
+                                            "Timer",
+                                        ],
+                                        label="Overlays",
+                                    )
+                                    effects = gr.CheckboxGroup(
+                                        ["Vignette", "Scanlines", "Noise"],
+                                        label="Post Effects",
+                                    )
+                                    custom_elem = gr.Dropdown(
+                                        [
+                                            "None",
+                                            "Custom Text",
+                                            "Logo Image",
+                                            "Spectrum Circle",
+                                        ],
+                                        label="Custom Element",
+                                    )
+                            ce_x = gr.Slider(0, 1, 0.5, label="Element X")
+                            ce_y = gr.Slider(0, 1, 0.5, label="Element Y")
+                            ce_scale = gr.Slider(
+                                0.1, 5, 1, label="Element Scale"
+                            )
+                            ce_opacity = gr.Slider(
+                                0, 1, 1, label="Element Opacity"
+                            )
+                            ce_text = gr.Textbox(label="Custom Text")
+                            ce_logo = gr.File(label="Custom Logo")
+
+                            btn = gr.Button("Generate Video")
+                            out_vid = gr.Video(label="Output Video")
+                            btn.click(
+                                fn=generate_video_handler,
+                                inputs=[
+                                    audio_in,
+                                    image_in,
+                                    style_dd,
+                                    resolution,
+                                    fps,
+                                    sensitivity,
+                                    reactivity,
+                                    palette,
+                                    overlays,
+                                    effects,
+                                    custom_elem,
+                                    ce_x,
+                                    ce_y,
+                                    ce_scale,
+                                    ce_opacity,
+                                    ce_text,
+                                    ce_logo,
+                                ],
+                                outputs=[out_vid],
+                            )
+            with gr.TabItem("Lyric Video"):
+                with gr.Group():
+                    gr.Markdown("### 📝 Lyric Video Creator")
+                    lv_audio = gr.Audio(label="Audio File", type="filepath")
+                    lv_bg = gr.Image(label="Background Image", type="filepath")
+                    lv_lyrics = gr.Textbox(label="Lyrics", lines=6)
+                    lv_pos = gr.Dropdown(
+                        ["top", "center", "bottom"],
+                        value="bottom",
+                        label="Text Position",
+                    )
+                    lv_max = gr.Number(value=640, label="Max Dimension")
+                    lv_font = gr.Number(value=70, label="Font Size")
+                    lv_color = gr.Textbox(value="white", label="Text Color")
+                    lv_stroke = gr.Textbox(value="black", label="Stroke Color")
+                    lv_width = gr.Slider(0, 10, value=2, label="Stroke Width")
+                    lv_fade = gr.Slider(
+                        0.0, 5.0, value=0.5, label="Fade Duration"
+                    )
+                    lv_btn = gr.Button("Make Lyric Video")
+                    lv_out = gr.Video(label="Lyric Output")
+                    lv_btn.click(
+                        fn=lyric_video,
+                        inputs=[
+                            lv_audio,
+                            lv_bg,
+                            lv_lyrics,
+                            lv_pos,
+                            lv_max,
+                            lv_font,
+                            lv_color,
+                            lv_stroke,
+                            lv_width,
+                            lv_fade,
+                        ],
+                        outputs=[lv_out],
+                    )
+            with gr.TabItem("Visualizer"):
+                with gr.Group():
+                    gr.Markdown("### 🎶 Music Visualizer")
+                    mv_audio = gr.Audio(label="Audio File", type="filepath")
+                    mv_width = gr.Number(value=1920, label="Width")
+                    mv_height = gr.Number(value=1080, label="Height")
+                    mv_fps = gr.Slider(
+                        minimum=1, maximum=60, value=30, label="FPS"
+                    )
+                    mv_btn = gr.Button("Generate Visualizer")
+                    mv_out = gr.Video(label="Visualizer Output")
+                    mv_btn.click(
+                        fn=music_video,
+                        inputs=[mv_audio, mv_width, mv_height, mv_fps],
+                        outputs=[mv_out],
+                    )
+    app.launch(
+        server_name="0.0.0.0",
+        css=custom_css,
+        theme=video_theme,
+        server_port=7860,
+    )
+
+
+def _gui_audio():
+    import gradio as gr
+
+    from definers import (
+        analyze_audio_features,
+        answer,
+        audio_to_midi,
+        beat_visualizer,
+        change_audio_speed,
+        convert_vocal_rvc,
+        create_share_links,
+        create_spectrum_visualization,
+        cwd,
+        device,
+        dj_mix,
+        enhance_audio,
+        extend_audio,
+        generate_music,
+        generate_voice,
+        get_audio_feedback,
+        google_drive_download,
+        identify_instruments,
+        init_pretrained_model,
+        install_audio_effects,
+        install_ffmpeg,
+        language_codes,
+        midi_to_audio,
+        pitch_shift_vocals,
+        random_string,
+        save_temp_text as save_text_to_file,
+        separate_stems,
+        set_system_message,
+        stem_mixer,
+        stretch_audio,
+        train_model_rvc,
+        transcribe_audio,
+    )
+
+    install_audio_effects()
+    install_ffmpeg()
+
+    init_stable_whisper()
+    init_pretrained_model("tts")
+
+    svc_installed = False
+    with cwd():
+        if exist("./assets"):
+            svc_installed = True
+
+    if not svc_installed:
+        init_pretrained_model("svc")
+
+    init_pretrained_model("speech-recognition")
+    init_pretrained_model("audio-classification")
+    init_pretrained_model("music")
+    init_pretrained_model("summary")
+    init_pretrained_model("answer")
+    init_pretrained_model("translate")
+
+    set_system_message(
+        name="Fazzer",
+        role="the official chat assistant for the 'Audio Studio Pro' application",
+        rules=[
+            "guide users with the application usage",
+            "explain the purpose of each tool in the application",
+            "provide simple, step-by-step instructions on how to use the features based on their UI",
+        ],
+        data=[
+            "The name of the software you help with, is Audio Studio Pro",
+            "The name of your creator, is Yaron Koresh",
+            "The origin country of your creator, is Israel",
+            "Audio Studio Pro is licensed under the Open source MIT license",
+            "The official link to Audio Studio Pro original source code, is https://github.com/YaronKoresh/audio-studio-pro",
+            "The main AI models that Audio Studio Pro depends on, are: openai/whisper-large-v3, MIT/ast-finetuned-audioset-10-10-0.4593, and facebook/musicgen-small",
+            "The supported output formats, are: MP3 (320k), FLAC (16-bit), and WAV (16-bit PCM)",
+            "The export process is by clicking on the small down-arrow download button",
+            """The complete list of the software's features with usage instructions:
+    an audio enhancement tool to auto-tune and master your track - upload your track, choose an output format, and click 'Enhance Audio';
+    audio to midi converter - upload an audio file and click 'Convert to MIDI';
+    midi to audio converter - upload a MIDI file and click 'Convert to Audio';
+    an audio extender that uses AI to seamlessly continue a piece of music - upload your audio, use the 'Extend Duration' slider to choose how many seconds to add, and click 'Extend Audio';
+    a stem mixer that mixes individual instrument tracks (stems) together - upload multiple audio files (e.g., drums.wav, bass.wav). The tool automatically beatmatches them to the first track and mixes them;
+    a track feedbacks generator that provides an analysis and advice on your mix - upload your track and click 'Get Feedback' for written analysis on its dynamics, stereo width, and frequency balance;
+    an instrument identifier from an audio file - upload an audio file and click 'Identify Instruments';
+    a video generator which creates a simple and abstract music visualizer - upload an audio file and click 'Generate Video' to create a video with a pulsing circle that reacts to the music;
+    a speed & pitch changer which changes the playback speed of a track - upload audio, use the 'Speed Factor' slider (e.g., 1.5x is faster), and check 'Preserve Pitch' for a more natural sound;
+    a stems separator which splits a song into vocals and instrumental - upload a full song and choose either 'Acapella (Vocals Only)' or 'Karaoke (Instrumental Only)';
+    a vocal pitch shifter which changes the pitch of only the vocals in a song - upload a song and use the 'Vocal Pitch Shift' slider to raise or lower the vocal pitch in semitones;
+    a voice cloning and conversion tool for voice manipulation, preserving the melody - upload your training audio files, click 'Train' to create a voice model, then use the 'Convert' tab to apply that voice to a new audio input;
+    a dj tool which automatically mixes multiple songs together - upload two or more tracks. Choose 'Beatmatched Crossfade' for a smooth, tempo-synced mix and adjust the 'Transition Duration';
+    an AI music generator which creates original music from a text description - write a description of the music you want (e.g., 'upbeat synthwave'), set the duration, and click 'Generate Music';
+    an AI voice generator which clones a voice to say anything you type - upload a clean 5-15 second 'Reference Voice' sample, type the 'Text to Speak', and click 'Generate Voice';
+    a bpm & key analysis tools which detects a track's musical key and tempo - upload your audio and click 'Analyze Audio';
+    a speech-to-text tool which transcribes speech from an audio file into text - upload an audio file with speech, select the language, and click 'Transcribe Audio'.
+    a spectrum analyzer which creates a visual graph (spectrogram) of an audio's frequencies - upload an audio file and click 'Generate Spectrum'.
+    a beat visualizer which creates a video where an image pulses to the music's beat - upload an image and an audio file. Adjust the 'Beat Intensity' slider to control how much the image reacts.
+    a lyric video creation tool which creates a simple lyric video - upload a song and a background image/video. Then, paste your lyrics into the text box, with each line representing a new phrase on screen.
+    a support chat (that's you!) which answer questions like 'What is Stem Mixing?' or 'How do I use the Vocal Pitch Shifter?' based on his knowledge-base.""",
+        ],
+        formal=True,
+        creative=False,
+    )
+
+    def handle_training(experiment, inp, lvl):
+        with cwd():
+            return train_model_rvc(experiment, inp, lvl), lvl + 1
+
+    format_choices = ["MP3", "WAV", "FLAC"]
+    language_choices = sorted(list(set(language_codes.values())))
+
+    with gr.Blocks(title="Audio Studio Pro") as app:
+        gr.HTML(
+            """<div id="header"><h1>Audio Studio Pro</h1><p>Your complete suite for professional audio production and AI-powered sound creation.</p></div>"""
+        )
+
+        tool_map = {
+            "Audio Enhancer": "enhancer",
+            "MIDI Tools": "midi_tools",
+            "Audio Extender": "audio_extender",
+            "Stem Mixer": "stem_mixer",
+            "Track Feedback": "feedback",
+            "Instrument ID": "instrument_id",
+            "Music Clip Generation": "video_gen",
+            "Speed & Pitch": "speed",
+            "Stem Separation": "stem",
+            "Vocal Pitch Shifter": "vps",
+            "Voice Lab": "voice_lab",
+            "DJ AutoMix": "dj",
+            "Music Gen": "music_gen",
+            "Voice Gen": "voice_gen",
+            "Analysis": "analysis",
+            "Speech-to-Text": "stt",
+            "Spectrum": "spectrum",
+            "Beat Visualizer": "beat_vis",
+            "Lyric Video": "lyric_vid",
+            "Support Chat": "chatbot",
+        }
+
+        with gr.Row(elem_id="nav-dropdown-wrapper"):
+            nav_dropdown = gr.Dropdown(
+                choices=list(tool_map.keys()),
+                value="Audio Enhancer",
+                label="Select a Tool",
+                elem_id="nav-dropdown",
+            )
+
+        with gr.Row(elem_id="main-row"):
+            with gr.Column(scale=1, elem_id="main-content"):
+                with gr.Group(
+                    visible=True, elem_classes="tool-container"
+                ) as view_enhancer:
+                    gr.Markdown("## Audio Enhancer")
+                    with gr.Row():
+                        with gr.Column():
+                            enhancer_input = gr.Audio(
+                                label="Upload Track", type="filepath"
+                            )
                             with gr.Row():
-                                ce_scale = gr.Slider(
-                                    0.1, 5.0, 1.0, 0.1, label="Scale"
+                                enhancer_btn = gr.Button(
+                                    "Enhance Audio", variant="primary"
                                 )
-                                ce_opacity = gr.Slider(
-                                    0.1, 1.0, 1.0, 0.1, label="Opacity"
+                                clear_enhancer_btn = gr.Button(
+                                    "Clear", variant="secondary"
                                 )
-                        with gr.TabItem("🌐 Global"):
-                            active_overlays = gr.CheckboxGroup(
-                                [
-                                    "Neon Border",
-                                    "Progress Bar",
-                                    "Audio Waveform",
-                                    "Timer",
-                                ],
-                                label="Persistent Elements",
+                        with gr.Column():
+                            with gr.Group(visible=False) as enhancer_output_box:
+                                enhancer_output = gr.Audio(
+                                    label="Enhancer Output",
+                                    interactive=False,
+                                    show_download_button=True,
+                                )
+                                enhancer_share_links = gr.Markdown()
+                with gr.Group(
+                    visible=False, elem_classes="tool-container"
+                ) as view_midi_tools:
+                    gr.Markdown("## MIDI Tools")
+                    with gr.Tabs():
+                        with gr.TabItem("Audio to MIDI"):
+                            with gr.Row():
+                                with gr.Column():
+                                    a2m_input = gr.Audio(
+                                        label="Upload Audio", type="filepath"
+                                    )
+                                    with gr.Row():
+                                        a2m_btn = gr.Button(
+                                            "Convert to MIDI", variant="primary"
+                                        )
+                                        clear_a2m_btn = gr.Button(
+                                            "Clear", variant="secondary"
+                                        )
+                                with gr.Column():
+                                    with gr.Group(
+                                        visible=False
+                                    ) as a2m_output_box:
+                                        a2m_output = gr.File(
+                                            label="Output MIDI",
+                                            interactive=False,
+                                        )
+                                        a2m_share_links = gr.Markdown()
+                        with gr.TabItem("MIDI to Audio"):
+                            with gr.Row():
+                                with gr.Column():
+                                    m2a_input = gr.File(
+                                        label="Upload MIDI",
+                                        file_types=[".mid", ".midi"],
+                                    )
+                                    m2a_format = gr.Radio(
+                                        format_choices,
+                                        label="Output Format",
+                                        value=format_choices[0],
+                                    )
+                                    with gr.Row():
+                                        m2a_btn = gr.Button(
+                                            "Convert to Audio",
+                                            variant="primary",
+                                        )
+                                        clear_m2a_btn = gr.Button(
+                                            "Clear", variant="secondary"
+                                        )
+                                with gr.Column():
+                                    with gr.Group(
+                                        visible=False
+                                    ) as m2a_output_box:
+                                        m2a_output = gr.Audio(
+                                            label="Output Audio",
+                                            interactive=False,
+                                            show_download_button=True,
+                                        )
+                                        m2a_share_links = gr.Markdown()
+                with gr.Group(
+                    visible=False, elem_classes="tool-container"
+                ) as view_audio_extender:
+                    gr.Markdown("## Audio Extender")
+                    with gr.Row():
+                        with gr.Column():
+                            extender_input = gr.Audio(
+                                label="Upload Audio to Extend", type="filepath"
                             )
-                            post_fx = gr.CheckboxGroup(
-                                ["Vignette", "Scanlines", "Noise"],
-                                label="Post-Processing FX",
+                            extender_duration = gr.Slider(
+                                5,
+                                60,
+                                15,
+                                step=1,
+                                label="Extend Duration (seconds)",
                             )
-                        with gr.TabItem("⚙️ Settings"):
-                            res_dd = gr.Dropdown(
-                                [
-                                    "Square (1:1)",
-                                    "Portrait (9:16)",
-                                    "Landscape (16:9)",
-                                ],
-                                value="Square (1:1)",
-                                label="Aspect Ratio",
+                            extender_format = gr.Radio(
+                                format_choices,
+                                label="Output Format",
+                                value=format_choices[0],
                             )
-                            fps_sl = gr.Slider(14, 20, 20, 1, label="FPS")
-                            sens_sl = gr.Slider(
-                                0.5, 3.0, 1.5, 1.0, label="Audio Reactivity"
-                            )
-                            band_dd = gr.Dropdown(
-                                ["All", "Low", "Mid", "High"],
-                                value="All",
-                                label="Frequency Band",
-                            )
-                            palette_dd = gr.Dropdown(
-                                [
-                                    "Cyberpunk",
-                                    "Sunset",
-                                    "Israel",
-                                    "Gold",
-                                    "Matrix",
-                                ],
-                                value="Cyberpunk",
-                                label="Color Palette",
-                            )
-                            bg_img = gr.Image(
-                                label="Background Image (for Image Pulse)",
+                            with gr.Row():
+                                extender_btn = gr.Button(
+                                    "Extend Audio", variant="primary"
+                                )
+                                clear_extender_btn = gr.Button(
+                                    "Clear", variant="secondary"
+                                )
+                        with gr.Column():
+                            with gr.Group(visible=False) as extender_output_box:
+                                extender_output = gr.Audio(
+                                    label="Extended Audio",
+                                    interactive=False,
+                                    show_download_button=True,
+                                )
+                                extender_share_links = gr.Markdown()
+                with gr.Group(
+                    visible=False, elem_classes="tool-container"
+                ) as view_stem_mixer:
+                    gr.Markdown("## Stem Mixer")
+                    with gr.Row():
+                        with gr.Column():
+                            stem_mixer_files = gr.File(
+                                label="Upload Stems (Drums, Bass, Vocals, etc.)",
+                                file_count="multiple",
                                 type="filepath",
                             )
+                            stem_mixer_format = gr.Radio(
+                                format_choices,
+                                label="Output Format",
+                                value=format_choices[0],
+                            )
+                            with gr.Row():
+                                stem_mixer_btn = gr.Button(
+                                    "Mix Stems", variant="primary"
+                                )
+                                clear_stem_mixer_btn = gr.Button(
+                                    "Clear", variant="secondary"
+                                )
+                        with gr.Column():
+                            with gr.Group(
+                                visible=False
+                            ) as stem_mixer_output_box:
+                                stem_mixer_output = gr.Audio(
+                                    label="Mixed Track",
+                                    interactive=False,
+                                    show_download_button=True,
+                                )
+                                stem_mixer_share_links = gr.Markdown()
+                with gr.Group(
+                    visible=False, elem_classes="tool-container"
+                ) as view_feedback:
+                    gr.Markdown("## AI Track Feedback")
                     with gr.Row():
-                        preview_btn = gr.Button(
-                            "📸 Generate Preview (Frame)",
-                            elem_classes="secondary",
+                        with gr.Column():
+                            feedback_input = gr.Audio(
+                                label="Upload Your Track", type="filepath"
+                            )
+                            with gr.Row():
+                                feedback_btn = gr.Button(
+                                    "Get Feedback", variant="primary"
+                                )
+                                clear_feedback_btn = gr.Button(
+                                    "Clear", variant="secondary"
+                                )
+                        with gr.Column():
+                            feedback_output = gr.Markdown(label="Feedback")
+                with gr.Group(
+                    visible=False, elem_classes="tool-container"
+                ) as view_instrument_id:
+                    gr.Markdown("## Instrument Identification")
+                    with gr.Row():
+                        with gr.Column():
+                            instrument_id_input = gr.Audio(
+                                label="Upload Audio", type="filepath"
+                            )
+                            with gr.Row():
+                                instrument_id_btn = gr.Button(
+                                    "Identify Instruments", variant="primary"
+                                )
+                                clear_instrument_id_btn = gr.Button(
+                                    "Clear", variant="secondary"
+                                )
+                        with gr.Column():
+                            instrument_id_output = gr.Markdown(
+                                label="Detected Instruments"
+                            )
+                with gr.Group(
+                    visible=False, elem_classes="tool-container"
+                ) as view_video_gen:
+                    gr.Markdown("## AI Music Clip Generation")
+                    with gr.Row():
+                        with gr.Column():
+                            video_gen_audio = gr.Audio(
+                                label="Upload Audio", type="filepath"
+                            )
+                            with gr.Row():
+                                video_gen_btn = gr.Button(
+                                    "Generate Video", variant="primary"
+                                )
+                                clear_video_gen_btn = gr.Button(
+                                    "Clear", variant="secondary"
+                                )
+                        with gr.Column():
+                            with gr.Group(
+                                visible=False
+                            ) as video_gen_output_box:
+                                video_gen_output = gr.Video(
+                                    label="Generated Clip",
+                                    interactive=False,
+                                    show_download_button=True,
+                                )
+                                video_gen_share_links = gr.Markdown()
+                with gr.Group(
+                    visible=False, elem_classes="tool-container"
+                ) as view_speed:
+                    gr.Markdown("## Speed & Pitch")
+                    with gr.Row():
+                        with gr.Column():
+                            speed_input = gr.Audio(
+                                label="Upload Track", type="filepath"
+                            )
+                            speed_factor = gr.Slider(
+                                minimum=0.5,
+                                maximum=2.0,
+                                value=1.0,
+                                step=0.01,
+                                label="Speed Factor",
+                            )
+                            preserve_pitch = gr.Checkbox(
+                                label="Preserve Pitch (higher quality)",
+                                value=True,
+                            )
+                            speed_format = gr.Radio(
+                                format_choices,
+                                label="Output Format",
+                                value=format_choices[0],
+                            )
+                            with gr.Row():
+                                speed_btn = gr.Button(
+                                    "Change Speed", variant="primary"
+                                )
+                                clear_speed_btn = gr.Button(
+                                    "Clear", variant="secondary"
+                                )
+                        with gr.Column():
+                            with gr.Group(visible=False) as speed_output_box:
+                                speed_output = gr.Audio(
+                                    label="Modified Audio",
+                                    interactive=False,
+                                    show_download_button=True,
+                                )
+                                speed_share_links = gr.Markdown()
+                with gr.Group(
+                    visible=False, elem_classes="tool-container"
+                ) as view_stem:
+                    gr.Markdown("## Stem Separation")
+                    with gr.Row():
+                        with gr.Column():
+                            stem_input = gr.Audio(
+                                label="Upload Full Mix", type="filepath"
+                            )
+                            stem_type = gr.Radio(
+                                [
+                                    "Acapella (Vocals Only)",
+                                    "Karaoke (Instrumental Only)",
+                                ],
+                                label="Separation Type",
+                                value="Acapella (Vocals Only)",
+                            )
+                            stem_format = gr.Radio(
+                                format_choices,
+                                label="Output Format",
+                                value=format_choices[0],
+                            )
+                            with gr.Row():
+                                stem_btn = gr.Button(
+                                    "Separate Stems", variant="primary"
+                                )
+                                clear_stem_btn = gr.Button(
+                                    "Clear", variant="secondary"
+                                )
+                        with gr.Column():
+                            with gr.Group(visible=False) as stem_output_box:
+                                stem_output = gr.Audio(
+                                    label="Separated Track",
+                                    interactive=False,
+                                    show_download_button=True,
+                                )
+                                stem_share_links = gr.Markdown()
+                with gr.Group(
+                    visible=False, elem_classes="tool-container"
+                ) as view_vps:
+                    gr.Markdown("## Vocal Pitch Shifter")
+                    with gr.Row():
+                        with gr.Column():
+                            vps_input = gr.Audio(
+                                label="Upload Full Song", type="filepath"
+                            )
+                            vps_pitch = gr.Slider(
+                                -12,
+                                12,
+                                0,
+                                step=1,
+                                label="Vocal Pitch Shift (Semitones)",
+                            )
+                            vps_format = gr.Radio(
+                                format_choices,
+                                label="Output Format",
+                                value=format_choices[0],
+                            )
+                            with gr.Row():
+                                vps_btn = gr.Button(
+                                    "Shift Vocal Pitch", variant="primary"
+                                )
+                                clear_vps_btn = gr.Button(
+                                    "Clear", variant="secondary"
+                                )
+                        with gr.Column():
+                            with gr.Group(visible=False) as vps_output_box:
+                                vps_output = gr.Audio(
+                                    label="Pitch Shifted Song",
+                                    interactive=False,
+                                    show_download_button=True,
+                                )
+                                vps_share_links = gr.Markdown()
+                with gr.Group(
+                    visible=False, elem_classes="tool-container"
+                ) as view_voice_lab:
+                    gr.Markdown("## 🔬 Voice Lab")
+                    with gr.Row(visible=False):
+                        experiment = gr.Textbox(value=random_string())
+                    with gr.Row():
+                        inp = gr.File(label="Input", type="filepath")
+                        outp = gr.File(
+                            label="Output",
+                            type="filepath",
+                            file_count="multiple",
                         )
-                        render_btn = gr.Button(
-                            "🚀 Render Full Video", elem_classes="primary"
+                    with gr.Row(visible=False):
+                        lvl = gr.Number(
+                            label="(re-)training step",
+                            value=1,
+                            minimum=1,
+                            step=1,
                         )
-                with gr.Column(scale=1):
-                    ce_logo = gr.Image(
-                        label="Logo File", type="filepath", height=300
+                    with gr.Row():
+                        but1 = gr.Button("Train", variant="primary")
+                        but1.click(
+                            fn=handle_training,
+                            inputs=[experiment, inp, lvl],
+                            outputs=[outp, lvl],
+                        )
+                        but2 = gr.Button("Convert", variant="primary")
+                        but2.click(
+                            fn=convert_vocal_rvc,
+                            inputs=[experiment, inp],
+                            outputs=[outp],
+                        )
+                with gr.Group(
+                    visible=False, elem_classes="tool-container"
+                ) as view_dj:
+                    gr.Markdown("## DJ AutoMix")
+                    with gr.Row():
+                        with gr.Column():
+                            dj_files = gr.File(
+                                label="Upload Audio Tracks",
+                                file_count="multiple",
+                                type="filepath",
+                                allow_reordering=True,
+                            )
+                            dj_mix_type = gr.Radio(
+                                ["Simple Crossfade", "Beatmatched Crossfade"],
+                                label="Mix Type",
+                                value="Beatmatched Crossfade",
+                            )
+                            dj_target_bpm = gr.Number(
+                                label="Target BPM (Optional)"
+                            )
+                            dj_transition = gr.Slider(
+                                1,
+                                15,
+                                5,
+                                step=1,
+                                label="Transition Duration (seconds)",
+                            )
+                            dj_format = gr.Radio(
+                                format_choices,
+                                label="Output Format",
+                                value=format_choices[0],
+                            )
+                            with gr.Row():
+                                dj_btn = gr.Button(
+                                    "Create DJ Mix", variant="primary"
+                                )
+                                clear_dj_btn = gr.Button(
+                                    "Clear", variant="secondary"
+                                )
+                        with gr.Column():
+                            with gr.Group(visible=False) as dj_output_box:
+                                dj_output = gr.Audio(
+                                    label="Final DJ Mix",
+                                    interactive=False,
+                                    show_download_button=True,
+                                )
+                                dj_share_links = gr.Markdown()
+                with gr.Group(
+                    visible=False, elem_classes="tool-container"
+                ) as view_music_gen:
+                    gr.Markdown("## AI Music Generation")
+                    if device() == "cpu":
+                        gr.Markdown(
+                            "<p style='color:orange;text-align:center;'>Running on a CPU. Music generation will be very slow.</p>"
+                        )
+                    with gr.Row():
+                        with gr.Column():
+                            gen_prompt = gr.Textbox(
+                                lines=4,
+                                label="Music Prompt",
+                                placeholder="e.g., '80s synthwave, retro, upbeat'",
+                            )
+                            gen_duration = gr.Slider(
+                                5, 30, 10, step=1, label="Duration (seconds)"
+                            )
+                            gen_format = gr.Radio(
+                                format_choices,
+                                label="Output Format",
+                                value=format_choices[0],
+                            )
+                            with gr.Row():
+                                gen_btn = gr.Button(
+                                    "Generate Music",
+                                    variant="primary",
+                                    interactive=True,
+                                )
+                                clear_gen_btn = gr.Button(
+                                    "Clear", variant="secondary"
+                                )
+                        with gr.Column():
+                            with gr.Group(visible=False) as gen_output_box:
+                                gen_output = gr.Audio(
+                                    label="Generated Music",
+                                    interactive=False,
+                                    show_download_button=True,
+                                )
+                                gen_share_links = gr.Markdown()
+                with gr.Group(
+                    visible=False, elem_classes="tool-container"
+                ) as view_voice_gen:
+                    gr.Markdown("## AI Voice Generation")
+                    with gr.Row():
+                        with gr.Column():
+                            vg_ref = gr.Audio(
+                                label="Reference Voice (Clear, 5-15s)",
+                                type="filepath",
+                            )
+                            vg_text = gr.Textbox(
+                                lines=4,
+                                label="Text to Speak",
+                                placeholder="Enter the text you want the generated voice to say...",
+                            )
+                            vg_format = gr.Radio(
+                                format_choices,
+                                label="Output Format",
+                                value=format_choices[0],
+                            )
+                            with gr.Row():
+                                vg_btn = gr.Button(
+                                    "Generate Voice",
+                                    variant="primary",
+                                    interactive=True,
+                                )
+                                clear_vg_btn = gr.Button(
+                                    "Clear", variant="secondary"
+                                )
+                        with gr.Column():
+                            with gr.Group(visible=False) as vg_output_box:
+                                vg_output = gr.Audio(
+                                    label="Generated Voice Audio",
+                                    interactive=False,
+                                    show_download_button=True,
+                                )
+                                vg_share_links = gr.Markdown()
+                with gr.Group(
+                    visible=False, elem_classes="tool-container"
+                ) as view_analysis:
+                    gr.Markdown("## BPM & Key Analysis")
+                    with gr.Row():
+                        with gr.Column(scale=1):
+                            analysis_input = gr.Audio(
+                                label="Upload Audio", type="filepath"
+                            )
+                            with gr.Row():
+                                analysis_btn = gr.Button(
+                                    "Analyze Audio", variant="primary"
+                                )
+                                clear_analysis_btn = gr.Button(
+                                    "Clear", variant="secondary"
+                                )
+                        with gr.Column(scale=1):
+                            analysis_bpm_key_output = gr.Textbox(
+                                label="Detected Key & BPM", interactive=False
+                            )
+                with gr.Group(
+                    visible=False, elem_classes="tool-container"
+                ) as view_stt:
+                    gr.Markdown("## Speech-to-Text")
+                    with gr.Row():
+                        with gr.Column():
+                            stt_input = gr.Audio(
+                                label="Upload Speech Audio", type="filepath"
+                            )
+                            stt_language = gr.Dropdown(
+                                language_choices,
+                                label="Language",
+                                value="english",
+                            )
+                            with gr.Row():
+                                stt_btn = gr.Button(
+                                    "Transcribe Audio",
+                                    variant="primary",
+                                    interactive=True,
+                                )
+                                clear_stt_btn = gr.Button(
+                                    "Clear", variant="secondary"
+                                )
+                        with gr.Column():
+                            stt_output = gr.Textbox(
+                                label="Transcription Result",
+                                interactive=False,
+                                lines=10,
+                            )
+                            stt_file_output = gr.File(
+                                label="Download Transcript",
+                                interactive=False,
+                                visible=False,
+                            )
+                with gr.Group(
+                    visible=False, elem_classes="tool-container"
+                ) as view_spectrum:
+                    gr.Markdown("## Spectrum Analyzer")
+                    spec_input = gr.Audio(label="Upload Audio", type="filepath")
+                    with gr.Row():
+                        spec_btn = gr.Button(
+                            "Generate Spectrum", variant="primary"
+                        )
+                        clear_spec_btn = gr.Button("Clear", variant="secondary")
+                    spec_output = gr.Image(
+                        label="Spectrum Plot", interactive=False
                     )
-                    preview_out = gr.Image(label="Preview Snapshot", height=300)
-                    out_vid = gr.Video(label="Final Output", height=400)
-            with gr.Row():
-                out_stat = gr.Textbox(label="System Log")
-            preview_btn.click(
-                fn=generate_preview_handler,
-                inputs=[
-                    audio_in,
-                    bg_img,
-                    style_dd,
-                    res_dd,
-                    sens_sl,
-                    band_dd,
-                    palette_dd,
-                    active_overlays,
-                    post_fx,
-                    ce_type,
-                    ce_x,
-                    ce_y,
-                    ce_scale,
-                    ce_opacity,
-                    ce_text,
-                    ce_logo,
-                ],
-                outputs=[preview_out, out_stat],
+                with gr.Group(
+                    visible=False, elem_classes="tool-container"
+                ) as view_beat_vis:
+                    gr.Markdown("## Beat Visualizer")
+                    with gr.Row():
+                        with gr.Column():
+                            vis_image_input = gr.Image(
+                                label="Upload Image", type="filepath"
+                            )
+                            vis_audio_input = gr.Audio(
+                                label="Upload Audio", type="filepath"
+                            )
+                        with gr.Column():
+                            vis_effect = gr.Radio(
+                                [
+                                    "None",
+                                    "Blur",
+                                    "Sharpen",
+                                    "Contour",
+                                    "Emboss",
+                                ],
+                                label="Image Effect",
+                                value="None",
+                            )
+                            vis_animation = gr.Radio(
+                                ["None", "Zoom In", "Zoom Out"],
+                                label="Animation Style",
+                                value="None",
+                            )
+                            vis_intensity = gr.Slider(
+                                1.05,
+                                1.5,
+                                1.15,
+                                step=0.01,
+                                label="Beat Intensity",
+                            )
+                            with gr.Row():
+                                vis_btn = gr.Button(
+                                    "Create Beat Visualizer", variant="primary"
+                                )
+                                clear_vis_btn = gr.Button(
+                                    "Clear", variant="secondary"
+                                )
+                    with gr.Group(visible=False) as vis_output_box:
+                        vis_output = gr.Video(
+                            label="Visualizer Output", show_download_button=True
+                        )
+                        vis_share_links = gr.Markdown()
+                with gr.Group(
+                    visible=False, elem_classes="tool-container"
+                ) as view_lyric_vid:
+                    gr.Markdown("## Lyric Video Creator")
+                    with gr.Row():
+                        with gr.Column():
+                            lyric_audio = gr.Audio(
+                                label="Upload Song", type="filepath"
+                            )
+                            lyric_bg = gr.File(
+                                label="Upload Background (Image or Video)",
+                                type="filepath",
+                            )
+                            lyric_position = gr.Radio(
+                                ["center", "bottom"],
+                                label="Text Position",
+                                value="bottom",
+                            )
+                        with gr.Column():
+                            lyric_text = gr.Textbox(
+                                label="Lyrics",
+                                lines=15,
+                                placeholder="Enter lyrics here, one line per phrase...",
+                            )
+                            load_transcript_btn = gr.Button(
+                                "Get Lyrics from Audio (via Speech-to-Text)"
+                            )
+                            lyric_language = gr.Dropdown(
+                                language_choices,
+                                label="Lyrics language (for Speech-to-Text)",
+                                value="english",
+                            )
+                    with gr.Row():
+                        lyric_btn = gr.Button(
+                            "Create Lyric Video", variant="primary"
+                        )
+                        clear_lyric_btn = gr.Button(
+                            "Clear", variant="secondary"
+                        )
+                    with gr.Group(visible=False) as lyric_output_box:
+                        lyric_output = gr.Video(
+                            label="Lyric Video Output",
+                            show_download_button=True,
+                        )
+                        lyric_share_links = gr.Markdown()
+                with gr.Group(
+                    visible=False, elem_classes="tool-container"
+                ) as view_chatbot:
+                    init_chat("Audio Studio Pro AI support", get_chat_response)
+
+        views = {
+            "enhancer": view_enhancer,
+            "midi_tools": view_midi_tools,
+            "audio_extender": view_audio_extender,
+            "stem_mixer": view_stem_mixer,
+            "feedback": view_feedback,
+            "instrument_id": view_instrument_id,
+            "video_gen": view_video_gen,
+            "speed": view_speed,
+            "stem": view_stem,
+            "vps": view_vps,
+            "voice_lab": view_voice_lab,
+            "dj": view_dj,
+            "music_gen": view_music_gen,
+            "voice_gen": view_voice_gen,
+            "analysis": view_analysis,
+            "stt": view_stt,
+            "spectrum": view_spectrum,
+            "beat_vis": view_beat_vis,
+            "lyric_vid": view_lyric_vid,
+            "chatbot": view_chatbot,
+        }
+
+        def switch_view(selected_tool_name):
+            selected_view_key = tool_map[selected_tool_name]
+            return {
+                view: gr.update(visible=(key == selected_view_key))
+                for key, view in views.items()
+            }
+
+        nav_dropdown.change(
+            fn=switch_view, inputs=nav_dropdown, outputs=list(views.values())
+        )
+
+        def create_ui_handler(
+            btn, out_el, out_box, out_share, logic_func, *inputs
+        ):
+            def ui_handler_generator(*args):
+
+                try:
+                    result = logic_func(*args)
+                    share_text = (
+                        "Check out this creation from Audio Studio Pro! 🎶"
+                    )
+                    share_html = create_share_links(
+                        "yaron123", "audio-studio-pro", result, share_text
+                    )
+                    return (
+                        gr.update(value=btn.value, interactive=True),
+                        gr.update(visible=True),
+                        gr.update(value=result),
+                        gr.update(value=share_html),
+                    )
+                except Exception:
+                    return (
+                        gr.update(value=btn.value, interactive=True),
+                        gr.update(visible=False),
+                        gr.update(value=None),
+                        gr.update(value=""),
+                    )
+
+            btn.click(
+                ui_handler_generator,
+                inputs=inputs,
+                outputs=[btn, out_box, out_el, out_share],
             )
-            render_btn.click(
-                fn=_generate_video_handler_gpu,
-                inputs=[
-                    audio_in,
-                    bg_img,
-                    style_dd,
-                    res_dd,
-                    fps_sl,
-                    sens_sl,
-                    band_dd,
-                    palette_dd,
-                    active_overlays,
-                    post_fx,
-                    ce_type,
-                    ce_x,
-                    ce_y,
-                    ce_scale,
-                    ce_opacity,
-                    ce_text,
-                    ce_logo,
-                ],
-                outputs=[out_vid, out_stat],
-            )
-        app.launch(server_name="0.0.0.0", server_port=7860)
-    elif proj == "audio":
-        pip_install("git+https://github.com/YaronKoresh/audio-studio-pro.git")
-        run("audio-studio-pro")
-    elif proj == "train":
-        pip_install("git+https://github.com/YaronKoresh/teachless.git")
-        run("teachless")
+
+        create_ui_handler(
+            enhancer_btn,
+            enhancer_output,
+            enhancer_output_box,
+            enhancer_share_links,
+            enhance_audio,
+            enhancer_input,
+        )
+        create_ui_handler(
+            a2m_btn,
+            a2m_output,
+            a2m_output_box,
+            a2m_share_links,
+            audio_to_midi,
+            a2m_input,
+        )
+        create_ui_handler(
+            m2a_btn,
+            m2a_output,
+            m2a_output_box,
+            m2a_share_links,
+            midi_to_audio,
+            m2a_input,
+            m2a_format,
+        )
+        create_ui_handler(
+            extender_btn,
+            extender_output,
+            extender_output_box,
+            extender_share_links,
+            extend_audio,
+            extender_input,
+            extender_duration,
+            extender_format,
+        )
+        create_ui_handler(
+            stem_mixer_btn,
+            stem_mixer_output,
+            stem_mixer_output_box,
+            stem_mixer_share_links,
+            stem_mixer,
+            stem_mixer_files,
+            stem_mixer_format,
+        )
+        create_ui_handler(
+            video_gen_btn,
+            video_gen_output,
+            video_gen_output_box,
+            video_gen_share_links,
+            music_video,
+            video_gen_audio,
+        )
+        create_ui_handler(
+            speed_btn,
+            speed_output,
+            speed_output_box,
+            speed_share_links,
+            change_audio_speed,
+            speed_input,
+            speed_factor,
+            preserve_pitch,
+            speed_format,
+        )
+        create_ui_handler(
+            stem_btn,
+            stem_output,
+            stem_output_box,
+            stem_share_links,
+            separate_stems,
+            stem_input,
+            stem_type,
+            stem_format,
+        )
+        create_ui_handler(
+            vps_btn,
+            vps_output,
+            vps_output_box,
+            vps_share_links,
+            pitch_shift_vocals,
+            vps_input,
+            vps_pitch,
+            vps_format,
+        )
+        create_ui_handler(
+            dj_btn,
+            dj_output,
+            dj_output_box,
+            dj_share_links,
+            dj_mix,
+            dj_files,
+            dj_mix_type,
+            dj_target_bpm,
+            dj_transition,
+            dj_format,
+        )
+        create_ui_handler(
+            gen_btn,
+            gen_output,
+            gen_output_box,
+            gen_share_links,
+            generate_music,
+            gen_prompt,
+            gen_duration,
+            gen_format,
+        )
+        create_ui_handler(
+            vg_btn,
+            vg_output,
+            vg_output_box,
+            vg_share_links,
+            generate_voice,
+            vg_text,
+            vg_ref,
+            vg_format,
+        )
+        create_ui_handler(
+            vis_btn,
+            vis_output,
+            vis_output_box,
+            vis_share_links,
+            beat_visualizer,
+            vis_image_input,
+            vis_audio_input,
+            vis_effect,
+            vis_animation,
+            vis_intensity,
+        )
+        create_ui_handler(
+            lyric_btn,
+            lyric_output,
+            lyric_output_box,
+            lyric_share_links,
+            lyric_video,
+            lyric_audio,
+            lyric_bg,
+            lyric_text,
+            lyric_position,
+        )
+
+        def feedback_ui(audio_path):
+            yield {
+                feedback_btn: gr.update(
+                    value="Analyzing...", interactive=False
+                ),
+                feedback_output: "",
+            }
+            try:
+                feedback_text = get_audio_feedback(audio_path)
+                yield {
+                    feedback_btn: gr.update(
+                        value="Get Feedback", interactive=True
+                    ),
+                    feedback_output: feedback_text,
+                }
+            except Exception as e:
+                yield {
+                    feedback_btn: gr.update(
+                        value="Get Feedback", interactive=True
+                    )
+                }
+                raise gr.Error(str(e))
+
+        feedback_btn.click(
+            feedback_ui, [feedback_input], [feedback_btn, feedback_output]
+        )
+
+        def instrument_id_ui(audio_path):
+            yield {
+                instrument_id_btn: gr.update(
+                    value="Identifying...", interactive=False
+                ),
+                instrument_id_output: "",
+            }
+            try:
+                instrument_text = identify_instruments(audio_path)
+                yield {
+                    instrument_id_btn: gr.update(
+                        value="Identify Instruments", interactive=True
+                    ),
+                    instrument_id_output: instrument_text,
+                }
+            except Exception as e:
+                yield {
+                    instrument_id_btn: gr.update(
+                        value="Identify Instruments", interactive=True
+                    )
+                }
+                raise gr.Error(str(e))
+
+        instrument_id_btn.click(
+            instrument_id_ui,
+            [instrument_id_input],
+            [instrument_id_btn, instrument_id_output],
+        )
+
+        def analysis_ui(audio_path):
+            yield {
+                analysis_btn: gr.update(
+                    value="Analyzing...", interactive=False
+                ),
+                analysis_bpm_key_output: "",
+            }
+            try:
+                bpm_key = analyze_audio_features(audio_path)
+                yield {
+                    analysis_btn: gr.update(
+                        value="Analyze Audio", interactive=True
+                    ),
+                    analysis_bpm_key_output: bpm_key,
+                }
+            except Exception as e:
+                yield {
+                    analysis_btn: gr.update(
+                        value="Analyze Audio", interactive=True
+                    )
+                }
+                raise gr.Error(str(e))
+
+        analysis_btn.click(
+            analysis_ui,
+            [analysis_input],
+            [analysis_btn, analysis_bpm_key_output],
+        )
+
+        def stt_ui(audio_path, language):
+            yield {
+                stt_btn: gr.update(value="Transcribing...", interactive=False),
+                stt_output: "",
+                stt_file_output: gr.update(visible=False),
+            }
+            try:
+                transcript = transcribe_audio(audio_path, language)
+                file_path = save_text_to_file(transcript)
+                yield {
+                    stt_btn: gr.update(
+                        value="Transcribe Audio", interactive=True
+                    ),
+                    stt_output: transcript,
+                    stt_file_output: gr.update(visible=True, value=file_path),
+                }
+            except Exception as e:
+                yield {
+                    stt_btn: gr.update(
+                        value="Transcribe Audio", interactive=True
+                    )
+                }
+                raise gr.Error(str(e))
+
+        stt_btn.click(
+            stt_ui,
+            [stt_input, stt_language],
+            [stt_btn, stt_output, stt_file_output],
+        )
+
+        def spec_ui(audio_path):
+            yield {
+                spec_btn: gr.update(value="Generating...", interactive=False),
+                spec_output: None,
+            }
+            try:
+                spec_image = create_spectrum_visualization(audio_path)
+                yield {
+                    spec_btn: gr.update(
+                        value="Generate Spectrum", interactive=True
+                    ),
+                    spec_output: spec_image,
+                }
+            except Exception as e:
+                yield {
+                    spec_btn: gr.update(
+                        value="Generate Spectrum", interactive=True
+                    )
+                }
+                raise gr.Error(str(e))
+
+        spec_btn.click(spec_ui, [spec_input], [spec_btn, spec_output])
+
+        def clear_ui(*components):
+            updates = {}
+            for comp in components:
+                if isinstance(
+                    comp,
+                    (
+                        gr.Audio,
+                        gr.Video,
+                        gr.Image,
+                        gr.File,
+                        gr.Textbox,
+                        gr.Markdown,
+                    ),
+                ):
+                    updates[comp] = None
+                if isinstance(comp, gr.Group):
+                    updates[comp] = gr.update(visible=False)
+            return updates
+
+        clear_enhancer_btn.click(
+            lambda: clear_ui(
+                enhancer_input, enhancer_output, enhancer_output_box
+            ),
+            [],
+            [enhancer_input, enhancer_output, enhancer_output_box],
+        )
+        clear_a2m_btn.click(
+            lambda: clear_ui(a2m_input, a2m_output, a2m_output_box),
+            [],
+            [a2m_input, a2m_output, a2m_output_box],
+        )
+        clear_m2a_btn.click(
+            lambda: clear_ui(m2a_input, m2a_output, m2a_output_box),
+            [],
+            [m2a_input, m2a_output, m2a_output_box],
+        )
+        clear_extender_btn.click(
+            lambda: clear_ui(
+                extender_input, extender_output, extender_output_box
+            ),
+            [],
+            [extender_input, extender_output, extender_output_box],
+        )
+        clear_stem_mixer_btn.click(
+            lambda: clear_ui(
+                stem_mixer_files, stem_mixer_output, stem_mixer_output_box
+            ),
+            [],
+            [stem_mixer_files, stem_mixer_output, stem_mixer_output_box],
+        )
+        clear_feedback_btn.click(
+            lambda: clear_ui(feedback_input, feedback_output),
+            [],
+            [feedback_input, feedback_output],
+        )
+        clear_instrument_id_btn.click(
+            lambda: clear_ui(instrument_id_input, instrument_id_output),
+            [],
+            [instrument_id_input, instrument_id_output],
+        )
+        clear_video_gen_btn.click(
+            lambda: clear_ui(
+                video_gen_audio, video_gen_output, video_gen_output_box
+            ),
+            [],
+            [video_gen_audio, video_gen_output, video_gen_output_box],
+        )
+        clear_speed_btn.click(
+            lambda: clear_ui(speed_input, speed_output, speed_output_box),
+            [],
+            [speed_input, speed_output, speed_output_box],
+        )
+        clear_stem_btn.click(
+            lambda: clear_ui(stem_input, stem_output, stem_output_box),
+            [],
+            [stem_input, stem_output, stem_output_box],
+        )
+        clear_vps_btn.click(
+            lambda: clear_ui(vps_input, vps_output, vps_output_box),
+            [],
+            [vps_input, vps_output, vps_output_box],
+        )
+        clear_dj_btn.click(
+            lambda: clear_ui(dj_files, dj_output, dj_output_box),
+            [],
+            [dj_files, dj_output, dj_output_box],
+        )
+        clear_gen_btn.click(
+            lambda: {
+                **clear_ui(gen_output, gen_output_box),
+                **{gen_prompt: ""},
+            },
+            [],
+            [gen_output, gen_output_box, gen_prompt],
+        )
+        clear_vg_btn.click(
+            lambda: {
+                **clear_ui(vg_ref, vg_output, vg_output_box),
+                **{vg_text: ""},
+            },
+            [],
+            [vg_ref, vg_output, vg_output_box, vg_text],
+        )
+        clear_analysis_btn.click(
+            lambda: {
+                **clear_ui(analysis_input),
+                **{analysis_bpm_key_output: ""},
+            },
+            [],
+            [analysis_input, analysis_bpm_key_output],
+        )
+        clear_stt_btn.click(
+            lambda: clear_ui(stt_input, stt_output, stt_file_output),
+            [],
+            [stt_input, stt_output, stt_file_output],
+        )
+        clear_spec_btn.click(
+            lambda: clear_ui(spec_input, spec_output),
+            [],
+            [spec_input, spec_output],
+        )
+        clear_vis_btn.click(
+            lambda: clear_ui(
+                vis_image_input, vis_audio_input, vis_output, vis_output_box
+            ),
+            [],
+            [vis_image_input, vis_audio_input, vis_output, vis_output_box],
+        )
+        clear_lyric_btn.click(
+            lambda: {
+                **clear_ui(
+                    lyric_audio, lyric_bg, lyric_output, lyric_output_box
+                ),
+                **{lyric_text: ""},
+            },
+            [],
+            [lyric_audio, lyric_bg, lyric_output, lyric_output_box, lyric_text],
+        )
+
+        load_transcript_btn.click(
+            transcribe_audio, [lyric_audio, lyric_language], [lyric_text]
+        )
+
+    app.launch(
+        server_name="0.0.0.0", theme=theme(), css=css(), server_port=7860
+    )
+
+
+def _gui_train():
+    import gradio as gr
+
+    from definers import (
+        _system,
+        css,
+        infer,
+        theme,
+        train,
+    )
+
+    _system.install_ffmpeg()
+
+    def handle_training(
+        features,
+        labels,
+        model_path,
+        remote_src,
+        dataset_label_columns,
+        revision,
+        url_type,
+        drop_list,
+        selected_rows,
+    ):
+
+        if selected_rows is not None:
+            from definers._ml import simple_text
+
+            if len(selected_rows) > MAX_INPUT_LENGTH:
+                raise gr.Error(
+                    f"Selected rows input too long ({len(selected_rows)} > {MAX_INPUT_LENGTH})"
+                )
+            if " " * (MAX_CONSECUTIVE_SPACES + 1) in selected_rows:
+                raise gr.Error(
+                    "Selected rows contains too many consecutive spaces"
+                )
+            selected_rows = simple_text(selected_rows)
+        return train(
+            model_path,
+            remote_src,
+            revision,
+            url_type,
+            features,
+            labels,
+            dataset_label_columns,
+            drop_list,
+            selected_rows,
+        )
+
+    with gr.Blocks() as app:
+        gr.Markdown("# Train your own models")
+
+        with gr.Tabs():
+            with gr.TabItem("Train"):
+                with gr.Row():
+                    with gr.Column():
+                        model_train = gr.File(
+                            label="Upload Model (for re-training)"
+                        )
+                        remote = gr.Textbox(
+                            placeholder="Remote Dataset",
+                            label="HuggingFace name or URL",
+                        )
+                        revision = gr.Textbox(
+                            placeholder="Dataset Revision", label="Revision"
+                        )
+                        tpe = gr.Dropdown(
+                            label="Remote Dataset Type",
+                            choices=[
+                                "parquet",
+                                "json",
+                                "csv",
+                                "arrow",
+                                "webdataset",
+                                "txt",
+                            ],
+                        )
+                        drop_list = gr.Textbox(
+                            placeholder="Ignored Columns (semi-colon separated)",
+                            label="Drop List",
+                        )
+                        label_columns = gr.Textbox(
+                            placeholder="Label Columns (semi-colon separated)",
+                            label="Label Columns",
+                        )
+                        selected_rows = gr.Textbox(
+                            placeholder="Single rows and ranges (space separated, use a hyphen to choose a range or rows)",
+                            label="Selected Rows",
+                            max_length=MAX_INPUT_LENGTH,
+                        )
+
+                    with gr.Column():
+                        local_features = gr.File(
+                            label="Local Features",
+                            file_count="multiple",
+                            allow_reordering=True,
+                        )
+                        local_labels = gr.File(
+                            label="Local Labels (for supervised training)",
+                            file_count="multiple",
+                            allow_reordering=True,
+                        )
+                        train_button = gr.Button("Train", elem_classes="btn")
+                        train_output = gr.File(label="Trained Model Output")
+
+                train_button.click(
+                    fn=handle_training,
+                    inputs=[
+                        local_features,
+                        local_labels,
+                        model_train,
+                        remote,
+                        label_columns,
+                        revision,
+                        tpe,
+                        drop_list,
+                        selected_rows,
+                    ],
+                    outputs=[train_output],
+                )
+
+            with gr.TabItem("Predict"):
+                with gr.Row():
+                    with gr.Column():
+                        model_predict = gr.File(
+                            label="Upload Model (for prediction)"
+                        )
+                        prediction_data = gr.File(label="Prediction Data")
+
+                    with gr.Column():
+                        predict_button = gr.Button(
+                            "Predict", elem_classes="btn"
+                        )
+                        predict_output = gr.File(label="Prediction Output")
+
+                predict_button.click(
+                    fn=infer,
+                    inputs=[model_predict, prediction_data],
+                    outputs=[predict_output],
+                )
+
+    app.launch(
+        server_name="0.0.0.0", theme=theme(), css=css(), server_port=7860
+    )
+
+
+def start(proj: str):
+    proj = proj.strip().lower()
+    func_name = f"_gui_{proj}"
+    func = globals().get(func_name)
+    if callable(func):
+        return func()
     else:
         catch(f"Error: No project called '{proj}' !")

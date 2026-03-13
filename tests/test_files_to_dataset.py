@@ -34,29 +34,29 @@ class TestFilesToDataset(unittest.TestCase):
         self.assertEqual(len(dataset), 1)
 
     @patch("definers.load_as_numpy", return_value=None)
-    @patch("builtins.print")
-    def test_loading_feature_fails(self, mock_print, mock_load):
+    @patch("definers.logger.exception")
+    def test_loading_feature_fails(self, mock_logger_exc, mock_load):
         features_paths = ["bad_feature.npy"]
         labels_paths = ["label.npy"]
         result = files_to_dataset(features_paths, labels_paths)
         self.assertIsNone(result)
-        mock_print.assert_any_call(
-            "Error loading feature file: bad_feature.npy"
-        )
+        mock_logger_exc.assert_called_once()
 
     @patch("definers.load_as_numpy")
-    @patch("builtins.print")
-    def test_loading_label_fails(self, mock_print, mock_load):
+    @patch("definers.logger.exception")
+    def test_loading_label_fails(self, mock_logger_exc, mock_load):
         mock_load.side_effect = [np.array([1]), None]
         features_paths = ["feature.npy"]
         labels_paths = ["bad_label.npy"]
         result = files_to_dataset(features_paths, labels_paths)
         self.assertIsNone(result)
-        mock_print.assert_any_call("Error loading label file: bad_label.npy")
+        mock_logger_exc.assert_called_once()
 
-    def test_empty_input_lists(self):
+    @patch("definers.logger.warning")
+    def test_empty_input_lists(self, mock_logger_warn):
         result = files_to_dataset([], [])
         self.assertIsNone(result)
+        mock_logger_warn.assert_called_once_with("No valid data loaded.")
 
     @patch(
         "definers.load_as_numpy", return_value=[np.array([1]), np.array([2])]

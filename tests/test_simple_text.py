@@ -54,6 +54,13 @@ class TestSimpleText(unittest.TestCase):
         expected = "this is a clean string"
         self.assertEqual(simple_text(prompt), expected)
 
+    def test_too_long_raises(self):
+        from definers._constants import MAX_INPUT_LENGTH
+
+        prompt = "a" * (MAX_INPUT_LENGTH + 1)
+        with self.assertRaises(ValueError):
+            simple_text(prompt)
+
 
 if __name__ == "__main__":
     unittest.main()

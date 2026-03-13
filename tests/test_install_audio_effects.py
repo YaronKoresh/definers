@@ -12,9 +12,17 @@ class TestInstallAudioEffects(unittest.TestCase):
     @patch("builtins.print")
     def test_install_on_linux(self, mock_print, mock_run, mock_get_os):
         install_audio_effects()
-        mock_run.assert_any_call("apt-get update -y")
+        mock_run.assert_any_call(["apt-get", "update", "-y"])
         mock_run.assert_any_call(
-            "apt-get install -y rubberband-cli fluidsynth fluid-soundfont-gm build-essential"
+            [
+                "apt-get",
+                "install",
+                "-y",
+                "rubberband-cli",
+                "fluidsynth",
+                "fluid-soundfont-gm",
+                "build-essential",
+            ]
         )
         mock_print.assert_any_call("\nInstalling Python packages with pip...")
 
@@ -41,11 +49,11 @@ class TestInstallAudioEffects(unittest.TestCase):
         install_audio_effects()
         install_dir = os.path.join(os.path.expanduser("~"), "app_dependencies")
         mock_download_unzip.assert_any_call(
-            "https://breakfastquay.com/files/releases/rubberband-3.3.0-gpl-executable-windows.zip",
+            "https://breakfastquay.com/files/releases/rubberband-4.0.0-gpl-executable-windows.zip",
             os.path.join(install_dir, "rubberband"),
         )
         mock_download_unzip.assert_any_call(
-            "https://github.com/FluidSynth/fluidsynth/releases/download/v2.3.5/fluidsynth-2.3.5-win64.zip",
+            "https://github.com/FluidSynth/fluidsynth/releases/download/v2.5.2/fluidsynth-v2.5.2-win10-x64-glib.zip",
             os.path.join(install_dir, "fluidsynth"),
         )
         mock_add_to_path.assert_any_call(
@@ -55,8 +63,10 @@ class TestInstallAudioEffects(unittest.TestCase):
             os.path.join(install_dir, "fluidsynth", "bin")
         )
         mock_download_file.assert_called_once_with(
-            "https://github.com/FluidSynth/fluidsynth/raw/master/sf2/FluidR3_GM.sf2",
-            os.path.join(install_dir, "soundfonts", "FluidR3_GM.sf2"),
+            "https://raw.githubusercontent.com/FluidSynth/fluidsynth/master/sf2/VintageDreamsWaves-v2.sf3",
+            os.path.join(
+                install_dir, "soundfonts", "VintageDreamsWaves-v2.sf3"
+            ),
         )
 
     @patch("definers.get_os_name", return_value="windows")

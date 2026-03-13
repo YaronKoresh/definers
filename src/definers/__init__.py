@@ -13,8 +13,6 @@ from datetime import datetime
 from glob import glob
 from pathlib import Path
 
-import joblib
-
 try:
     import imageio as iio
 except ImportError:
@@ -141,6 +139,8 @@ try:
 except ImportError:
     AutoTokenizer = None
 collections.MutableSequence = collections.abc.MutableSequence
+from importlib.metadata import PackageNotFoundError, version as _pkg_version
+
 import numpy as _np
 
 from definers._audio import (
@@ -160,7 +160,6 @@ from definers._audio import (
     create_spectrum_visualization,
     detect_silence_mask,
     dj_mix,
-    enhance_audio,
     export_audio,
     export_to_pkl,
     extend_audio,
@@ -195,25 +194,32 @@ from definers._audio import (
     value_to_keys,
     write_mp3,
 )
-from definers._chat import (
+from definers._video_gui import (
     apply_global_overlays,
     apply_post_fx,
-    calculate_gpu_duration,
-    css,
     draw_custom_element,
     draw_star_of_david,
     filter_styles,
     generate_preview_handler,
     generate_video_handler,
-    get_chat_response,
     get_rms_and_beat,
+    normalize_arr,
+    prepare_common_resources,
+    render_frame_base,
+)
+
+try:
+    __version__ = _pkg_version("definers")
+except PackageNotFoundError:
+    __version__ = "0.0.0"
+
+from definers._chat import (
+    css,
+    get_chat_response,
     init_chat,
     init_stable_whisper,
     lyric_video,
     music_video,
-    normalize_arr,
-    prepare_common_resources,
-    render_frame_base,
     start,
     strip_nikud,
     theme,
@@ -221,6 +227,7 @@ from definers._chat import (
 from definers._constants import (
     CONFIGS,
     FFMPEG_URL,
+    KNOWN_EXTENSIONS,
     MADMOM_AVAILABLE,
     MODELS,
     PROCESSORS,
@@ -229,12 +236,19 @@ from definers._constants import (
     TOKENIZERS,
     _negative_prompt_,
     _positive_prompt_,
-    ai_model_extensions,
+    ai_model_formats,
     beam_kwargs,
+    binary_formats,
     common_audio_formats,
+    common_compressed_formats,
+    common_text_formats,
+    common_video_formats,
+    compiled_code_formats,
     higher_beams,
     iio_formats,
     language_codes,
+    pkg_file_formats,
+    script_formats,
     tasks,
     unesco_mapping,
     user_agents,
@@ -247,6 +261,7 @@ from definers._cuda import (
     set_cuda_env,
 )
 from definers._data import (
+    TrainingData,
     _find_spec,
     _init_cupy_numpy,
     check_onnx,
@@ -269,10 +284,12 @@ from definers._data import (
     numpy_to_list,
     numpy_to_str,
     one_dim_numpy,
+    order_dataset,
     pad_nested,
     pad_sequences,
     patch_cupy_numpy,
     patch_torch_proxy_mode,
+    prepare_data,
     process_rows,
     pytorch_to_onnx,
     read_as_numpy,
@@ -280,6 +297,7 @@ from definers._data import (
     select_columns,
     select_rows,
     split_columns,
+    split_dataset,
     str_to_numpy,
     tensor_length,
     three_dim_numpy,
@@ -324,6 +342,7 @@ from definers._ml import (
     get_model_instructions,
     git,
     infer,
+    init_custom_model,
     init_model_file,
     init_model_repo,
     init_pretrained_model,
@@ -337,6 +356,7 @@ from definers._ml import (
     map_reduce_summary,
     optimize_prompt_realism,
     pipe,
+    predict,
     predict_linear_regression,
     preprocess_prompt,
     rvc_to_onnx,
@@ -401,6 +421,8 @@ from definers._system import (
     runnable,
     save,
     save_temp_text,
+    secure_command,
+    secure_path,
     send_signal_to_process,
     thread,
     tmp,
@@ -488,55 +510,4 @@ except Exception:
     pass
 set_system_message(name="Phi", role="a helpful chat assistant")
 
-
-def predict(prediction_file, model_path):
-    model = joblib.load(model_path)
-    if model is None:
-        return None
-    ext = os.path.splitext(prediction_file)[1].lstrip(".").lower()
-    if ext in common_audio_formats:
-        return predict_audio(model, prediction_file)
-    if ext == "txt":
-        data = read(prediction_file)
-        vectorizer = create_vectorizer()
-        features = extract_text_features(data, vectorizer)
-    else:
-        features = load_as_numpy(prediction_file)
-        if features is None:
-            return None
-    gpu_features = numpy_to_cupy(features)
-    flat = one_dim_numpy(gpu_features)
-    prediction = model.predict(flat)
-    if prediction is None:
-        return None
-    if is_clusters_model(model):
-        prediction = get_cluster_content(model, int(prediction[0]))
-    output_type = guess_numpy_type(prediction)
-    if output_type == "text":
-        text = features_to_text(prediction)
-        path = random_string() + ".txt"
-        with open(path, "w") as f:
-            f.write(text)
-        return path
-    elif output_type == "image":
-        img = features_to_image(prediction)
-        img_np = cupy_to_numpy(img)
-        path = random_string() + ".png"
-        iio.imwrite(path, img_np)
-        return path
-    return None
-
-
-def init_custom_model(model_type, path):
-    if not path or model_type not in ("onnx", "pkl"):
-        return None
-    try:
-        with open(path, "rb") as f:
-            if model_type == "onnx":
-                model = onnx.load(f)
-            elif model_type == "pkl":
-                model = pickle.load(f)
-        return model
-    except Exception as e:
-        catch(f"Error initializing model: {e}")
-        return None
+from . import _chat, _system
