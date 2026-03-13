@@ -2,7 +2,6 @@ import os
 import shutil
 import tempfile
 import unittest
-from pathlib import Path
 
 from definers import exist, remove
 

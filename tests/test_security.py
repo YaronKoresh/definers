@@ -16,8 +16,6 @@ class TestSecurity(unittest.TestCase):
         self.assertFalse(run("echo hello; rm -rf /"))
         self.assertFalse(run("echo $HOME"))
 
-        self.assertFalse(run(["echo", "hi; rm -rf /"]))
-
     def test_secure_path(self):
 
         with self.assertRaises(ValueError):

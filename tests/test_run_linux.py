@@ -2,43 +2,19 @@ import sys
 import unittest
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from definers import run_linux
 
 
 class TestRunLinux(unittest.TestCase):
     @unittest.skipIf(sys.platform.startswith("win"), "Linux-specific test")
-    @patch("definers.write")
-    @patch("definers.permit")
-    @patch("definers.delete")
-    @patch("pty.openpty")
-    @patch("os.fork", create=True)
-    @patch("os.waitpid")
-    @patch("select.select")
-    @patch("os.read")
-    def test_run_linux_success(
-        self,
-        mock_read,
-        mock_select,
-        mock_waitpid,
-        mock_fork,
-        mock_openpty,
-        mock_delete,
-        mock_permit,
-        mock_write,
-    ):
-        mock_openpty.return_value = (10, 20)
-        mock_fork.return_value = 1234
-        mock_waitpid.return_value = (1234, 0)
-        output_stream = [b"line 1\n", b"line 2\n", b""]
-        mock_read.side_effect = output_stream
-        mock_select.return_value = ([10], [], [])
-        result = run_linux("echo 'line 1' && echo 'line 2'", silent=True)
+    @patch("subprocess.Popen")
+    def test_run_linux_success(self, mock_popen):
+        mock_proc = MagicMock()
+        mock_proc.communicate.return_value = ("line 1\nline 2\n", "")
+        mock_proc.returncode = 0
+        mock_popen.return_value = mock_proc
+        result = run_linux("echo 'line 1'", silent=True)
         self.assertEqual(result, ["line 1", "line 2"])
-        mock_write.assert_called_once()
-        mock_permit.assert_called_once()
-        mock_delete.assert_called_once()
 
     @unittest.skipIf(sys.platform.startswith("win"), "Linux-specific test")
     def test_run_linux_list_invocation(self):
@@ -52,24 +28,12 @@ class TestRunLinux(unittest.TestCase):
         self.assertFalse(result)
 
     @unittest.skipIf(sys.platform.startswith("win"), "Linux-specific test")
-    @patch("definers.write")
-    @patch("definers.permit")
-    @patch("definers.delete")
-    @patch("pty.openpty")
-    @patch("os.fork", create=True)
-    @patch("os.waitpid")
-    def test_run_linux_failure(
-        self,
-        mock_waitpid,
-        mock_fork,
-        mock_openpty,
-        mock_delete,
-        mock_permit,
-        mock_write,
-    ):
-        mock_openpty.return_value = (10, 20)
-        mock_fork.return_value = 1234
-        mock_waitpid.return_value = (1234, 256)
+    @patch("subprocess.Popen")
+    def test_run_linux_failure(self, mock_popen):
+        mock_proc = MagicMock()
+        mock_proc.communicate.return_value = ("", "error")
+        mock_proc.returncode = 1
+        mock_popen.return_value = mock_proc
         result = run_linux("exit 1", silent=True)
         self.assertFalse(result)
 

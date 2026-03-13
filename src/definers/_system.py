@@ -778,13 +778,16 @@ def shutil_rmtree_readonly_handler(func, path, exc_info):
 
 
 def delete(path):
-    resolved = full_path(str(path))
-    p = Path(resolved)
-    if p.is_symlink():
-        p.unlink()
+    str_path = str(path).strip()
+    expanded = Path(str_path).expanduser()
+    unresolved = Path(os.path.abspath(str(expanded)))
+    if unresolved.is_symlink():
+        unresolved.unlink()
         return
+    resolved = full_path(str_path)
     if not exist(resolved):
         return
+    p = Path(resolved)
     if is_directory(resolved):
         try:
             shutil.rmtree(resolved, on_exc=shutil_rmtree_readonly_handler)

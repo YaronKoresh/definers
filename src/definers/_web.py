@@ -52,10 +52,19 @@ def geo_new_york():
     }
 
 
-def extract_text(url, selector):
+try:
     from lxml.cssselect import CSSSelector
     from lxml.html import fromstring
+except ImportError:
+    CSSSelector = None
+    fromstring = None
+
+
+def extract_text(url, selector):
     from playwright.sync_api import expect, sync_playwright
+
+    if CSSSelector is None or fromstring is None:
+        raise ImportError("lxml with cssselect is required for extract_text")
 
     xpath = CSSSelector(selector).path
     log("URL", url)
