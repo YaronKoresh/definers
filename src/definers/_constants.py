@@ -23,6 +23,8 @@ ai_model_extensions = [
     "tflite",
     "gguf",
     "ckpt",
+    "npy",
+    "index",
 ]
 unesco_mapping = {
     "ar": [
@@ -425,6 +427,54 @@ common_audio_formats = [
     "aiff",
     "m4a",
     "wma",
+]
+common_text_formats = [
+    "txt",
+    "json",
+    "yaml",
+    "yml",
+    "csv",
+    "log",
+    "tsv",
+    "md",
+    "xml",
+    "ini",
+    "cfg",
+    "conf",
+]
+common_video_formats = [
+    "mp4",
+    "mkv",
+    "avi",
+    "mov",
+    "webm",
+    "flv",
+    "mpeg",
+    "mpg",
+    "m4v",
+    "3gp",
+]
+common_compressed_formats = [
+    "zip",
+    "tar",
+    "gz",
+    "7z",
+    "rar",
+    "bz2",
+    "xz",
+    "tar.gz",
+    "tar.bz2",
+    "tar.xz",
+]
+ALLOWED_TMP_EXTENSIONS = [
+    *set(iio_formats),
+    *set(common_audio_formats),
+    *set(common_text_formats),
+    *set(common_video_formats),
+    *set(common_compressed_formats),
+    *set(ai_model_extensions),
+    "data",
+    "tmp",
 ]
 _negative_prompt_ = "glamour, makeup, airbrushed, smooth, retouching, polished, perfect, oversaturated, CGI, 3d, vfx, SFX, rendered, painted, unreal, octane, cinematic, bokeh, blurry, cropped, mutated, duplicated"
 _positive_prompt_ = "journalism, realism, national geographic, minimalism, rough, grainy, messy, natural, correct structure, correct anatomy"

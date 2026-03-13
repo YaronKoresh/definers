@@ -20,7 +20,11 @@ from datetime import datetime
 from glob import glob
 from pathlib import Path
 
-from definers._constants import FFMPEG_URL, ai_model_extensions
+from definers._constants import (
+    ALLOWED_TMP_EXTENSIONS,
+    FFMPEG_URL,
+    ai_model_extensions,
+)
 
 
 def _init_logger():
@@ -631,26 +635,34 @@ def unique(arr):
     return sorted(list(set(arr)))
 
 
-def tmp(suffix: str = ".data", keep: bool = True, dir=False):
+def tmp(suffix: str | None = None, keep: bool = True, dir=False):
     import definers as _d
 
     if dir:
         temp_dir_path = tempfile.TemporaryDirectory()
         temp_dir_path = temp_dir_path.__enter__()
+
         if not keep:
             _d.delete(temp_dir_path)
+
         return temp_dir_path
-    if not suffix.startswith("."):
-        if len(suffix.split(".")) > 1:
-            suffix = suffix.split(".")
-            suffix = suffix[len(suffix) - 1]
-            if len(suffix) < 1:
-                suffix = "tmp"
-        suffix = "." + suffix
+
+    if suffix is None:
+        suffix = "data"
+
+    suffix = str(suffix).strip().strip(".").lower()
+
+    if suffix not in ALLOWED_TMP_EXTENSIONS:
+        suffix = "data"
+
+    suffix = "." + suffix
+
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as temp:
         temp_name = temp.name
+
     if not keep:
         _d.delete(temp_name)
+
     return temp_name
 
 
