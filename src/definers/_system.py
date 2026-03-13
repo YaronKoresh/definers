@@ -23,6 +23,7 @@ from pathlib import Path
 from definers._constants import (
     FFMPEG_URL,
     KNOWN_EXTENSIONS,
+    SAFE_EXTENSIONS,
     ai_model_formats,
 )
 
@@ -652,7 +653,7 @@ def tmp(suffix: str | None = None, keep: bool = True, dir=False):
 
     suffix = str(suffix).strip().strip(".").lower()
 
-    if suffix in KNOWN_EXTENSIONS:
+    if suffix in SAFE_EXTENSIONS:
         suffix = "." + suffix
 
         with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as temp:
@@ -665,7 +666,7 @@ def tmp(suffix: str | None = None, keep: bool = True, dir=False):
 
     else:
         raise ValueError(
-            f"Invalid suffix for tmp file. Allowed extensions are: {', '.join(KNOWN_EXTENSIONS)}"
+            f"Invalid suffix for tmp file. Allowed extensions are: {', '.join(SAFE_EXTENSIONS)}"
         )
 
 

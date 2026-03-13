@@ -716,6 +716,14 @@ ai_model_formats = [
     "npz",
     "tensor",
 ]
+SAFE_EXTENSIONS = [
+    *iio_formats,
+    *common_audio_formats,
+    *common_text_formats,
+    *common_video_formats,
+    "data",
+    "tmp",
+]
 KNOWN_EXTENSIONS = [
     *iio_formats,
     *common_audio_formats,

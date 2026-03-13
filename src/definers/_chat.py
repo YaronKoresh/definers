@@ -628,7 +628,6 @@ def _gui_animation():
     steps = 30
 
     def generate_chunk(
-        chunks_path,
         txt,
         img,
         dur,
@@ -636,7 +635,6 @@ def _gui_animation():
         chunk_state,
         progress=gr.Progress(),
     ):
-
         txt = validate_text_input(txt)
         txt = optimize_prompt_realism(txt)
         total_frames = int(dur * fps)
@@ -674,7 +672,9 @@ def _gui_animation():
             num_inference_steps=steps,
             num_frames=FRAMES_PER_CHUNK,
         )
-        chunk_path = full_path(chunks_path, f"chunk_{current_chunk_index}.gif")
+        chunk_path = full_path(
+            chunk_state["chunks_path"], f"chunk_{current_chunk_index}.gif"
+        )
         export_to_gif(output.frames[0], chunk_path, fps=fps)
         chunk_state["chunk_paths"].append(chunk_path)
         chunk_state["current_chunk"] += 1
@@ -711,13 +711,12 @@ def _gui_animation():
         )
         return (final_gif_path, gr.update(visible=False))
 
-    def reset_state(chunks_path):
-        delete(chunks_path)
-        chunks_path = tmp(dir=True)
-        initial_state = {"current_chunk": 1, "chunk_paths": []}
+    def reset_state(chunk_state):
+        chunk_state["current_chunk"] = 1
+        chunk_state["chunk_paths"] = []
+        chunk_state["chunks_path"] = tmp(dir=True)
         return (
-            chunks_path,
-            initial_state,
+            chunk_state,
             None,
             "Ready to generate the first chunk.",
             gr.update(visible=False),
@@ -725,7 +724,13 @@ def _gui_animation():
         )
 
     with gr.Blocks() as app:
-        chunk_state = gr.State({"current_chunk": 1, "chunk_paths": []})
+        chunk_state = gr.State(
+            {
+                "current_chunk": 1,
+                "chunk_paths": [],
+                "chunks_path": tmp(dir=True),
+            }
+        )
         gr.Markdown("# Image to Animation: Manual Chunking Method")
         gr.Markdown(
             "This app generates long animations piece-by-piece to avoid timeouts on free services. **You must click 'Generate Next Chunk' repeatedly** until all chunks are created, then click 'Combine'."
@@ -769,11 +774,9 @@ def _gui_animation():
                 visible=False,
             )
             reset_button = gr.Button("Start Over")
-        with gr.Row(visible=False):
-            chunks_path = gr.Textbox(value=tmp(dir=True))
         generate_button.click(
             fn=generate_chunk,
-            inputs=[chunks_path, txt, img, dur, seed, chunk_state],
+            inputs=[txt, img, dur, seed, chunk_state],
             outputs=[out, chunk_state, prog, combine_button],
         )
         combine_button.click(
@@ -783,9 +786,8 @@ def _gui_animation():
         )
         reset_button.click(
             fn=reset_state,
-            inputs=[chunks_path],
+            inputs=[chunk_state],
             outputs=[
-                chunks_path,
                 chunk_state,
                 out,
                 prog,
