@@ -1,6 +1,6 @@
 import unittest
 
-from definers import is_huggingface_repo
+from definers.ml import is_huggingface_repo
 
 
 class TestHuggingFaceRepo(unittest.TestCase):

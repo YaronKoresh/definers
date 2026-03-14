@@ -1,6 +1,6 @@
 import unittest
 
-from definers import check_parameter
+from definers.ml import check_parameter
 
 
 class TestCheckParameter(unittest.TestCase):

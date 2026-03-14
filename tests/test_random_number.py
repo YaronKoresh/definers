@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from definers import random_number
+from definers.text import random_number
 
 
 class TestRandomNumber(unittest.TestCase):

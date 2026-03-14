@@ -1,6 +1,6 @@
 import unittest
 
-from definers import path_ext
+from definers.path_utils import path_ext
 
 
 class TestPathExt(unittest.TestCase):

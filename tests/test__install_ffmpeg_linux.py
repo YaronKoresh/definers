@@ -2,7 +2,7 @@ import subprocess
 import unittest
 from unittest.mock import call, patch
 
-from definers import install_ffmpeg_linux
+from definers.system import install_ffmpeg_linux
 
 
 class TestInstallFfmpegLinux(unittest.TestCase):
@@ -81,7 +81,7 @@ class TestInstallFfmpegLinux(unittest.TestCase):
         )
         mock_exit.assert_called_once_with(1)
 
-    @patch("definers.logger.error")
+    @patch("definers.system.logger.error")
     @patch("os.geteuid", return_value=0, create=True)
     @patch("shutil.which", return_value="apt-get")
     @patch("subprocess.run", side_effect=Exception("Test error"))

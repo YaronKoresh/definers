@@ -1,6 +1,8 @@
 #!/bin/bash
 
-sudo mkdir /etc/modprobe.d
+set -euo pipefail
+
+sudo mkdir -p /etc/modprobe.d
 
 sudo chmod a+rwx /tmp
 sudo chmod a+rwx /etc/modprobe.d/
@@ -11,7 +13,7 @@ sudo apt-get install -y curl dkms
 sudo apt-get purge -y nvidia-*
 sudo apt-get autoremove -y
 
-sudo cat > /etc/modprobe.d/blacklist-nouveau.conf <<EOF
+sudo tee /etc/modprobe.d/blacklist-nouveau.conf >/dev/null <<EOF
 blacklist nouveau
 options nouveau modeset=0
 EOF

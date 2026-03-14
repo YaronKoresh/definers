@@ -1,10 +1,10 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-import numpy as np
 from PIL import Image
 
-from definers import MODELS, general_negative_prompt, upscale
+from definers.constants import MODELS
+from definers.image import upscale
 
 
 class TestUpscale(unittest.TestCase):
@@ -22,7 +22,7 @@ class TestUpscale(unittest.TestCase):
             os.remove(self.image_path)
         MODELS["upscale"] = None
 
-    @patch("definers.save_image", return_value="upscaled_image.png")
+    @patch("definers.image.save_image", return_value="upscaled_image.png")
     @patch("refiners.fluxion.utils.manual_seed")
     def test_successful_upscale_with_defaults(
         self, mock_manual_seed, mock_save_image
@@ -33,7 +33,7 @@ class TestUpscale(unittest.TestCase):
         mock_save_image.assert_called_once()
         self.assertEqual(result, "upscaled_image.png")
 
-    @patch("definers.save_image", return_value="upscaled_image.png")
+    @patch("definers.image.save_image", return_value="upscaled_image.png")
     @patch("refiners.fluxion.utils.manual_seed")
     def test_custom_parameters_and_seed(
         self, mock_manual_seed, mock_save_image

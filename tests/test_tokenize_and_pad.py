@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 
-from definers import tokenize_and_pad
+from definers.data import tokenize_and_pad
 
 
 class TestTokenizeAndPad(unittest.TestCase):
@@ -13,7 +13,7 @@ class TestTokenizeAndPad(unittest.TestCase):
             "input_ids": [[101, 2054, 2049, 102], [101, 2088, 2049, 102]]
         }
 
-    @patch("definers.two_dim_numpy")
+    @patch("definers.data.two_dim_numpy")
     def test_tokenize_with_dict_rows(self, mock_two_dim_numpy):
         mock_two_dim_numpy.side_effect = lambda x: np.array(x)
         rows = [
@@ -26,7 +26,7 @@ class TestTokenizeAndPad(unittest.TestCase):
         self.assertIn("hello world 123", call_args)
         self.assertIn("another row 4 5", call_args)
 
-    @patch("definers.two_dim_numpy")
+    @patch("definers.data.two_dim_numpy")
     def test_tokenize_with_string_rows(self, mock_two_dim_numpy):
         mock_two_dim_numpy.side_effect = lambda x: np.array(x)
         rows = ["first sentence", "second sentence"]
@@ -38,7 +38,7 @@ class TestTokenizeAndPad(unittest.TestCase):
             return_tensors="pt",
         )
 
-    @patch("definers.two_dim_numpy")
+    @patch("definers.data.two_dim_numpy")
     def test_tokenize_with_mixed_rows(self, mock_two_dim_numpy):
         mock_two_dim_numpy.side_effect = lambda x: np.array(x)
         rows = [{"feature1": "dict row", "feature2": 99}, "a string row"]
@@ -60,7 +60,7 @@ class TestTokenizeAndPad(unittest.TestCase):
             [], padding=True, truncation=True, return_tensors="pt"
         )
 
-    @patch("definers.two_dim_numpy")
+    @patch("definers.data.two_dim_numpy")
     def test_handles_none_values_in_dicts(self, mock_two_dim_numpy):
         mock_two_dim_numpy.side_effect = lambda x: np.array(x)
         rows = [

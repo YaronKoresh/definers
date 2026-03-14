@@ -6,7 +6,7 @@ import definers.data as data
 
 data.np = np
 data._np = np
-from definers import guess_numpy_type
+from definers.data import guess_numpy_type
 
 
 class TestGuessNumpyType(unittest.TestCase):

@@ -1,6 +1,6 @@
 import unittest
 
-from definers import unique
+from definers.path_utils import unique
 
 
 class TestUnique(unittest.TestCase):

@@ -1,6 +1,7 @@
 @echo off
+setlocal EnableExtensions
 
-cd %~dp0..
+cd /d "%~dp0.."
 
 set "INSTALL_GROUP="
 echo.
@@ -21,7 +22,8 @@ set /p "INSTALL_GROUP= Enter groups to install (default: dev): "
 
 if "%INSTALL_GROUP%"=="" set "INSTALL_GROUP=dev"
 
-call pip install -e ".[%INSTALL_GROUP%]" --extra-index-url https://pypi.nvidia.com
+call python -m pip install -e ".[%INSTALL_GROUP%]" --extra-index-url https://pypi.nvidia.com
+if errorlevel 1 exit /B %ERRORLEVEL%
 call poe hook
 
 pause

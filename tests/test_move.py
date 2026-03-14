@@ -2,9 +2,8 @@ import os
 import shutil
 import tempfile
 import unittest
-from pathlib import Path
 
-from definers import move
+from definers.platform.filesystem import move
 
 
 class TestMove(unittest.TestCase):

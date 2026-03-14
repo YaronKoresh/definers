@@ -13,413 +13,313 @@ import warnings
 from collections import Counter, OrderedDict
 from pathlib import Path
 from time import sleep, time
+from types import SimpleNamespace
 
 import numpy as _np
 import numpy as np
 
 from definers import regex_utils
-from definers.audio import (
-    audio_preview,
-    features_to_audio,
-    normalize_audio_to_peak,
-    predict_audio,
-    separate_stems,
-    stem_mixer,
+from definers.application_ml import answer as _answer
+from definers.application_ml.inference import (
+    extract_text_features as _extract_text_features,
+    features_to_text as _features_to_text,
+    predict_linear_regression as _predict_linear_regression,
 )
+from definers.application_ml.training import (
+    HybridModel as _HybridModel,
+    LinearRegressionTorch as _LinearRegressionTorch,
+    feed as _feed,
+    fit as _fit,
+    initialize_linear_regression as _initialize_linear_regression,
+    linear_regression as _linear_regression,
+    train_linear_regression as _train_linear_regression,
+)
+
+try:
+    from definers.audio import (
+        features_to_audio,
+        normalize_audio_to_peak,
+        predict_audio,
+        separate_stems,
+        stem_mixer,
+    )
+except Exception:
+    features_to_audio = None
+    normalize_audio_to_peak = None
+    predict_audio = None
+    separate_stems = None
+    stem_mixer = None
 from definers.constants import (
     MODELS,
     PROCESSORS,
-    SYSTEM_MESSAGE,
     TOKENIZERS,
-    general_positive_prompt,
-    beam_kwargs,
     common_audio_formats,
-    higher_beams,
-    iio_formats,
     language_codes,
     tasks,
 )
-from definers.cuda import device, free, set_cuda_env
-from definers.data import (
-    create_vectorizer,
-    cupy_to_numpy,
-    dtype,
-    get_prediction_file_extension,
-    guess_numpy_type,
-    load_as_numpy,
-    numpy_to_cupy,
-    one_dim_numpy,
-)
-from definers.image import (
-    features_to_image,
-    get_max_resolution,
-    image_resolution,
-    resize_image,
-    save_image,
-)
+
+try:
+    from definers.cuda import device, free, set_cuda_env
+except Exception:
+
+    def device():
+        return "cpu"
+
+    def free(*args, **kwargs):
+        return None
+
+    def set_cuda_env(*args, **kwargs):
+        return None
+
+
+try:
+    from definers.data import (
+        create_vectorizer,
+        cupy_to_numpy,
+        dtype,
+        get_max_shapes,
+        get_prediction_file_extension,
+        guess_numpy_type,
+        load_as_numpy,
+        numpy_to_cupy,
+        one_dim_numpy,
+        reshape_numpy,
+    )
+except Exception:
+    create_vectorizer = None
+    cupy_to_numpy = None
+    dtype = None
+    get_prediction_file_extension = None
+    get_max_shapes = None
+    guess_numpy_type = None
+    load_as_numpy = None
+    numpy_to_cupy = None
+    one_dim_numpy = None
+    reshape_numpy = None
+try:
+    from definers.image import (
+        features_to_image,
+        save_image,
+    )
+except Exception:
+    features_to_image = None
+    save_image = None
 from definers.logger import init_logger
-from definers.system import (
-    add_path,
-    big_number,
-    catch,
-    copy,
-    cores,
-    cwd,
-    delete,
-    directory,
-    exist,
-    full_path,
-    get_ext,
-    get_os_name,
-    is_directory,
-    log,
-    modify_wheel_requirements,
-    move,
-    normalize_path,
-    path_end,
-    path_ext,
-    paths,
-    read,
-    run,
-    secure_path,
-    thread,
-    tmp,
-    wait,
-    write,
-)
-from definers.text import (
-    ai_translate,
-    language,
-    random_string,
-    simple_text,
-    strip_nikud,
-)
-from definers.video import features_to_video, write_video
-from definers.web import download_file, google_drive_download
+
+try:
+    from definers.system import (
+        add_path,
+        big_number,
+        catch,
+        copy,
+        cores,
+        cwd,
+        delete,
+        directory,
+        exist,
+        full_path,
+        get_ext,
+        get_os_name,
+        is_directory,
+        log,
+        modify_wheel_requirements,
+        move,
+        normalize_path,
+        path_end,
+        path_ext,
+        paths,
+        read,
+        run,
+        secure_path,
+        thread,
+        tmp,
+        wait,
+        write,
+    )
+except Exception:
+
+    def _missing_runtime(*args, **kwargs):
+        raise RuntimeError("definers.system is unavailable")
+
+    add_path = _missing_runtime
+    big_number = _missing_runtime
+
+    def catch(*args, **kwargs):
+        return None
+
+    copy = _missing_runtime
+    cores = _missing_runtime
+    cwd = _missing_runtime
+    delete = _missing_runtime
+    directory = _missing_runtime
+    exist = _missing_runtime
+    full_path = _missing_runtime
+    get_ext = _missing_runtime
+    get_os_name = _missing_runtime
+    is_directory = _missing_runtime
+
+    def log(*args, **kwargs):
+        return None
+
+    modify_wheel_requirements = _missing_runtime
+    move = _missing_runtime
+    normalize_path = _missing_runtime
+    path_end = _missing_runtime
+    path_ext = _missing_runtime
+    paths = _missing_runtime
+    read = _missing_runtime
+    run = _missing_runtime
+    secure_path = _missing_runtime
+    thread = _missing_runtime
+    tmp = _missing_runtime
+    wait = _missing_runtime
+    write = _missing_runtime
+try:
+    from definers.text import (
+        random_string,
+        simple_text,
+    )
+except Exception:
+    random_string = None
+    simple_text = None
+try:
+    from definers.video import features_to_video, write_video
+except Exception:
+    features_to_video = None
+    write_video = None
+try:
+    from definers.web import download_file, google_drive_download
+except Exception:
+    download_file = None
+    google_drive_download = None
 
 logger = init_logger()
 
 
+def _answer_runtime_adapter():
+    return SimpleNamespace(MODELS=MODELS, PROCESSORS=PROCESSORS)
+
+
+def _linear_regression_runtime_adapter():
+    return SimpleNamespace(device=device)
+
+
+def _train_linear_regression_runtime_adapter():
+    return SimpleNamespace(
+        device=device,
+        initialize_linear_regression=initialize_linear_regression,
+    )
+
+
+def _training_array_adapter():
+    return SimpleNamespace(
+        catch=catch,
+        cupy_to_numpy=cupy_to_numpy,
+        get_max_shapes=get_max_shapes,
+        numpy_to_cupy=numpy_to_cupy,
+        reshape_numpy=reshape_numpy,
+    )
+
+
+def _concatenate_training_rows():
+    cupy_module = getattr(np, "cuda", None)
+    if cupy_module is not None:
+        concatenate = getattr(cupy_module, "cupy", None)
+        if concatenate is not None:
+            concatenate = getattr(concatenate, "concatenate", None)
+            if concatenate is not None:
+                return concatenate
+    return np.concatenate
+
+
+def map_reduce_summary(text, max_words):
+    from definers.application_ml.text_generation import (
+        map_reduce_summary as _map_reduce_summary,
+    )
+
+    return _map_reduce_summary(text, max_words)
+
+
+def optimize_prompt_realism(prompt):
+    from definers.application_ml.text_generation import (
+        optimize_prompt_realism as _optimize_prompt_realism,
+    )
+
+    return _optimize_prompt_realism(prompt)
+
+
+def preprocess_prompt(prompt):
+    from definers.application_ml.text_generation import (
+        preprocess_prompt as _preprocess_prompt,
+    )
+
+    return _preprocess_prompt(prompt)
+
+
+def summarize(text_to_summarize):
+    from definers.application_ml.text_generation import summarize as _summarize
+
+    return _summarize(text_to_summarize)
+
+
+def summary(text, max_words=20, min_loops=1):
+    from definers.application_ml.text_generation import summary as _summary
+
+    return _summary(text, max_words=max_words, min_loops=min_loops)
+
+
 def answer(history: list):
-    from PIL import Image
-
-    import definers as _d
-
-    try:
-        import librosa
-    except Exception:
-        librosa = None
-    try:
-        import soundfile as sf
-    except Exception:
-        sf = None
-
-    img_list = []
-    snd_list = []
-    alt_history = [{"role": "system", "content": _d.SYSTEM_MESSAGE}]
-    add_role = None
-    required_lang = "en"
-
-    def _normalize_text(text):
-        try:
-            content_lang = language(text)
-        except Exception:
-            return text
-        if content_lang != required_lang:
-            try:
-                return ai_translate(text, lang=required_lang)
-            except Exception:
-                return text
-        return text
-
-    history_len = len(history)
-    for history_index in range(history_len):
-        h = history[history_index]
-        content = h["content"]
-        role = h["role"]
-        is_text = bool(
-            not isinstance(content, dict) and (not isinstance(content, tuple))
-        )
-        add_content = ""
-        if is_text:
-            add_content = _normalize_text(content)
-        else:
-            ps = []
-            if isinstance(content, dict):
-                ps = [content["path"]]
-            else:
-                ps = [c["path"] for c in content if isinstance(c, dict)]
-            for p in ps:
-                ext = get_ext(p)
-                if ext in _d.common_audio_formats:
-                    loaded_audio = None
-                    if sf is not None:
-                        try:
-                            loaded_audio = sf.read(p)
-                        except Exception:
-                            loaded_audio = None
-                    if loaded_audio is None and librosa is not None:
-                        try:
-                            aud = audio_preview(file_path=p, max_duration=16)
-                            source = aud if aud else p
-                            loaded_audio = librosa.load(
-                                source, sr=16000, mono=True
-                            )
-                        except Exception:
-                            loaded_audio = None
-                    if loaded_audio is not None:
-                        snd_list.append(loaded_audio)
-                        add_content += f" <|audio_{str(len(snd_list))}|>"
-                elif ext in _d.iio_formats:
-                    try:
-                        img = Image.open(p)
-                    except Exception:
-                        try:
-                            shape = image_resolution(p)
-                            if (
-                                isinstance(shape, tuple)
-                                and len(shape) >= 2
-                                and shape[0] > 0
-                                and shape[1] > 0
-                            ):
-                                (w, h) = shape[:2]
-                                (w2, h2) = get_max_resolution(
-                                    w, h, mega_pixels=0.25
-                                )
-                                if w2 > w:
-                                    resized = resize_image(p, w, h)
-                                    if isinstance(resized, tuple):
-                                        img = resized[1]
-                                    else:
-                                        img = resized
-                                else:
-                                    img = Image.open(p)
-                            else:
-                                img = None
-                        except Exception:
-                            img = None
-                    if img is not None:
-                        img_list.append(img)
-                        add_content += f" <|image_{str(len(img_list))}|>"
-                else:
-                    content = read(p)
-                    content = _normalize_text(content)
-                    add_content += "\n\n" + content
-        if add_role != role:
-            add_role = role
-            alt_history.append(
-                {"role": add_role, "content": add_content.strip()}
-            )
-            continue
-        alt_history[-1]["content"] += "\n\n" + add_content
-        alt_history[-1]["content"] = alt_history[-1]["content"].strip()
-
-    processor = _d.PROCESSORS.get("answer")
-    model = _d.MODELS.get("answer")
-    if model is None:
-        return None
-
-    if processor is None:
-        prompt = (
-            "".join(
-                [
-                    f"<|{msg['role']}|>{msg['content']}<|end|>"
-                    for msg in alt_history
-                ]
-            )
-            + "<|assistant|>"
-        )
-        generate_kwargs = {
-            "prompt": prompt,
-            "max_length": 200,
-            "beam_width": 16,
-        }
-        if img_list:
-            generate_kwargs["images"] = img_list
-        if snd_list:
-            generate_kwargs["audios"] = snd_list
-        return model.generate(**generate_kwargs)
-
-    prompt = processor.tokenizer.apply_chat_template(
-        alt_history, tokenize=False, add_generation_prompt=True
-    )
-    inputs = processor(
-        text=prompt,
-        images=img_list if img_list else None,
-        audios=snd_list if snd_list else None,
-        return_tensors="pt",
-    )
-    inputs = inputs.to(device())
-    generate_ids = model.generate(
-        **inputs, **beam_kwargs, max_length=4096, num_logits_to_keep=1
-    )
-    output_ids = generate_ids[:, inputs["input_ids"].shape[1] :]
-    response = processor.batch_decode(
-        output_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
-    )[0]
-    return response
+    return _answer(history, runtime=_answer_runtime_adapter())
 
 
 def linear_regression(X, y, learning_rate=0.01, epochs=50):
-    import numpy as np
-
-    (m, n) = X.shape
-    if epochs <= 0:
-        return (np.zeros(n), 0)
-    if n > 1:
-        weights = np.linalg.lstsq(X, y, rcond=None)[0]
-        return (weights, 0.0)
-    X_aug = np.concatenate([X, np.ones((m, 1))], axis=1)
-    params = np.linalg.lstsq(X_aug, y, rcond=None)[0]
-    weights = params[:-1]
-    bias = float(params[-1])
-    return (weights, bias)
+    return _linear_regression(
+        X,
+        y,
+        learning_rate=learning_rate,
+        epochs=epochs,
+    )
 
 
 def initialize_linear_regression(input_dim, model_path):
-    import torch
-
-    import definers as _d
-    from definers.system import secure_path
-
-    try:
-        model_path = secure_path(model_path)
-    except Exception as e:
-        logger.error(f"Unsafe linear-regression model path: {e}")
-        return _d.LinearRegressionTorch(input_dim)
-
-    model_exists = os.path.exists(model_path)
-    model_torch = _d.LinearRegressionTorch(input_dim)
-    if model_exists:
-        model_torch.load_state_dict(torch.load(model_path))
-        logger.info("Loaded existing model.")
-    else:
-        logger.info("Created new model.")
-    if hasattr(model_torch, "cuda"):
-        model_torch.cuda()
-    else:
-        model_torch.to(device())
-    return model_torch
+    return _initialize_linear_regression(
+        input_dim,
+        model_path,
+        runtime=_linear_regression_runtime_adapter(),
+        factory=_LinearRegressionTorch,
+        logger=logger.info,
+    )
 
 
 def train_linear_regression(X, y, model_path, learning_rate=0.01):
-    from unittest.mock import MagicMock
-
-    import torch
-
-    import definers as _d
-
-    model_torch = _d.initialize_linear_regression(X.shape[1], model_path)
-    criterion = torch.nn.MSELoss()
-    optimizer = torch.optim.SGD(model_torch.parameters(), lr=learning_rate)
-    d = _d.device()
-    X_torch = torch.tensor(X, dtype=torch.float32, device=d)
-    y_torch = torch.tensor(y, dtype=torch.float32, device=d)
-    y_pred = model_torch(X_torch).squeeze()
-    if hasattr(criterion, "return_value"):
-        backward_attr = getattr(criterion.return_value, "backward", None)
-        if not hasattr(backward_attr, "assert_called_once"):
-            criterion.return_value = MagicMock()
-    loss = criterion(y_pred, y_torch)
-    optimizer.zero_grad()
-    loss.backward()
-    optimizer.step()
-    torch.save(model_torch.state_dict(), model_path)
-    logger.info("Model saved.")
-    return model_torch
+    return _train_linear_regression(
+        X,
+        y,
+        model_path,
+        learning_rate=learning_rate,
+        runtime=_train_linear_regression_runtime_adapter(),
+    )
 
 
 def init_model_file(task: str, turbo: bool = True, model_type: str = None):
-    import pickle
+    from definers.application_ml.repository_sync import (
+        init_model_file as _init_model_file,
+    )
 
-    import joblib
-    import onnxruntime
-    import torch
-    from safetensors.torch import load_file
-
-    from definers.system import secure_path
-
-    free()
-    global MODELS
-    model_path = task
-    if task in tasks:
-        model_path = tasks[task]
-    if not model_type:
-        model_type = get_ext(model_path)
-    model_type = model_type.lower()
-
-    if model_path.startswith("https://") or model_path.startswith("https://"):
-        temp_model_path = tmp(model_type, keep=False)
-        model_path = download_file(model_path, temp_model_path)
-    try:
-        model_path = secure_path(model_path)
-        model = None
-        supported_types = ["onnx", "pkl", "pt", "pth", "safetensors", "joblib"]
-        if model_type not in supported_types:
-            logger.error(
-                f'Error: Model type "{model_type}" is not supported. Must be one of {supported_types}'
-            )
-            return None
-        logger.info(
-            f"Attempting to load a {model_type.upper()} model from: {model_path}"
-        )
-        if model_type == "joblib":
-            model = joblib.load(model_path)
-        elif model_type == "onnx":
-            model = onnxruntime.InferenceSession(model_path)
-        elif model_type == "pkl":
-            with open(model_path, "rb") as f:
-                model = pickle.load(f)
-        elif model_type in ["pt", "pth", "safetensors"]:
-            if model_type in ["pt", "pth"]:
-                model = torch.load(model_path, map_location=device())
-            else:
-                model = load_file(model_path, map_location=device())
-            if hasattr(model, "eval"):
-                model.eval()
-                logger.info("Model set to evaluation mode.")
-        if turbo:
-            try:
-                model.vae.enable_slicing()
-            except:
-                pass
-            try:
-                model.vae.enable_tiling()
-            except:
-                pass
-            optimizations = [
-                "enable_vae_slicing",
-                "enable_vae_tiling",
-                "enable_model_cpu_offload",
-                "enable_sequential_cpu_offload",
-                "enable_attention_slicing",
-            ]
-            for opt in optimizations:
-                try:
-                    if opt == "enable_attention_slicing":
-                        getattr(model, opt)(1)
-                    else:
-                        getattr(model, opt)()
-                except AttributeError:
-                    pass
-                except Exception as e:
-                    logger.warning(f"Could not apply optimization {opt}: {e}")
-        logger.info("✅ Model loaded successfully.")
-        MODELS[task] = model
-    except FileNotFoundError:
-        logger.error(f"Error: The file was not found at '{model_path}'")
-        return None
-    except Exception as e:
-        logger.error(
-            f"An unexpected error occurred while loading the model: {e}"
-        )
-        return None
-    finally:
-        free()
+    return _init_model_file(task, turbo=turbo, model_type=model_type)
 
 
 def kmeans_k_suggestions(X, k_range=range(2, 20), random_state=None):
-    import definers as _d
+    try:
+        from cuml.cluster import KMeans as cluster_factory
+    except Exception:
+        from sklearn.cluster import KMeans as cluster_factory
+
+    from sklearn.metrics import (
+        calinski_harabasz_score,
+        davies_bouldin_score,
+        silhouette_score,
+    )
 
     wcss_values = {}
     silhouette_scores = {}
@@ -430,8 +330,8 @@ def kmeans_k_suggestions(X, k_range=range(2, 20), random_state=None):
     suggested_k_davies_bouldin = None
     suggested_k_calinski_harabasz = None
     final_suggestion_k = None
-    kmeans_lib = _d.KMeans
-    is_cupy_available = "cupy" in str(type(getattr(_d, "np", np))).lower()
+    kmeans_lib = cluster_factory
+    is_cupy_available = getattr(np, "__name__", "").lower() == "cupy"
     if is_cupy_available and (kmeans_lib is not None):
         print(
             "GPU acceleration with CuPy (cuML) is available and will be used."
@@ -440,11 +340,7 @@ def kmeans_k_suggestions(X, k_range=range(2, 20), random_state=None):
         print(
             "Warning: CuPy (cuML) is unavailable, falling back to CPU with scikit-learn KMeans."
         )
-    if kmeans_lib is None:
-        from sklearn.cluster import KMeans as _SkKMeans
-
-        kmeans_lib = _SkKMeans
-    X_array = _d.np.asarray(X) if hasattr(_d, "np") else np.asarray(X)
+    X_array = np.asarray(X)
     if len(k_range) < 2:
         return {
             "wcss": wcss_values,
@@ -472,22 +368,11 @@ def kmeans_k_suggestions(X, k_range=range(2, 20), random_state=None):
         numpy_labels = np.asnumpy(labels) if is_cupy_available else labels
         numpy_X = np.asnumpy(X_array) if is_cupy_available else X_array
         wcss_values[k] = kmeans.inertia_
-        silhouette_fn = getattr(_d, "silhouette_score", None)
-        db_fn = getattr(_d, "davies_bouldin_score", None)
-        ch_fn = getattr(_d, "calinski_harabasz_score", None)
-        if silhouette_fn is None or db_fn is None or ch_fn is None:
-            from sklearn.metrics import (
-                calinski_harabasz_score as _ch,
-                davies_bouldin_score as _db,
-                silhouette_score as _sil,
-            )
-
-            silhouette_fn = _sil
-            db_fn = _db
-            ch_fn = _ch
-        silhouette_scores[k] = silhouette_fn(numpy_X, numpy_labels)
-        davies_bouldin_indices[k] = db_fn(numpy_X, numpy_labels)
-        calinski_harabasz_indices[k] = ch_fn(numpy_X, numpy_labels)
+        silhouette_scores[k] = silhouette_score(numpy_X, numpy_labels)
+        davies_bouldin_indices[k] = davies_bouldin_score(numpy_X, numpy_labels)
+        calinski_harabasz_indices[k] = calinski_harabasz_score(
+            numpy_X, numpy_labels
+        )
     wcss_ratios = {}
     if len(k_range) > 2:
         for i in range(len(k_range) - 1):
@@ -532,102 +417,23 @@ def kmeans_k_suggestions(X, k_range=range(2, 20), random_state=None):
 
 
 def fit(model):
-    import definers as _d
-
-    log("Features", model.X_all)
-    try:
-        if hasattr(model, "y_all"):
-            log("Labels", model.y_all)
-            max_lens = _d.get_max_shapes(model.X_all, model.y_all)
-            X_all = _d.numpy_to_cupy(
-                _d.reshape_numpy(
-                    _d.cupy_to_numpy(model.X_all), lengths=max_lens
-                )
-            )
-            y_all = _d.numpy_to_cupy(
-                _d.reshape_numpy(
-                    _d.cupy_to_numpy(model.y_all), lengths=max_lens
-                )
-            )
-            log(
-                "Fitting Supervised model...",
-                f"Features shape: {model.X_all.shape}",
-            )
-            model.fit(X_all, y_all)
-        else:
-            max_lens = _d.get_max_shapes(model.X_all)
-            X_all = _d.numpy_to_cupy(
-                _d.reshape_numpy(
-                    _d.cupy_to_numpy(model.X_all), lengths=max_lens
-                )
-            )
-            log(
-                "Fitting Unsupervised model...",
-                f"Features shape: {model.X_all.shape}",
-            )
-            model.fit(X_all)
-    except Exception as e:
-        catch(e)
-        try:
-            if hasattr(model, "y_all"):
-                model.fit(model.X_all, model.y_all)
-            else:
-                model.fit(model.X_all)
-        except Exception as e2:
-            _d.catch(e2)
-    return model
+    return _fit(
+        model,
+        array_adapter=_training_array_adapter(),
+        logger=log,
+        error_handler=catch,
+    )
 
 
 def feed(model, X_new, y_new=None, epochs=1):
-    import definers as _d
-
-    if model is None:
-        model = _d.HybridModel()
-    if y_new is None:
-        current_X = model.X_all if hasattr(model, "X_all") else None
-        if current_X is not None and "unittest.mock" in str(type(current_X)):
-            current_X = None
-        if current_X is not None and (not hasattr(current_X, "shape")):
-            current_X = None
-        for epoch in range(epochs):
-            log(f"Feeding epoch {epoch + 1} X", X_new)
-        if current_X is None:
-            if epochs <= 1:
-                current_X = X_new
-            else:
-                current_X = np.concatenate([X_new] * epochs, axis=0)
-        else:
-            for _ in range(epochs):
-                current_X = np.concatenate((current_X, X_new), axis=0)
-        model.X_all = current_X
-    else:
-        current_X = model.X_all if hasattr(model, "X_all") else None
-        current_y = model.y_all if hasattr(model, "y_all") else None
-        if current_X is not None and "unittest.mock" in str(type(current_X)):
-            current_X = None
-        if current_y is not None and "unittest.mock" in str(type(current_y)):
-            current_y = None
-        if current_X is not None and (not hasattr(current_X, "shape")):
-            current_X = None
-        if current_y is not None and (not hasattr(current_y, "shape")):
-            current_y = None
-        for epoch in range(epochs):
-            log(f"Feeding epoch {epoch + 1} X", X_new)
-            log(f"Feeding epoch {epoch + 1} y", y_new)
-        if current_X is None:
-            if epochs <= 1:
-                current_X = X_new
-                current_y = y_new
-            else:
-                current_X = np.concatenate([X_new] * epochs, axis=0)
-                current_y = np.concatenate([y_new] * epochs, axis=0)
-        else:
-            for _ in range(epochs):
-                current_X = np.concatenate((current_X, X_new), axis=0)
-                current_y = np.concatenate((current_y, y_new), axis=0)
-        model.X_all = current_X
-        model.y_all = current_y
-    return model
+    return _feed(
+        model,
+        X_new,
+        y_new,
+        epochs=epochs,
+        logger=log,
+        concatenate=_concatenate_training_rows(),
+    )
 
 
 from definers.constants import MAX_CONSECUTIVE_SPACES, MAX_INPUT_LENGTH
@@ -663,22 +469,35 @@ def train(
 ):
     import joblib
 
-    import definers as _d
-    from definers.system import secure_path
-
-    tokenizer = _d.init_tokenizer()
-
-    if _d.check_parameter(remote_src):
-        remote_src = _validate_str_param("remote_src", remote_src)
-    got_inp = _d.check_parameter(features) or _d.check_parameter(remote_src)
-
-    if _d.check_parameter(selected_rows):
-        selected_rows = _validate_str_param("selected_rows", selected_rows)
-    is_supv = _d.check_parameter(dataset_label_columns) or _d.check_parameter(
-        labels
+    from definers.application_data.arrays import numpy_to_cupy
+    from definers.application_data.loaders import (
+        drop_columns,
+        fetch_dataset,
+        files_to_dataset,
+        select_rows,
+        split_columns,
     )
+    from definers.application_data.preparation import (
+        pad_sequences,
+        prepare_data,
+        to_loader,
+    )
+    from definers.application_data.tokenization import (
+        init_tokenizer,
+        tokenize_and_pad,
+    )
+    from definers.system import log, secure_path
+
+    if check_parameter(remote_src):
+        remote_src = _validate_str_param("remote_src", remote_src)
+    got_inp = check_parameter(features) or check_parameter(remote_src)
+
+    if check_parameter(selected_rows):
+        selected_rows = _validate_str_param("selected_rows", selected_rows)
+    is_supv = check_parameter(dataset_label_columns) or check_parameter(labels)
+    tokenizer = init_tokenizer()
     model = None
-    if _d.check_parameter(model_path):
+    if check_parameter(model_path):
         try:
             model_path = secure_path(model_path)
         except Exception as e:
@@ -689,38 +508,36 @@ def train(
         if model is None:
             logging.error(f"Could not load model from {model_path}")
             return None
-    model_path = f"model_{_d.random_string()}.joblib"
+    model_path = f"model_{random_string()}.joblib"
     if not got_inp:
         return None
 
     loaders = []
-    if _d.check_parameter(selected_rows):
+    if check_parameter(selected_rows):
         selected_rows = _validate_str_param("selected_rows", selected_rows)
-        if _d.check_parameter(remote_src):
-            dataset = _d.fetch_dataset(remote_src, url_type, revision)
+        if check_parameter(remote_src):
+            dataset = fetch_dataset(remote_src, url_type, revision)
         else:
-            dataset = _d.files_to_dataset(features, labels)
-        dataset = _d.drop_columns(dataset, drop_list)
-        _d.log("Full dataset length", len(dataset))
+            dataset = files_to_dataset(features, labels)
+        dataset = drop_columns(dataset, drop_list)
+        log("Full dataset length", len(dataset))
         selected_rows = simple_text(selected_rows).split()
         for part in selected_rows:
             if "-" in part:
                 start_end = part.split("-")
                 loaders.append(
-                    _d.to_loader(
-                        _d.select_rows(
+                    to_loader(
+                        select_rows(
                             dataset, int(start_end[0]) - 1, int(start_end[-1])
                         )
                     )
                 )
             else:
                 loaders.append(
-                    _d.to_loader(
-                        _d.select_rows(dataset, int(part) - 1, int(part))
-                    )
+                    to_loader(select_rows(dataset, int(part) - 1, int(part)))
                 )
     else:
-        td = _d.prepare_data(
+        td = prepare_data(
             remote_src=remote_src,
             features=features,
             labels=labels,
@@ -746,20 +563,18 @@ def train(
         except Exception:
             dataset_len = None
         if dataset_len is not None:
-            _d.log("Full dataset length", dataset_len)
+            log("Full dataset length", dataset_len)
     if is_supv:
         for l, loader in enumerate(loaders):
             logger.info(f"Loader {l + 1}")
             for i, b in enumerate(loader):
                 logger.info(f"Batch {i + 1}: {b}")
-                (X, y) = _d.split_columns(
-                    b, dataset_label_columns, is_batch=True
-                )
-                X = _d.tokenize_and_pad(X, tokenizer)
-                y = _d.tokenize_and_pad(y, tokenizer)
-                X = _d.pad_sequences(X)
-                X = _d.numpy_to_cupy(X)
-                y = _d.numpy_to_cupy(y)
+                (X, y) = split_columns(b, dataset_label_columns, is_batch=True)
+                X = tokenize_and_pad(X, tokenizer)
+                y = tokenize_and_pad(y, tokenizer)
+                X = pad_sequences(X)
+                X = numpy_to_cupy(X)
+                y = numpy_to_cupy(y)
                 logger.info("Feeding model")
                 model = feed(model, X, y)
     else:
@@ -767,16 +582,16 @@ def train(
             logger.info(f"Loader {l + 1}")
             for i, b in enumerate(loader):
                 logger.info(f"Batch {i + 1}: {b}")
-                X = _d.tokenize_and_pad(b, tokenizer)
-                X = _d.pad_sequences(X)
-                X = _d.numpy_to_cupy(X)
+                X = tokenize_and_pad(b, tokenizer)
+                X = pad_sequences(X)
+                X = numpy_to_cupy(X)
                 logger.info("Feeding model")
                 model = feed(model, X)
     logger.info("Fitting model")
     fit(model)
     try:
         joblib.dump(model, model_path)
-        _d.log("Trained model path", model_path, status=True)
+        log("Trained model path", model_path, status=True)
         return model_path
     except Exception as e:
         print(f"Error saving cuML model: {e}")
@@ -784,152 +599,55 @@ def train(
 
 
 def extract_text_features(text, vectorizer=None):
-    from sklearn.feature_extraction.text import TfidfVectorizer
-
-    try:
-        vectorizer = vectorizer or TfidfVectorizer(
-            token_pattern="(?u)\\b\\w+\\b"
-        )
-        tfidf_matrix = vectorizer.fit_transform([text])
-        features = tfidf_matrix.toarray().flatten().astype(_np.float32)
-        return features
-    except Exception as e:
-        print(f"Error extracting text features: {e}")
-        return None
+    return _extract_text_features(text, vectorizer)
 
 
 def predict_linear_regression(X_new, model_path):
-    import torch
-
-    from definers.system import secure_path
-
-    try:
-        model_path = secure_path(model_path)
-    except Exception as e:
-        print(f"Unsafe model path in predict_linear_regression: {e}")
-        return None
-
-    try:
-        input_dim = X_new.shape[1]
-        model_torch = LinearRegressionTorch(input_dim)
-        model_torch.load_state_dict(torch.load(model_path))
-        model_torch.eval()
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        model_torch.to(device)
-        X_new_torch = torch.tensor(X_new, dtype=torch.float32, device=device)
-        with torch.no_grad():
-            predictions_torch = model_torch(X_new_torch).reshape(-1)
-        predictions_numpy = predictions_torch.cpu().numpy().reshape(-1)
-        return predictions_numpy
-    except Exception as e:
-        print(f"Error during prediction: {e}")
-        return None
+    return _predict_linear_regression(
+        X_new,
+        model_path,
+        factory=_LinearRegressionTorch,
+    )
 
 
 def features_to_text(predicted_features, vectorizer=None, vocabulary=None):
-    from sklearn.feature_extraction.text import TfidfVectorizer
-
-    if vectorizer is None and vocabulary is None:
-        print(
-            "Error generating text from features: Either a vectorizer or a vocabulary must be provided."
-        )
-        raise ValueError(
-            "Either a vectorizer or a vocabulary must be provided."
-        )
-    try:
-        if vectorizer is None:
-            vectorizer = TfidfVectorizer(token_pattern="(?u)\\b\\w+\\b")
-            vectorizer.fit(vocabulary)
-        tfidf_matrix = predicted_features.reshape(1, -1)
-        word_indices = tfidf_matrix.nonzero()[1]
-        feature_names = vectorizer.get_feature_names_out()
-        reconstructed_words = [feature_names[i] for i in word_indices]
-        reconstructed_text = " ".join(reconstructed_words)
-        return reconstructed_text
-    except Exception as e:
-        print(f"Error generating text from features: {e}")
-        return None
+    return _features_to_text(
+        predicted_features,
+        vectorizer=vectorizer,
+        vocabulary=vocabulary,
+    )
 
 
 def lang_code_to_name(code):
-    if code in language_codes:
-        return language_codes[code]
-    lower_code = code.lower()
-    if lower_code in language_codes:
-        return language_codes[lower_code]
-    raise KeyError(code)
+    from definers.application_ml.introspection import (
+        lang_code_to_name as _lang_code_to_name,
+    )
+
+    return _lang_code_to_name(code)
 
 
 def find_latest_rvc_checkpoint(folder_path: str, model_name: str) -> str | None:
-    from definers.system import secure_path
-
-    logger.info(
-        f"Searching for latest checkpoint in '{folder_path}' with model name '{model_name}'"
+    from definers.application_ml.rvc import (
+        find_latest_rvc_checkpoint as _find_latest_rvc_checkpoint,
     )
-    try:
-        folder_path = secure_path(folder_path)
-    except Exception as e:
-        logger.error(f"Invalid checkpoint folder: {e}")
-        return None
-    if not is_directory(folder_path):
-        logger.error(f"Error: Folder not found at {folder_path}")
-        return None
-    pattern = re.compile(f"^{re.escape(model_name)}_e(\\d+)_s(\\d+)\\.pth$")
-    latest_checkpoint = None
-    latest_epoch = -1
-    latest_global_step = -1
-    try:
-        for filename in os.listdir(folder_path):
-            match = pattern.match(filename)
-            if match:
-                epoch = int(match.group(1))
-                global_step = int(match.group(2))
-                if epoch > latest_epoch:
-                    latest_epoch = epoch
-                    latest_global_step = global_step
-                    latest_checkpoint = filename
-                elif epoch == latest_epoch and global_step > latest_global_step:
-                    latest_global_step = global_step
-                    latest_checkpoint = filename
-    except Exception as e:
-        logger.error(
-            f"An error occurred while scanning the folder for checkpoints: {e}"
-        )
-        return None
-    if latest_checkpoint:
-        logger.info(f"Latest checkpoint found: {latest_checkpoint}")
-    else:
-        logger.warning(
-            f"No checkpoint found matching the pattern in '{folder_path}'"
-        )
-    return latest_checkpoint
+
+    return _find_latest_rvc_checkpoint(folder_path, model_name)
 
 
 def get_cluster_content(model, cluster_index):
-    if not hasattr(model, "labels_"):
-        raise ValueError("Model must be a trained KMeans model.")
-    cluster_labels = model.labels_
-    cluster_contents = {}
-    for i, label in enumerate(cluster_labels):
-        if label not in cluster_contents:
-            cluster_contents[label] = []
-        cluster_contents[label].append(model.x_all[i])
-    if cluster_index in cluster_contents:
-        return cluster_contents[cluster_index]
-    return None
+    from definers.application_ml.introspection import (
+        get_cluster_content as _get_cluster_content,
+    )
+
+    return _get_cluster_content(model, cluster_index)
 
 
 def is_clusters_model(model):
-    if model is None or isinstance(model, (str, bytes)):
-        return False
-    try:
-        model_vars = vars(model)
-    except Exception:
-        return False
-    return (
-        "cluster_centers_" in model_vars
-        and model_vars["cluster_centers_"] is not None
+    from definers.application_ml.introspection import (
+        is_clusters_model as _is_clusters_model,
     )
+
+    return _is_clusters_model(model)
 
 
 def build_faiss():
@@ -1038,50 +756,6 @@ def build_faiss():
         catch(f"File not found error: {e}")
     except Exception as e:
         catch(f"An unexpected error occurred: {e}")
-
-
-def summarize(text_to_summarize):
-    prefix = "summarize: "
-    encoded = TOKENIZERS["summary"](
-        prefix + text_to_summarize,
-        return_tensors="pt",
-        truncation=True,
-        max_length=512,
-    )
-    encoded = {key: tensor.to(device()) for (key, tensor) in encoded.items()}
-    _beam_kwargs = beam_kwargs
-    _beam_kwargs["num_beams"] = higher_beams
-    gen = MODELS["summary"].generate(**encoded, **_beam_kwargs, max_length=512)
-    return TOKENIZERS["summary"].decode(gen[0], skip_special_tokens=True)
-
-
-def map_reduce_summary(text, max_words):
-    chunk_size = 60
-    overlap = 10
-    while len(text.split()) > max_words:
-        words = text.split()
-        chunk_summaries = []
-        for i in range(0, len(words), chunk_size - overlap):
-            chunk_text = " ".join(words[i : i + chunk_size])
-            chunk_summary = summarize(chunk_text)
-            chunk_summaries.append(chunk_summary)
-        text = " ".join(chunk_summaries)
-    final_summary = summarize(text)
-    return final_summary
-
-
-def summary(text, max_words=20, min_loops=1):
-    text = strip_nikud(text)
-    words_count = len(text.split())
-    while words_count > max_words or min_loops > 0:
-        if words_count > 80:
-            text = map_reduce_summary(text, max_words)
-        else:
-            text = summarize(text)
-        min_loops = min_loops - 1
-        words_count = len(text.split())
-    log("Summary", text)
-    return text
 
 
 def predict(prediction_file: str, model_path: str | list):
@@ -1263,7 +937,11 @@ def init_model_repo(task: str, turbo: bool = True):
                 git("YaronKoresh", "definers rvc files")
                 log("RVC initialization", "Initialization complete.", True)
             else:
-                log("RVC initialization", "RVC files already exist, skipping initialization.", True)
+                log(
+                    "RVC initialization",
+                    "RVC files already exist, skipping initialization.",
+                    True,
+                )
         return None
     elif task in ["speech-recognition"]:
         from transformers import pipeline
@@ -1525,21 +1203,6 @@ def choose_random_words(word_list, num_words=10):
     return chosen_words
 
 
-def optimize_prompt_realism(prompt):
-    prompt = preprocess_prompt(prompt)
-    prompt = f"{prompt}, {general_positive_prompt}, {general_positive_prompt}."
-    return prompt
-
-
-def preprocess_prompt(prompt):
-    if language(prompt) != "en":
-        prompt = ai_translate(prompt)
-    prompt = simple_text(prompt)
-    prompt = summary(prompt, max_words=14)
-    prompt = simple_text(prompt)
-    return prompt
-
-
 def pipe(
     task: str,
     *a,
@@ -1624,62 +1287,10 @@ def check_parameter(p):
     )
 
 
-class HybridModel:
-    def __init__(self):
-        self.model = None
-
-    def fit(self, X, y=None):
-        if y is not None:
-            from cuml.linear_model import LinearRegression as cuLinearRegression
-
-            if self.model is None:
-                self.model = cuLinearRegression()
-            start_train = time()
-            self.model.fit(X, y)
-            if hasattr(np, "cuda"):
-                np.cuda.runtime.deviceSynchronize()
-            end_train = time()
-            train_time = end_train - start_train
-            print(f"Train Time: {train_time:.4f} seconds")
-        else:
-            from cuml.cluster import KMeans as cuKMeans
-
-            if self.model is None:
-                self.model = cuKMeans(n_clusters=32768)
-            start_train = time()
-            self.model.fit(X)
-            if hasattr(np, "cuda"):
-                np.cuda.runtime.deviceSynchronize()
-            end_train = time()
-            train_time = end_train - start_train
-            print(f"Train Time: {train_time:.4f} seconds")
-
-    def predict(self, X):
-        if self.model is None:
-            raise ValueError("Model must be trained before prediction.")
-        start_predict = time()
-        predictions = self.model.predict(X)
-        if hasattr(np, "cuda"):
-            np.cuda.runtime.deviceSynchronize()
-        end_predict = time()
-        predict_time = end_predict - start_predict
-        predictions = cupy_to_numpy(predictions)
-        print(f"Predict Time: {predict_time:.4f} seconds")
-        return predictions
+HybridModel = _HybridModel
 
 
-def LinearRegressionTorch(input_dim):
-    import torch
-
-    class _LinearRegressionTorch(torch.nn.Module):
-        def __init__(self, input_dim):
-            super().__init__()
-            self.linear = torch.nn.Linear(input_dim, 1)
-
-        def forward(self, x):
-            return self.linear(x)
-
-    return _LinearRegressionTorch(input_dim)
+LinearRegressionTorch = _LinearRegressionTorch
 
 
 def SklearnWrapper(sklearn_model, is_classification=False):
@@ -1751,12 +1362,16 @@ def rvc_to_onnx(model_path):
         google_drive_download(
             id="1kqMYQskvVKwKglcWQsK2Q5G3yPahnbtH", dest="./infer.zip"
         )
-    
+
     try:
         init_pretrained_model("svc")
         from .infer.modules.onnx.export import export_onnx
     except ImportError as ie:
-        log("Import Error", "Failed to import ONNX export function", status=False)
+        log(
+            "Import Error",
+            "Failed to import ONNX export function",
+            status=False,
+        )
         catch(ie)
         return None
     except Exception as e:
@@ -1770,7 +1385,7 @@ def rvc_to_onnx(model_path):
     except Exception as e:
         log("An error occurred during ONNX export!", status="")
         catch(e)
-    
+
     return None
 
 
@@ -2651,10 +2266,6 @@ def get_model_instructions(task: str, model_type: str) -> str:
             )
     final_report = _generate_report()
     log(f"Deep Dive Analysis for '{task}'", final_report)
-
-
-def generate_song(_arg1, _arg):
-    print("songs generation is not implemented yet...")
 
 
 def infer(task: str, inference_file: str, model_type: str = None):

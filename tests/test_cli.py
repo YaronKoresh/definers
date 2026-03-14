@@ -2,9 +2,8 @@ import os
 import subprocess
 import sys
 
-import pytest
-
 from definers import __version__
+from definers.cli import main as cli_main
 
 
 def run_cli(args, monkeypatch=None):
@@ -16,7 +15,7 @@ def run_cli(args, monkeypatch=None):
     sys.stderr = StringIO()
     try:
         try:
-            code = __import__("definers.cli").cli.main(args)
+            code = cli_main(args)
         except SystemExit as e:
             code = e.code
     finally:
@@ -87,3 +86,16 @@ def test_unknown_command():
     code, out = run_cli(["nope"])
     assert code != 0
     assert "unknown command" in out.lower()
+
+
+def test_start_dispatch_uses_registry_resolution(monkeypatch):
+    import definers.chat as chat
+
+    called = []
+
+    monkeypatch.setattr(chat, "_gui_chat", lambda: called.append("chat") or 0)
+
+    code, out = run_cli(["chat"])
+
+    assert code == 0
+    assert called == ["chat"]

@@ -2,38 +2,49 @@ import sys
 import unittest
 from unittest.mock import patch
 
-from definers import run
+from definers.system import run
 
 
 class TestRun(unittest.TestCase):
-    @patch("definers.run_windows")
-    def test_run_on_windows(self, mock_run_windows):
+    @patch("definers.system.get_infrastructure_services")
+    def test_run_on_windows(self, mock_get_infrastructure_services):
         with patch.object(sys, "platform", "win32"):
             command = "dir"
             silent = True
             env = {"TEST_ENV": "123"}
             run(command, silent=silent, env=env)
-            mock_run_windows.assert_called_once_with(
+            mock_get_infrastructure_services.return_value.processes.run.assert_called_once_with(
                 command, silent=silent, env=env
             )
 
-    @patch("definers.run_linux")
-    def test_run_on_linux(self, mock_run_linux):
+    @patch("definers.system.get_infrastructure_services")
+    def test_run_on_windows_normalizes_missing_env(
+        self, mock_get_infrastructure_services
+    ):
+        with patch.object(sys, "platform", "win32"):
+            command = "dir"
+            run(command)
+            mock_get_infrastructure_services.return_value.processes.run.assert_called_once_with(
+                command, silent=False, env={}
+            )
+
+    @patch("definers.system.get_infrastructure_services")
+    def test_run_on_linux(self, mock_get_infrastructure_services):
         with patch.object(sys, "platform", "linux"):
             command = "ls"
             silent = False
             env = {"TEST_ENV": "abc"}
             run(command, silent=silent, env=env)
-            mock_run_linux.assert_called_once_with(
+            mock_get_infrastructure_services.return_value.processes.run.assert_called_once_with(
                 command, silent=silent, env=env
             )
 
-    @patch("definers.run_linux")
-    def test_run_on_darwin(self, mock_run_linux):
+    @patch("definers.system.get_infrastructure_services")
+    def test_run_on_darwin(self, mock_get_infrastructure_services):
         with patch.object(sys, "platform", "darwin"):
             command = "ls -l"
             run(command)
-            mock_run_linux.assert_called_once_with(
+            mock_get_infrastructure_services.return_value.processes.run.assert_called_once_with(
                 command, silent=False, env={}
             )
 

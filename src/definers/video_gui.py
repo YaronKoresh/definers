@@ -1,17 +1,106 @@
-import os
+import importlib
 import tempfile
 
-from definers.audio import analyze_audio, get_color_palette
 from definers.constants import STYLES_DB
 
-from definers.data import init_cupy_numpy
+try:
+    np = importlib.import_module("cupy")
+except Exception:
+    np = importlib.import_module("numpy")
 
-np, _ = init_cupy_numpy()
+
+def _build_custom_element_config(
+    ce_x,
+    ce_y,
+    ce_scale,
+    ce_opacity,
+    ce_text,
+    ce_logo,
+):
+    return {
+        "x": ce_x,
+        "y": ce_y,
+        "scale": ce_scale,
+        "opacity": ce_opacity,
+        "text_content": ce_text,
+        "logo_path": ce_logo,
+    }
+
+
+def _render_composed_frame(
+    t,
+    style,
+    width,
+    height,
+    audio_data,
+    params,
+    reactivity_band,
+    sensitivity,
+    img_array,
+    custom_elem_type,
+    custom_config,
+    active_overlays,
+    post_effects,
+    duration,
+):
+    (rms, is_beat) = get_rms_and_beat(
+        t, audio_data, reactivity_band, sensitivity
+    )
+    frame = render_frame_base(
+        style, t, width, height, audio_data, params, rms, is_beat, img_array
+    )
+    frame = draw_custom_element(
+        frame, custom_elem_type, custom_config, width, height, rms
+    )
+    frame = apply_global_overlays(
+        frame, t, width, height, active_overlays, rms, duration
+    )
+    return apply_post_fx(frame, post_effects, rms)
+
+
+def normalize_audio_payload(audio_data):
+    if not isinstance(audio_data, dict):
+        return {}
+
+    normalized = dict(audio_data)
+    stft = normalized.get("stft")
+    if stft is None:
+        stft = normalized.get("stft_db")
+        if stft is not None:
+            normalized["stft"] = stft
+
+    hop_length = normalized.get("hop_length")
+    if not isinstance(hop_length, int) or hop_length <= 0:
+        normalized["hop_length"] = 1024
+
+    if normalized.get("rms") is None:
+        band_arrays = []
+        for key in ("rms_low", "rms_mid", "rms_high"):
+            band = normalized.get(key)
+            if getattr(band, "size", 0) > 0:
+                band_arrays.append(np.asarray(band))
+        if band_arrays:
+            min_length = min(band.shape[0] for band in band_arrays)
+            normalized["rms"] = np.mean(
+                np.vstack([band[:min_length] for band in band_arrays]), axis=0
+            )
+        elif getattr(stft, "shape", ()) and len(stft.shape) > 1:
+            normalized["rms"] = np.zeros(stft.shape[1], dtype=float)
+        else:
+            normalized["rms"] = np.array([], dtype=float)
+
+    if normalized.get("beat_frames") is None:
+        normalized["beat_frames"] = []
+
+    return normalized
+
 
 def render_frame_base(
     style, t, width, height, audio_data, params, rms, is_beat, img_array=None
 ):
     import cv2
+
+    from definers.audio import get_color_palette
 
     colors = get_color_palette(params["palette"])
     (cx, cy) = (width // 2, height // 2)
@@ -46,14 +135,22 @@ def render_frame_base(
         cv2.circle(frame, (cx, cy), radius, colors[2], 4)
     elif style == "Spectrum Bars":
         frame[:] = (10, 10, 15)
-        total_frames = audio_data["stft"].shape[1]
-        frame_idx = int(t * audio_data["sr"] / audio_data["hop_length"])
+        stft = audio_data.get("stft")
+        if stft is None or getattr(stft, "size", 0) == 0 or len(stft.shape) < 2:
+            return frame
+        total_frames = stft.shape[1]
+        sr = audio_data.get("sr", 0)
+        hop_length = audio_data.get("hop_length", 1024)
+        if total_frames <= 0 or sr <= 0 or hop_length <= 0:
+            return frame
+        frame_idx = max(0, int(t * sr / hop_length))
         safe_idx = min(frame_idx, total_frames - 1)
-        stft_col = audio_data["stft"][:, safe_idx]
+        stft_col = stft[:, safe_idx]
         num_bars = 64
         bar_w = width // num_bars
         for i in range(num_bars):
-            val = np.mean(stft_col[i * 2 : (i + 1) * 2]) * params["sensitivity"]
+            band = stft_col[i * 2 : (i + 1) * 2]
+            val = np.mean(band) * params["sensitivity"] if band.size else 0.0
             bar_h = int(val * height * 0.8)
             c = colors[i % len(colors)]
             if is_beat and i % 4 == 0:
@@ -118,7 +215,7 @@ def render_frame_base(
     return frame
 
 
-def draw_custom_element(frame, element_type, config, t, width, height, rms):
+def draw_custom_element(frame, element_type, config, width, height, rms):
     import cv2
 
     if element_type == "None":
@@ -187,7 +284,7 @@ def draw_custom_element(frame, element_type, config, t, width, height, rms):
 
 
 def apply_global_overlays(
-    frame, t, width, height, active_features, rms, is_beat, duration
+    frame, t, width, height, active_features, rms, duration
 ):
     import cv2
 
@@ -263,19 +360,42 @@ def apply_post_fx(frame, effects, rms):
 
 
 def get_rms_and_beat(t, adata, reactivity_band, sensitivity):
-    total_frames = adata["stft"].shape[1]
-    frame_idx = int(t * adata["sr"] / adata["hop_length"])
-    safe_idx = min(frame_idx, total_frames - 1)
+    stft = adata.get("stft")
+    if stft is None or getattr(stft, "size", 0) == 0 or len(stft.shape) < 2:
+        return (0.0, False)
+
+    total_frames = stft.shape[1]
+    sr = adata.get("sr", 0)
+    hop_length = adata.get("hop_length", 1024)
+    if total_frames <= 0 or sr <= 0 or hop_length <= 0:
+        return (0.0, False)
+
+    frame_idx = max(0, int(t * sr / hop_length))
+    safe_idx = max(0, min(frame_idx, total_frames - 1))
+
+    def resolve_rms(series_name):
+        series = adata.get(series_name)
+        if series is None or getattr(series, "size", 0) == 0:
+            return 0.0
+        if safe_idx >= len(series):
+            return float(series[-1]) if len(series) else 0.0
+        return float(series[safe_idx])
+
     if reactivity_band == "Low":
-        raw_rms = adata["rms_low"][safe_idx]
+        raw_rms = resolve_rms("rms_low")
     elif reactivity_band == "Mid":
-        raw_rms = adata["rms_mid"][safe_idx]
+        raw_rms = resolve_rms("rms_mid")
     elif reactivity_band == "High":
-        raw_rms = adata["rms_high"][safe_idx]
+        raw_rms = resolve_rms("rms_high")
     else:
-        raw_rms = adata["rms"][safe_idx]
+        raw_rms = resolve_rms("rms")
     rms = raw_rms * sensitivity
-    is_beat = any(abs(frame_idx - bf) < 3 for bf in adata["beat_frames"])
+    try:
+        is_beat = any(
+            abs(frame_idx - bf) < 3 for bf in adata.get("beat_frames", [])
+        )
+    except Exception:
+        is_beat = False
     return (rms, is_beat)
 
 
@@ -302,64 +422,6 @@ def prepare_common_resources(audio, image, resolution):
     return (w, h, img_array, None)
 
 
-def generate_preview_handler(
-    audio,
-    image,
-    style,
-    resolution,
-    sensitivity,
-    reactivity_band,
-    palette,
-    active_overlays,
-    post_effects,
-    custom_elem_type,
-    ce_x,
-    ce_y,
-    ce_scale,
-    ce_opacity,
-    ce_text,
-    ce_logo,
-):
-    import cv2
-
-    (w, h, img_array, error) = prepare_common_resources(
-        audio, image, resolution
-    )
-    if error:
-        return (None, error)
-    try:
-        adata = analyze_audio(audio, duration=10)
-        preview_t = 3.0 if adata["duration"] > 3 else adata["duration"] / 2
-    except Exception as e:
-        return (None, f"Audio Analysis Failed: {e}")
-    params = {"sensitivity": sensitivity, "palette": palette}
-    (rms, is_beat) = get_rms_and_beat(
-        preview_t, adata, reactivity_band, sensitivity
-    )
-    custom_config = {
-        "x": ce_x,
-        "y": ce_y,
-        "scale": ce_scale,
-        "opacity": ce_opacity,
-        "text_content": ce_text,
-        "logo_path": ce_logo,
-    }
-    frame = render_frame_base(
-        style, preview_t, w, h, adata, params, rms, is_beat, img_array
-    )
-    frame = draw_custom_element(
-        frame, custom_elem_type, custom_config, preview_t, w, h, rms
-    )
-    frame = apply_global_overlays(
-        frame, preview_t, w, h, active_overlays, rms, is_beat, adata["duration"]
-    )
-    frame = apply_post_fx(frame, post_effects, rms)
-    return (
-        cv2.cvtColor(frame, cv2.COLOR_BGR2RGB),
-        f"Preview at {preview_t:.2f}s | BPM: {adata['bpm']}",
-    )
-
-
 def generate_video_handler(
     audio,
     image,
@@ -382,65 +444,59 @@ def generate_video_handler(
     import cv2
     from moviepy import AudioFileClip, VideoClip
 
+    from definers.audio import analyze_audio
+
     (w, h, img_array, error) = prepare_common_resources(
         audio, image, resolution
     )
     if error:
         return (None, error)
     print("Analyzing full audio...")
-    adata = analyze_audio(audio)
+    adata = normalize_audio_payload(analyze_audio(audio))
+    duration = adata.get("duration", 0.0)
+    if duration <= 0:
+        return (None, "Audio Analysis Failed: Invalid duration")
     params = {"sensitivity": sensitivity, "palette": palette}
-    custom_config = {
-        "x": ce_x,
-        "y": ce_y,
-        "scale": ce_scale,
-        "opacity": ce_opacity,
-        "text_content": ce_text,
-        "logo_path": ce_logo,
-    }
+    custom_config = _build_custom_element_config(
+        ce_x, ce_y, ce_scale, ce_opacity, ce_text, ce_logo
+    )
 
     def make_frame(t):
-        (rms, is_beat) = get_rms_and_beat(
-            t, adata, reactivity_band, sensitivity
+        frame = _render_composed_frame(
+            t,
+            style,
+            w,
+            h,
+            adata,
+            params,
+            reactivity_band,
+            sensitivity,
+            img_array,
+            custom_elem_type,
+            custom_config,
+            active_overlays,
+            post_effects,
+            duration,
         )
-        frame = render_frame_base(
-            style, t, w, h, adata, params, rms, is_beat, img_array
-        )
-        frame = draw_custom_element(
-            frame, custom_elem_type, custom_config, t, w, h, rms
-        )
-        frame = apply_global_overlays(
-            frame, t, w, h, active_overlays, rms, is_beat, adata["duration"]
-        )
-        frame = apply_post_fx(frame, post_effects, rms)
         return cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-    clip = VideoClip(make_frame, duration=adata["duration"])
+    clip = VideoClip(make_frame, duration=duration)
     clip = clip.with_audio(AudioFileClip(audio))
 
-    tmp = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
-    output = tmp.name
+    temp_file = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+    output = temp_file.name
+    temp_file.close()
 
-    try:
-        tmp.close()
-
-        print("Rendering...")
-        clip.write_videofile(
-            output,
-            fps=fps,
-            codec="libx264",
-            audio_codec="aac",
-            preset="ultrafast",
-            logger=None,
-        )
-        return (output, f"Render Complete! Duration: {adata['duration']:.2f}s")
-    finally:
-        if os.path.exists(output):
-            try:
-                os.remove(output)
-                print("Temporary file cleaned up successfully.")
-            except OSError as e:
-                print(f"Error cleaning up: {e}")
+    print("Rendering...")
+    clip.write_videofile(
+        output,
+        fps=fps,
+        codec="libx264",
+        audio_codec="aac",
+        preset="ultrafast",
+        logger=None,
+    )
+    return (output, f"Render Complete! Duration: {duration:.2f}s")
 
 
 def filter_styles(query, category):

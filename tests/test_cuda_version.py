@@ -2,7 +2,7 @@ import subprocess
 import unittest
 from unittest.mock import Mock, patch
 
-from definers import cuda_version
+from definers.cuda import cuda_version
 
 
 class TestCudaVersion(unittest.TestCase):

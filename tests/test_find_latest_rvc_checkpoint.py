@@ -1,13 +1,13 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from definers import find_latest_rvc_checkpoint
+from definers.application_ml import find_latest_rvc_checkpoint
 
 
 class TestFindLatestRvcCheckpoint(unittest.TestCase):
     @patch("definers.system.secure_path", side_effect=lambda x: x)
-    @patch("definers.ml.is_directory", return_value=False)
-    @patch("definers.ml.logger")
+    @patch("definers.application_ml.rvc.is_directory", return_value=False)
+    @patch("definers.application_ml.rvc.logger")
     def test_folder_not_found(self, mock_logger, mock_isdir, mock_sanitize):
         result = find_latest_rvc_checkpoint("/non/existent/path", "my_model")
         self.assertIsNone(result)
@@ -17,7 +17,7 @@ class TestFindLatestRvcCheckpoint(unittest.TestCase):
         )
 
     @patch("definers.system.secure_path", side_effect=lambda x: x)
-    @patch("definers.ml.is_directory", return_value=True)
+    @patch("definers.application_ml.rvc.is_directory", return_value=True)
     @patch(
         "os.listdir",
         return_value=[
@@ -27,7 +27,7 @@ class TestFindLatestRvcCheckpoint(unittest.TestCase):
             "not_a_model_file.txt",
         ],
     )
-    @patch("definers.ml.logger")
+    @patch("definers.application_ml.rvc.logger")
     def test_finds_latest_checkpoint_by_step(
         self, mock_logger, mock_listdir, mock_isdir, mock_sanitize
     ):
@@ -38,7 +38,7 @@ class TestFindLatestRvcCheckpoint(unittest.TestCase):
         )
 
     @patch("definers.system.secure_path", side_effect=lambda x: x)
-    @patch("definers.ml.is_directory", return_value=True)
+    @patch("definers.application_ml.rvc.is_directory", return_value=True)
     @patch(
         "os.listdir",
         return_value=[
@@ -47,7 +47,7 @@ class TestFindLatestRvcCheckpoint(unittest.TestCase):
             "my_model_e10_s20000.pth",
         ],
     )
-    @patch("definers.ml.logger")
+    @patch("definers.application_ml.rvc.logger")
     def test_finds_latest_checkpoint_by_epoch(
         self, mock_logger, mock_listdir, mock_isdir, mock_sanitize
     ):
@@ -58,11 +58,11 @@ class TestFindLatestRvcCheckpoint(unittest.TestCase):
         )
 
     @patch("definers.system.secure_path", side_effect=lambda x: x)
-    @patch("definers.ml.is_directory", return_value=True)
+    @patch("definers.application_ml.rvc.is_directory", return_value=True)
     @patch(
         "os.listdir", return_value=["other_model_e1_s1.pth", "random_file.txt"]
     )
-    @patch("definers.ml.logger")
+    @patch("definers.application_ml.rvc.logger")
     def test_no_matching_checkpoints(
         self, mock_logger, mock_listdir, mock_isdir, mock_sanitize
     ):
@@ -73,9 +73,9 @@ class TestFindLatestRvcCheckpoint(unittest.TestCase):
         )
 
     @patch("definers.system.secure_path", side_effect=lambda x: x)
-    @patch("definers.ml.is_directory", return_value=True)
+    @patch("definers.application_ml.rvc.is_directory", return_value=True)
     @patch("os.listdir", return_value=[])
-    @patch("definers.ml.logger")
+    @patch("definers.application_ml.rvc.logger")
     def test_empty_directory(
         self, mock_logger, mock_listdir, mock_isdir, mock_sanitize
     ):
@@ -86,9 +86,9 @@ class TestFindLatestRvcCheckpoint(unittest.TestCase):
         )
 
     @patch("definers.system.secure_path", side_effect=lambda x: x)
-    @patch("definers.ml.is_directory", return_value=True)
+    @patch("definers.application_ml.rvc.is_directory", return_value=True)
     @patch("os.listdir", side_effect=PermissionError("Access denied"))
-    @patch("definers.ml.logger")
+    @patch("definers.application_ml.rvc.logger")
     def test_os_listdir_raises_exception(
         self, mock_logger, mock_listdir, mock_isdir, mock_sanitize
     ):

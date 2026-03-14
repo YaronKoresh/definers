@@ -1,7 +1,7 @@
 import base64
 import unittest
 
-from definers import linked_url
+from definers.media.web_transfer import linked_url
 
 
 class TestLinkedUrl(unittest.TestCase):

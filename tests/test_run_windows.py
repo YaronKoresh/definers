@@ -3,9 +3,7 @@ import sys
 import unittest
 from unittest.mock import MagicMock, patch
 
-import pytest
-
-from definers import run_windows
+from definers.system import run_windows
 
 
 class TestRunWindows(unittest.TestCase):
@@ -13,7 +11,7 @@ class TestRunWindows(unittest.TestCase):
         if not sys.platform.startswith("win"):
             self.skipTest("Windows-specific tests")
 
-    @patch("definers.system.subprocess.Popen")
+    @patch("definers.platform.processes.subprocess.Popen")
     def test_run_windows_success_string_command(self, mock_popen):
         mock_process = MagicMock()
         mock_process.communicate.return_value = ("success output\r\n", "")
@@ -34,7 +32,7 @@ class TestRunWindows(unittest.TestCase):
             errors="replace",
         )
 
-    @patch("definers.system.subprocess.Popen")
+    @patch("definers.platform.processes.subprocess.Popen")
     def test_run_windows_success_list_command(self, mock_popen):
         mock_process = MagicMock()
         mock_process.communicate.return_value = ("line1\r\nline2\r\n", "")
@@ -60,7 +58,7 @@ class TestRunWindows(unittest.TestCase):
         result = run_windows("echo hi; rm -rf /")
         self.assertFalse(result)
 
-    @patch("definers.system.subprocess.Popen")
+    @patch("definers.platform.processes.subprocess.Popen")
     def test_run_windows_failure(self, mock_popen):
         mock_process = MagicMock()
         mock_process.communicate.return_value = ("", "error message")
@@ -69,7 +67,7 @@ class TestRunWindows(unittest.TestCase):
         result = run_windows("exit 1", silent=True)
         self.assertFalse(result)
 
-    @patch("definers.system.subprocess.Popen")
+    @patch("definers.platform.processes.subprocess.Popen")
     def test_run_windows_with_env(self, mock_popen):
         mock_process = MagicMock()
         mock_process.communicate.return_value = ("test_value\r\n", "")
@@ -84,7 +82,7 @@ class TestRunWindows(unittest.TestCase):
         self.assertEqual(called_kwargs["env"], expected_env)
 
     @patch("builtins.print")
-    @patch("definers.system.subprocess.Popen")
+    @patch("definers.platform.processes.subprocess.Popen")
     def test_run_windows_silent_mode(self, mock_popen, mock_print):
         mock_process = MagicMock()
         mock_process.communicate.return_value = ("output", "error")
@@ -94,7 +92,7 @@ class TestRunWindows(unittest.TestCase):
         mock_print.assert_not_called()
 
     @patch("builtins.print")
-    @patch("definers.system.subprocess.Popen")
+    @patch("definers.platform.processes.subprocess.Popen")
     def test_run_windows_verbose_mode(self, mock_popen, mock_print):
         mock_process = MagicMock()
         mock_process.communicate.return_value = ("output\n", "error\n")
@@ -110,7 +108,7 @@ class TestRunWindows(unittest.TestCase):
             mock_print.call_args_list,
         )
 
-    @patch("definers.system.subprocess.Popen")
+    @patch("definers.platform.processes.subprocess.Popen")
     def test_run_windows_empty_command_returns_false(self, mock_popen):
         result = run_windows("   ", silent=True)
         self.assertFalse(result)

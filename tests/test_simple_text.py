@@ -1,6 +1,6 @@
 import unittest
 
-from definers import simple_text
+from definers.text import simple_text
 
 
 class TestSimpleText(unittest.TestCase):

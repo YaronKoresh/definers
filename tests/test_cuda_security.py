@@ -1,11 +1,11 @@
 import unittest
 from unittest.mock import call, patch
 
-from definers import cuda_toolkit, free
+from definers.cuda import cuda_toolkit, free
 
 
 class TestCudaRunCommands(unittest.TestCase):
-    @patch("definers.run")
+    @patch("definers.cuda.run")
     def test_cuda_toolkit_runs_lists(self, mock_run):
 
         cuda_toolkit()
@@ -20,7 +20,7 @@ class TestCudaRunCommands(unittest.TestCase):
         self.assertEqual(first[0], "apt-get")
         self.assertEqual(second[0], "apt-get")
 
-    @patch("definers.run")
+    @patch("definers.cuda.run")
     def test_free_commands_are_lists(self, mock_run):
 
         free()

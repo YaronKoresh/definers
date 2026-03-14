@@ -1,6 +1,6 @@
 import unittest
 
-from definers import random_salt
+from definers.text import random_salt
 
 
 class TestRandomSalt(unittest.TestCase):

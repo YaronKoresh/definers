@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from definers import select_columns
+from definers.data import select_columns
 
 
 class TestSelectColumns(unittest.TestCase):
@@ -9,7 +9,7 @@ class TestSelectColumns(unittest.TestCase):
         self.mock_dataset = MagicMock()
         self.mock_dataset.column_names = ["col_a", "col_b", "col_c", "col_d"]
 
-    @patch("definers.drop_columns")
+    @patch("definers.application_data.loaders.drop_columns")
     def test_selects_subset_of_columns(self, mock_drop_columns):
         mock_drop_columns.return_value = "subset dataset"
         cols_to_select = ["col_a", "col_d"]
@@ -19,7 +19,7 @@ class TestSelectColumns(unittest.TestCase):
         )
         self.assertEqual(result, "subset dataset")
 
-    @patch("definers.drop_columns")
+    @patch("definers.application_data.loaders.drop_columns")
     def test_selects_all_columns(self, mock_drop_columns):
         mock_drop_columns.return_value = self.mock_dataset
         cols_to_select = ["col_a", "col_b", "col_c", "col_d"]
@@ -27,7 +27,7 @@ class TestSelectColumns(unittest.TestCase):
         mock_drop_columns.assert_called_once_with(self.mock_dataset, [])
         self.assertEqual(result, self.mock_dataset)
 
-    @patch("definers.drop_columns")
+    @patch("definers.application_data.loaders.drop_columns")
     def test_handles_empty_selection(self, mock_drop_columns):
         test_cases = [None, [], [""]]
         for cols_to_select in test_cases:
@@ -37,7 +37,7 @@ class TestSelectColumns(unittest.TestCase):
                 self.assertIs(result, self.mock_dataset)
                 mock_drop_columns.reset_mock()
 
-    @patch("definers.drop_columns")
+    @patch("definers.application_data.loaders.drop_columns")
     def test_handles_nonexistent_columns(self, mock_drop_columns):
         mock_drop_columns.return_value = "empty dataset"
         cols_to_select = ["col_x", "col_y"]
@@ -47,7 +47,7 @@ class TestSelectColumns(unittest.TestCase):
         )
         self.assertEqual(result, "empty dataset")
 
-    @patch("definers.drop_columns")
+    @patch("definers.application_data.loaders.drop_columns")
     def test_selects_mix_of_existing_and_nonexistent_columns(
         self, mock_drop_columns
     ):

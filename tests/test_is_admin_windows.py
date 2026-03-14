@@ -2,7 +2,7 @@ import sys
 import unittest
 from unittest.mock import MagicMock, patch
 
-from definers import is_admin_windows
+from definers.system import is_admin_windows
 
 
 class TestIsAdminWindows(unittest.TestCase):

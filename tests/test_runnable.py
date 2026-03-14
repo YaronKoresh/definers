@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from definers import runnable
+from definers.system import runnable
 
 
 class TestRunnable(unittest.TestCase):

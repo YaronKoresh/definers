@@ -1,15 +1,48 @@
 import unittest
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 from PIL import Image, ImageDraw, ImageFont
 
-from definers import write_on_image
+import definers.media.image_helpers as image_helpers_module
+import definers.media.web_transfer as web_transfer_module
+import definers.os_utils as os_utils
+import definers.path_utils as path_utils
+import definers.platform.filesystem as filesystem_module
+
+if not hasattr(os_utils, "get_python_version"):
+    os_utils.get_python_version = lambda: "3.10"
+if not hasattr(os_utils, "get_linux_distribution"):
+    os_utils.get_linux_distribution = lambda: "linux"
+
+for _name, _value in {
+    "normalize_path": lambda path: str(path),
+    "full_path": lambda *parts: "/".join(
+        str(part) for part in parts if str(part)
+    ),
+    "paths": lambda *patterns: [],
+    "unique": lambda items: list(dict.fromkeys(items)),
+    "cwd": lambda: ".",
+    "parent_directory": lambda path: "",
+    "path_end": lambda path: str(path).rsplit("/", 1)[-1].rsplit("\\", 1)[-1],
+    "path_ext": lambda path: (
+        "" if "." not in str(path) else "." + str(path).rsplit(".", 1)[-1]
+    ),
+    "path_name": lambda path: (
+        str(path).rsplit("/", 1)[-1].rsplit("\\", 1)[-1].rsplit(".", 1)[0]
+    ),
+    "tmp": lambda *args, **kwargs: "/tmp/mock",
+    "secure_path": lambda path, *args, **kwargs: path,
+}.items():
+    if not hasattr(path_utils, _name):
+        setattr(path_utils, _name, _value)
+
+from definers.image import write_on_image
 
 
 class TestWriteOnImage(unittest.TestCase):
-    @patch("definers.save_image")
-    @patch("definers.google_drive_download")
-    @patch("definers.read")
+    @patch.object(image_helpers_module, "save_image")
+    @patch.object(web_transfer_module, "google_drive_download")
+    @patch.object(filesystem_module, "read")
     @patch("PIL.Image.open")
     @patch("PIL.ImageDraw.Draw")
     @patch("PIL.ImageFont.truetype")
@@ -26,7 +59,7 @@ class TestWriteOnImage(unittest.TestCase):
         mock_img.size = (800, 600)
         mock_open.return_value = mock_img
         mock_draw_instance = MagicMock()
-        mock_draw_instance.textlength.return_value = 200
+        mock_draw_instance.textbbox.return_value = (0, 0, 200, 80)
         mock_draw.return_value = mock_draw_instance
         mock_font = MagicMock()
         mock_truetype.return_value = mock_font
@@ -52,9 +85,9 @@ class TestWriteOnImage(unittest.TestCase):
         mock_save.assert_called_once_with(mock_img)
         self.assertEqual(result, "output_path.png")
 
-    @patch("definers.save_image")
-    @patch("definers.google_drive_download")
-    @patch("definers.read")
+    @patch.object(image_helpers_module, "save_image")
+    @patch.object(web_transfer_module, "google_drive_download")
+    @patch.object(filesystem_module, "read")
     @patch("PIL.Image.open")
     @patch("PIL.ImageDraw.Draw")
     @patch("PIL.ImageFont.truetype")
@@ -71,7 +104,7 @@ class TestWriteOnImage(unittest.TestCase):
         mock_img.size = (1024, 768)
         mock_open.return_value = mock_img
         mock_draw_instance = MagicMock()
-        mock_draw_instance.textlength.return_value = 300
+        mock_draw_instance.textbbox.return_value = (0, 0, 300, 100)
         mock_draw.return_value = mock_draw_instance
         mock_read.return_value = ["Alef-Bold.ttf"]
         top = "Hello"
@@ -83,9 +116,9 @@ class TestWriteOnImage(unittest.TestCase):
         self.assertTrue(any(top in arg for arg in args_list))
         self.assertTrue(any(bottom in arg for arg in args_list))
 
-    @patch("definers.save_image")
-    @patch("definers.google_drive_download")
-    @patch("definers.read")
+    @patch.object(image_helpers_module, "save_image")
+    @patch.object(web_transfer_module, "google_drive_download")
+    @patch.object(filesystem_module, "read")
     @patch("PIL.Image.open")
     @patch("PIL.ImageDraw.Draw")
     @patch("PIL.ImageFont.truetype")
@@ -107,9 +140,9 @@ class TestWriteOnImage(unittest.TestCase):
         mock_draw_instance.text.assert_not_called()
         mock_save.assert_called_once_with(mock_img)
 
-    @patch("definers.save_image")
-    @patch("definers.google_drive_download")
-    @patch("definers.read")
+    @patch.object(image_helpers_module, "save_image")
+    @patch.object(web_transfer_module, "google_drive_download")
+    @patch.object(filesystem_module, "read")
     @patch("PIL.Image.open")
     @patch("PIL.ImageDraw.Draw")
     @patch("PIL.ImageFont.truetype")
@@ -126,7 +159,7 @@ class TestWriteOnImage(unittest.TestCase):
         mock_img.size = (1200, 800)
         mock_open.return_value = mock_img
         mock_draw_instance = MagicMock()
-        mock_draw_instance.textlength.return_value = 400
+        mock_draw_instance.textbbox.return_value = (0, 0, 400, 120)
         mock_draw.return_value = mock_draw_instance
         mock_read.return_value = ["Alef-Bold.ttf"]
         middle_text = "This is a\nmultiline message."

@@ -2,7 +2,12 @@ import unittest
 
 import numpy as np
 
-from definers import TrainingData, order_dataset, prepare_data, split_dataset
+from definers.data import (
+    TrainingData,
+    order_dataset,
+    prepare_data,
+    split_dataset,
+)
 
 
 class TestPrepareDataHelpers(unittest.TestCase):
@@ -81,7 +86,7 @@ class TestPrepareDataHelpers(unittest.TestCase):
 
         from unittest.mock import patch
 
-        with patch("definers.fetch_dataset") as mf:
+        with patch("definers.data.fetch_dataset") as mf:
             mf.return_value = [
                 {"x": 1, "label": 0},
                 {"x": 2, "label": 1},
@@ -108,8 +113,6 @@ class TestPrepareDataHelpers(unittest.TestCase):
 
     def test_prepare_data_caching(self):
         from unittest.mock import patch
-
-        import definers as _d
 
         calls = []
 

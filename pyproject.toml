@@ -166,6 +166,9 @@ allow-direct-references = true
 testpaths = [
     "tests",
 ]
+markers = [
+    "asyncio: marks async tests",
+]
 
 [tool.ruff]
 target-version = "py310"

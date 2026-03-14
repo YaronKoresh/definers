@@ -3,7 +3,7 @@ import shutil
 import tempfile
 import unittest
 
-from definers import load
+from definers.platform.filesystem import load
 
 
 class TestLoad(unittest.TestCase):

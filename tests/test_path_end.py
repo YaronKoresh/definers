@@ -1,6 +1,6 @@
 import unittest
 
-from definers import path_end
+from definers.path_utils import path_end
 
 
 class TestPathEnd(unittest.TestCase):

@@ -3,7 +3,7 @@ import pytest
 
 def test_filter_styles_returns_update():
 
-    from definers import video_gui
+    import definers.video_gui as video_gui
 
     result = video_gui.filter_styles("psy", "All")
     assert isinstance(result, dict)
@@ -16,7 +16,7 @@ def test_filter_styles_returns_update():
 def test_normalize_arr_constant():
     import numpy as np
 
-    from definers import video_gui
+    import definers.video_gui as video_gui
 
     arr = np.full((3, 3), 5.0)
     out = video_gui.normalize_arr(arr)

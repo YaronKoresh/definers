@@ -1,6 +1,6 @@
 import unittest
 
-from definers import string_to_bytes
+from definers.text import string_to_bytes
 
 
 class TestStringToBytes(unittest.TestCase):

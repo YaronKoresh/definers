@@ -1,9 +1,9 @@
 import os
 import sys
 import unittest
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
-from definers.web import add_to_path_windows
+from definers.media.web_transfer import add_to_path_windows
 
 
 class TestAddToPathWindows(unittest.TestCase):
@@ -20,7 +20,7 @@ class TestAddToPathWindows(unittest.TestCase):
         self.assertEqual(os.environ.get("PATH", ""), original_path)
 
     @patch.object(sys, "platform", "win32")
-    @patch("definers.web.broadcast_path_change")
+    @patch("definers.media.web_transfer.broadcast_path_change")
     def test_adds_new_folder_to_path(self, mock_broadcast: MagicMock) -> None:
         mock_key = MagicMock()
         existing_path = "C:\\Existing\\Bin;C:\\Another\\Bin"
@@ -46,7 +46,7 @@ class TestAddToPathWindows(unittest.TestCase):
                 winreg_mock.CloseKey.assert_called_once_with(mock_key)
 
     @patch.object(sys, "platform", "win32")
-    @patch("definers.web.broadcast_path_change")
+    @patch("definers.media.web_transfer.broadcast_path_change")
     def test_skips_duplicate_folder(self, mock_broadcast: MagicMock) -> None:
         folder = os.path.normpath("C:\\Existing\\Bin")
         existing_path = f"{folder};C:\\Another\\Bin"
@@ -65,7 +65,7 @@ class TestAddToPathWindows(unittest.TestCase):
                 mock_broadcast.assert_not_called()
 
     @patch.object(sys, "platform", "win32")
-    @patch("definers.web.broadcast_path_change")
+    @patch("definers.media.web_transfer.broadcast_path_change")
     def test_handles_empty_existing_path(
         self, mock_broadcast: MagicMock
     ) -> None:
@@ -97,7 +97,7 @@ class TestAddToPathWindows(unittest.TestCase):
             add_to_path_windows("C:\\Some\\Folder")
 
     @patch.object(sys, "platform", "win32")
-    @patch("definers.web.broadcast_path_change")
+    @patch("definers.media.web_transfer.broadcast_path_change")
     def test_strips_quotes_from_folder_path(
         self, mock_broadcast: MagicMock
     ) -> None:

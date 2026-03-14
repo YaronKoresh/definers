@@ -1,6 +1,6 @@
 import unittest
 
-from definers import number_to_hex
+from definers.text import number_to_hex
 
 
 class TestNumberToHex(unittest.TestCase):

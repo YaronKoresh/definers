@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from definers import importable
+from definers.system import importable
 
 
 class TestImportable(unittest.TestCase):

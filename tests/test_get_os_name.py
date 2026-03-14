@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from definers import get_os_name
+from definers.system import get_os_name
 
 
 class TestGetOsName(unittest.TestCase):

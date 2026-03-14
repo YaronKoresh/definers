@@ -1,55 +1,62 @@
 import os
+import tempfile
 import unittest
+from importlib import import_module
 from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-from definers import cwd
+from unittest.mock import patch
 
 
-def _resolve(p):
-    return os.path.normpath(str(Path(p).resolve()))
+def _load_modules():
+    return import_module("definers.path_utils"), import_module(
+        "definers.platform.paths"
+    )
 
 
 class TestCwd(unittest.TestCase):
-    @patch("os.getcwd", return_value="/original/path")
+    def test_re_exports_platform_function(self):
+        path_utils, platform_paths = _load_modules()
+        self.assertIs(path_utils.cwd, platform_paths.cwd)
+
+    @patch("os.getcwd")
     @patch("os.chdir")
     def test_cwd_with_directory_provided(self, mock_chdir, mock_getcwd):
-        new_dir = "/new/test/dir"
-        expected_new = _resolve(new_dir)
-        expected_owd = _resolve("/original/path")
-        with cwd(new_dir):
+        path_utils, _ = _load_modules()
+        original_dir = str(Path(tempfile.gettempdir()).resolve())
+        new_dir = os.path.join(original_dir, "new", "test", "dir")
+        expected_new = str(Path(new_dir).expanduser().resolve())
+        expected_owd = str(Path(original_dir).expanduser().resolve())
+        mock_getcwd.return_value = original_dir
+        with path_utils.cwd(new_dir):
             mock_chdir.assert_called_once_with(expected_new)
-        mock_chdir.assert_called_with(expected_owd)
+        self.assertEqual(mock_chdir.call_args_list[-1].args[0], expected_owd)
         self.assertEqual(mock_chdir.call_count, 2)
 
-    @patch("os.getcwd", return_value="/original/path")
+    @patch("os.getcwd")
     @patch("os.chdir")
-    @patch("os.path.dirname")
-    def test_cwd_with_no_directory_provided(
-        self, mock_dirname, mock_chdir, mock_getcwd
-    ):
-        mock_script_dir = "/fake/script/dir"
-        mock_dirname.return_value = mock_script_dir
-        expected_new = _resolve(os.path.join(mock_script_dir, "."))
-        expected_owd = _resolve("/original/path")
-        with cwd():
+    def test_cwd_with_no_directory_provided(self, mock_chdir, mock_getcwd):
+        path_utils, platform_paths = _load_modules()
+        original_dir = str(Path(tempfile.gettempdir()).resolve())
+        package_root = str(
+            Path(platform_paths.__file__).resolve().parent.parent
+        )
+        expected_new = str(
+            Path(os.path.join(package_root, ".")).expanduser().resolve()
+        )
+        expected_owd = str(Path(original_dir).expanduser().resolve())
+        mock_getcwd.return_value = original_dir
+        with path_utils.cwd():
             mock_chdir.assert_called_once_with(expected_new)
-        mock_chdir.assert_called_with(expected_owd)
+        self.assertEqual(mock_chdir.call_args_list[-1].args[0], expected_owd)
         self.assertEqual(mock_chdir.call_count, 2)
 
     def test_cwd_actually_changes_directory(self):
-        original_dir = os.getcwd()
-        temp_dir = os.path.realpath(
-            os.path.join(original_dir, "temp_test_dir_for_cwd")
-        )
-        os.makedirs(temp_dir, exist_ok=True)
-        try:
-            with cwd(temp_dir):
-                self.assertEqual(os.getcwd(), temp_dir)
-            self.assertEqual(os.getcwd(), original_dir)
-        finally:
-            if os.path.exists(temp_dir):
-                os.rmdir(temp_dir)
+        path_utils, _ = _load_modules()
+        original_dir = str(Path(os.getcwd()).resolve())
+        with tempfile.TemporaryDirectory() as temp_dir:
+            expected_dir = str(Path(temp_dir).resolve())
+            with path_utils.cwd(temp_dir):
+                self.assertEqual(str(Path(os.getcwd()).resolve()), expected_dir)
+            self.assertEqual(str(Path(os.getcwd()).resolve()), original_dir)
 
 
 if __name__ == "__main__":

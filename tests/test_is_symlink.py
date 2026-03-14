@@ -2,7 +2,7 @@ import os
 import tempfile
 import unittest
 
-from definers import is_symlink
+from definers.platform.filesystem import is_symlink
 
 
 class TestIsSymlink(unittest.TestCase):

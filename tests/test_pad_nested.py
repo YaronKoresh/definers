@@ -6,7 +6,7 @@ import definers.data as data
 
 data._np = _numpy
 data.np = _numpy
-from definers import pad_nested
+from definers.data import pad_nested
 
 
 class TestPadNested(unittest.TestCase):

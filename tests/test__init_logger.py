@@ -1,7 +1,7 @@
 import logging
 import unittest
 
-from definers import init_logger
+from definers.logger import init_logger
 
 
 class TestInitLogger(unittest.TestCase):

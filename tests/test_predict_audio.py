@@ -6,7 +6,8 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import soundfile as sf
 
-from definers import predict_audio
+import definers as runtime_definers
+from definers.audio.features import predict_audio
 
 
 class TestPredictAudio(unittest.TestCase):
@@ -18,30 +19,68 @@ class TestPredictAudio(unittest.TestCase):
         sf.write(self.audio_path, self.audio_data, self.sr)
         self.mock_model = MagicMock()
         self.mock_model.predict.return_value = np.random.rand(100)
-        self.patcher_timeline = patch(
-            "definers.get_active_audio_timeline", return_value=[(0.5, 1.5)]
+        self.patcher_full_path = patch.object(
+            runtime_definers,
+            "full_path",
+            side_effect=lambda path: path,
+            create=True,
         )
-        self.patcher_features_to_audio = patch(
-            "definers.features_to_audio", return_value=np.random.randn(self.sr)
+        self.patcher_timeline = patch.object(
+            runtime_definers,
+            "get_active_audio_timeline",
+            return_value=[(0.5, 1.5)],
+            create=True,
         )
-        self.patcher_tmp = patch(
-            "definers.tmp",
+        self.patcher_numpy_to_cupy = patch.object(
+            runtime_definers,
+            "numpy_to_cupy",
+            side_effect=lambda values: values,
+            create=True,
+        )
+        self.patcher_cupy_to_numpy = patch.object(
+            runtime_definers,
+            "cupy_to_numpy",
+            side_effect=lambda values: values,
+            create=True,
+        )
+        self.patcher_features_to_audio = patch.object(
+            runtime_definers,
+            "features_to_audio",
+            return_value=np.random.randn(self.sr),
+            create=True,
+        )
+        self.patcher_tmp = patch.object(
+            runtime_definers,
+            "tmp",
             return_value=os.path.join(self.test_dir, "output.wav"),
+            create=True,
         )
-        self.patcher_is_clusters = patch(
-            "definers.is_clusters_model", return_value=False
+        self.patcher_is_clusters = patch.object(
+            runtime_definers,
+            "is_clusters_model",
+            return_value=False,
+            create=True,
         )
-        self.patcher_get_cluster = patch(
-            "definers.get_cluster_content", return_value=np.random.rand(100)
+        self.patcher_get_cluster = patch.object(
+            runtime_definers,
+            "get_cluster_content",
+            return_value=np.random.rand(100),
+            create=True,
         )
+        self.mock_full_path = self.patcher_full_path.start()
         self.mock_timeline = self.patcher_timeline.start()
+        self.mock_numpy_to_cupy = self.patcher_numpy_to_cupy.start()
+        self.mock_cupy_to_numpy = self.patcher_cupy_to_numpy.start()
         self.mock_features_to_audio = self.patcher_features_to_audio.start()
         self.mock_tmp = self.patcher_tmp.start()
         self.mock_is_clusters = self.patcher_is_clusters.start()
         self.mock_get_cluster = self.patcher_get_cluster.start()
 
     def tearDown(self):
+        self.patcher_full_path.stop()
         self.patcher_timeline.stop()
+        self.patcher_numpy_to_cupy.stop()
+        self.patcher_cupy_to_numpy.stop()
         self.patcher_features_to_audio.stop()
         self.patcher_tmp.stop()
         self.patcher_is_clusters.stop()
@@ -58,6 +97,7 @@ class TestPredictAudio(unittest.TestCase):
         self.assertTrue(os.path.exists(result_path))
         self.mock_timeline.assert_called_once_with(self.audio_path)
         self.mock_model.predict.assert_called()
+        self.mock_numpy_to_cupy.assert_called()
         self.mock_features_to_audio.assert_called()
 
     def test_successful_prediction_cluster_model(self):
@@ -67,6 +107,7 @@ class TestPredictAudio(unittest.TestCase):
         self.assertIsNotNone(result_path)
         self.assertTrue(os.path.exists(result_path))
         self.mock_get_cluster.assert_called_with(self.mock_model, 0)
+        self.mock_cupy_to_numpy.assert_called()
         self.mock_features_to_audio.assert_called()
 
     def test_audio_file_not_found(self):

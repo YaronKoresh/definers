@@ -3,7 +3,7 @@ import sys
 import unittest
 from unittest.mock import patch
 
-from definers import pre_install
+from definers.system import pre_install
 
 
 class TestPreInstall(unittest.TestCase):

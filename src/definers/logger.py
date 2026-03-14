@@ -1,31 +1,35 @@
 import logging
-from typing import ClassVar, Final
 
-from definers.core import enforce_error_boundary
+from definers.shared_kernel.observability import (
+    MESSAGE_SCHEMA,
+    init_logger as _init_logger,
+)
+
+DEFAULT_LOGGER_NAME = __name__
+DIAGNOSTIC_LEVEL = logging.DEBUG
 
 
-class UnifiedLoggingSystem:
-    DIAGNOSTIC_LEVEL: ClassVar[int] = logging.DEBUG
-    MESSAGE_SCHEMA: Final[str] = (
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+def init_logger(
+    name: str = DEFAULT_LOGGER_NAME,
+    level: str | int | None = None,
+    log_file: str | None = None,
+) -> logging.Logger:
+    effective_level = DIAGNOSTIC_LEVEL if level is None else level
+    return _init_logger(
+        name,
+        level=effective_level,
+        log_file=log_file,
+        default_level=DIAGNOSTIC_LEVEL,
     )
 
-    @staticmethod
-    @enforce_error_boundary
-    def construct_default_diagnostic_pipeline(
-        context_scope_identifier: str,
-    ) -> logging.Logger:
-        diagnostic_stream = logging.getLogger(context_scope_identifier)
-        diagnostic_stream.setLevel(UnifiedLoggingSystem.DIAGNOSTIC_LEVEL)
-        if not diagnostic_stream.handlers:
-            terminal_output_bridge = logging.StreamHandler()
-            structured_message_schema = logging.Formatter(
-                UnifiedLoggingSystem.MESSAGE_SCHEMA
-            )
-            terminal_output_bridge.setFormatter(structured_message_schema)
-            diagnostic_stream.addHandler(terminal_output_bridge)
-        return diagnostic_stream
+
+logger = init_logger()
 
 
-def init_logger() -> logging.Logger:
-    return UnifiedLoggingSystem.construct_default_diagnostic_pipeline(__name__)
+__all__ = [
+    "DEFAULT_LOGGER_NAME",
+    "DIAGNOSTIC_LEVEL",
+    "MESSAGE_SCHEMA",
+    "init_logger",
+    "logger",
+]

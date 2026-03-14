@@ -3,7 +3,14 @@ from pathlib import Path
 
 import pytest
 
-from definers import git
+from definers.ml import (
+    convert_vocal_rvc,
+    export_files_rvc,
+    find_latest_checkpoint,
+    git,
+    rvc_to_onnx,
+    train_model_rvc,
+)
 from definers.system import secure_path
 
 
@@ -45,7 +52,7 @@ def test_sanitize_path_prevents_traversal(tmp_path):
 
 
 def test_git_branch_and_run_list(monkeypatch, tmp_path):
-    from definers import run
+    from definers.system import run
 
     calls = []
 
@@ -67,8 +74,6 @@ def test_git_branch_and_run_list(monkeypatch, tmp_path):
 
 
 def test_find_latest_checkpoint_untrusted(tmp_path):
-    from definers import find_latest_checkpoint
-
     base = tmp_path / "base"
     base.mkdir()
     os.environ["DEFINERS_TRUSTED_PATHS"] = str(tmp_path / "other")
@@ -77,8 +82,6 @@ def test_find_latest_checkpoint_untrusted(tmp_path):
 
 def test_rvc_to_onnx_untrusted(tmp_path):
     pytest.importorskip("definers.configs")
-    from definers import rvc_to_onnx
-
     fake = tmp_path / "w.pth"
     fake.write_text("")
     os.environ["DEFINERS_TRUSTED_PATHS"] = str(tmp_path / "nothing")
@@ -87,8 +90,6 @@ def test_rvc_to_onnx_untrusted(tmp_path):
 
 def test_train_model_rvc_untrusted(tmp_path):
     pytest.importorskip("definers.configs")
-    from definers import train_model_rvc
-
     audio = tmp_path / "input.wav"
     audio.write_text("")
     os.environ["DEFINERS_TRUSTED_PATHS"] = str(tmp_path / "other")
@@ -97,8 +98,6 @@ def test_train_model_rvc_untrusted(tmp_path):
 
 def test_convert_vocal_rvc_untrusted(tmp_path):
     pytest.importorskip("definers.configs")
-    from definers import convert_vocal_rvc
-
     audio = tmp_path / "input.wav"
     audio.write_text("")
     os.environ["DEFINERS_TRUSTED_PATHS"] = str(tmp_path / "nothing")
@@ -106,8 +105,6 @@ def test_convert_vocal_rvc_untrusted(tmp_path):
 
 
 def test_convert_vocal_rvc_missing_deps(tmp_path):
-    from definers import convert_vocal_rvc
-
     audio = tmp_path / "input.wav"
     audio.write_text("")
 
@@ -115,8 +112,6 @@ def test_convert_vocal_rvc_missing_deps(tmp_path):
 
 
 def test_sanitize_basename_and_experiment(tmp_path, capsys):
-    from definers import convert_vocal_rvc, export_files_rvc, train_model_rvc
-
     assert secure_path("abc_123", basename=True) == "abc_123"
 
     with pytest.raises(ValueError):

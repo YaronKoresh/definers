@@ -81,7 +81,13 @@ pip-log.txt
 profile_default/
 sdist/
 share/python-wheels/
-src/definers/*/
+src/definers/assets/
+src/definers/configs/
+src/definers/docs/
+src/definers/i18n/
+src/definers/infer/
+src/definers/logs/
+src/definers/tools/
 target/
 var/
 venv.bak/

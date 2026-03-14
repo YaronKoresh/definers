@@ -2,7 +2,8 @@ import os
 import tempfile
 import unittest
 
-from definers import read, save_temp_text
+from definers.file_ops import save_temp_text
+from definers.platform.filesystem import read
 
 
 class TestSaveTempText(unittest.TestCase):

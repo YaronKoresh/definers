@@ -1,6 +1,6 @@
 import unittest
 
-from definers import check_version_wildcard
+from definers.system import check_version_wildcard
 
 
 class TestCheckVersionWildcard(unittest.TestCase):

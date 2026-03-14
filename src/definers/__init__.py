@@ -1,772 +1,98 @@
-import collections
-import collections.abc
 import contextlib
 import importlib
 import io
+import subprocess
+import sys
 from importlib.metadata import PackageNotFoundError, version as _pkg_version
 from types import ModuleType
 from typing import Any
 
-collections.MutableSequence = collections.abc.MutableSequence
+
+def _resolve_version() -> str:
+    try:
+        return _pkg_version("definers")
+    except PackageNotFoundError:
+        return "0.0.0"
 
 
 class MissingTransformer:
-    def __init__(self, *args: object, **kwargs: object) -> None:
+    def __init__(self, *_args: object, **_kwargs: object) -> None:
         raise ImportError("sox is not available")
 
 
-class SoxProxy:
+class MissingSoxModule:
     Transformer = MissingTransformer
 
     def __getattr__(self, name: str) -> Any:
         raise ImportError("sox module is not available")
 
 
-def load_sox_module() -> ModuleType | None:
-    try:
-        buf = io.StringIO()
-        import subprocess
+def load_sox_module() -> ModuleType | MissingSoxModule:
+    cached_module = sys.modules.get("sox")
+    if cached_module is not None:
+        return cached_module
+    buffer = io.StringIO()
+    original_run = subprocess.run
+    original_popen = subprocess.Popen
 
-        orig_run = subprocess.run
-        orig_popen = subprocess.Popen
+    def silent_run(*args: object, **kwargs: object) -> Any:
+        kwargs.setdefault("stderr", subprocess.DEVNULL)
+        kwargs.setdefault("stdout", subprocess.DEVNULL)
+        return original_run(*args, **kwargs)
 
-        def _silent_run(*args, **kwargs):
+    class SilentPopen(original_popen):
+        def __init__(self, *args: object, **kwargs: object) -> None:
             kwargs.setdefault("stderr", subprocess.DEVNULL)
             kwargs.setdefault("stdout", subprocess.DEVNULL)
-            return orig_run(*args, **kwargs)
+            super().__init__(*args, **kwargs)
 
-        class _SilentPopen(orig_popen):
-            def __init__(self, *args, **kwargs):
-                kwargs.setdefault("stderr", subprocess.DEVNULL)
-                kwargs.setdefault("stdout", subprocess.DEVNULL)
-                super().__init__(*args, **kwargs)
-
-        subprocess.run = _silent_run
-        subprocess.Popen = _SilentPopen
-        try:
-            with (
-                contextlib.redirect_stderr(buf),
-                contextlib.redirect_stdout(buf),
-            ):
-                return importlib.import_module("sox")
-        finally:
-            subprocess.run = orig_run
-            subprocess.Popen = orig_popen
-    except ImportError:
-        return None
+    try:
+        subprocess.run = silent_run
+        subprocess.Popen = SilentPopen
+        with (
+            contextlib.redirect_stderr(buffer),
+            contextlib.redirect_stdout(buffer),
+        ):
+            return importlib.import_module("sox")
     except Exception:
-        return None
-
-
-sox = load_sox_module() or SoxProxy()
+        return MissingSoxModule()
+    finally:
+        subprocess.run = original_run
+        subprocess.Popen = original_popen
 
 
 def has_sox() -> bool:
-    return not isinstance(sox, SoxProxy)
+    return not isinstance(sox, MissingSoxModule)
 
 
-from definers.audio import (
-    SmartMastering,
-    SmartMasteringConfig,
-    analyze_audio,
-    analyze_audio_features,
-    apply_compressor,
-    apply_exciter,
-    audio_preview,
-    audio_to_midi,
-    autotune_song,
-    beat_visualizer,
-    calculate_active_rms,
-    calculate_dynamic_cutoff,
-    change_audio_speed,
-    compact_audio,
-    compute_gain_envelope,
-    create_sample_audio,
-    create_share_links,
-    create_spectrum_visualization,
-    decoupled_envelope,
-    detect_silence_mask,
-    dj_mix,
-    export_to_pkl,
-    extend_audio,
-    extract_audio_features,
-    features_to_audio,
-    freq_cut,
-    generate_bands,
-    generate_music,
-    generate_voice,
-    get_active_audio_timeline,
-    get_audio_duration,
-    get_audio_feedback,
-    get_color_palette,
-    get_scale_notes,
-    humanize_vocals,
-    identify_instruments,
-    limiter_smooth_env,
-    loudness_maximizer,
-    master,
-    midi_to_audio,
-    mix_audio,
-    normalize_audio_to_peak,
-    pad_audio,
-    pitch_shift_vocals,
-    predict_audio,
-    process_audio_chunks,
-    read_audio,
-    remove_silence,
-    resample,
-    riaa_filter,
-    save_audio,
-    separate_stems,
-    split_audio,
-    stem_mixer,
-    stereo,
-    stretch_audio,
-    subdivide_beats,
-    transcribe_audio,
-    value_to_keys,
-    write_mp3,
-)
-from definers.video_gui import (
-    apply_global_overlays,
-    apply_post_fx,
-    draw_custom_element,
-    draw_star_of_david,
-    filter_styles,
-    generate_preview_handler,
-    generate_video_handler,
-    get_rms_and_beat,
-    normalize_arr,
-    prepare_common_resources,
-    render_frame_base,
-)
+__version__ = _resolve_version()
+sox = load_sox_module()
 
-try:
-    __version__ = _pkg_version("definers")
-except PackageNotFoundError:
-    __version__ = "0.0.0"
-
-from definers.capabilities import (
-    CircuitBreaker,
-    CircuitBreakerOpenException,
-    CircuitSnapshot,
-    CircuitState,
-    ExponentialBackoffDelay,
-    with_retry,
-)
-from definers.chat import (
-    css,
-    get_chat_response,
-    init_chat,
-    init_stable_whisper,
-    lyric_video,
-    music_video,
-    start,
-    strip_nikud,
-    theme,
-)
-from definers.cli import main
-from definers.constants import (
-    CONFIGS,
-    FFMPEG_URL,
-    KNOWN_EXTENSIONS,
-    MADMOM_AVAILABLE,
-    MAX_PATTERN_LENGTH,
-    MODELS,
-    NESTED_QUANTIFIER_RE,
-    PROCESSORS,
-    STYLES_DB,
-    SYSTEM_MESSAGE,
-    TOKENIZERS,
-    ai_model_formats,
-    beam_kwargs,
-    binary_formats,
-    common_audio_formats,
-    common_compressed_formats,
-    common_text_formats,
-    common_video_formats,
-    compiled_code_formats,
-    general_negative_prompt,
-    general_positive_prompt,
-    higher_beams,
-    iio_formats,
-    language_codes,
-    pkg_file_formats,
-    script_formats,
-    tasks,
-    unesco_mapping,
-    user_agents,
-)
-from definers.core import (
-    BaseDiagnosticTracker,
-    CriticalSystemFailure,
-    SystemDiagnosticsFactory,
-    enforce_error_boundary,
-)
-from definers.cuda import (
-    cuda_toolkit,
-    cuda_version,
-    device,
-    free,
-    set_cuda_env,
-)
-from definers.data import (
-    TrainingData,
-    check_onnx,
-    convert_tensor_dtype,
-    create_vectorizer,
-    cupy_to_numpy,
-    drop_columns,
-    dtype,
-    fetch_dataset,
-    files_to_dataset,
-    find_spec,
-    get_max_shapes,
-    get_prediction_file_extension,
-    guess_numpy_sample_rate,
-    guess_numpy_type,
-    init_cupy_numpy,
-    init_tokenizer,
-    is_gpu,
-    load_as_numpy,
-    merge_columns,
-    numpy_to_cupy,
-    numpy_to_list,
-    numpy_to_str,
-    one_dim_numpy,
-    order_dataset,
-    pad_nested,
-    pad_sequences,
-    patch_dask,
-    patch_torch_proxy_mode,
-    prepare_data,
-    process_rows,
-    pytorch_to_onnx,
-    read_as_numpy,
-    reshape_numpy,
-    select_columns,
-    select_rows,
-    split_columns,
-    split_dataset,
-    str_to_numpy,
-    tensor_length,
-    three_dim_numpy,
-    to_loader,
-    tokenize_and_pad,
-    two_dim_numpy,
-    unvectorize,
-    vectorize,
-)
-from definers.image import (
-    extract_image_features,
-    features_to_image,
-    get_max_resolution,
-    image_resolution,
-    init_upscale,
-    resize_image,
-    save_image,
-    upscale,
-    write_on_image,
-)
-from definers.logger import init_logger
-from definers.ml import (
-    HybridModel,
-    LinearRegressionTorch,
-    SklearnWrapper,
-    answer,
-    build_faiss,
-    check_parameter,
-    choose_random_words,
-    compile_model,
-    convert_vocal_rvc,
-    export_files_rvc,
-    extract_text_features,
-    features_to_text,
-    feed,
-    find_latest_checkpoint,
-    find_latest_rvc_checkpoint,
-    fit,
-    generate_song,
-    get_cluster_content,
-    get_model_instructions,
-    git,
-    infer,
-    init_custom_model,
-    init_model_file,
-    init_model_repo,
-    init_pretrained_model,
-    initialize_linear_regression,
-    is_clusters_model,
-    is_huggingface_repo,
-    keep_alive,
-    kmeans_k_suggestions,
-    lang_code_to_name,
-    linear_regression,
-    map_reduce_summary,
-    optimize_prompt_realism,
-    pipe,
-    predict,
-    predict_linear_regression,
-    preprocess_prompt,
-    rvc_to_onnx,
-    simple_text,
-    summarize,
-    summary,
-    train,
-    train_linear_regression,
-    train_model_rvc,
-)
-from definers.regex_utils import (
-    check_complexity,
-    compile,
-    escape,
-    escape_and_compile,
-    fullmatch,
-    sub,
-)
-from definers.system import (
-    add_path,
-    apt_install,
-    big_number,
-    catch,
-    check_version_wildcard,
-    compress,
-    copy,
-    cores,
-    cwd,
-    delete,
-    directory,
-    exist,
-    extract,
-    find_package_paths,
-    full_path,
-    get_ext,
-    get_linux_distribution,
-    get_os_name,
-    get_process_pid,
-    get_python_version,
-    importable,
-    install_audio_effects,
-    install_faiss,
-    install_ffmpeg,
-    install_ffmpeg_linux,
-    install_ffmpeg_windows,
-    installed,
-    is_admin_windows,
-    is_ai_model,
-    is_directory,
-    is_package_path,
-    is_symlink,
-    load,
-    log,
-    modify_wheel_requirements,
-    move,
-    normalize_path,
-    parent_directory,
-    path_end,
-    path_ext,
-    path_name,
-    paths,
-    permit,
-    pip_install,
-    post_install,
-    pre_install,
-    read,
-    remove,
-    run,
-    run_linux,
-    run_windows,
-    runnable,
-    save,
-    save_temp_text,
-    secure_command,
-    secure_path,
-    send_signal_to_process,
-    thread,
-    tmp,
-    unique,
-    wait,
-    write,
-)
-from definers.text import (
-    Database,
-    ai_translate,
-    camel_case,
-    duck_translate,
-    file_to_sha3_512,
-    google_translate,
-    language,
-    number_to_hex,
-    random_number,
-    random_salt,
-    random_string,
-    set_system_message,
-    string_to_bytes,
-    string_to_sha3_512,
-    translate_with_code,
-)
-from definers.video import (
-    convert_video_fps,
-    extract_video_features,
-    features_to_video,
-    read_video,
-    resize_video,
-    write_video,
-)
-from definers.web import (
-    add_to_path_windows,
-    download_and_unzip,
-    download_file,
-    extract_text,
-    google_drive_download,
-    linked_url,
-)
-
-logger = init_logger()
-
-importlib.util.find_spec = find_spec
-
-try:
-    patch_dask()
-except Exception:
-    pass
-
-try:
-    patch_torch_proxy_mode()
-except Exception:
-    pass
-
-set_system_message(name="Phi", role="a helpful chat assistant")
-
-cupy, numpy = init_cupy_numpy()
-
-__all__ = [
-    "__version__",
-    "add_path",
-    "add_to_path_windows",
-    "ai_model_formats",
-    "ai_translate",
-    "analyze_audio",
-    "analyze_audio_features",
-    "answer",
-    "apply_compressor",
-    "apply_exciter",
-    "apply_global_overlays",
-    "apply_post_fx",
-    "apt_install",
-    "audio_preview",
-    "audio_to_midi",
-    "autotune_song",
-    "BaseDiagnosticTracker",
-    "beam_kwargs",
-    "beat_visualizer",
-    "big_number",
-    "binary_formats",
-    "build_faiss",
-    "calculate_active_rms",
-    "calculate_dynamic_cutoff",
-    "camel_case",
-    "catch",
-    "change_audio_speed",
-    "check_complexity",
-    "check_onnx",
-    "check_parameter",
-    "check_version_wildcard",
-    "choose_random_words",
-    "CircuitBreaker",
-    "CircuitBreakerOpenException",
-    "CircuitSnapshot",
-    "CircuitState",
-    "common_audio_formats",
-    "common_compressed_formats",
-    "common_text_formats",
-    "common_video_formats",
-    "compact_audio",
-    "compile",
-    "compile_model",
-    "compiled_code_formats",
-    "compress",
-    "compute_gain_envelope",
-    "CONFIGS",
-    "convert_tensor_dtype",
-    "convert_video_fps",
-    "convert_vocal_rvc",
-    "copy",
-    "cores",
-    "create_sample_audio",
-    "create_share_links",
-    "create_spectrum_visualization",
-    "create_vectorizer",
-    "CriticalSystemFailure",
-    "css",
-    "cuda_toolkit",
-    "cuda_version",
-    "cupy",
-    "cupy_to_numpy",
-    "cwd",
-    "Database",
-    "decoupled_envelope",
-    "delete",
-    "detect_silence_mask",
-    "device",
-    "directory",
-    "dj_mix",
-    "download_and_unzip",
-    "download_file",
-    "draw_custom_element",
-    "draw_star_of_david",
-    "drop_columns",
-    "dtype",
-    "duck_translate",
-    "enforce_error_boundary",
-    "escape",
-    "escape_and_compile",
-    "exist",
-    "ExponentialBackoffDelay",
-    "export_files_rvc",
-    "export_to_pkl",
-    "extend_audio",
-    "extract",
-    "extract_audio_features",
-    "extract_image_features",
-    "extract_text",
-    "extract_text_features",
-    "extract_video_features",
-    "features_to_audio",
-    "features_to_image",
-    "features_to_text",
-    "features_to_video",
-    "feed",
-    "fetch_dataset",
-    "FFMPEG_URL",
-    "file_to_sha3_512",
-    "files_to_dataset",
-    "filter_styles",
-    "find_latest_checkpoint",
-    "find_latest_rvc_checkpoint",
-    "find_package_paths",
-    "find_spec",
-    "fit",
-    "free",
-    "freq_cut",
-    "full_path",
-    "fullmatch",
-    "general_negative_prompt",
-    "general_positive_prompt",
-    "generate_bands",
-    "generate_music",
-    "generate_preview_handler",
-    "generate_song",
-    "generate_video_handler",
-    "generate_voice",
-    "get_active_audio_timeline",
-    "get_audio_duration",
-    "get_audio_feedback",
-    "get_chat_response",
-    "get_cluster_content",
-    "get_color_palette",
-    "get_ext",
-    "get_linux_distribution",
-    "get_max_resolution",
-    "get_max_shapes",
-    "get_model_instructions",
-    "get_os_name",
-    "get_prediction_file_extension",
-    "get_process_pid",
-    "get_python_version",
-    "get_rms_and_beat",
-    "get_scale_notes",
-    "git",
-    "google_drive_download",
-    "google_translate",
-    "guess_numpy_sample_rate",
-    "guess_numpy_type",
-    "has_sox",
-    "higher_beams",
-    "humanize_vocals",
-    "HybridModel",
-    "identify_instruments",
-    "iio_formats",
-    "image_resolution",
-    "importable",
-    "infer",
-    "init_chat",
-    "init_cupy_numpy",
-    "init_custom_model",
-    "init_logger",
-    "init_model_file",
-    "init_model_repo",
-    "init_pretrained_model",
-    "init_stable_whisper",
-    "init_tokenizer",
-    "init_upscale",
-    "initialize_linear_regression",
-    "install_audio_effects",
-    "install_faiss",
-    "install_ffmpeg",
-    "install_ffmpeg_linux",
-    "install_ffmpeg_windows",
-    "installed",
-    "is_admin_windows",
-    "is_ai_model",
-    "is_clusters_model",
-    "is_directory",
-    "is_gpu",
-    "is_huggingface_repo",
-    "is_package_path",
-    "is_symlink",
-    "keep_alive",
-    "kmeans_k_suggestions",
-    "KNOWN_EXTENSIONS",
-    "lang_code_to_name",
-    "language",
-    "language_codes",
-    "limiter_smooth_env",
-    "linear_regression",
-    "LinearRegressionTorch",
-    "linked_url",
-    "load",
-    "load_as_numpy",
-    "load_sox_module",
-    "log",
+_LAZY_SUBMODULES = {
+    "audio",
+    "cuda",
+    "data",
+    "image",
     "logger",
-    "loudness_maximizer",
-    "lyric_video",
-    "MADMOM_AVAILABLE",
-    "main",
-    "map_reduce_summary",
-    "master",
-    "MAX_PATTERN_LENGTH",
-    "merge_columns",
-    "midi_to_audio",
-    "mix_audio",
-    "MODELS",
-    "modify_wheel_requirements",
-    "move",
-    "music_video",
-    "NESTED_QUANTIFIER_RE",
-    "normalize_arr",
-    "normalize_audio_to_peak",
-    "normalize_path",
-    "number_to_hex",
-    "numpy",
-    "numpy_to_cupy",
-    "numpy_to_list",
-    "numpy_to_str",
-    "one_dim_numpy",
-    "optimize_prompt_realism",
-    "order_dataset",
-    "pad_audio",
-    "pad_nested",
-    "pad_sequences",
-    "parent_directory",
-    "patch_dask",
-    "patch_torch_proxy_mode",
-    "path_end",
-    "path_ext",
-    "path_name",
-    "paths",
-    "permit",
-    "pip_install",
-    "pipe",
-    "pitch_shift_vocals",
-    "pkg_file_formats",
-    "post_install",
-    "pre_install",
-    "pre_install",
-    "predict",
-    "predict_audio",
-    "predict_linear_regression",
-    "prepare_common_resources",
-    "prepare_data",
-    "preprocess_prompt",
-    "process_audio_chunks",
-    "process_rows",
-    "PROCESSORS",
-    "pytorch_to_onnx",
-    "random_number",
-    "random_salt",
-    "random_string",
-    "read",
-    "read_as_numpy",
-    "read_audio",
-    "read_video",
-    "remove",
-    "remove_silence",
-    "render_frame_base",
-    "resample",
-    "reshape_numpy",
-    "resize_image",
-    "resize_video",
-    "riaa_filter",
-    "run",
-    "run_linux",
-    "run_windows",
-    "runnable",
-    "rvc_to_onnx",
-    "save",
-    "save_audio",
-    "save_image",
-    "save_temp_text",
-    "script_formats",
-    "secure_command",
-    "secure_path",
-    "select_columns",
-    "select_rows",
-    "send_signal_to_process",
-    "separate_stems",
-    "set_cuda_env",
-    "set_system_message",
-    "simple_text",
-    "SklearnWrapper",
-    "SmartMastering",
-    "SmartMasteringConfig",
+    "media",
+    "ml",
+    "platform",
+    "text",
+    "web",
+}
+
+
+def __getattr__(name: str) -> Any:
+    if name in _LAZY_SUBMODULES:
+        module = importlib.import_module(f"{__name__}.{name}")
+        globals()[name] = module
+        return module
+    raise AttributeError(name)
+
+
+__all__ = (
+    "__version__",
+    "has_sox",
+    "load_sox_module",
     "sox",
-    "split_audio",
-    "split_columns",
-    "split_dataset",
-    "start",
-    "stem_mixer",
-    "stereo",
-    "str_to_numpy",
-    "stretch_audio",
-    "string_to_bytes",
-    "string_to_sha3_512",
-    "strip_nikud",
-    "STYLES_DB",
-    "sub",
-    "subdivide_beats",
-    "summarize",
-    "summary",
-    "SYSTEM_MESSAGE",
-    "SystemDiagnosticsFactory",
-    "tasks",
-    "tensor_length",
-    "theme",
-    "thread",
-    "three_dim_numpy",
-    "tmp",
-    "to_loader",
-    "tokenize_and_pad",
-    "TOKENIZERS",
-    "train",
-    "train_linear_regression",
-    "train_model_rvc",
-    "TrainingData",
-    "transcribe_audio",
-    "translate_with_code",
-    "two_dim_numpy",
-    "unesco_mapping",
-    "unique",
-    "unvectorize",
-    "upscale",
-    "user_agents",
-    "value_to_keys",
-    "vectorize",
-    "wait",
-    "with_retry",
-    "write",
-    "write_mp3",
-    "write_on_image",
-    "write_video",
-]
+)

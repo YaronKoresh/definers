@@ -2,7 +2,7 @@ import unittest
 
 from sklearn.feature_extraction.text import TfidfVectorizer
 
-from definers import create_vectorizer
+from definers.data import create_vectorizer
 
 
 class TestCreateVectorizer(unittest.TestCase):
@@ -32,6 +32,13 @@ class TestCreateVectorizer(unittest.TestCase):
         self.assertIn("a", vectorizer.vocabulary_)
         self.assertIn("single", vectorizer.vocabulary_)
         self.assertIn("document", vectorizer.vocabulary_)
+
+    def test_create_vectorizer_tuple_input(self):
+        texts = ("hello world", "tuple input")
+        vectorizer = create_vectorizer(texts)
+        self.assertIsInstance(vectorizer, TfidfVectorizer)
+        self.assertIn("hello", vectorizer.vocabulary_)
+        self.assertIn("tuple", vectorizer.vocabulary_)
 
 
 if __name__ == "__main__":

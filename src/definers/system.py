@@ -1,30 +1,28 @@
-import ctypes
-import errno
-import importlib
 import logging
 import os
-import platform
-import re
-import shlex
 import shutil
-import site
-import stat
 import subprocess
 import sys
 import tempfile
 import threading
-import unicodedata
 import zipfile
-from contextlib import contextmanager
-from datetime import datetime
-from glob import glob
 from pathlib import Path
 
-from definers.constants import (
+from . import (
+    file_ops as _file_ops,
+    os_utils as _os_utils,
+    path_utils as _path_utils,
+)
+from .constants import (
     FFMPEG_URL,
     KNOWN_EXTENSIONS,
-    SAFE_EXTENSIONS,
     ai_model_formats,
+)
+from .platform import filesystem as _filesystem, paths as _paths
+from .platform.runtime import get_python_version
+from .platform.services import get_infrastructure_services
+from .shared_kernel.observability import (
+    init_logger as _shared_init_logger,
 )
 
 
@@ -34,71 +32,173 @@ def init_logger(
     *,
     enable_console: bool = True,
 ) -> logging.Logger:
-    def _parse_level(value: str | int | None) -> int:
-        if value is None:
-            return logging.INFO
-        if isinstance(value, int):
-            return value
-        name = str(value).strip().upper()
-        if name.isdigit():
-            return int(name)
-        return getattr(logging, name, logging.INFO)
-
-    env_level = os.environ.get("DEFINERS_LOG_LEVEL") or os.environ.get("LOGLEVEL")
-    final_level = _parse_level(level or env_level)
-
-    logger = logging.getLogger("definers")
-    logger.propagate = False
-    logger.setLevel(final_level)
-
-    if log_file is None:
-        log_file = os.environ.get("DEFINERS_LOG_FILE")
-
-    formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    return _shared_init_logger(
+        "definers",
+        level=level,
+        log_file=log_file,
+        enable_console=enable_console,
+        propagate=False,
+        default_level=logging.INFO,
     )
-
-    existing_handlers = {type(h): h for h in logger.handlers}
-
-    if enable_console and logging.StreamHandler not in existing_handlers:
-        stream_handler = logging.StreamHandler()
-        stream_handler.setFormatter(formatter)
-        stream_handler.setLevel(final_level)
-        logger.addHandler(stream_handler)
-
-    if log_file and logging.FileHandler not in existing_handlers:
-        file_handler = logging.FileHandler(log_file, encoding="utf-8")
-        file_handler.setFormatter(formatter)
-        file_handler.setLevel(final_level)
-        logger.addHandler(file_handler)
-
-    for handler in logger.handlers:
-        handler.setLevel(final_level)
-
-    return logger
 
 
 logger = init_logger()
 
 
+normalize_path = _paths.normalize_path
+full_path = _paths.full_path
+paths = _paths.paths
+unique = _paths.unique
+cwd = _paths.cwd
+parent_directory = _paths.parent_directory
+path_end = _paths.path_end
+path_ext = _paths.path_ext
+path_name = _paths.path_name
+add_path = _path_utils.add_path
+find_package_paths = _path_utils.find_package_paths
+is_package_path = _path_utils.is_package_path
+tmp = _paths.tmp
+
+log = _file_ops.log
+catch = _file_ops.catch
+save_temp_text = _file_ops.save_temp_text
+is_directory = _filesystem.is_directory
+is_symlink = _filesystem.is_symlink
+remove_readonly = _filesystem.remove_readonly
+shutil_rmtree_readonly_handler = _filesystem.shutil_rmtree_readonly_handler
+is_text = _filesystem.is_text
+
+get_linux_distribution = _os_utils.get_linux_distribution
+
+
 def get_os_name():
-    return platform.system().lower()
+    return get_infrastructure_services().environment.get_os_name()
 
 
 def is_admin_windows():
-    try:
-        return ctypes.windll.shell32.IsUserAnAdmin()
-    except:
-        return False
+    return get_infrastructure_services().environment.is_admin_windows()
+
+
+def cores():
+    return get_infrastructure_services().environment.cores()
+
+
+def check_version_wildcard(version_spec, version_actual):
+    return get_infrastructure_services().environment.check_version_wildcard(
+        version_spec, version_actual
+    )
+
+
+def installed(package_name: str, version: str | None = None) -> bool:
+    return get_infrastructure_services().environment.installed(
+        package_name, version
+    )
+
+
+def importable(name: str) -> bool:
+    return get_infrastructure_services().environment.importable(name)
+
+
+def runnable(command: str) -> bool:
+    return get_infrastructure_services().environment.runnable(command)
+
+
+def secure_command(command):
+    return get_infrastructure_services().processes.secure_command(command)
+
+
+def exist(*path_parts: str) -> bool:
+    return get_infrastructure_services().filesystem.exist(*path_parts)
+
+
+def copy(source: str, target: str):
+    return get_infrastructure_services().filesystem.copy(source, target)
+
+
+def directory(path: str, exist_ok: bool = True):
+    return get_infrastructure_services().filesystem.directory(path, exist_ok)
+
+
+def move(source: str, target: str):
+    return get_infrastructure_services().filesystem.move(source, target)
+
+
+def delete(path):
+    return get_infrastructure_services().filesystem.delete(path)
+
+
+def remove(path):
+    return get_infrastructure_services().filesystem.remove(path)
+
+
+def load(path: str):
+    return get_infrastructure_services().filesystem.load(path)
+
+
+def read(path: str):
+    return get_infrastructure_services().filesystem.read(path)
+
+
+def write(path: str, text=""):
+    return get_infrastructure_services().filesystem.write(path, text)
+
+
+def save(path: str, text=""):
+    return get_infrastructure_services().filesystem.save(path, text)
+
+
+def run_linux(command, silent: bool = False, env=None):
+    return get_infrastructure_services().processes.run_linux(
+        command, silent=silent, env={} if env is None else env
+    )
+
+
+def run_windows(command, silent: bool = False, env=None):
+    return get_infrastructure_services().processes.run_windows(
+        command, silent=silent, env={} if env is None else env
+    )
+
+
+def run(command, silent: bool = False, env=None):
+    return get_infrastructure_services().processes.run(
+        command, silent=silent, env={} if env is None else env
+    )
+
+
+def get_process_pid(process_name: str) -> int | None:
+    return get_infrastructure_services().processes.get_process_pid(process_name)
+
+
+def send_signal_to_process(pid: int, signal_number: int) -> bool:
+    return get_infrastructure_services().processes.send_signal_to_process(
+        pid, signal_number
+    )
+
+
+def permit(
+    path: str,
+    *,
+    exists_func=None,
+    get_os_name_func=None,
+    subprocess_module=None,
+) -> bool:
+    return get_infrastructure_services().filesystem.permit(
+        path,
+        exists_func=exist if exists_func is None else exists_func,
+        get_os_name_func=get_os_name
+        if get_os_name_func is None
+        else get_os_name_func,
+        subprocess_module=subprocess
+        if subprocess_module is None
+        else subprocess_module,
+    )
 
 
 def install_ffmpeg_windows():
     import requests
 
-    import definers as _d
-
     print("[INFO] Running FFmpeg installer for Windows...")
-    if not _d.is_admin_windows():
+    if not is_admin_windows():
         print(
             "[ERROR] This script requires Administrator privileges to run on Windows."
         )
@@ -186,7 +286,7 @@ def install_ffmpeg_windows():
             "[INFO] IMPORTANT: You must restart your terminal or PC for the new PATH to be recognized."
         )
     except Exception as e:
-        _d.logger.error(f"An error occurred during manual installation: {e}")
+        logger.error(f"An error occurred during manual installation: {e}")
         sys.exit(1)
     finally:
         print("[INFO] Cleaning up temporary files...")
@@ -198,8 +298,6 @@ def install_ffmpeg_windows():
 
 
 def install_ffmpeg_linux():
-    import definers as _d
-
     print("[INFO] Running FFmpeg installer for Linux...")
     if os.geteuid() != 0:
         print("[WARN] This script needs sudo privileges to install packages.")
@@ -241,21 +339,19 @@ def install_ffmpeg_linux():
         )
         sys.exit(1)
     except Exception as e:
-        _d.logger.error(f"An unexpected error occurred: {e}")
+        logger.error(f"An unexpected error occurred: {e}")
         sys.exit(1)
 
 
 def install_ffmpeg():
-    import definers as _d
-
-    if _d.installed("ffmpeg"):
+    if installed("ffmpeg"):
         return True
-    system = _d.get_os_name()
+    system = get_os_name()
     if system == "windows":
-        _d.install_ffmpeg_windows()
+        install_ffmpeg_windows()
         return True
     elif system == "linux":
-        _d.install_ffmpeg_linux()
+        install_ffmpeg_linux()
         return True
     else:
         print(f"[ERROR] Unsupported operating system: {system}.")
@@ -264,9 +360,13 @@ def install_ffmpeg():
 
 
 def install_audio_effects():
-    import definers as _d
+    from .media.web_transfer import (
+        add_to_path_windows,
+        download_and_unzip,
+        download_file,
+    )
 
-    os_name = _d.get_os_name()
+    os_name = get_os_name()
     if os_name == "linux":
         print("Detected Linux. Installing system dependencies with apt-get...")
         dependencies_apt = [
@@ -275,13 +375,13 @@ def install_audio_effects():
             "fluid-soundfont-gm",
             "build-essential",
         ]
-        _d.run(["apt-get", "update", "-y"])
+        run(["apt-get", "update", "-y"])
         pkg_list = (
             dependencies_apt
             if isinstance(dependencies_apt, list)
             else dependencies_apt.split()
         )
-        _d.run(["apt-get", "install", "-y"] + pkg_list)
+        run(["apt-get", "install", "-y"] + pkg_list)
     elif os_name == "windows":
         install_dir = os.path.join(os.path.expanduser("~"), "app_dependencies")
         os.makedirs(install_dir, exist_ok=True)
@@ -297,26 +397,26 @@ def install_audio_effects():
         if "rubberband" not in os.environ.get("PATH", "") or not exist(
             rubberband_extract_path
         ):
-            if _d.download_and_unzip(rubberband_url, rubberband_extract_path):
+            if download_and_unzip(rubberband_url, rubberband_extract_path):
                 extracted_dirs = os.listdir(rubberband_extract_path)
                 if extracted_dirs:
                     rubberband_bin_path = os.path.join(
                         rubberband_extract_path, extracted_dirs[0]
                     )
-                    _d.add_to_path_windows(rubberband_bin_path)
+                    add_to_path_windows(rubberband_bin_path)
         fluidsynth_extract_path = os.path.join(install_dir, "fluidsynth")
         if "fluidsynth" not in os.environ.get("PATH", "") or not exist(
             fluidsynth_extract_path
         ):
-            if _d.download_and_unzip(fluidsynth_url, fluidsynth_extract_path):
+            if download_and_unzip(fluidsynth_url, fluidsynth_extract_path):
                 fluidsynth_bin_path = os.path.join(
                     fluidsynth_extract_path, "bin"
                 )
-                _d.add_to_path_windows(fluidsynth_bin_path)
+                add_to_path_windows(fluidsynth_bin_path)
         if not exist(soundfont_path):
             os.makedirs(os.path.dirname(soundfont_path), exist_ok=True)
             print("Downloading SoundFont for MIDI playback...")
-            _d.download_file(soundfont_url, soundfont_path)
+            download_file(soundfont_url, soundfont_path)
     else:
         print(
             f"Unsupported OS: {os_name}. Manual installation of system dependencies may be required."
@@ -325,7 +425,7 @@ def install_audio_effects():
 
 
 def pip_install(packs):
-    from definers import download_file
+    from .media.web_transfer import download_file
 
     packs_arr = packs.strip().split()
     for idx, pack in enumerate(packs_arr):
@@ -425,7 +525,8 @@ def modify_wheel_requirements(wheel_path: str, requirements_map: dict):
 
 
 def build_faiss():
-    from definers import free, git, set_cuda_env
+    from .cuda import free, set_cuda_env
+    from .ml import git
 
     with cwd():
         git("YaronKoresh", "faiss", parent="./xfaiss")
@@ -481,15 +582,6 @@ def build_faiss():
         catch(f"An unexpected error occurred: {e}")
 
 
-def exist(*p):
-    joined = os.path.join(*[str(_p).strip() for _p in p])
-    if not joined or not joined.strip():
-        return False
-    expanded = os.path.expanduser(joined)
-    absolute = os.path.abspath(expanded)
-    return os.path.exists(absolute)
-
-
 def secure_path(
     path: list | str,
     trust: list | str | None = None,
@@ -497,568 +589,11 @@ def secure_path(
     basename: bool = False,
     shell: bool = False,
 ) -> str:
-    if not path or not isinstance(path, (str, list)):
-        raise ValueError("Invalid path: must be a non-empty string or list.")
-
-    if isinstance(path, list):
-        path = full_path(*path)
-
-    clean_str = unicodedata.normalize("NFKC", str(path))
-    clean_str = " ".join(clean_str.split())
-
-    if not clean_str:
-        raise ValueError("Path is empty after cleaning.")
-
-    _STRICT_BASENAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
-    _TRAVERSAL_RE = re.compile(r"(?:\.\.[/\\])|(?:\A[/\\]\.\.)")
-
-    if basename:
-        if not _STRICT_BASENAME_RE.fullmatch(clean_str):
-            raise ValueError(
-                f"Security Error: Invalid basename format: {clean_str!r}"
-            )
-        result = clean_str
-
-    else:
-        if _TRAVERSAL_RE.search(clean_str):
-            raise ValueError(
-                "Security Error: Path traversal characters detected."
-            )
-
-        try:
-            result = full_path(clean_str)
-        except Exception as e:
-            raise ValueError(f"Failed to resolve path: {e}")
-
-        p = Path(result)
-
-        if trust is None:
-            trust = []
-        elif isinstance(trust, str):
-            trust = [trust]
-
-        bases = [Path(full_path(b)) for b in trust if b.strip()]
-
-        cwd = Path.cwd().resolve()
-        if cwd not in bases:
-            bases.append(cwd)
-
-        temp_dir = Path(full_path(tempfile.gettempdir())).resolve()
-        if temp_dir not in bases:
-            bases.append(temp_dir)
-
-        is_safe = any(
-            p.is_relative_to(b)
-            if sys.version_info >= (3, 9)
-            else (str(p) == str(b) or str(p).startswith(str(b) + os.path.sep))
-            for b in bases
-        )
-
-        if not is_safe:
-            raise ValueError(
-                f"Security Error: Path escapes allowed directories: {p}"
-            )
-
-    if shell:
-        result = shlex.quote(result)
-
-    return result
-
-
-def add_path(*p):
-    import definers as _d
-
-    joined = os.path.join(*[str(_p).strip() for _p in p]) if p else ""
-    path = joined if joined == "" else full_path(*p)
-    if path not in sys.path:
-        _d.permit(path)
-        sys.path.insert(0, path)
-        site.addsitedir(path)
-        importlib.invalidate_caches()
-    if get_os_name() == "linux" or get_os_name() == "darwin":
-        cmd = f'export PATH="{path}:$PATH"'
-        if exist("~/.bashrc"):
-            content = read("~/.bashrc")
-            if content is not None:
-                write("~/.bashrc", "\n".join([content, cmd]))
-        elif exist("~/.zshrc"):
-            content = read("~/.zshrc")
-            if content is not None:
-                write("~/.zshrc", "\n".join([content, cmd]))
-        return run(cmd)
-    if get_os_name() == "windows":
-        return run(f'setx PATH "%PATH%;{path}"')
-
-
-def normalize_path(p):
-    normalized = os.path.normpath(p)
-    expanded = os.path.expanduser(normalized)
-    return expanded
-
-
-def full_path(*p):
-    joined = os.path.join(*[str(_p).strip() for _p in p])
-    return str(Path(joined).expanduser().resolve())
-
-
-def paths(*patterns):
-    import definers as _d
-
-    patterns = [full_path(p) for p in patterns]
-    path_list = []
-    for p in patterns:
-        try:
-            lst = list(_d.glob(p, recursive=True))
-            path_list = [*path_list, *lst]
-        except Exception:
-            pass
-    return sorted(list(set(path_list)))
-
-
-def copy(src, dst):
-    src_path = Path(full_path(src))
-    if src_path.is_symlink():
-        resolved = src_path.resolve()
-        if os.path.isdir(str(resolved)):
-            shutil.copytree(
-                str(src),
-                str(dst),
-                symlinks=False,
-                ignore_dangling_symlinks=True,
-            )
-        else:
-            shutil.copy(str(src), str(dst))
-    elif os.path.isdir(str(src_path)):
-        shutil.copytree(
-            str(src), str(dst), symlinks=False, ignore_dangling_symlinks=True
-        )
-    else:
-        shutil.copy(str(src), str(dst))
+    return _paths.secure_path(path, trust, basename=basename, shell=shell)
 
 
 def big_number(zeros=10):
     return int("1" + "0" * zeros)
-
-
-def find_package_paths(package_name):
-    import definers as _d
-
-    package_paths_found = []
-    package_dir_name = package_name.replace("-", "_")
-    site_packages_dirs = _d.site.getsitepackages()
-    for site_packages_dir in site_packages_dirs:
-        package_path = os.path.join(site_packages_dir, package_dir_name)
-        if os.path.exists(package_path) and os.path.isdir(package_path):
-            package_paths_found.append(package_path)
-    for path in sys.path:
-        if path:
-            potential_package_path = os.path.join(path, package_dir_name)
-            if os.path.exists(potential_package_path) and os.path.isdir(
-                potential_package_path
-            ):
-                package_paths_found.append(potential_package_path)
-    for site_packages_dir in site_packages_dirs:
-        dist_packages_dir = site_packages_dir.replace(
-            "site-packages", "dist-packages"
-        )
-        if dist_packages_dir != site_packages_dir:
-            package_path = os.path.join(dist_packages_dir, package_dir_name)
-            if os.path.exists(package_path) and os.path.isdir(package_path):
-                package_paths_found.append(package_path)
-    unique_paths = unique(package_paths_found)
-    return unique_paths
-
-
-def unique(arr):
-    return sorted(list(set(arr)))
-
-
-def tmp(suffix: str | None = None, keep: bool = True, dir=False):
-    import definers as _d
-
-    if dir:
-        temp_dir_path = tempfile.TemporaryDirectory()
-        temp_dir_path = temp_dir_path.__enter__()
-
-        if not keep:
-            _d.delete(temp_dir_path)
-
-        return temp_dir_path
-
-    if not isinstance(suffix, str) or not suffix.strip():
-        suffix = "data"
-
-    suffix = str(suffix).strip().strip(".").lower()
-
-    if suffix in SAFE_EXTENSIONS:
-        suffix = "." + suffix
-
-        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as temp:
-            temp_name = temp.name
-
-        if not keep:
-            _d.delete(temp_name)
-
-        return temp_name
-
-    else:
-        raise ValueError(
-            f"Invalid suffix for tmp file. Allowed extensions are: {', '.join(SAFE_EXTENSIONS)}"
-        )
-
-
-def get_process_pid(process_name):
-    try:
-        pid = int(subprocess.check_output(["pidof", process_name]).strip())
-        return pid
-    except subprocess.CalledProcessError:
-        return None
-    except ValueError:
-        return None
-
-
-def send_signal_to_process(pid, signal_number):
-    try:
-        os.kill(pid, signal_number)
-        return True
-    except OSError as e:
-        print(f"Error sending signal: {e}")
-        return False
-
-
-@contextmanager
-def cwd(dir=None):
-    if not dir:
-        dir = "."
-    if not dir.startswith("/") and (not dir.startswith("~")):
-        dir = full_path(os.path.dirname(__file__), dir)
-    else:
-        dir = full_path(dir)
-    owd = full_path(os.getcwd())
-    try:
-        os.chdir(dir)
-        yield dir
-    finally:
-        try:
-            os.chdir(owd)
-        except:
-            pass
-
-
-def log(subject: str, data: str | int | None = None, status: bool | str | None = None):
-    import definers as _d
-
-    if data is None:
-        data = "No data provided"
-
-    now = datetime.now().time()
-    payload = str(data)
-
-    if status is True:
-        _d.logger.info(f"[{now}] SUCCESS - {subject}\n{payload}")
-    elif status is False:
-        _d.logger.error(f"[{now}] ERROR - {subject}\n{payload}")
-    elif isinstance(status, str) and status.strip():
-        _d.logger.info(f"[{now}] {status.strip()} - {subject}\n{payload}")
-    else:
-        _d.logger.info(f"[{now}] {subject}\n{payload}")
-
-
-def catch(error: object, message: str | None = None, reraise: bool = False) -> None:
-    import definers as _d
-    if message:
-        _d.logger.error(message)
-    if isinstance(error, BaseException):
-        _d.logger.exception(error)
-    else:
-        _d.logger.error(str(error))
-    if reraise and isinstance(error, BaseException):
-        raise error
-
-
-def directory(dir, exist_ok=True):
-    dir = full_path(str(dir))
-    os.makedirs(dir, exist_ok=exist_ok)
-
-
-def move(src, dest):
-    src_path = full_path(str(src))
-    if not exist(src_path):
-        raise FileNotFoundError(f"Source path not found: {src}")
-    copy(src, dest)
-    delete(src)
-
-
-def is_directory(*p):
-    return Path(os.path.join(*[str(_p).strip() for _p in p])).is_dir()
-
-
-def is_symlink(*p):
-    return Path(os.path.join(*[str(_p).strip() for _p in p])).is_symlink()
-
-
-def remove_readonly(func, path, excinfo):
-    exception_instance = excinfo[1]
-
-    if exception_instance.errno == errno.EACCES:
-        os.chmod(path, stat.S_IWRITE)
-        func(path)
-    else:
-        raise
-
-
-def shutil_rmtree_readonly_handler(func, path, exc_info):
-    exception_instance = (
-        exc_info[1] if isinstance(exc_info, tuple) else exc_info
-    )
-
-    if exception_instance.errno == errno.EACCES:
-        os.chmod(path, stat.S_IWRITE)
-        func(path)
-    else:
-        raise
-
-
-def delete(path: str | list):
-    secure_path(path)
-    expanded = Path(path).expanduser()
-    unresolved = Path(os.path.abspath(str(expanded)))
-    if unresolved.is_symlink():
-        unresolved.unlink()
-        return
-    resolved = full_path(path)
-    if not exist(resolved):
-        return
-    p = Path(resolved)
-    if is_directory(resolved):
-        try:
-            shutil.rmtree(resolved, on_exc=shutil_rmtree_readonly_handler)
-        except TypeError:
-            shutil.rmtree(resolved, onerror=shutil_rmtree_readonly_handler)
-    else:
-        p.unlink(missing_ok=True)
-
-
-def remove(path: str | list):
-    delete(path)
-
-
-def load(path):
-    path = full_path(str(path))
-    permit(path)
-    if not exist(path):
-        return None
-    if is_directory(path):
-        return sorted([p.name for p in Path(path).iterdir()])
-    else:
-        raw = Path(path).read_bytes()
-        if b"\x00" in raw or not is_text(raw):
-            return raw
-        try:
-            return raw.decode("utf-8").replace("\r\n", "\n")
-        except (UnicodeDecodeError, ValueError):
-            return raw
-
-
-def is_text(data):
-    if not data:
-        return True
-    text_chars = set(range(32, 127)) | {9, 10, 13} | set(range(128, 256))
-    return all(b in text_chars for b in data[:8192])
-
-
-def read(path):
-    return load(path)
-
-
-def write(path, txt=""):
-    return save(path, txt)
-
-
-def parent_directory(p, levels: int = 1):
-    path = Path(str(p))
-    for _ in range(levels):
-        path = path.parent
-    return os.path.normpath(str(path))
-
-
-def save(path, text=""):
-    os.makedirs(parent_directory(path), exist_ok=True)
-    with open(path, "w+", encoding="utf8") as file:
-        file.write(str(text))
-
-
-def save_temp_text(text_content):
-    if text_content is None:
-        return None
-    temp_path = tmp(".data")
-    with open(temp_path, "w", encoding="utf-8") as f:
-        f.write(text_content)
-    return temp_path
-
-
-def run_linux(command, silent=False, env=None):
-    if env is None:
-        env = {}
-    original_env = os.environ.copy()
-    modified_env = {**original_env, **env}
-
-    try:
-        args = secure_command(command)
-    except ValueError as e:
-        print("Error: Command rejected")
-        catch(e)
-        return False
-
-    try:
-        proc = subprocess.Popen(
-            args,
-            shell=False,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            env=modified_env,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-        )
-        stdout, stderr = proc.communicate()
-
-        if stdout is None:
-            stdout = ""
-        if stderr is None:
-            stderr = ""
-
-        returncode = proc.returncode
-
-        if not silent:
-            if stdout:
-                print(stdout, end="", flush=True)
-            if stderr:
-                print(stderr, end="", flush=True)
-
-        if returncode != 0:
-            if not silent:
-                log(f"Script failed [{returncode}]", " ".join(args))
-                log(f"Stderr: {stderr.strip()}", "")
-            return False
-        else:
-            if not silent:
-                log("Script completed", " ".join(args))
-            out_lines = stdout.strip().splitlines()
-            ret_lines = [o.strip() for o in out_lines if o.strip() != ""]
-            return ret_lines
-
-    except Exception as e:
-        catch(e)
-
-    return False
-
-
-def run_windows(command, silent=False, env=None):
-    try:
-        if env is None:
-            env = {}
-        original_env = os.environ.copy()
-        modified_env = {**original_env, **env}
-
-        try:
-            args = secure_command(command)
-        except ValueError as e:
-            print("Error: Command rejected")
-            catch(e)
-            return False
-
-        process = subprocess.Popen(
-            args,
-            shell=False,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            env=modified_env,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-        )
-
-        (stdout, stderr) = process.communicate()
-
-        if stdout is None:
-            stdout = ""
-        if stderr is None:
-            stderr = ""
-
-        returncode = process.returncode
-
-        if not silent:
-            if stdout:
-                print(stdout, end="", flush=True)
-            if stderr:
-                print(stderr, end="", flush=True)
-
-        if returncode != 0:
-            if not silent:
-                log(f"Script failed [{returncode}]", " ".join(args))
-                log(f"Stderr: {stderr.strip()}", "")
-            return False
-        else:
-            if not silent:
-                log("Script completed", " ".join(args))
-            out_lines = stdout.strip().splitlines()
-            ret_lines = [o.strip() for o in out_lines if o.strip()]
-            return ret_lines
-
-    except Exception as e:
-        catch(e)
-
-    return False
-
-
-def secure_command(command: str | list) -> list[str]:
-    if isinstance(command, str):
-        text_cmd = command.strip()
-        if not text_cmd:
-            raise ValueError("Command is empty.")
-
-        if re.search(r"[;&|`$]", text_cmd):
-            raise ValueError(
-                f"Security Error: Unsafe characters in command: {text_cmd}"
-            )
-
-        try:
-            cmd_list = shlex.split(text_cmd)
-        except ValueError as e:
-            raise ValueError(f"Invalid command syntax: {e}")
-
-    elif isinstance(command, list):
-        cmd_list = [str(c).strip() for c in command if str(c).strip()]
-        if not cmd_list:
-            raise ValueError("Command list is empty.")
-
-        for arg in cmd_list:
-            if len(arg) > 1024:
-                raise ValueError(
-                    f"Security Error: Argument too long: {arg[:50]}..."
-                )
-    else:
-        raise TypeError("Command must be a string or a list.")
-
-    executable = cmd_list[0]
-
-    if "/" in executable or "\\" in executable:
-        cmd_list[0] = secure_path(executable)
-    return cmd_list
-
-
-def run(command, silent=False, env=None):
-    import definers as _d
-
-    if env is None:
-        env = {}
-    if sys.platform.startswith("win"):
-        return _d.run_windows(command, silent=silent, env=env)
-    else:
-        return _d.run_linux(command, silent=silent, env=env)
 
 
 def thread(func, *args, **kwargs):
@@ -1077,242 +612,6 @@ def thread(func, *args, **kwargs):
 def wait(*threads):
     for t in threads:
         t.join()
-
-
-def permit(path):
-    try:
-        if not exist(path):
-            return False
-        if get_os_name() == "linux":
-            subprocess.run(["chmod", "-R", "a+xrw", path], check=True)
-            return True
-        if get_os_name() == "windows":
-            subprocess.run(
-                ["icacls", path, "/grant", "Everyone:F", "/T"], check=True
-            )
-            return True
-        return False
-    except Exception:
-        return False
-
-
-def check_version_wildcard(version_spec, version_actual):
-
-    import fnmatch
-
-    if version_spec is None or version_actual is None:
-        return version_spec == version_actual
-
-    return fnmatch.fnmatchcase(version_actual, version_spec)
-
-
-def installed(pack, version=None):
-    import definers as _d
-
-    pack_lower = pack.lower().strip()
-    version_lower = None
-    if version:
-        version_lower = version.lower().strip()
-    system = _d.get_os_name()
-    if system == "windows":
-        cmd = 'powershell.exe -Command "Get-ItemProperty HKLM:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*, HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*, HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* | Select-Object DisplayName, DisplayVersion | Format-Table -HideTableHeaders'
-        try:
-            lines = _d.run(cmd, silent=True)
-            for line in lines:
-                parts = re.split("\\s{2,}", line.strip())
-                if not parts or not parts[0]:
-                    continue
-                name = parts[0].lower().strip()
-                ver = parts[1].strip() if len(parts) > 1 else ""
-                if pack_lower in name:
-                    if (
-                        version_lower is None
-                        or (ver and ver.startswith(version_lower))
-                        or (
-                            ver
-                            and "*" in version_lower
-                            and check_version_wildcard(version_lower, ver)
-                        )
-                    ):
-                        return True
-        except Exception:
-            pass
-    elif system == "linux":
-        which_result = _d.shutil.which(pack)
-        if which_result:
-            if version_lower is None:
-                return True
-            try:
-                lines = _d.run([pack, "--version"], silent=True)
-                if not lines:
-                    lines = _d.run([pack, "-v"], silent=True)
-                if lines:
-                    match = re.search("(\\d+\\.\\d+(\\.\\d+)*)", lines[0])
-                    if match:
-                        actual_version = match.group(0)
-                        if actual_version.startswith(version_lower) or (
-                            "*" in version_lower
-                            and check_version_wildcard(
-                                version_lower, actual_version
-                            )
-                        ):
-                            return True
-            except Exception:
-                pass
-    try:
-        lines = _d.run("pip list", silent=True)
-        if lines:
-            for line in lines:
-                from definers import regex_utils
-
-                parts = regex_utils.sub(r"( ){2,}", ";", line).split(";")
-                if len(parts) == 2:
-                    n = parts[0].lower().strip()
-                    v = parts[1].lower().strip()
-                    if n == pack_lower and (
-                        version_lower is None
-                        or v.startswith(version_lower)
-                        or (
-                            "*" in version_lower
-                            and check_version_wildcard(version_lower, v)
-                        )
-                    ):
-                        return True
-                else:
-                    continue
-        return False
-    except subprocess.CalledProcessError:
-        raise
-    except FileNotFoundError:
-        return False
-
-
-def importable(name):
-    if not isinstance(name, str):
-        return False
-    module_name = name.strip()
-    if not module_name:
-        return False
-    try:
-        module_specification = importlib.util.find_spec(module_name)
-        if module_specification is None:
-            return False
-        return True
-    except Exception:
-        return False
-
-
-def runnable(cmd):
-    if not isinstance(cmd, str):
-        return False
-    command_line = cmd.strip()
-    if not command_line:
-        return False
-    try:
-        command_parts = shlex.split(command_line, posix=False)
-    except ValueError:
-        command_parts = command_line.split()
-    if len(command_parts) == 0:
-        return False
-    command_name = command_parts[0].strip('"').strip("'")
-    if not command_name:
-        return False
-    return shutil.which(command_name) is not None
-
-
-def is_package_path(package_path, package_name=None):
-    if (
-        exist(package_path)
-        and os.path.isdir(package_path)
-        and (
-            os.path.exists(os.path.join(package_path, "__init__.py"))
-            or os.path.exists(
-                os.path.join(package_path, os.path.basename(package_path))
-            )
-            or os.path.exists(os.path.join(package_path, "src"))
-        )
-        and (
-            package_name is None
-            or package_name == os.path.basename(package_path)
-        )
-    ):
-        return True
-    return False
-
-
-def get_python_version():
-    import definers as _d
-
-    try:
-        version_info = _d.sys.version_info
-        if not hasattr(version_info, "major"):
-            raise AttributeError(
-                "sys.version_info is missing essential version attributes"
-            )
-        major = version_info.major
-        minor = getattr(version_info, "minor", 0)
-        micro = getattr(version_info, "micro", 0)
-        version_str = f"{major}.{minor}.{micro}"
-        return version_str
-    except Exception as e:
-        print(f"Error getting Python version: {e}")
-        return None
-
-
-def get_linux_distribution():
-    import definers as _d
-
-    try:
-        try:
-            _d.subprocess.run(
-                ["apt-get", "update"],
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-            _d.subprocess.run(
-                ["apt-get", "install", "-y", "lsb_release"],
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-            result = _d.subprocess.run(
-                ["lsb_release", "-a"],
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-            output = result.stdout
-            distro_match = re.search("Distributor ID:\\s*([^\\n]+)", output)
-            release_match = re.search("Release:\\s*([^\\n]+)", output)
-            if distro_match and release_match:
-                distro = distro_match.group(1).strip().lower().split(" ")[0]
-                release = release_match.group(1).strip()
-                return (distro, release)
-            else:
-                return (None, None)
-        except (FileNotFoundError, subprocess.CalledProcessError):
-            pass
-        try:
-            with open("/etc/os-release") as f:
-                os_release_content = f.read()
-            name_match = re.search('NAME="([^"]+)"', os_release_content)
-            version_match = re.search(
-                'VERSION_ID="([^"]+)"', os_release_content
-            )
-            if name_match and version_match:
-                distro = name_match.group(1).strip()
-                release = version_match.group(1).strip()
-                return (distro, release)
-        except FileNotFoundError:
-            pass
-        return (None, None)
-    except Exception:
-        return (None, None)
-
-
-def cores():
-    return os.cpu_count()
 
 
 def get_ext(input_path):
@@ -1335,7 +634,7 @@ def compress(dir: str, format: str = "zip", keep_name: bool = True):
     if keep_name:
         target = str(Path(dir).parent) + "/" + str(Path(dir).name)
     else:
-        from definers import random_string
+        from .text import random_string
 
         target = str(Path(dir).parent) + "/" + random_string()
     shutil.make_archive(
@@ -1351,23 +650,6 @@ def extract(arcv, dest=None, format=None):
         shutil.unpack_archive(arcv, dest, format)
     else:
         shutil.unpack_archive(arcv, dest)
-
-
-def path_end(p: str):
-    return Path(p.rstrip("/").rstrip("\\")).name
-
-
-def path_ext(p):
-    if is_directory(p):
-        return None
-    try:
-        return "".join(Path(p).suffixes)
-    except:
-        return None
-
-
-def path_name(p):
-    return str(Path(p).stem)
 
 
 def pre_install():
@@ -1394,7 +676,7 @@ def pre_install():
 def post_install():
     import numpy as _np
 
-    import definers
+    from . import cuda as _cuda
 
     try:
         import torch.fx.experimental.proxy_tensor as proxy_mod
@@ -1405,17 +687,15 @@ def post_install():
         pass
     if not hasattr(_np, "_no_nep50_warning"):
         _np._no_nep50_warning = lambda *a, **_kw: None
-    definers.free()
+    _cuda.free()
 
 
 def install_faiss():
-    import definers
-
-    if definers.importable("faiss"):
+    if importable("faiss"):
         return False
     try:
         faiss_dir = "_faiss_"
-        with definers.cwd() as d:
+        with cwd() as d:
             faiss_dir = d
         subprocess.run(
             [
@@ -1426,10 +706,10 @@ def install_faiss():
             ],
             check=True,
         )
-        py = definers.sys.executable
-        prefix = definers.sys.prefix
-        major = definers.sys.version_info.major
-        minor = definers.sys.version_info.minor
+        py = sys.executable
+        prefix = sys.prefix
+        major = sys.version_info.major
+        minor = sys.version_info.minor
         subprocess.run(
             [
                 "cmake",
@@ -1467,16 +747,14 @@ def install_faiss():
 
 
 def apt_install(upgrade=False):
-    import definers
-
-    definers.pre_install()
+    pre_install()
     basic_apt = "build-essential gcc cmake swig gdebi git git-lfs wget curl libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev libncursesw5-dev xz-utils tk-dev libffi-dev liblzma-dev initramfs-tools libgirepository1.0-dev libdbus-1-dev libdbus-glib-1-dev libsecret-1-0 libmanette-0.2-0 libharfbuzz0b libharfbuzz-icu0 libenchant-2-2 libhyphen0 libwoff1 libgraphene-1.0-0 libxml2-dev libxmlsec1-dev"
     audio_apt = "libportaudio2 libasound2-dev sox libsox-fmt-all praat ffmpeg libavcodec-extra libavif-dev"
     visual_apt = "libopenblas-dev libgflags-dev libgles2 libgtk-3-0 libgtk-4-1 libatk1.0-0 libatk-bridge2.0-0 libcups2 libxcomposite1 libxdamage1 libatspi2.0-0 libgstreamer1.0-0 gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-tools gstreamer1.0-gl"
-    definers.run(["apt-get", "update"])
+    run(["apt-get", "update"])
     pkgstr = f"{basic_apt} {audio_apt} {visual_apt}".strip()
     pkg_list = pkgstr.split()
-    definers.run(["apt-get", "install", "-y"] + pkg_list)
+    run(["apt-get", "install", "-y"] + pkg_list)
     if upgrade:
-        definers.run("apt-get upgrade -y")
-    definers.post_install()
+        run("apt-get upgrade -y")
+    post_install()

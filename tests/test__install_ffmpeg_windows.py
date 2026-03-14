@@ -1,11 +1,11 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from definers import install_ffmpeg_windows, is_admin_windows
+from definers.system import install_ffmpeg_windows
 
 
 class TestInstallFfmpegWindows(unittest.TestCase):
-    @patch("definers.is_admin_windows", return_value=True)
+    @patch("definers.system.is_admin_windows", return_value=True)
     @patch("subprocess.run")
     def test_winget_install_succeeds(self, mock_run, mock_is_admin):
         mock_run.return_value = MagicMock(
@@ -15,7 +15,7 @@ class TestInstallFfmpegWindows(unittest.TestCase):
         mock_run.assert_called_once()
         self.assertIn("winget", mock_run.call_args[0][0])
 
-    @patch("definers.is_admin_windows", return_value=False)
+    @patch("definers.system.is_admin_windows", return_value=False)
     @patch("builtins.print")
     @patch("sys.exit", side_effect=SystemExit)
     def test_non_admin_exits(self, mock_exit, mock_print, mock_is_admin):
@@ -26,7 +26,7 @@ class TestInstallFfmpegWindows(unittest.TestCase):
         )
         mock_exit.assert_called_once_with(1)
 
-    @patch("definers.is_admin_windows", return_value=True)
+    @patch("definers.system.is_admin_windows", return_value=True)
     @patch("subprocess.run", side_effect=[FileNotFoundError, MagicMock()])
     @patch("requests.get")
     @patch("zipfile.ZipFile")

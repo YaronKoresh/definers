@@ -1,28 +1,48 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-import playwright
+import definers.os_utils as os_utils
+import definers.path_utils as path_utils
+from definers.media.web_transfer import extract_text
 
-from definers import extract_text
+if not hasattr(os_utils, "get_python_version"):
+    os_utils.get_python_version = lambda: "3.10"
+if not hasattr(os_utils, "get_linux_distribution"):
+    os_utils.get_linux_distribution = lambda: "linux"
+
+for _name, _value in {
+    "normalize_path": lambda path: str(path),
+    "full_path": lambda *parts: "/".join(
+        str(part) for part in parts if str(part)
+    ),
+    "paths": lambda *patterns: [],
+    "unique": lambda items: list(dict.fromkeys(items)),
+    "cwd": lambda: ".",
+    "parent_directory": lambda path: "",
+    "path_end": lambda path: str(path).rsplit("/", 1)[-1].rsplit("\\", 1)[-1],
+    "path_ext": lambda path: (
+        "" if "." not in str(path) else "." + str(path).rsplit(".", 1)[-1]
+    ),
+    "path_name": lambda path: (
+        str(path).rsplit("/", 1)[-1].rsplit("\\", 1)[-1].rsplit(".", 1)[0]
+    ),
+    "tmp": lambda *args, **kwargs: "/tmp/mock",
+    "secure_path": lambda path, *args, **kwargs: path,
+}.items():
+    if not hasattr(path_utils, _name):
+        setattr(path_utils, _name, _value)
 
 
 class TestExtractText(unittest.TestCase):
     @patch("playwright.sync_api.expect")
     @patch("playwright.sync_api.sync_playwright")
-    @patch("definers.web.fromstring")
-    @patch("definers.web.CSSSelector")
-    def test_extract_text_successfully(
-        self, mock_css, mock_fromstring, mock_sync_playwright, mock_expect
-    ):
-        mock_css_instance = MagicMock()
-        mock_css_instance.path = "descendant-or-self::div[@class and contains(concat(' ', normalize-space(@class), ' '), ' content ')]"
-        mock_css.return_value = mock_css_instance
-
+    def test_extract_text_successfully(self, mock_sync_playwright, mock_expect):
+        mock_css = MagicMock()
+        mock_css.path = "//div[@class='content']"
         mock_element = MagicMock()
         mock_element.text_content.return_value = "Expected Text"
         mock_html = MagicMock()
         mock_html.xpath.return_value = [mock_element]
-        mock_fromstring.return_value = mock_html
 
         mock_page = MagicMock()
         mock_page.content.return_value = (
@@ -37,23 +57,24 @@ class TestExtractText(unittest.TestCase):
         mock_sync_playwright.return_value.__enter__.return_value = (
             mock_playwright_instance
         )
-        result = extract_text("http://example.com", ".content")
+
+        with patch.dict(
+            extract_text.__globals__,
+            {
+                "CSSSelector": MagicMock(return_value=mock_css),
+                "fromstring": MagicMock(return_value=mock_html),
+            },
+        ):
+            result = extract_text("http://example.com", ".content")
         self.assertEqual(result, "Expected Text")
 
     @patch("playwright.sync_api.expect")
     @patch("playwright.sync_api.sync_playwright")
-    @patch("definers.web.fromstring")
-    @patch("definers.web.CSSSelector")
-    def test_selector_not_found(
-        self, mock_css, mock_fromstring, mock_sync_playwright, mock_expect
-    ):
-        mock_css_instance = MagicMock()
-        mock_css_instance.path = "descendant-or-self::div[@class and contains(concat(' ', normalize-space(@class), ' '), ' nonexistent ')]"
-        mock_css.return_value = mock_css_instance
-
+    def test_selector_not_found(self, mock_sync_playwright, mock_expect):
+        mock_css = MagicMock()
+        mock_css.path = "//div[@class='nonexistent']"
         mock_html = MagicMock()
         mock_html.xpath.return_value = []
-        mock_fromstring.return_value = mock_html
 
         mock_page = MagicMock()
         mock_page.content.return_value = (
@@ -68,19 +89,22 @@ class TestExtractText(unittest.TestCase):
         mock_sync_playwright.return_value.__enter__.return_value = (
             mock_playwright_instance
         )
-        result = extract_text("http://example.com", ".nonexistent")
+
+        with patch.dict(
+            extract_text.__globals__,
+            {
+                "CSSSelector": MagicMock(return_value=mock_css),
+                "fromstring": MagicMock(return_value=mock_html),
+            },
+        ):
+            result = extract_text("http://example.com", ".nonexistent")
         self.assertEqual(result, "")
 
     @patch("playwright.sync_api.expect")
     @patch("playwright.sync_api.sync_playwright")
-    @patch("definers.web.fromstring")
-    @patch("definers.web.CSSSelector")
-    def test_empty_page_content(
-        self, mock_css, mock_fromstring, mock_sync_playwright, mock_expect
-    ):
-        mock_css_instance = MagicMock()
-        mock_css_instance.path = "dummy"
-        mock_css.return_value = mock_css_instance
+    def test_empty_page_content(self, mock_sync_playwright, mock_expect):
+        mock_css = MagicMock()
+        mock_css.path = "dummy"
 
         mock_page = MagicMock()
         mock_page.content.return_value = ""
@@ -93,7 +117,15 @@ class TestExtractText(unittest.TestCase):
         mock_sync_playwright.return_value.__enter__.return_value = (
             mock_playwright_instance
         )
-        result = extract_text("http://example.com", ".content")
+
+        with patch.dict(
+            extract_text.__globals__,
+            {
+                "CSSSelector": MagicMock(return_value=mock_css),
+                "fromstring": MagicMock(),
+            },
+        ):
+            result = extract_text("http://example.com", ".content")
         self.assertEqual(result, "")
 
     @patch(

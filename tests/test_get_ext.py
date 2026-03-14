@@ -1,6 +1,6 @@
 import unittest
 
-from definers import get_ext
+from definers.system import get_ext
 
 
 class TestGetExt(unittest.TestCase):

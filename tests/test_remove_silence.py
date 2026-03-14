@@ -1,8 +1,25 @@
+import importlib.util
 import subprocess
+import sys
 import unittest
-from unittest.mock import call, patch
+from pathlib import Path
+from unittest.mock import patch
 
-from definers import remove_silence
+
+def _load_module(module_name: str, module_path: Path):
+    spec = importlib.util.spec_from_file_location(module_name, module_path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
+ROOT = Path(__file__).resolve().parents[1]
+AUDIO_IO_MODULE = _load_module(
+    "_test_remove_silence_io", ROOT / "src" / "definers" / "audio" / "io.py"
+)
+remove_silence = AUDIO_IO_MODULE.remove_silence
 
 
 class TestRemoveSilence(unittest.TestCase):
@@ -26,7 +43,7 @@ class TestRemoveSilence(unittest.TestCase):
         mock_run.assert_called_once_with(expected_command, check=True)
 
     @patch("subprocess.run")
-    @patch("definers.catch")
+    @patch("definers.file_ops.catch")
     def test_remove_silence_failure(self, mock_catch, mock_run):
         mock_run.side_effect = subprocess.CalledProcessError(1, "ffmpeg")
         input_file = "input.wav"

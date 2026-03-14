@@ -1,13 +1,19 @@
 import tempfile
 import unittest
+from pathlib import Path
 
-from definers import Database
+from definers.persistence.database import Database
 
 
 class TestDatabase(unittest.TestCase):
     def setUp(self):
         self._tmpdir = tempfile.mkdtemp()
         self.db = Database(self._tmpdir)
+
+    def tearDown(self):
+        import shutil
+
+        shutil.rmtree(self._tmpdir, ignore_errors=True)
 
     def test_push_and_history(self):
         self.db.push("items", {"id": "1", "name": "apple"}, timestamp=1000)
@@ -57,6 +63,26 @@ class TestDatabase(unittest.TestCase):
         self.db.push("items", {"id": "x", "v": "1"})
         result = self.db.history("items")
         self.assertEqual(len(result), 1)
+
+    def test_latest_with_wildcard_returns_database_mapping(self):
+        self.db.push("items", {"id": "1", "value": "one"}, timestamp=1000)
+        self.db.push("events", {"id": "2", "value": "two"}, timestamp=2000)
+
+        result = self.db.latest("*")
+
+        self.assertEqual(result["items"][0]["value"], "one")
+        self.assertEqual(result["events"][0]["value"], "two")
+
+    def test_history_ignores_non_timestamp_directories(self):
+        invalid_directory = Path(self._tmpdir) / "items" / "not-a-timestamp"
+        invalid_directory.mkdir(parents=True)
+        (invalid_directory / "id").write_text("ignored", encoding="utf-8")
+
+        self.db.push("items", {"id": "1", "value": "ok"}, timestamp=1000)
+
+        result = self.db.history("items")
+
+        self.assertEqual(result, [{"id": "1", "value": "ok"}])
 
 
 if __name__ == "__main__":

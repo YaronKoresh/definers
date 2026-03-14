@@ -1,6 +1,6 @@
 import unittest
 
-from definers import get_max_resolution
+from definers.media.image_helpers import get_max_resolution
 
 
 class TestGetMaxResolution(unittest.TestCase):
