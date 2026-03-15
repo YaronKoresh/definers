@@ -25,121 +25,165 @@ jobs:
         uses: actions/github-script@v8
         with:
           script: |
-            const fs = require('fs');
+            const fs = require("fs");
             const { owner, repo } = context.repo;
             const pr = context.payload.pull_request;
             const files = await github.paginate(github.rest.pulls.listFiles, { owner, repo, pull_number: pr.number, per_page: 100 });
-            const fileManifest = files.map(f => `[${f.status.toUpperCase()}] ${f.filename} (+${f.additions} -${f.deletions})`).join('\n');
-            const totalAdditions = files.reduce((s, f) => s + f.additions, 0);
-            const totalDeletions = files.reduce((s, f) => s + f.deletions, 0);
-            const fileExtensions = [...new Set(files.map(f => f.filename.includes('.') ? f.filename.split('.').pop() : '(none)'))];
-            const topDirs = [...new Set(files.map(f => { const parts = f.filename.split('/'); parts.pop(); return parts.length > 0 ? parts.slice(0, 2).join('/') : '(root)'; }))];
-            const { data: rawDiff } = await github.rest.pulls.get({ owner, repo, pull_number: pr.number, mediaType: { format: 'diff' } });
-            const MAX_DIFF_CHARS = 20000;
-            let diff = rawDiff;
-            if (diff.length > MAX_DIFF_CHARS) {
-              const segments = diff.split(/^diff --git /m).filter(Boolean);
-              const budget = Math.floor(MAX_DIFF_CHARS / segments.length);
-              diff = segments.map(seg => {
-                const content = 'diff --git ' + seg;
-                return content.length > budget ? content.substring(0, budget) + '\n[…truncated — file diff too large…]\n' : content;
-              }).join('');
+            const MAX_FILES_PER_WINDOW = 40;
+            const MAX_PATCH_CHARS_PER_WINDOW = 14000;
+            const MAX_PATCH_CHARS_PER_FILE = 1400;
+            const MAX_HIGHLIGHTED_FILES_PER_WINDOW = 12;
+            const MAX_PATCH_SNIPPETS_PER_WINDOW = 4;
+            const totalAdditions = files.reduce((sum, file) => sum + file.additions, 0);
+            const totalDeletions = files.reduce((sum, file) => sum + file.deletions, 0);
+            const fileExtensions = [...new Set(files.map(file => file.filename.includes(".") ? file.filename.split(".").pop() : "(none)"))];
+            const topDirs = [...new Set(files.map(file => {
+              const parts = file.filename.split("/");
+              parts.pop();
+              return parts.length > 0 ? parts.slice(0, 2).join("/") : "(root)";
+            }))];
+            const statusCounts = files.reduce((counts, file) => {
+              counts[file.status] = (counts[file.status] || 0) + 1;
+              return counts;
+            }, {});
+            const extensionCounts = files.reduce((counts, file) => {
+              const extension = file.filename.includes(".") ? file.filename.split(".").pop() : "(none)";
+              counts[extension] = (counts[extension] || 0) + 1;
+              return counts;
+            }, {});
+
+            function normalizePatch(patch) {
+              if (!patch) {
+                return "[patch unavailable: binary, generated, or too large for the API]";
+              }
+              if (patch.length <= MAX_PATCH_CHARS_PER_FILE) {
+                return patch;
+              }
+              return patch.substring(0, MAX_PATCH_CHARS_PER_FILE) + "\n[...patch truncated for prompt budget...]";
             }
+
+            function scoreFile(file) {
+              const changeVolume = file.additions + file.deletions;
+              const patchWeight = file.patch ? Math.min(file.patch.length, 4000) : 0;
+              const structuralWeight = file.status === "renamed" || file.status === "removed" ? 800 : 0;
+              return changeVolume * 5 + patchWeight + structuralWeight;
+            }
+
+            const windows = [];
+            let currentWindow = [];
+            let currentWindowPatchChars = 0;
+
+            for (const file of files) {
+              const normalizedPatch = normalizePatch(file.patch);
+              const patchSize = normalizedPatch.length;
+              const shouldStartNewWindow = currentWindow.length > 0 && (
+                currentWindow.length >= MAX_FILES_PER_WINDOW ||
+                currentWindowPatchChars + patchSize > MAX_PATCH_CHARS_PER_WINDOW
+              );
+
+              if (shouldStartNewWindow) {
+                windows.push(currentWindow);
+                currentWindow = [];
+                currentWindowPatchChars = 0;
+              }
+
+              currentWindow.push({
+                filename: file.filename,
+                status: file.status,
+                additions: file.additions,
+                deletions: file.deletions,
+                patch: normalizedPatch,
+                rawPatchAvailable: Boolean(file.patch),
+                score: scoreFile(file)
+              });
+              currentWindowPatchChars += patchSize;
+            }
+
+            if (currentWindow.length > 0) {
+              windows.push(currentWindow);
+            }
+
+            function formatWindow(windowFiles, index) {
+              const highlightedFiles = [...windowFiles]
+                .sort((left, right) => right.score - left.score)
+                .slice(0, MAX_HIGHLIGHTED_FILES_PER_WINDOW);
+              const detailedPatchFiles = highlightedFiles
+                .filter(file => file.rawPatchAvailable)
+                .slice(0, MAX_PATCH_SNIPPETS_PER_WINDOW);
+              const omittedFileCount = Math.max(windowFiles.length - highlightedFiles.length, 0);
+
+              return [
+                `WINDOW ${index + 1}/${windows.length}`,
+                `Files in window: ${windowFiles.length}`,
+                `Highlighted files:`,
+                highlightedFiles.map(file => `- ${file.filename} [${file.status.toUpperCase()}] (+${file.additions} -${file.deletions})${file.rawPatchAvailable ? "" : " [patch unavailable]"}`).join("\n"),
+                omittedFileCount > 0 ? `Additional lower-signal files not expanded in this window: ${omittedFileCount}` : "All files in this window are highlighted.",
+                detailedPatchFiles.length > 0 ? "Detailed patch snippets:" : "Detailed patch snippets: none available in this window.",
+                detailedPatchFiles.map(file => [
+                  `FILE: ${file.filename}`,
+                  `STATUS: ${file.status.toUpperCase()} (+${file.additions} -${file.deletions})`,
+                  file.patch
+                ].join("\n")).join("\n\n")
+              ].filter(Boolean).join("\n\n");
+            }
+
+            const windowDigest = windows.map((windowFiles, index) => formatWindow(windowFiles, index)).join("\n\n═══════════════════════════════════════════\n\n");
             const summaryPrompt = [
-              'You are a principal software engineer performing a meticulous technical analysis of a pull request.',
-              'You will receive ONLY the raw code diff and a file manifest. Do NOT hallucinate features that are not in the diff.',
-              'Do NOT reference any PR title or description — they were written by a human and are intentionally excluded.',
-              '',
-              'CRITICAL OUTPUT CONSTRAINTS:',
-              '- Output MUST be valid Markdown.',
-              '- Do NOT wrap the report in triple backticks. No ``` blocks anywhere.',
-              '- Output MUST be BETWEEN 2500 and 12000 characters total.',
-              '- Mention EVERY changed file in the "Changed Files Breakdown" section (even if brief).',
-              '- If the diff contains "[…truncated — file diff too large…]" you MUST say which files may be partially analyzed.',
-              '- If you cannot infer "why", write "Reason not inferable from diff." Do not guess.',
-              '- End your response with the exact final line: END_OF_REPORT',
-              '',
-              'Generate a comprehensive, highly-detailed Markdown report using EXACTLY this structure:',
-              '',
-              '## 🔍 Pull Request Analysis',
-              '',
-              '### 📝 Executive Summary',
-              'A concise 3–5 sentence overview of the purpose and scope of these changes.',
-              '',
-              '### 📁 Changed Files Breakdown',
-              'Group modified files by category (source, tests, config, docs, assets, migrations, CI, etc.).',
-              'For each file, state what changed and why it matters. Use a table if more than 5 files.',
-              '',
-              '### 🔧 Technical Changes — Detailed',
-              'Walk through every meaningful code change:',
-              '- New functions, methods, classes, types, or interfaces introduced',
-              '- Modified signatures, return types, or behavioral contracts',
-              '- Deleted code and the likely rationale (or "Reason not inferable from diff.")',
-              '- Algorithm, data-structure, or logic changes',
-              '- New or changed API endpoints / routes / GraphQL resolvers',
-              '- State management changes (stores, reducers, context, signals)',
-              '- Error handling additions or modifications',
-              '- New or modified environment variables, feature flags, or configuration',
-              '',
-              '### 🏗️ Architecture & Design Impact',
-              '- Module or package boundary shifts',
-              '- Coupling and cohesion observations',
-              '- Data flow or control flow changes',
-              '- New or removed dependencies (packages, internal modules)',
-              '- Design pattern introductions or removals',
-              '',
-              '### 🔒 Security Observations',
-              'Note any security-relevant changes: auth, crypto, input validation, secrets, CSP, CORS, etc.',
-              'If none, write "No security-relevant changes detected."',
-              '',
-              '### ⚡ Performance Observations',
-              'Note any perf-relevant changes: caching, lazy loading, query optimization, bundle size, memoization, concurrency, etc.',
-              'If none, write "No performance-relevant changes detected."',
-              '',
-              '### ⚠️ Risk Assessment',
-              '| Dimension | Rating | Details |',
-              '|-----------|--------|---------|',
-              '| Breaking-change risk | 🟢 LOW / 🟡 MEDIUM / 🔴 HIGH | … |',
-              '| Regression risk | 🟢 LOW / 🟡 MEDIUM / 🔴 HIGH | … |',
-              '| Security risk | 🟢 LOW / 🟡 MEDIUM / 🔴 HIGH | … |',
-              '| Data-loss risk | 🟢 LOW / 🟡 MEDIUM / 🔴 HIGH | … |',
-              '',
-              'List specific edge cases or scenarios that reviewers should test manually.',
-              '',
-              '### 🧪 Testing Impact',
-              '- New or updated test files and what they cover',
-              '- Estimated coverage impact',
-              '- Recommended additional tests that should be written',
-              '',
-              '### 📊 Change Metrics',
-              '| Metric | Value |',
-              '|--------|-------|',
-              '| Complexity | TRIVIAL · SIMPLE · MODERATE · COMPLEX · CRITICAL |',
-              '| Review effort | QUICK · STANDARD · THOROUGH · DEEP-DIVE |',
-              '| Scope | NARROW · MODERATE · BROAD · SWEEPING |',
-              '',
-              '### 💡 Reviewer Tips',
-              'Give 2-4 concrete suggestions on what to focus on during review.',
-              '',
-              '---',
-              '',
-              '═══════════════════════════════════════════',
-              `FILE MANIFEST (${files.length} files, +${totalAdditions} -${totalDeletions})`,
-              `Extensions: ${fileExtensions.join(', ')}`,
-              `Directories: ${topDirs.join(', ')}`,
-              '═══════════════════════════════════════════',
-              fileManifest,
-              '',
-              '═══════════════════════════════════════════',
-              'UNIFIED DIFF',
-              '═══════════════════════════════════════════',
-              diff
-            ].join('\n');
-            fs.writeFileSync('/tmp/summary_prompt.txt', summaryPrompt);
-            core.setOutput('has_changes', 'true');
-            core.setOutput('files_changed', String(files.length));
-            core.setOutput('additions', String(totalAdditions));
-            core.setOutput('deletions', String(totalDeletions));
+              "You are a principal software engineer analyzing a pull request from rolling file windows.",
+              "This PR may be very large, so each window contains the highest-signal file metadata and selected patch snippets instead of one monolithic diff.",
+              "Use only the evidence shown in the windows. If a file is listed without a patch snippet, treat that file as partially analyzed.",
+              "Do not invent product behavior, hidden files, or motivations that are not supported by the prompt.",
+              "",
+              "OUTPUT REQUIREMENTS:",
+              "- Output MUST be valid Markdown.",
+              "- Do NOT wrap the report in triple backticks.",
+              "- Keep the report concise and review-oriented.",
+              "- Output MUST be BETWEEN 1800 and 5000 characters total.",
+              "- Focus on the most important change clusters, release relevance, risks, and testing implications.",
+              "- Call out any files or areas that were only partially analyzed because the patch was unavailable or truncated.",
+              "- End your response with the exact final line: END_OF_REPORT",
+              "",
+              "Generate Markdown using EXACTLY this structure:",
+              "",
+              "## Pull Request Analysis",
+              "",
+              "### Executive Summary",
+              "3-4 sentences that summarize the main scope.",
+              "",
+              "### Major Change Areas",
+              "Group the key change clusters and explain why they matter.",
+              "",
+              "### Release Relevance",
+              "State whether the PR appears release-relevant and explain the strongest signals.",
+              "",
+              "### Risks",
+              "List the highest-value regression, compatibility, rollout, or operational risks.",
+              "",
+              "### Testing Focus",
+              "List the most important checks reviewers should run.",
+              "",
+              "### Coverage Notes",
+              "State what was fully analyzed versus partially analyzed.",
+              "",
+              "GLOBAL METRICS",
+              `Total files: ${files.length}`,
+              `Total additions: ${totalAdditions}`,
+              `Total deletions: ${totalDeletions}`,
+              `Status counts: ${Object.entries(statusCounts).map(([status, count]) => `${status}=${count}`).join(", ")}`,
+              `Extensions: ${Object.entries(extensionCounts).sort((left, right) => right[1] - left[1]).slice(0, 12).map(([extension, count]) => `${extension}(${count})`).join(", ")}`,
+              `Top directories: ${topDirs.slice(0, 12).join(", ")}`,
+              `Window count: ${windows.length}`,
+              "",
+              "ROLLING WINDOWS",
+              windowDigest
+            ].join("\n");
+
+            fs.writeFileSync("/tmp/summary_prompt.txt", summaryPrompt);
+            core.setOutput("has_changes", files.length > 0 ? "true" : "false");
+            core.setOutput("files_changed", String(files.length));
+            core.setOutput("additions", String(totalAdditions));
+            core.setOutput("deletions", String(totalDeletions));
+            core.setOutput("windows_count", String(windows.length));
       - name: AI — Generate Change Summary
         if: steps.collect.outputs.has_changes == 'true'
         id: ai-summary
@@ -147,100 +191,172 @@ jobs:
         with:
           model: openai/gpt-4o
           prompt-file: /tmp/summary_prompt.txt
-          max-completion-tokens: 4000
+          max-completion-tokens: 2600
+      - name: Build Compact Summary Prompt
+        if: steps.collect.outputs.has_changes == 'true'
+        id: compact-prompt
+        env:
+          AI_DETAILED_SUMMARY: ${{ steps.ai-summary.outputs.response }}
+          FILES_CHANGED: ${{ steps.collect.outputs.files_changed }}
+          ADDITIONS: ${{ steps.collect.outputs.additions }}
+          DELETIONS: ${{ steps.collect.outputs.deletions }}
+          WINDOWS_COUNT: ${{ steps.collect.outputs.windows_count }}
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require("fs");
+            const detailedSummary = (process.env.AI_DETAILED_SUMMARY || "").replace(/\nEND_OF_REPORT\s*$/m, "").trim();
+            const compactPrompt = [
+              "You are compressing a PR analysis that was generated from rolling windows of a large pull request.",
+              "Keep the final summary concise, stable across repeated updates, and useful for reviewers deciding release relevance.",
+              "",
+              "OUTPUT REQUIREMENTS:",
+              "- Output MUST be valid Markdown.",
+              "- Keep the result between 900 and 2200 characters.",
+              "- Preserve the strongest technical signals and remove repetition.",
+              "- Do not mention labels directly unless they are clearly supported by the summary.",
+              "- End your response with the exact final line: END_OF_REPORT",
+              "",
+              "Use EXACTLY this structure:",
+              "",
+              "## Autobot Summary",
+              "",
+              "### What Changed",
+              "2-4 sentences.",
+              "",
+              "### Release Relevance",
+              "1-3 bullets.",
+              "",
+              "### Risks And Testing",
+              "2-5 bullets covering the top risks and checks.",
+              "",
+              "PR METRICS",
+              `Files changed: ${process.env.FILES_CHANGED || "0"}`,
+              `Additions: ${process.env.ADDITIONS || "0"}`,
+              `Deletions: ${process.env.DELETIONS || "0"}`,
+              `Rolling windows analyzed: ${process.env.WINDOWS_COUNT || "0"}`,
+              "",
+              "DETAILED SUMMARY",
+              detailedSummary
+            ].join("\n");
+
+            fs.writeFileSync("/tmp/compact_summary_prompt.txt", compactPrompt);
+            core.setOutput("ready", "true");
+      - name: AI — Compact Change Summary
+        if: steps.compact-prompt.outputs.ready == 'true'
+        id: ai-compact
+        uses: actions/ai-inference@v2
+        with:
+          model: openai/gpt-4o
+          prompt-file: /tmp/compact_summary_prompt.txt
+          max-completion-tokens: 1200
       - name: Build Label Prompt
         if: steps.collect.outputs.has_changes == 'true'
         id: label-prompt
         env:
-          AI_SUMMARY: ${{ steps.ai-summary.outputs.response }}
+          AI_SUMMARY: ${{ steps.ai-compact.outputs.response }}
         uses: actions/github-script@v8
         with:
           script: |
-            const fs = require('fs');
-            const summary = process.env.AI_SUMMARY || '';
+            const fs = require("fs");
+            const summary = process.env.AI_SUMMARY || "";
+            const MAX_AI_LABELS = 6;
             const prompt = [
-              'You are an expert issue/PR classifier.',
-              'You will receive an AI-generated technical summary of code changes.',
-              'Based ONLY on the summary below, assign every applicable label from the allowed list.',
-              '',
-              'RULES:',
-              '- Assign ALL labels that genuinely apply — do not under-label or over-label.',
-              '- Use the descriptions to decide. A label applies when the summary provides clear evidence for it.',
-              '- Return ONLY a valid JSON array of label name strings. No markdown, no explanation, no extra text.',
-              '- Return label names exactly as provided in ALLOWED LABELS (lowercase).',
-              '- If nothing fits, return an empty array: []',
-              '',
-              'ALLOWED LABELS (name → when to apply):',
-              '',
-              'bug → Fixes incorrect behavior, crashes, regressions, error handling that was wrong',
-              'enhancement → Adds new user-visible features, capabilities, or meaningful improvements',
-              'documentation → Changes docs, READMEs, comments, JSDoc/Javadoc, changelogs, guides',
-              'breaking-change → Removes or changes public API surfaces, drops backward compatibility, major rewrites',
-              'ui → Visual/UI/UX changes: CSS, layouts, themes, design tokens, components styling',
-              'performance → Optimizations: caching, lazy-loading, memoization, query tuning, bundle size',
-              'security → Auth, crypto, secrets, XSS/CSRF fixes, CVE patches, input sanitization',
-              'refactor → Restructures code without changing external behavior: renames, extractions, simplifications',
-              'test → Adds, fixes, or improves tests (unit, integration, e2e, snapshots, mocks)',
-              'ci → CI/CD pipelines, GitHub Actions, Docker, Kubernetes, deployment configs',
-              'dependencies → Bumps, adds, or removes third-party packages or internal dependency changes',
-              'database → Schema migrations, query changes, ORM models, indexes, seeds, DB config',
-              'build → Build tooling: bundlers (webpack/vite/rollup), compilers, tsconfig, babel',
-              'accessibility → A11y improvements: ARIA, screen-reader, focus management, WCAG, contrast',
-              'localization → i18n/l10n: translations, locale files, date/number formatting, RTL support',
-              'api → REST/GraphQL/gRPC endpoint changes, request/response schemas, middleware',
-              'infrastructure → Cloud infra, IaC (Terraform/Pulumi), networking, DNS, load balancing, certs',
-              'config → App configuration changes: env vars, feature flags, settings files',
-              'types → TypeScript types/interfaces, schema definitions, type-only changes',
-              'logging → Logging, monitoring, observability, tracing, error reporting, analytics',
-              'deprecation → Marks features/APIs as deprecated with migration paths',
-              'chore → Maintenance work: cleanup, formatting, tooling tweaks not covered elsewhere',
-              'dx → Developer experience: improving dev workflow, scripts, linting ergonomics, local setup',
-              'release → Release-related changes: versioning, changelog/release notes, tagging, packaging',
-              'observability → Metrics/tracing/alerts/dashboards beyond basic logging',
-              'docs-site → Documentation website / static site generator changes',
-              'runtime → Runtime/platform compatibility changes (Node/Python/Java version support, ESM/CJS, polyfills/shims)',
-              'cleanup → Removes dead code, unused files, unused exports, redundant logic',
-              'style → Formatting-only changes (prettier, gofmt, whitespace) with no behavior change',
-              'lint → Lint rules/config updates or lint-fix-only PRs',
-              'formatting → Pure formatting changes distinct from lint rule changes',
-              'tooling → Tooling changes: scripts, generators, dev tools, editor config',
-              'release-notes → Updates to release notes, changelog entries, or generated notes',
-              'versioning → Version bumps of app/package itself (not just deps)',
-              'packaging → Package publishing config, npm/pypi metadata, artifacts',
-              'workflow → GitHub workflow logic changes beyond simple CI',
-              'automation → Bots, scripts, scheduled automation, repo management automation',
-              'quality → Code quality improvements (clarity, maintainability) not strictly refactor',
-              'stability → Improves reliability, reduces flakiness, hardens error handling',
-              'error-handling → Adds or modifies error handling paths, retries, fallbacks',
-              'validation → Input/data validation changes (schemas, guards)',
-              'feature-flag → Adds/changes feature flags or rollout toggles',
-              'migration → Data migrations, upgrade guides, breaking migration steps',
-              'compatibility → Backward/forward compat work, shims, polyfills',
-              'monitoring → Monitoring configuration, alerting rules, dashboards',
-              'telemetry → Analytics/telemetry events, tracking, instrumentation',
-              'logging-verbosity → Changes log levels, log volume, structured logging fields',
-              'docs-api → API documentation changes (OpenAPI/Swagger/GraphQL docs)',
-              'examples → Changes to examples, sample apps, demo code',
-              'devcontainer → Devcontainer/Docker-based dev environment changes',
-              'docker → Dockerfile/docker-compose/container build changes',
-              'kubernetes → K8s manifests/helm/kustomize/operator changes',
-              'terraform → Terraform modules/state/provider changes',
-              'helm → Helm chart changes',
-              'github → GitHub repo settings/templates/codeowners changes',
-              'policy → Security/policy files: SECURITY.md, support policy, governance',
-              'license → License/legal changes',
-              'supply-chain → SBOM, provenance, signing, dependency security hardening',
-              'codegen → Code generation output/templates/config changes',
-              'schema → Schema changes (json schema, proto, graphql schema)',
-              'serialization → Serialization/deserialization format changes',
-              '',
-              '══════════════════════════════════════════',
-              'AI-GENERATED CHANGE SUMMARY:',
-              '══════════════════════════════════════════',
+              "You are an expert issue and pull request classifier.",
+              "You will receive an AI-generated technical summary of code changes.",
+              `Based ONLY on the summary below, select up to ${MAX_AI_LABELS} of the most relevant labels from the allowed list.`,
+              "",
+              "RULES:",
+              `- Return at most ${MAX_AI_LABELS} labels, ordered from most to least relevant.`,
+              "- Use only direct evidence from the summary. Do not infer labels from weak hints.",
+              "- Prefer the more specific label over a broader overlapping label.",
+              "- Include support labels only when the summary independently supports them after higher-signal labels are chosen.",
+              "- Keep release-relevant labels when clearly supported even if the PR also includes testing, CI, docs, or refactor work.",
+              "- Return ONLY a valid JSON array of label name strings. No markdown, no explanation, no extra text.",
+              "- Return label names exactly as provided in ALLOWED LABELS (lowercase).",
+              "- If nothing fits, return an empty array: []",
+              "",
+              "PREFERENCE RULES:",
+              "- Prefer workflow over ci when the summary is mainly about GitHub workflow logic or orchestration rather than generic pipeline execution.",
+              "- Prefer automation over workflow when the summary is mainly about bots, repo management, or autonomous maintenance behavior.",
+              "- Prefer stability over bug when the change hardens reliability or reduces flakiness without a clearly described incorrect behavior fix.",
+              "- Prefer quality over refactor when the main value is maintainability or readability rather than structural code movement.",
+              "- Use logging for emitted log behavior, monitoring for dashboards or alerts, and observability for broader metrics, tracing, or system visibility changes.",
+              "- Prefer tooling for tools, scripts, generators, and editor setup; use dx when the main outcome is a smoother developer workflow.",
+              "- Prefer feature-flag only for rollout toggles; use config for broader settings or environment configuration changes.",
+              "- Only apply release, release-notes, versioning, or packaging when the summary clearly supports those exact release mechanics.",
+              "",
+              "ALLOWED LABELS (name → when to apply):",
+              "",
+              "bug → Fixes clearly incorrect behavior, regressions, failures, or broken error paths.",
+              "enhancement → Adds or meaningfully expands user-visible capability, behavior, or product scope.",
+              "documentation → Changes written documentation, guides, READMEs, or explanatory code annotations.",
+              "breaking-change → Introduces incompatible behavior or API changes that require consumers to adapt.",
+              "ui → Changes rendered interface structure, styling, interaction flow, or visual UX behavior.",
+              "performance → Improves speed, memory use, load behavior, throughput, or runtime efficiency.",
+              "security → Changes authentication, authorization, secrets handling, sanitization, or other security controls.",
+              "refactor → Restructures implementation without intending to change external behavior.",
+              "test → Adds, updates, fixes, or reorganizes automated tests or test fixtures.",
+              "ci → Changes build or validation execution in CI systems without broader workflow orchestration significance.",
+              "dependencies → Adds, removes, or updates third-party or internal dependency versions.",
+              "database → Changes schema, queries, ORM models, indexes, seeds, or database configuration.",
+              "build → Changes compilation, bundling, transpilation, packaging inputs, or build-system behavior.",
+              "accessibility → Improves ARIA, keyboard behavior, semantics, contrast, or assistive-technology support.",
+              "localization → Changes translations, locale assets, localized formatting, or internationalization behavior.",
+              "api → Changes external or internal API routes, contracts, request or response schemas, or middleware behavior.",
+              "infrastructure → Changes cloud infrastructure, networking, IaC, or environment provisioning.",
+              "config → Changes configuration files, settings, environment variables, or runtime toggles that are not specifically release flags.",
+              "types → Changes type declarations, interfaces, schemas, or type-only contracts.",
+              "logging → Changes log messages, log fields, log formats, or where logging occurs.",
+              "deprecation → Marks features or APIs as deprecated and signals migration away from them.",
+              "chore → Small maintenance work that does not fit a stronger functional label.",
+              "dx → Improves local developer experience, setup flow, or day-to-day development ergonomics.",
+              "release → Changes release process behavior, release automation, or release workflow outcomes.",
+              "observability → Adds or changes metrics, tracing, instrumentation, or broad operational visibility capabilities.",
+              "docs-site → Changes a documentation website, static docs app, or docs publishing surface.",
+              "runtime → Changes runtime compatibility, execution environment support, or platform-level behavior.",
+              "cleanup → Removes dead code, unused files, redundant exports, or obsolete logic.",
+              "style → Applies formatting-only changes with no intended behavioral effect.",
+              "lint → Changes lint rules, lint config, or lint-fix-only code updates.",
+              "formatting → Applies code formatting changes that are distinct from lint rule changes.",
+              "tooling → Changes developer tools, scripts, generators, editor config, or repository tooling.",
+              "release-notes → Changes changelog entries, release notes, or generated release summaries.",
+              "versioning → Changes the project or package version itself rather than dependency versions.",
+              "packaging → Changes publish metadata, package contents, artifact layout, or distribution configuration.",
+              "workflow → Changes GitHub workflow logic, job orchestration, approvals, or repository automation flow.",
+              "automation → Changes bots, scheduled automation, auto-triage, auto-labeling, or autonomous repo management.",
+              "quality → Improves maintainability, clarity, consistency, or code quality beyond simple structural refactoring.",
+              "stability → Improves resilience, retries, fault tolerance, or reduces flakiness and operational instability.",
+              "error-handling → Changes explicit error detection, retries, fallback logic, or failure reporting paths.",
+              "validation → Changes guards, input validation, schema validation, or defensive data checks.",
+              "feature-flag → Adds or changes rollout flags, kill switches, or feature gating behavior.",
+              "migration → Adds or changes upgrade steps, migration guides, or migration logic.",
+              "compatibility → Improves backward or forward compatibility, shims, or interoperability behavior.",
+              "monitoring → Changes alerting rules, dashboards, monitors, or operational monitoring setup.",
+              "telemetry → Changes analytics events, usage tracking, or telemetry instrumentation.",
+              "logging-verbosity → Changes log levels, verbosity, or structured logging detail volume.",
+              "docs-api → Changes API-specific documentation such as OpenAPI, Swagger, or schema docs.",
+              "examples → Changes examples, demo apps, or sample integration code.",
+              "devcontainer → Changes devcontainer or containerized local development environment setup.",
+              "docker → Changes Dockerfiles, compose files, or container image build behavior.",
+              "kubernetes → Changes Kubernetes manifests, operators, Kustomize, or Helm deployment behavior.",
+              "terraform → Changes Terraform modules, providers, resources, or Terraform state behavior.",
+              "helm → Changes Helm chart templates, values, or chart packaging.",
+              "github → Changes GitHub-specific settings, templates, forms, codeowners, or repository metadata.",
+              "policy → Changes policy, governance, support policy, or security policy documentation and rules.",
+              "license → Changes license files, license text, or legal licensing metadata.",
+              "supply-chain → Changes provenance, signing, dependency trust, or software supply-chain hardening.",
+              "codegen → Changes code generation config, templates, or generated output behavior.",
+              "schema → Changes GraphQL, JSON Schema, Proto, or other shared schema definitions.",
+              "serialization → Changes encoding, decoding, wire formats, or serialization and deserialization behavior.",
+              "",
+              "══════════════════════════════════════════",
+              "AI-GENERATED CHANGE SUMMARY:",
+              "══════════════════════════════════════════",
               summary
-            ].join('\n');
-            fs.writeFileSync('/tmp/label_prompt.txt', prompt);
-            core.setOutput('ready', 'true');
+            ].join("\n");
+            fs.writeFileSync("/tmp/label_prompt.txt", prompt);
+            core.setOutput("ready", "true");
       - name: AI — Classify Labels
         if: steps.label-prompt.outputs.ready == 'true'
         id: ai-labels
@@ -248,10 +364,10 @@ jobs:
         with:
           model: openai/gpt-4o
           prompt-file: /tmp/label_prompt.txt
-          max-completion-tokens: 400
+          max-completion-tokens: 600
       - name: Manage Project
         env:
-          AI_SUMMARY: ${{ steps.ai-summary.outputs.response }}
+          AI_SUMMARY: ${{ steps.ai-compact.outputs.response }}
           AI_LABELS_RAW: ${{ steps.ai-labels.outputs.response }}
         uses: actions/github-script@v8
         with:
@@ -261,8 +377,9 @@ jobs:
             const issueNumber = context.issue.number;
             const isPR = context.eventName === 'pull_request';
             const MIN_RELEASE_SIZE = 3;
+            const MAX_AI_LABELS = 6;
             const FORCE_RELEASE_TYPES = ['enhancement', 'breaking-change', 'security'];
-            const IGNORE_LABELS = ['documentation', 'chore', 'test', 'ci', 'refactor', 'dependencies', 'build', 'types', 'config', 'logging', 'dx', 'docs-site', 'style', 'formatting', 'lint', 'cleanup', 'tooling'];
+            const RELEASE_RELEVANT_LABELS = ['api', 'breaking-change', 'bug', 'compatibility', 'database', 'enhancement', 'feature-flag', 'migration', 'performance', 'runtime', 'schema', 'security'];
             const BOT_COMMENT_SIGNATURE = '<!-- autobot-ai-summary -->';
             const labelDefinitions = {
               'bug': { color: 'd73a4a', description: "Something isn't working" },
@@ -328,6 +445,9 @@ jobs:
               'serialization': { color: '2b67c6', description: "Serialization format changes" }
             };
             const VALID_LABELS = new Set(Object.keys(labelDefinitions));
+            function hasReleaseRelevantLabel(labels) {
+              return labels.some(label => RELEASE_RELEVANT_LABELS.includes(label));
+            }
             async function ensureLabelExists(name) {
               try { await github.rest.issues.getLabel({ owner, repo, name }); }
               catch (e) {
@@ -365,13 +485,25 @@ jobs:
               }
               return [];
             }
-            async function upsertBotComment(body) {
+            function extractBotMetadata(body) {
+              const match = body.match(/<!-- autobot-metadata:(.+?) -->/s);
+              if (!match) return {};
+              try {
+                return JSON.parse(match[1].trim());
+              } catch (e) {
+                return {};
+              }
+            }
+            async function getExistingBotComment() {
               const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: issueNumber });
-              const existing = comments.find(c => c.user.type === 'Bot' && c.body.includes(BOT_COMMENT_SIGNATURE));
+              return comments.find(comment => comment.user.type === 'Bot' && comment.body.includes(BOT_COMMENT_SIGNATURE));
+            }
+            async function upsertBotComment(body, metadata) {
+              const existing = await getExistingBotComment();
               const MAX_COMMENT_CHARS = 60000;
               let safeBody = body;
               if (safeBody.length > MAX_COMMENT_CHARS) safeBody = safeBody.slice(0, MAX_COMMENT_CHARS - 200) + '\n\n---\n\n_(Autobot note: comment truncated to fit GitHub size limits.)_';
-              const fullBody = BOT_COMMENT_SIGNATURE + '\n' + safeBody;
+              const fullBody = BOT_COMMENT_SIGNATURE + '\n' + `<!-- autobot-metadata:${JSON.stringify(metadata || {})} -->` + '\n' + safeBody;
               if (existing) await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body: fullBody });
               else await github.rest.issues.createComment({ owner, repo, issue_number: issueNumber, body: fullBody });
             }
@@ -379,29 +511,50 @@ jobs:
               const aiSummary = (process.env.AI_SUMMARY || '').replace(/\nEND_OF_REPORT\s*$/m, '').trim();
               const aiLabelsRaw = process.env.AI_LABELS_RAW || '';
               const aiSummaryForComment = aiSummary.replace(/\nEND_OF_REPORT\s*$/m, '').trim();
-              let labelsToAdd = [];
-              if (isPR && aiLabelsRaw) labelsToAdd = parseAILabels(aiLabelsRaw);
+              const existingBotComment = isPR ? await getExistingBotComment() : null;
+              const previousBotLabels = existingBotComment ? (extractBotMetadata(existingBotComment.body).aiLabels || []) : [];
+              let nextAiLabels = [];
+              if (isPR && aiLabelsRaw) nextAiLabels = parseAILabels(aiLabelsRaw).slice(0, MAX_AI_LABELS);
+              const labelsToRemove = previousBotLabels.filter(label => !nextAiLabels.includes(label));
+              const labelsToAdd = nextAiLabels.filter(label => !previousBotLabels.includes(label));
+              for (const label of labelsToRemove) {
+                try {
+                  await github.rest.issues.removeLabel({ owner, repo, issue_number: issueNumber, name: label });
+                } catch (e) {
+                  if (e.status !== 404) throw e;
+                }
+              }
               if (labelsToAdd.length > 0) {
                 for (const label of labelsToAdd) await ensureLabelExists(label);
                 await github.rest.issues.addLabels({ owner, repo, issue_number: issueNumber, labels: labelsToAdd });
               }
               if (isPR && aiSummaryForComment) {
                 const pr = payload.pull_request;
-                const appliedLabels = labelsToAdd.map(l => `\`${l}\``).join(' ') || '_none_';
+                const appliedLabels = nextAiLabels.map(l => `\`${l}\``).join(' ') || '_none_';
                 const commentBody = [`# Autobot — Changes Analysis`, ``, `> **PR #${pr.number}** · ${pr.head.ref} → ${pr.base.ref} · ${new Date().toISOString().split('T')[0]}`, ``, `---`, ``, aiSummaryForComment, ``, `---`, ``, `<details>`, `<summary><strong>🏷️ AI Label Classification</strong></summary>`, ``, `**Applied labels:** ${appliedLabels}`, ``, `Labels were determined by AI analysis of the code diff — not the PR title or description.`, ``, `</details>`].join('\n');
-                await upsertBotComment(commentBody);
+                await upsertBotComment(commentBody, { aiLabels: nextAiLabels, maxAiLabels: MAX_AI_LABELS });
               }
               const freshIssue = await github.rest.issues.get({ owner, repo, issue_number: issueNumber });
               const currentLabelNames = freshIssue.data.labels.map(l => l.name);
-              const shouldSkipMilestone = currentLabelNames.some(l => IGNORE_LABELS.includes(l));
-              const hasNoLabels = currentLabelNames.length === 0;
-              if (shouldSkipMilestone || hasNoLabels) return;
+              const releaseRelevant = hasReleaseRelevantLabel(currentLabelNames);
+              if (!isPR) {
+                if (freshIssue.data.milestone && !releaseRelevant) {
+                  await github.rest.issues.update({ owner, repo, issue_number: issueNumber, milestone: null });
+                }
+                return;
+              }
+              if (!releaseRelevant) {
+                if (freshIssue.data.milestone) {
+                  await github.rest.issues.update({ owner, repo, issue_number: issueNumber, milestone: null });
+                }
+                return;
+              }
               const milestone = await getOrCreateMilestone();
-              const currentMilestone = payload.issue?.milestone || payload.pull_request?.milestone;
-              if (!currentMilestone) await github.rest.issues.update({ owner, repo, issue_number: issueNumber, milestone: milestone.number });
+              if (!freshIssue.data.milestone) await github.rest.issues.update({ owner, repo, issue_number: issueNumber, milestone: milestone.number });
               const items = await github.paginate(github.rest.issues.listForRepo, { owner, repo, milestone: milestone.number, state: 'all' });
-              const hasFeature = items.some(i => i.labels.some(l => l.name === 'enhancement'));
-              const isBreaking = items.some(i => i.labels.some(l => l.name === 'breaking-change'));
+              const releaseItems = items.filter(item => item.pull_request && item.labels.some(label => RELEASE_RELEVANT_LABELS.includes(label.name)));
+              const hasFeature = releaseItems.some(item => item.labels.some(label => label.name === 'enhancement'));
+              const isBreaking = releaseItems.some(item => item.labels.some(label => label.name === 'breaking-change'));
               if (isBreaking && isPR) {
                 const comments = await github.rest.issues.listComments({ owner, repo, issue_number: issueNumber });
                 const alreadyAlerted = comments.data.some(c => c.body.includes('MAJOR RELEASE ALERT'));
@@ -415,14 +568,16 @@ jobs:
               if (newTitle !== milestone.title) await github.rest.issues.updateMilestone({ owner, repo, milestone_number: milestone.number, title: newTitle });
             }
             if (payload.action === 'closed') {
-              const mData = payload.issue?.milestone || payload.pull_request?.milestone;
+              if (!payload.pull_request || !payload.pull_request.merged) return;
+              const mData = payload.pull_request.milestone;
               if (!mData) return;
               const freshMilestone = await github.rest.issues.getMilestone({ owner, repo, milestone_number: mData.number });
               if (freshMilestone.data.open_issues === 0 && freshMilestone.data.state === 'open' && freshMilestone.data.closed_issues > 0) {
                 const closedItems = await github.paginate(github.rest.issues.listForRepo, { owner, repo, milestone: freshMilestone.data.number, state: 'closed' });
-                const hasBreaking = closedItems.some(i => i.labels.some(l => l.name === 'breaking-change'));
-                const hasForcedType = closedItems.some(i => i.labels.some(l => FORCE_RELEASE_TYPES.includes(l.name)));
-                if (freshMilestone.data.closed_issues < MIN_RELEASE_SIZE && !hasForcedType && !hasBreaking) return;
+                const closedReleaseItems = closedItems.filter(item => item.pull_request && item.labels.some(label => RELEASE_RELEVANT_LABELS.includes(label.name)));
+                const hasBreaking = closedReleaseItems.some(item => item.labels.some(label => label.name === 'breaking-change'));
+                const hasForcedType = closedReleaseItems.some(item => item.labels.some(label => FORCE_RELEASE_TYPES.includes(label.name)));
+                if (closedReleaseItems.length < MIN_RELEASE_SIZE && !hasForcedType && !hasBreaking) return;
                 let targetVersion = freshMilestone.data.title;
                 const releases = await github.rest.repos.listReleases({ owner, repo });
                 const latestRelease = releases.data[0];
