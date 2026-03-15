@@ -24,7 +24,9 @@ def _empty_vectorized_rows(vectorizer) -> np.ndarray:
     return np.empty((0, vocabulary_size))
 
 
-def vectorize(vectorizer: FittedVectorizerPort | None, texts: TextValues | None):
+def vectorize(
+    vectorizer: FittedVectorizerPort | None, texts: TextValues | None
+):
     if vectorizer is None or texts is None:
         return None
     if isinstance(texts, list) and not texts:

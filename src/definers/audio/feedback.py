@@ -1,8 +1,7 @@
-
 from __future__ import annotations
 
-import numpy as np
 import librosa
+import numpy as np
 
 from definers.logger import init_logger
 
@@ -39,9 +38,7 @@ def get_audio_feedback(audio_path: str) -> str | None:
         high_energy = np.mean(np.abs(stft[(freqs >= 5000) & (freqs < 20000)]))
         peak_amp = np.max(np.abs(y_mono))
         mean_rms = np.mean(rms)
-        crest_factor = (
-            20 * np.log10(peak_amp / mean_rms) if mean_rms > 0 else 0
-        )
+        crest_factor = 20 * np.log10(peak_amp / mean_rms) if mean_rms > 0 else 0
         stereo_width = 0
         if y_stereo.ndim > 1 and y_stereo.shape[0] == 2:
             from scipy.stats import pearsonr
@@ -57,9 +54,7 @@ def get_audio_feedback(audio_path: str) -> str | None:
         elif crest_factor > 8:
             feedback += "This is a good balance between punch and loudness, typical for many genres.\n"
         else:
-            feedback += (
-                "This suggests the track is heavily compressed or limited, prioritizing loudness over dynamic range.\n"
-            )
+            feedback += "This suggests the track is heavily compressed or limited, prioritizing loudness over dynamic range.\n"
         feedback += f"- **Stereo Image:** The stereo width is estimated at **{stereo_width:.1f}%**. "
         if stereo_width > 60:
             feedback += "The mix feels wide and immersive.\n"
@@ -73,33 +68,23 @@ def get_audio_feedback(audio_path: str) -> str | None:
         elif high_energy > bass_energy * 2:
             feedback += "The track is bright or treble-heavy.\n"
         else:
-            feedback += "The track has a relatively balanced frequency spectrum.\n"
+            feedback += (
+                "The track has a relatively balanced frequency spectrum.\n"
+            )
         feedback += "\n#### Advice\n"
         if crest_factor < 8:
-            feedback += (
-                "- **Compression:** The track might be over-compressed. Consider reducing the amount of compression to bring back some life and punch to the transients.\n"
-            )
+            feedback += "- **Compression:** The track might be over-compressed. Consider reducing the amount of compression to bring back some life and punch to the transients.\n"
         if stereo_width < 20 and y_stereo.ndim > 1:
-            feedback += (
-                "- **Stereo Width:** To make the mix sound bigger, try using stereo widening tools or panning instruments differently to create more space.\n"
-            )
+            feedback += "- **Stereo Width:** To make the mix sound bigger, try using stereo widening tools or panning instruments differently to create more space.\n"
         if bass_energy > high_energy * 2.5:
-            feedback += (
-                "- **Bass Management:** The low-end might be overpowering. Ensure it's not masking other instruments. A high-pass filter on non-bass elements can clean up muddiness.\n"
-            )
+            feedback += "- **Bass Management:** The low-end might be overpowering. Ensure it's not masking other instruments. A high-pass filter on non-bass elements can clean up muddiness.\n"
         if high_energy > bass_energy * 2.5:
-            feedback += (
-                "- **Tame the Highs:** The track is very bright, which can be fatiguing. Check for harshness in cymbals or vocals, and consider using a de-esser or a gentle high-shelf cut.\n"
-            )
+            feedback += "- **Tame the Highs:** The track is very bright, which can be fatiguing. Check for harshness in cymbals or vocals, and consider using a de-esser or a gentle high-shelf cut.\n"
         if mean_rms < 0.05:
-            feedback += (
-                "- **Mastering:** The overall volume is low. The track would benefit from mastering to increase its loudness and competitiveness with commercial tracks.\n"
-            )
+            feedback += "- **Mastering:** The overall volume is low. The track would benefit from mastering to increase its loudness and competitiveness with commercial tracks.\n"
         else:
-            feedback += (
-                "- **General Mix:** The track has a solid technical foundation. Focus on creative choices, arrangement, and ensuring all elements have their own space in the mix.\n"
-            )
+            feedback += "- **General Mix:** The track has a solid technical foundation. Focus on creative choices, arrangement, and ensuring all elements have their own space in the mix.\n"
         return feedback
-    except Exception as e:
+    except Exception:
         _logger.exception("Audio feedback analysis failed")
         return None

@@ -1,17 +1,20 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
-from definers.platform import filesystem as _filesystem
-from definers.platform import processes as _processes
-from definers.platform import runtime as _runtime
+from definers.platform import (
+    filesystem as _filesystem,
+    processes as _processes,
+    runtime as _runtime,
+)
 from definers.platform.contracts import (
     CommandInput,
     EnvironmentPort,
     FileSystemPort,
-    InfrastructureServiceContextPort,
     InfrastructurePorts,
+    InfrastructureServiceContextPort,
     PathInput,
     ProcessEnvironment,
     ProcessPort,
@@ -23,10 +26,14 @@ class EnvironmentService:
     get_os_name_fn: Callable[[], str] = _runtime.get_os_name
     is_admin_windows_fn: Callable[[], bool] = _runtime.is_admin_windows
     cores_fn: Callable[[], int | None] = _runtime.cores
-    get_python_version_fn: Callable[[], str | None] = _runtime.get_python_version
+    get_python_version_fn: Callable[[], str | None] = (
+        _runtime.get_python_version
+    )
     importable_fn: Callable[[str], bool] = _runtime.importable
     runnable_fn: Callable[[str], bool] = _runtime.runnable
-    check_version_wildcard_fn: Callable[[Any, Any], bool] = _runtime.check_version_wildcard
+    check_version_wildcard_fn: Callable[[Any, Any], bool] = (
+        _runtime.check_version_wildcard
+    )
     installed_fn: Callable[[str, str | None], bool] = _runtime.installed
 
     def get_os_name(self) -> str:
@@ -47,7 +54,9 @@ class EnvironmentService:
     def runnable(self, command: str) -> bool:
         return self.runnable_fn(command)
 
-    def check_version_wildcard(self, version_spec: Any, version_actual: Any) -> bool:
+    def check_version_wildcard(
+        self, version_spec: Any, version_actual: Any
+    ) -> bool:
         return self.check_version_wildcard_fn(version_spec, version_actual)
 
     def installed(self, package_name: str, version: str | None = None) -> bool:
@@ -118,12 +127,22 @@ class FileSystemService:
 
 @dataclass(slots=True)
 class ProcessService:
-    secure_command_fn: Callable[[CommandInput], list[str]] = _processes.secure_command
-    run_linux_fn: Callable[[CommandInput, bool, ProcessEnvironment], Any] = _processes.run_linux
-    run_windows_fn: Callable[[CommandInput, bool, ProcessEnvironment], Any] = _processes.run_windows
-    run_fn: Callable[[CommandInput, bool, ProcessEnvironment], Any] = _processes.run
+    secure_command_fn: Callable[[CommandInput], list[str]] = (
+        _processes.secure_command
+    )
+    run_linux_fn: Callable[[CommandInput, bool, ProcessEnvironment], Any] = (
+        _processes.run_linux
+    )
+    run_windows_fn: Callable[[CommandInput, bool, ProcessEnvironment], Any] = (
+        _processes.run_windows
+    )
+    run_fn: Callable[[CommandInput, bool, ProcessEnvironment], Any] = (
+        _processes.run
+    )
     get_process_pid_fn: Callable[[str], int | None] = _processes.get_process_pid
-    send_signal_to_process_fn: Callable[[int, int], bool] = _processes.send_signal_to_process
+    send_signal_to_process_fn: Callable[[int, int], bool] = (
+        _processes.send_signal_to_process
+    )
 
     def secure_command(self, command: CommandInput) -> list[str]:
         return self.secure_command_fn(command)
@@ -252,7 +271,9 @@ def _coerce_infrastructure_services(
 
 @dataclass(slots=True)
 class InfrastructureServiceContext(InfrastructureServiceContextPort):
-    current: InfrastructureServices = field(default_factory=build_infrastructure_services)
+    current: InfrastructureServices = field(
+        default_factory=build_infrastructure_services
+    )
 
     def get(self) -> InfrastructureServices:
         return self.current
@@ -273,7 +294,9 @@ def get_infrastructure_services() -> InfrastructureServices:
     return _infrastructure_service_context.get()
 
 
-def set_infrastructure_services(services: InfrastructurePorts) -> InfrastructureServices:
+def set_infrastructure_services(
+    services: InfrastructurePorts,
+) -> InfrastructureServices:
     return _infrastructure_service_context.set(services)
 
 

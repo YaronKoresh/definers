@@ -131,8 +131,12 @@ class HttpChunkedTransferStrategy:
                 source_uri, timeout=request_timeout
             ) as network_response:
                 network_response.raise_for_status()
-                async with aiofiles.open(target_node, "wb") as persistent_storage:
-                    async for data_chunk in network_response.content.iter_chunked(
+                async with aiofiles.open(
+                    target_node, "wb"
+                ) as persistent_storage:
+                    async for (
+                        data_chunk
+                    ) in network_response.content.iter_chunked(
                         self.chunk_size_bytes
                     ):
                         await persistent_storage.write(data_chunk)
@@ -205,7 +209,9 @@ class TransferExecutionPolicy:
     def retry_policy(self) -> RetryPolicy:
         return RetryPolicy(
             max_retries=self.max_retries,
-            delay_strategy=ExponentialBackoffDelay(base_delay=self.base_delay_seconds),
+            delay_strategy=ExponentialBackoffDelay(
+                base_delay=self.base_delay_seconds
+            ),
         )
 
 
@@ -307,7 +313,9 @@ def download_file(
     url: str,
     destination: str,
     executor: Callable[[Any], Any] = execute_async_operation,
-    orchestrator_factory: Callable[[], ResourceRetrievalOrchestrator] = create_http_orchestrator,
+    orchestrator_factory: Callable[
+        [], ResourceRetrievalOrchestrator
+    ] = create_http_orchestrator,
 ) -> str | None:
     validate_network_url(url)
 
@@ -323,7 +331,9 @@ def download_and_unzip(
     url: str,
     extract_to: str,
     executor: Callable[[Any], Any] = execute_async_operation,
-    orchestrator_factory: Callable[[], ResourceRetrievalOrchestrator] = create_zip_orchestrator,
+    orchestrator_factory: Callable[
+        [], ResourceRetrievalOrchestrator
+    ] = create_zip_orchestrator,
 ) -> bool:
     validate_network_url(url)
 
@@ -354,7 +364,9 @@ def add_to_path_windows(
     import winreg
 
     folder_path = os.path.normpath(folder_path).strip('"')
-    path_change_broadcaster = broadcast_path_change if broadcaster is None else broadcaster
+    path_change_broadcaster = (
+        broadcast_path_change if broadcaster is None else broadcaster
+    )
     try:
         key = winreg.OpenKey(
             winreg.HKEY_CURRENT_USER, "Environment", 0, winreg.KEY_ALL_ACCESS

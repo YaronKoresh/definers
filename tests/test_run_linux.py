@@ -3,12 +3,13 @@ import sys
 import unittest
 from unittest.mock import MagicMock, patch
 
+import definers.platform.processes as processes
 from definers.system import run_linux
 
 
 class TestRunLinux(unittest.TestCase):
     @unittest.skipIf(sys.platform.startswith("win"), "Linux-specific test")
-    @patch("definers.platform.processes.subprocess.Popen")
+    @patch.object(processes.subprocess, "Popen")
     def test_run_linux_success(self, mock_popen):
         mock_proc = MagicMock()
         mock_proc.communicate.return_value = ("line 1\nline 2\n", "")
@@ -27,7 +28,7 @@ class TestRunLinux(unittest.TestCase):
         self.assertFalse(result)
 
     @unittest.skipIf(sys.platform.startswith("win"), "Linux-specific test")
-    @patch("definers.platform.processes.subprocess.Popen")
+    @patch.object(processes.subprocess, "Popen")
     def test_run_linux_failure(self, mock_popen):
         mock_proc = MagicMock()
         mock_proc.communicate.return_value = ("", "error")
@@ -36,7 +37,7 @@ class TestRunLinux(unittest.TestCase):
         result = run_linux("exit 1", silent=True)
         self.assertFalse(result)
 
-    @patch("definers.platform.processes.subprocess.Popen")
+    @patch.object(processes.subprocess, "Popen")
     def test_run_linux_with_env(self, mock_popen):
         mock_proc = MagicMock()
         mock_proc.communicate.return_value = ("test_value\n", "")

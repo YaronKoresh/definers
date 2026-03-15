@@ -1,12 +1,11 @@
-
 from __future__ import annotations
 
-import numpy as np
 import librosa
+import numpy as np
 
 from definers.constants import MADMOM_AVAILABLE
-from definers.media.image_helpers import get_max_resolution
 from definers.logger import init_logger
+from definers.media.image_helpers import get_max_resolution
 from definers.platform.paths import tmp
 from definers.system import cores
 
@@ -43,7 +42,9 @@ def _resolve_tempo_and_beats(
                 return (bpm, beat_frames)
         except Exception:
             pass
-    tempo, beat_frames = librosa.beat.beat_track(y=y, sr=sr, hop_length=hop_length)
+    tempo, beat_frames = librosa.beat.beat_track(
+        y=y, sr=sr, hop_length=hop_length
+    )
     return (int(round(tempo)), beat_frames)
 
 
@@ -73,7 +74,9 @@ def detect_silence_mask(
     min_silence_samples = int(min_silence_len * sample_rate)
     silence_mask_filtered = silence_mask.copy()
 
-    silence_regions = librosa.effects.split(silence_mask.astype(float), top_db=0.5)
+    silence_regions = librosa.effects.split(
+        silence_mask.astype(float), top_db=0.5
+    )
     for start, end in silence_regions:
         if end - start < min_silence_samples:
             silence_mask_filtered[start:end] = False
@@ -160,7 +163,9 @@ def analyze_audio(
     offset: float = 0.0,
 ) -> dict[str, object]:
 
-    (y, sr) = librosa.load(audio_path, sr=None, duration=duration, offset=offset)
+    (y, sr) = librosa.load(
+        audio_path, sr=None, duration=duration, offset=offset
+    )
     actual_duration = librosa.get_duration(y=y, sr=sr)
     return _build_audio_analysis_payload(
         y=y,
@@ -176,17 +181,15 @@ def analyze_audio_features(audio_path: str, txt: bool = True):
 
     try:
         y, sr = librosa.load(audio_path, sr=None, mono=True)
-    except Exception as e:
+    except Exception:
         _logger.exception("Failed to load audio for feature analysis")
         return None
 
-                      
     try:
         tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
     except Exception:
         tempo = 0.0
 
-                                                                                         
     chroma = librosa.feature.chroma_stft(y=y, sr=sr)
     chroma_sum = np.mean(chroma, axis=1)
 

@@ -22,7 +22,9 @@ def launch_animation_app():
     fps = 20
     steps = 30
 
-    def generate_chunk(txt, img, dur, seed, chunk_state, _progress=gr.Progress()):
+    def generate_chunk(
+        txt, img, dur, seed, chunk_state, _progress=gr.Progress()
+    ):
         txt = validate_text_input(txt)
         txt = optimize_prompt_realism(txt)
         total_frames = int(dur * fps)
@@ -68,9 +70,7 @@ def launch_animation_app():
         export_to_gif(output.frames[0], chunk_path, fps=fps)
         chunk_state["chunk_paths"].append(chunk_path)
         chunk_state["current_chunk"] += 1
-        progress_text = (
-            f"Finished chunk {current_chunk_index}/{total_chunks}. Ready for next chunk."
-        )
+        progress_text = f"Finished chunk {current_chunk_index}/{total_chunks}. Ready for next chunk."
         if current_chunk_index == total_chunks:
             progress_text = "All chunks generated! You can now combine them."
         return (

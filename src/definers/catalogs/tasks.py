@@ -1,6 +1,5 @@
 from types import MappingProxyType
 
-
 TASKS = MappingProxyType(
     {
         "general-tokenizer": "distilbert-base-uncased",

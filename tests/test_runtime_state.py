@@ -77,7 +77,9 @@ def test_named_runtime_scopes_are_isolated() -> None:
     scoped_state.set_model("answer", scoped_marker)
 
     assert get_runtime_state().get_model("answer") is default_marker
-    assert get_runtime_state("chat-session").get_model("answer") is scoped_marker
+    assert (
+        get_runtime_state("chat-session").get_model("answer") is scoped_marker
+    )
     assert list_runtime_scopes() == ("chat-session", "default")
 
 

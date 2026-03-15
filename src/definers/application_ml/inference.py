@@ -51,9 +51,7 @@ def features_to_text(
     try:
         active_vectorizer = vectorizer
         if active_vectorizer is None:
-            active_vectorizer = TfidfVectorizer(
-                token_pattern="(?u)\\b\\w+\\b"
-            )
+            active_vectorizer = TfidfVectorizer(token_pattern="(?u)\\b\\w+\\b")
             active_vectorizer.fit(vocabulary)
         tfidf_matrix = np.asarray(predicted_features).reshape(1, -1)
         word_indices = tfidf_matrix.nonzero()[1]

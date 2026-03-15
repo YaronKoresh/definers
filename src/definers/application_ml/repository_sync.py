@@ -11,7 +11,9 @@ from definers.web import download_file
 logger = init_logger()
 
 
-def init_model_file(task: str, turbo: bool = True, model_type: str | None = None):
+def init_model_file(
+    task: str, turbo: bool = True, model_type: str | None = None
+):
     import pickle
 
     import joblib
@@ -72,7 +74,6 @@ def _load_model(model_path: str, model_type: str) -> Any:
         with open(model_path, "rb") as file_obj:
             return pickle.load(file_obj)
     import torch
-
     from safetensors.torch import load_file
 
     if model_type in ["pt", "pth"]:
@@ -98,6 +99,4 @@ def _apply_turbo_optimizations(model: Any) -> None:
         except AttributeError:
             continue
         except Exception as error:
-            logger.warning(
-                f"Could not apply optimization {attr_name}: {error}"
-            )
+            logger.warning(f"Could not apply optimization {attr_name}: {error}")

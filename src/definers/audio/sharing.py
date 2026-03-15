@@ -1,6 +1,9 @@
+from urllib.parse import quote
 
 
-def create_share_links(hf_username: str, space_name: str, file_path: str, text_description: str) -> str:
+def create_share_links(
+    hf_username: str, space_name: str, file_path: str, text_description: str
+) -> str:
     file_url = f"https://{hf_username}-{space_name}.hf.space/gradio_api/file={file_path}"
     encoded_text = quote(text_description)
     encoded_url = quote(file_url)

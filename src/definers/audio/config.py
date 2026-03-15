@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -12,27 +11,35 @@ class SmartMasteringConfig:
     num_bands: int = 16
     intensity: float = 1.0
 
-    bass_ratio: float = 2.0
-    bass_attack_ms: float = 0.1
-    bass_release_ms: float = 70.0
-    bass_threshold_db: float = -20.0
+    bass_ratio: float = 1.5
+    bass_attack_ms: float = 10.0
+    bass_release_ms: float = 140.0
+    bass_threshold_db: float = -25.0
 
     treb_ratio: float = 2.0
     treb_attack_ms: float = 0.1
-    treb_release_ms: float = 30.0
-    treb_threshold_db: float = -20.0
+    treb_release_ms: float = 40.0
+    treb_threshold_db: float = -15.0
 
     sample_rate: int | None = None
+    resampling_target: int = 96000
+
+    target_lufs: float = -9.0
+
     slope_db: float = 3.0
     slope_hz: float = 1000.0
+
     smoothing_fraction: float = 1.0 / 3.0
-    target_lufs: float = -9.0
+
     correction_strength: float = 1.0
+
     low_cut: int | None = None
     high_cut: int | None = None
-    phase_type: str = "minimal"
-    drive_db: float = 0.0
-    ceil_db: float = -0.1
+
+    phase_type: str = "linear"
+
+    drive_db: float = 1.0
+    ceil_db: float = -0.3
 
     @classmethod
     def make_bands_from_fcs(

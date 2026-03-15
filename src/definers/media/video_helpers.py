@@ -1,10 +1,9 @@
 from definers.data import init_cupy_numpy
-from definers.system import catch
-
 from definers.media.image_helpers import (
     _extract_visual_features,
     _reconstruct_visual_frame,
 )
+from definers.system import catch
 
 np, _np = init_cupy_numpy()
 

@@ -1,6 +1,6 @@
-from importlib import import_module
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from importlib import import_module
 from typing import Any
 
 from .gui_registry import (
@@ -44,7 +44,9 @@ class GuiProjectStarter:
             if callable(registered_launcher):
                 launcher = registered_launcher
         if launcher is None:
-            namespaced_launcher = self.namespace.get(f"_gui_{normalized_project}")
+            namespaced_launcher = self.namespace.get(
+                f"_gui_{normalized_project}"
+            )
             if callable(namespaced_launcher):
                 launcher = namespaced_launcher
         if launcher is not None:

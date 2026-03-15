@@ -109,7 +109,7 @@ def _resolve_source_translation_context(paragraph: str) -> tuple[str, str]:
 
 
 def _resolve_primary_unesco_code(
-    code: str | list[str] | tuple[str, ...]
+    code: str | list[str] | tuple[str, ...],
 ) -> str:
     if isinstance(code, (list, tuple)):
         return code[0]
@@ -265,9 +265,7 @@ def simple_text(prompt: str | None) -> str:
         line.lower().strip().replace(" -", "-").replace("- ", "-")
         for line in normalized_prompt.splitlines()
     ]
-    return "\n".join(
-        [" ".join(line.split()) for line in lines if line.strip()]
-    )
+    return "\n".join([" ".join(line.split()) for line in lines if line.strip()])
 
 
 @lru_cache(maxsize=1024)
@@ -277,14 +275,13 @@ def camel_case(txt: str | None) -> str:
     words = re.sub("[^a-zA-Z0-9]+", " ", txt).split()
     if not words:
         return ""
-    return words[0].lower() + "".join(
-        word.capitalize() for word in words[1:]
-    )
+    return words[0].lower() + "".join(word.capitalize() for word in words[1:])
 
 
 def ai_translate(text: str, lang: str = "en") -> str:
     import torch
     from sacremoses import MosesPunctNormalizer
+
     from definers.system import catch
 
     if not text or not text.strip():
@@ -301,8 +298,8 @@ def ai_translate(text: str, lang: str = "en") -> str:
             translated_paragraphs.append("")
             continue
         try:
-            source_language_code, source_code = _resolve_source_translation_context(
-                paragraph
+            source_language_code, source_code = (
+                _resolve_source_translation_context(paragraph)
             )
         except (KeyError, Exception) as error:
             catch(error)
@@ -366,7 +363,7 @@ def google_translate(text: str | None, lang: str = "en") -> str:
     )
     try:
         response = requests.get(url)
-        translated_text = response.text.split("\"")[1]
+        translated_text = response.text.split('"')[1]
         translated_text = simple_text(translated_text)
         logger = _get_logger()
         logger.info(translated_text)

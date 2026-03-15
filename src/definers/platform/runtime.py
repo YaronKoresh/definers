@@ -77,13 +77,16 @@ def _normalize_name(value: str | None) -> str:
     return str(value).strip().lower()
 
 
-def _version_matches(version_spec: str | None, version_actual: str | None) -> bool:
+def _version_matches(
+    version_spec: str | None, version_actual: str | None
+) -> bool:
     if version_spec is None:
         return True
     if not version_actual:
         return False
     return version_actual.startswith(version_spec) or (
-        "*" in version_spec and check_version_wildcard(version_spec, version_actual)
+        "*" in version_spec
+        and check_version_wildcard(version_spec, version_actual)
     )
 
 
@@ -102,7 +105,7 @@ def installed(pack: str, version: str | None = None) -> bool:
     system_name = get_os_name()
 
     if system_name == "windows":
-        command = "powershell.exe -Command \"Get-ItemProperty HKLM:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*, HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*, HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* | Select-Object DisplayName, DisplayVersion | Format-Table -HideTableHeaders\""
+        command = 'powershell.exe -Command "Get-ItemProperty HKLM:\\Software\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*, HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*, HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* | Select-Object DisplayName, DisplayVersion | Format-Table -HideTableHeaders"'
         try:
             result = subprocess.run(
                 command,
@@ -116,8 +119,12 @@ def installed(pack: str, version: str | None = None) -> bool:
                 if not parts or not parts[0]:
                     continue
                 name = _normalize_name(parts[0])
-                current_version = _normalize_name(parts[1] if len(parts) > 1 else "")
-                if pack_lower in name and _version_matches(version_lower, current_version):
+                current_version = _normalize_name(
+                    parts[1] if len(parts) > 1 else ""
+                )
+                if pack_lower in name and _version_matches(
+                    version_lower, current_version
+                ):
                     return True
         except Exception:
             pass
@@ -162,7 +169,9 @@ def installed(pack: str, version: str | None = None) -> bool:
             if parsed_line is None:
                 continue
             name, current_version = parsed_line
-            if name == pack_lower and _version_matches(version_lower, current_version):
+            if name == pack_lower and _version_matches(
+                version_lower, current_version
+            ):
                 return True
         return False
     except Exception:

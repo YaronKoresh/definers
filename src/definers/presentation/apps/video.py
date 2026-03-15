@@ -2,7 +2,6 @@ from definers.constants import STYLES_DB
 from definers.presentation.gradio_shared import launch_blocks
 from definers.video_gui import filter_styles, generate_video_handler
 
-
 VIDEO_APP_CSS = """
 body { color: #00ff41; font-family: monospace; }
 .gr-button.primary { background: #00f3ff; color: black; font-weight: bold; box-shadow: 0 0 10px #00f3ff; }
@@ -31,7 +30,9 @@ def launch_video_app():
                                 "### 📂 Media & Style",
                                 elem_classes="section-header",
                             )
-                            audio_in = gr.Audio(label="Audio File", type="filepath")
+                            audio_in = gr.Audio(
+                                label="Audio File", type="filepath"
+                            )
                             with gr.Row():
                                 search_txt = gr.Textbox(
                                     placeholder="Search styles...",
@@ -129,8 +130,12 @@ def launch_video_app():
                                     )
                             ce_x = gr.Slider(0, 1, 0.5, label="Element X")
                             ce_y = gr.Slider(0, 1, 0.5, label="Element Y")
-                            ce_scale = gr.Slider(0.1, 5, 1, label="Element Scale")
-                            ce_opacity = gr.Slider(0, 1, 1, label="Element Opacity")
+                            ce_scale = gr.Slider(
+                                0.1, 5, 1, label="Element Scale"
+                            )
+                            ce_opacity = gr.Slider(
+                                0, 1, 1, label="Element Opacity"
+                            )
                             ce_text = gr.Textbox(label="Custom Text")
                             ce_logo = gr.File(label="Custom Logo")
 
@@ -175,7 +180,9 @@ def launch_video_app():
                     lv_color = gr.Textbox(value="white", label="Text Color")
                     lv_stroke = gr.Textbox(value="black", label="Stroke Color")
                     lv_width = gr.Slider(0, 10, value=2, label="Stroke Width")
-                    lv_fade = gr.Slider(0.0, 5.0, value=0.5, label="Fade Duration")
+                    lv_fade = gr.Slider(
+                        0.0, 5.0, value=0.5, label="Fade Duration"
+                    )
                     lv_btn = gr.Button("Make Lyric Video")
                     lv_out = gr.Video(label="Lyric Output")
                     lv_btn.click(
@@ -200,7 +207,9 @@ def launch_video_app():
                     mv_audio = gr.Audio(label="Audio File", type="filepath")
                     mv_width = gr.Number(value=1920, label="Width")
                     mv_height = gr.Number(value=1080, label="Height")
-                    mv_fps = gr.Slider(minimum=1, maximum=60, value=30, label="FPS")
+                    mv_fps = gr.Slider(
+                        minimum=1, maximum=60, value=30, label="FPS"
+                    )
                     mv_btn = gr.Button("Generate Visualizer")
                     mv_out = gr.Video(label="Visualizer Output")
                     mv_btn.click(

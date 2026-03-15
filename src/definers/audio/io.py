@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import os
@@ -11,7 +10,9 @@ from definers.platform.paths import full_path, tmp
 
 
 def _is_audio_segment(audio_signal) -> bool:
-    return hasattr(audio_signal, "export") and hasattr(audio_signal, "frame_rate")
+    return hasattr(audio_signal, "export") and hasattr(
+        audio_signal, "frame_rate"
+    )
 
 
 def _run_ffmpeg(command: list[str]):
@@ -25,37 +26,15 @@ def _run_ffmpeg(command: list[str]):
         return None
 
 
-def read_audio(audio_file, normalized: bool = False) -> tuple[int, np.ndarray]:
+def read_audio(audio_file: str) -> tuple[int, np.ndarray]:
     import pydub
 
     audio_segment = pydub.AudioSegment.from_file(audio_file)
     samples = np.array(audio_segment.get_array_of_samples())
-    if audio_segment.channels == 2:
-        audio_data = samples.reshape((-1, 2)).T
-    else:
-        audio_data = samples.reshape((1, -1))
-    if normalized:
-        return (audio_segment.frame_rate, np.float32(audio_data) / 32768.0)
-    else:
-        return (audio_segment.frame_rate, audio_data)
 
+    audio_data = samples.reshape((-1, audio_segment.channels)).T
 
-def write_mp3(file_path: str, sr: int, audio_data: np.ndarray) -> None:
-    import pydub
-
-    if audio_data.ndim == 1:
-        channels = 1
-    else:
-        channels = audio_data.shape[0]
-    y = np.int8(audio_data * 128.0 / 2 + 128.0 + (audio_data * 128.0 / 2 - 128.0))
-    interleaved_data = np.ascontiguousarray(y.T)
-    song = pydub.AudioSegment(
-        interleaved_data.tobytes(),
-        frame_rate=sr,
-        sample_width=1,
-        channels=channels,
-    )
-    song.export(file_path, format="mp3", bitrate="320k")
+    return audio_segment.frame_rate, audio_data.astype(np.float32) / 32768.0
 
 
 def save_audio(
@@ -67,85 +46,41 @@ def save_audio(
     audio_bit_depth: int = 32,
     audio_bitrate: int = 320,
 ) -> None:
-    import lameenc
+    import pydub
     import soundfile as sf
 
     base_path = os.path.splitext(str(destination_path))[0]
-    final_path = f"{base_path}.mp3" if output_format.lower() == "mp3" else f"{base_path}.wav"
+    ext = output_format.lower()
+    final_path = f"{base_path}.{ext}"
 
-    if _is_audio_segment(audio_signal):
-        export_kwargs = {"format": output_format.lower()}
-        if output_format.lower() == "mp3":
-            export_kwargs["bitrate"] = f"{audio_bitrate}k"
-        audio_signal.export(final_path, **export_kwargs)
+    if hasattr(audio_signal, "export"):
+        audio_signal.export(final_path, format=ext, bitrate=f"{audio_bitrate}k")
         return final_path
 
-    ceiling_db = -0.1
-    lin_amp = 10 ** (ceiling_db / 20.0)
-
-    audio_signal = np.clip(audio_signal * lin_amp, -lin_amp, lin_amp)
-
-    if output_format.lower() == "mp3":
-        INT16_MAX = np.iinfo(np.int16).max
-        y_scaled = (audio_signal * INT16_MAX).astype(np.int16)
-
-        if y_scaled.ndim == 1:
-            channels = 1
-            y_interleaved = y_scaled
-        else:
-            y_interleaved = np.ascontiguousarray(
-                y_scaled.T if y_scaled.shape[0] < y_scaled.shape[1] else y_scaled
-            )
-            channels = y_interleaved.shape[1]
-
-        encoder = lameenc.Encoder()
-        encoder.set_bit_rate(audio_bitrate)
-        encoder.set_in_sample_rate(sample_rate)
-        encoder.set_channels(channels)
-        encoder.set_quality(2)
-
-        mp3_data = encoder.encode(y_interleaved.tobytes())
-        mp3_data += encoder.flush()
-
-        with open(final_path, "wb") as f:
-            f.write(mp3_data)
-        return final_path
-
-    if audio_bit_depth == 16:
-        INT16_MIN = np.iinfo(np.int16).min
-        INT16_MAX = np.iinfo(np.int16).max
-        y_scaled = audio_signal * float(INT16_MAX)
-
-        tpdf = (
-            np.random.uniform(-1.0, 1.0, y_scaled.shape)
-            + np.random.uniform(-1.0, 1.0, y_scaled.shape)
-        ) * 0.5
-
-        y_dithered = y_scaled + tpdf
-        audio_signal = np.clip(np.rint(y_dithered), INT16_MIN, INT16_MAX).astype(
-            np.int16
-        )
-
-    elif audio_bit_depth == 32:
-        audio_signal = audio_signal.astype(np.float32)
-
-    elif audio_bit_depth == 64:
-        audio_signal = audio_signal.astype(np.float64)
-
-    else:
-        raise ValueError(f"Unsupported bit depth: {audio_bit_depth}. Use 16, 32, or 64.")
-
-    if audio_signal.ndim == 2 and audio_signal.shape[0] < audio_signal.shape[1]:
+    if audio_signal.ndim == 2 and audio_signal.shape[0] < 10:
         audio_signal = audio_signal.T
 
-    subtype_map = {16: "PCM_16", 32: "FLOAT", 64: "DOUBLE"}
-    sf.write(
-        final_path,
-        audio_signal,
-        sample_rate,
-        subtype=subtype_map[audio_bit_depth],
-        format="RF64",
-    )
+    if ext == "wav":
+        subtype = {16: "PCM_16", 32: "FLOAT", 64: "DOUBLE"}.get(
+            audio_bit_depth, "FLOAT"
+        )
+        sf.write(
+            final_path,
+            audio_signal,
+            sample_rate,
+            subtype=subtype,
+            format="RF64",
+        )
+
+    else:
+        import io
+
+        buffer = io.BytesIO()
+        sf.write(buffer, audio_signal, sample_rate, format="WAV")
+        buffer.seek(0)
+        song = pydub.AudioSegment.from_wav(buffer)
+        song.export(final_path, format=ext, bitrate=f"{audio_bitrate}k")
+
     return final_path
 
 
@@ -161,6 +96,7 @@ def split_audio(
 ) -> list[str]:
     import math
     import os
+
     import pydub
 
     audio_file_path = full_path(audio_file_path)
@@ -183,7 +119,11 @@ def split_audio(
 
     remaining_ms = total_ms - skip_ms
     max_chunks = math.ceil(remaining_ms / duration_ms)
-    num_chunks = min(chunks_limit, max_chunks) if chunks_limit is not None else max_chunks
+    num_chunks = (
+        min(chunks_limit, max_chunks)
+        if chunks_limit is not None
+        else max_chunks
+    )
 
     if output_folder:
         output_folder = full_path(output_folder)

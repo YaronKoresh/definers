@@ -20,7 +20,10 @@ def test_parse_pid_output_rejects_invalid_integer() -> None:
 
 
 def test_parse_pip_list_line_returns_normalized_name_and_version() -> None:
-    assert runtime._parse_pip_list_line("Requests  2.31.0") == ("requests", "2.31.0")
+    assert runtime._parse_pip_list_line("Requests  2.31.0") == (
+        "requests",
+        "2.31.0",
+    )
 
 
 def test_parse_pip_list_line_rejects_unstructured_lines() -> None:

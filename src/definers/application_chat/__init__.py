@@ -1,8 +1,8 @@
 from definers.application_chat.contracts import (
     Answerer,
+    ChatAuditMessageBuilder,
     ChatHistory,
     ChatMessage,
-    ChatAuditMessageBuilder,
     ChatRequest,
     ChatRequestNormalizer,
     HistoryItem,

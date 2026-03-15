@@ -14,7 +14,9 @@ def test_secure_command_rejects_empty_string() -> None:
         processes.secure_command("   ")
 
 
-@pytest.mark.parametrize("command", ["echo ok; whoami", "echo ok | whoami", "echo `x`", "echo $HOME"])
+@pytest.mark.parametrize(
+    "command", ["echo ok; whoami", "echo ok | whoami", "echo `x`", "echo $HOME"]
+)
 def test_secure_command_rejects_unsafe_characters(command: str) -> None:
     with pytest.raises(ValueError, match="Unsafe characters"):
         processes.secure_command(command)
@@ -43,7 +45,9 @@ def test_secure_command_rejects_overlong_argument() -> None:
         processes.secure_command(["python", "x" * 1025])
 
 
-def test_secure_command_uses_secure_path_for_pathlike_executable(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_secure_command_uses_secure_path_for_pathlike_executable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     calls: list[str] = []
 
     def fake_secure_path(path: str) -> str:
@@ -60,4 +64,4 @@ def test_secure_command_uses_secure_path_for_pathlike_executable(monkeypatch: py
 
 def test_secure_command_rejects_invalid_input_type() -> None:
     with pytest.raises(TypeError, match="Command must be a string or a list"):
-        processes.secure_command(42)                          
+        processes.secure_command(42)

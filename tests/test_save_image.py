@@ -1,9 +1,8 @@
 import os
-import re
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
-import definers
+import definers.media.image_helpers as image_helpers_module
 import definers.os_utils as os_utils
 import definers.path_utils as path_utils
 
@@ -34,29 +33,28 @@ for _name, _value in {
     if not hasattr(path_utils, _name):
         setattr(path_utils, _name, _value)
 
-from definers.image import save_image
-
 
 class TestSaveImage(unittest.TestCase):
     def test_save_image_returns_png_path(self):
         mock_img = MagicMock()
-        with unittest.mock.patch.object(
-            definers, "random_string", create=True, return_value="random123"
+        with patch.object(
+            image_helpers_module,
+            "_image_random_string",
+            return_value="random123",
         ):
-            result_path = save_image(mock_img, path=".")
+            result_path = image_helpers_module.save_image(mock_img, path=".")
         self.assertEqual(os.path.dirname(result_path), ".")
         self.assertEqual(os.path.basename(result_path), "img_random123.png")
         mock_img.save.assert_called_once_with(result_path)
 
     def test_save_image_calls_save_method(self):
         mock_img = MagicMock()
-        with unittest.mock.patch.object(
-            definers,
-            "random_string",
-            create=True,
+        with patch.object(
+            image_helpers_module,
+            "_image_random_string",
             return_value="another_random",
         ):
-            result_path = save_image(mock_img, path="/tmp")
+            result_path = image_helpers_module.save_image(mock_img, path="/tmp")
         self.assertEqual(os.path.dirname(result_path), "/tmp")
         self.assertEqual(
             os.path.basename(result_path), "img_another_random.png"

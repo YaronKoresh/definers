@@ -7,7 +7,6 @@ from numpy.typing import NDArray
 from definers.application_data.runtime_patches import init_cupy_numpy
 from definers.application_data.vectorizers import create_vectorizer, vectorize
 
-
 np, _np = init_cupy_numpy()
 NumpyArray = NDArray[Any]
 
@@ -64,7 +63,9 @@ def numpy_to_str(value):
 
 
 def _coerce_existing_array(value: Any) -> NumpyArray:
-    if _np.issubdtype(value.dtype, _np.str_) or _np.issubdtype(value.dtype, _np.bytes_):
+    if _np.issubdtype(value.dtype, _np.str_) or _np.issubdtype(
+        value.dtype, _np.bytes_
+    ):
         return cupy_to_numpy(str_to_numpy(numpy_to_str(value)))
     if not np.issubdtype(value.dtype, np.number):
         raise TypeError(f"CuPy array of dtype {value.dtype} is not supported.")
@@ -89,7 +90,9 @@ def _coerce_numpy_array(value: Any) -> NumpyArray:
     try:
         return _np.array(value).astype(float)
     except Exception as error:
-        raise TypeError(f"Input of type {type(value)} is not supported: {error}")
+        raise TypeError(
+            f"Input of type {type(value)} is not supported: {error}"
+        )
 
 
 def _reshape_to_two_dimensions(value: Any) -> NumpyArray:
@@ -146,7 +149,9 @@ def two_dim_numpy(value):
         return numpy_to_cupy(_reshape_to_two_dimensions(value))
     except ValueError as error:
         shape = getattr(_coerce_numpy_array(value), "shape", None)
-        raise ValueError(f"Cannot reshape array of shape {shape} to 2D: {error}")
+        raise ValueError(
+            f"Cannot reshape array of shape {shape} to 2D: {error}"
+        )
 
 
 def three_dim_numpy(value):
@@ -154,7 +159,9 @@ def three_dim_numpy(value):
         return numpy_to_cupy(_reshape_to_three_dimensions(value))
     except ValueError as error:
         shape = getattr(_coerce_numpy_array(value), "shape", None)
-        raise ValueError(f"Cannot reshape array of shape {shape} to 3D: {error}")
+        raise ValueError(
+            f"Cannot reshape array of shape {shape} to 3D: {error}"
+        )
 
 
 def numpy_to_list(np_arr):
@@ -189,7 +196,11 @@ def guess_numpy_sample_rate(
     for sample_rate in possible_sample_rates:
         nyquist_frequency = sample_rate / 2
         for frequency in dominant_frequencies:
-            if abs(frequency) < nyquist_frequency and abs(frequency - round(frequency)) / nyquist_frequency < frequency_threshold:
+            if (
+                abs(frequency) < nyquist_frequency
+                and abs(frequency - round(frequency)) / nyquist_frequency
+                < frequency_threshold
+            ):
                 return sample_rate
     return None
 

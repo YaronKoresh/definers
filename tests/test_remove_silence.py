@@ -43,7 +43,7 @@ class TestRemoveSilence(unittest.TestCase):
         mock_run.assert_called_once_with(expected_command, check=True)
 
     @patch("subprocess.run")
-    @patch("definers.file_ops.catch")
+    @patch("_test_remove_silence_io.file_ops.catch")
     def test_remove_silence_failure(self, mock_catch, mock_run):
         mock_run.side_effect = subprocess.CalledProcessError(1, "ffmpeg")
         input_file = "input.wav"

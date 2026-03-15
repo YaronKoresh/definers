@@ -31,7 +31,9 @@ class EnvironmentPort(Protocol):
         self, version_spec: Any, version_actual: Any
     ) -> bool: ...
 
-    def installed(self, package_name: str, version: str | None = None) -> bool: ...
+    def installed(
+        self, package_name: str, version: str | None = None
+    ) -> bool: ...
 
 
 class FileSystemPort(Protocol):
@@ -146,7 +148,9 @@ class RuntimeStatePort(RuntimeCollectionsPort, Protocol):
 
 
 class RuntimeStateRegistryPort(Protocol):
-    def get_state(self, scope: RuntimeScope = "default") -> RuntimeStatePort: ...
+    def get_state(
+        self, scope: RuntimeScope = "default"
+    ) -> RuntimeStatePort: ...
 
     def create_state(
         self,

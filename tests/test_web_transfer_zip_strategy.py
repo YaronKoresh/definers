@@ -77,7 +77,9 @@ def test_zip_extract_transfer_strategy_extracts_archive_async(
     target_node = tmp_path / "extract"
 
     result = asyncio.run(
-        strategy.execute_transfer("https://example.com/archive.zip", target_node)
+        strategy.execute_transfer(
+            "https://example.com/archive.zip", target_node
+        )
     )
 
     assert result is True

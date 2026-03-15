@@ -2,7 +2,6 @@ import logging
 import os
 from datetime import datetime
 
-
 MESSAGE_SCHEMA = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
 
@@ -26,7 +25,9 @@ def init_logger(
     propagate: bool = False,
     default_level: int = logging.INFO,
 ) -> logging.Logger:
-    environment_level = os.environ.get("DEFINERS_LOG_LEVEL") or os.environ.get("LOGLEVEL")
+    environment_level = os.environ.get("DEFINERS_LOG_LEVEL") or os.environ.get(
+        "LOGLEVEL"
+    )
     final_level = _parse_level(level or environment_level, default_level)
     active_logger = logging.getLogger(name)
     active_logger.propagate = propagate
@@ -36,7 +37,9 @@ def init_logger(
         log_file = os.environ.get("DEFINERS_LOG_FILE")
 
     formatter = logging.Formatter(MESSAGE_SCHEMA)
-    existing_handlers = {type(handler): handler for handler in active_logger.handlers}
+    existing_handlers = {
+        type(handler): handler for handler in active_logger.handlers
+    }
 
     if enable_console and logging.StreamHandler not in existing_handlers:
         stream_handler = logging.StreamHandler()

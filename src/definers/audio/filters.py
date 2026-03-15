@@ -1,11 +1,14 @@
-
 from __future__ import annotations
 
 import numpy as np
 from scipy.signal import butter, lfilter
 
+from .dsp import resample
 
-def freq_cut(y: np.ndarray, sr: int, low_cut: int | None, high_cut: int | None) -> np.ndarray:
+
+def freq_cut(
+    y: np.ndarray, sr: int, low_cut: int | None, high_cut: int | None
+) -> np.ndarray:
     y = np.asarray(y, dtype=np.float64)
     original_length = y.shape[-1]
 
@@ -19,7 +22,6 @@ def freq_cut(y: np.ndarray, sr: int, low_cut: int | None, high_cut: int | None) 
 
     if high_cut:
         target_high_sr = high_cut * 2
-        from scipy.signal import resample
 
         y_high_cut_resampled = resample(y, target_high_sr)
         y_main = resample(y_high_cut_resampled, sr)
@@ -32,7 +34,6 @@ def freq_cut(y: np.ndarray, sr: int, low_cut: int | None, high_cut: int | None) 
 
     if low_cut:
         target_low_sr = low_cut * 2
-        from scipy.signal import resample
 
         y_low_only_resampled = resample(y, target_low_sr)
         y_low_reconstructed = resample(y_low_only_resampled, sr)

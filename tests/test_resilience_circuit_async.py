@@ -1,8 +1,10 @@
 import asyncio
 
-from definers.shared_kernel.resilience import CircuitBreaker
-from definers.shared_kernel.resilience import CircuitBreakerOpenException
-from definers.shared_kernel.resilience import CircuitState
+from definers.shared_kernel.resilience import (
+    CircuitBreaker,
+    CircuitBreakerOpenException,
+    CircuitState,
+)
 
 
 class ScriptedClock:
@@ -82,7 +84,9 @@ def test_async_circuit_opens_at_threshold_and_blocks_subsequent_calls() -> None:
     asyncio.run(run_test())
 
 
-def test_async_circuit_transitions_to_half_open_then_closes_on_success() -> None:
+def test_async_circuit_transitions_to_half_open_then_closes_on_success() -> (
+    None
+):
     clock = ScriptedClock([0.0, 0.0, 3.1], fallback=3.1)
     breaker = CircuitBreaker(
         failure_threshold=1,

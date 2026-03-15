@@ -1,13 +1,17 @@
 from typing import Any
 
 import definers.text as text
+from definers.application_chat.contracts import (
+    ChatHistory,
+    ChatMessage,
+    ChatRequest,
+)
 from definers.application_chat.handlers import (
     build_chat_audit_message as _build_chat_audit_message,
-    handle_chat_request,
     create_chat_request,
     create_chat_request_handler,
+    handle_chat_request,
 )
-from definers.application_chat.contracts import ChatHistory, ChatMessage, ChatRequest
 from definers.constants import (
     MAX_CONSECUTIVE_SPACES,
     MAX_INPUT_LENGTH,

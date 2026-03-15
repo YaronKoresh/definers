@@ -42,12 +42,16 @@ def enforce_error_boundary(func: BoundCallable) -> BoundCallable:
     if inspect.iscoroutinefunction(func):
 
         @functools.wraps(func)
-        async def async_boundary_execution_wrapper(*args: Any, **kwargs: Any) -> Any:
+        async def async_boundary_execution_wrapper(
+            *args: Any, **kwargs: Any
+        ) -> Any:
             try:
                 return await func(*args, **kwargs)
             except Exception as unhandled_exception:
-                diagnostic_stream = SystemDiagnosticsFactory.provision_diagnostic_stream(
-                    __name__
+                diagnostic_stream = (
+                    SystemDiagnosticsFactory.provision_diagnostic_stream(
+                        __name__
+                    )
                 )
                 diagnostic_stream.critical(
                     f"Boundary breached in {func.__name__}: {str(unhandled_exception)}"
@@ -64,8 +68,8 @@ def enforce_error_boundary(func: BoundCallable) -> BoundCallable:
         try:
             return func(*args, **kwargs)
         except Exception as unhandled_exception:
-            diagnostic_stream = SystemDiagnosticsFactory.provision_diagnostic_stream(
-                __name__
+            diagnostic_stream = (
+                SystemDiagnosticsFactory.provision_diagnostic_stream(__name__)
             )
             diagnostic_stream.critical(
                 f"Boundary breached in {func.__name__}: {str(unhandled_exception)}"
@@ -198,7 +202,9 @@ class ExponentialBackoffDelay:
         if self.multiplier < 1:
             raise ValueError("multiplier must be at least 1")
         if self.max_delay < self.base_delay:
-            raise ValueError("max_delay must be greater than or equal to base_delay")
+            raise ValueError(
+                "max_delay must be greater than or equal to base_delay"
+            )
         if not 0 <= self.jitter_ratio <= 1:
             raise ValueError("jitter_ratio must be between 0 and 1")
 
@@ -210,7 +216,9 @@ class ExponentialBackoffDelay:
         if self.jitter_ratio == 0:
             return bounded_delay
         jitter_window = bounded_delay * self.jitter_ratio
-        randomized_delay = bounded_delay + random.uniform(-jitter_window, jitter_window)
+        randomized_delay = bounded_delay + random.uniform(
+            -jitter_window, jitter_window
+        )
         return max(0.0, randomized_delay)
 
 
@@ -253,12 +261,16 @@ async def execute_with_retry_async(
             if attempt_index == policy.max_retries - 1:
                 break
             if on_retry is not None:
-                on_retry(attempt_index + 1, policy.max_retries, current_exception)
+                on_retry(
+                    attempt_index + 1, policy.max_retries, current_exception
+                )
             await asyncio.sleep(
                 policy.delay_strategy.delay_for_attempt(attempt_index)
             )
     if last_exception is None:
-        raise RuntimeError("retry loop exited without result or captured exception")
+        raise RuntimeError(
+            "retry loop exited without result or captured exception"
+        )
     raise last_exception
 
 
@@ -293,7 +305,9 @@ def with_retry(
     retry_on: ExceptionType = Exception,
     delay_strategy=None,
 ) -> Callable[[Callable[..., Awaitable[T]]], Callable[..., Awaitable[T]]]:
-    active_delay_strategy = delay_strategy or ExponentialBackoffDelay(base_delay=delay)
+    active_delay_strategy = delay_strategy or ExponentialBackoffDelay(
+        base_delay=delay
+    )
     retry_policy = RetryPolicy(
         max_retries=max_retries,
         delay_strategy=active_delay_strategy,

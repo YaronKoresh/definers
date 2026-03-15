@@ -9,9 +9,7 @@ from definers.system import is_directory
 logger = init_logger()
 
 
-def find_latest_rvc_checkpoint(
-    folder_path: str, model_name: str
-) -> str | None:
+def find_latest_rvc_checkpoint(folder_path: str, model_name: str) -> str | None:
     from definers.system import secure_path
 
     logger.info(

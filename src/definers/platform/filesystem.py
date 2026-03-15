@@ -86,7 +86,9 @@ def remove_readonly(func, path, excinfo):
 
 
 def shutil_rmtree_readonly_handler(func, path, exc_info):
-    exception_instance = exc_info[1] if isinstance(exc_info, tuple) else exc_info
+    exception_instance = (
+        exc_info[1] if isinstance(exc_info, tuple) else exc_info
+    )
     if exception_instance.errno == errno.EACCES:
         os.chmod(path, stat.S_IWRITE)
         func(path)
@@ -176,5 +178,3 @@ def permit(
         return False
     except Exception:
         return False
-
-

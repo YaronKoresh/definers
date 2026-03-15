@@ -34,9 +34,7 @@ def _extract_visual_features(image, gray_image):
     radius = 1
     n_points = 8 * radius
     local_binary_pattern = (
-        skf.local_binary_pattern(
-            gray_image, n_points, radius, method="uniform"
-        )
+        skf.local_binary_pattern(gray_image, n_points, radius, method="uniform")
         .flatten()
         .astype(_np.float32)
     )
@@ -64,11 +62,15 @@ def _reconstruct_visual_frame(predicted_features, frame_shape):
     reconstructed_frame = np.zeros(frame_shape, dtype=np.uint8)
     for channel_index in range(channels):
         channel_histogram = color_histogram[min(channel_index, 2)]
-        max_value = float(_np.max(channel_histogram)) if channel_histogram.size else 0.0
+        max_value = (
+            float(_np.max(channel_histogram)) if channel_histogram.size else 0.0
+        )
         if max_value <= 0.0:
             continue
         channel_value = np.uint8(channel_histogram / max_value * 255.0)
-        reconstructed_frame[:, :, channel_index] = np.sum(channel_value).astype(np.uint8)
+        reconstructed_frame[:, :, channel_index] = np.sum(channel_value).astype(
+            np.uint8
+        )
     lbp_scaled = cv2.normalize(
         local_binary_pattern, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U
     )
@@ -101,7 +103,9 @@ def features_to_image(predicted_features, image_shape=(1024, 1024, 3)):
     try:
         return _reconstruct_visual_frame(predicted_features, image_shape)
     except Exception as exception:
-        _log_media_exception("Failed to reconstruct image from features", exception)
+        _log_media_exception(
+            "Failed to reconstruct image from features", exception
+        )
         return None
 
 
@@ -154,13 +158,16 @@ def get_max_resolution(width, height, mega_pixels=0.25, factor=16):
 
 
 def save_image(img, path="."):
-    import definers
-    from definers.text import random_string as generate_random_string
-
-    random_name = getattr(definers, "random_string", generate_random_string)()
+    random_name = _image_random_string()
     name = os.path.join(path, "img_" + random_name + ".png")
     img.save(name)
     return name
+
+
+def _image_random_string():
+    from definers.text import random_string
+
+    return random_string()
 
 
 def resize_image(image_path, target_width, target_height, anti_aliasing=True):
@@ -200,6 +207,7 @@ def write_on_image(
     image_path, top_title=None, middle_title=None, bottom_title=None
 ):
     from PIL import Image, ImageDraw, ImageFont
+
     from definers.media.web_transfer import google_drive_download
     from definers.platform.filesystem import read
 

@@ -4,9 +4,14 @@ import tempfile
 import textwrap
 import unittest
 
-
-MODULE_PATH = pathlib.Path(__file__).resolve().parents[1] / "scripts" / "strip_comments.py"
-MODULE_SPEC = importlib.util.spec_from_file_location("strip_comments_script", MODULE_PATH)
+MODULE_PATH = (
+    pathlib.Path(__file__).resolve().parents[1]
+    / "scripts"
+    / "strip_comments.py"
+)
+MODULE_SPEC = importlib.util.spec_from_file_location(
+    "strip_comments_script", MODULE_PATH
+)
 strip_comments = importlib.util.module_from_spec(MODULE_SPEC)
 assert MODULE_SPEC.loader is not None
 MODULE_SPEC.loader.exec_module(strip_comments)

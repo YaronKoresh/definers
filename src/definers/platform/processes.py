@@ -89,7 +89,9 @@ def _run_command(
             from definers.file_ops import log
 
             log("Script completed", " ".join(args))
-        return [line.strip() for line in stdout.strip().splitlines() if line.strip()]
+        return [
+            line.strip() for line in stdout.strip().splitlines() if line.strip()
+        ]
     except Exception as error:
         try:
             from definers.file_ops import catch
@@ -101,7 +103,11 @@ def _run_command(
 
 
 def _parse_pid_output(output: bytes | str) -> int | None:
-    normalized_output = output.decode("utf-8", errors="ignore") if isinstance(output, bytes) else str(output)
+    normalized_output = (
+        output.decode("utf-8", errors="ignore")
+        if isinstance(output, bytes)
+        else str(output)
+    )
     pid_tokens = [token for token in normalized_output.strip().split() if token]
     if len(pid_tokens) != 1:
         return None

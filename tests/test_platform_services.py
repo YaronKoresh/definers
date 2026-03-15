@@ -54,7 +54,9 @@ def test_system_permit_preserves_compatibility_injected_dependencies():
         return True
 
     set_infrastructure_services(
-        InfrastructureServices(filesystem=FileSystemService(permit_fn=fake_permit))
+        InfrastructureServices(
+            filesystem=FileSystemService(permit_fn=fake_permit)
+        )
     )
 
     assert system.permit("demo.txt") is True
@@ -87,5 +89,7 @@ def test_system_run_uses_configured_process_service():
         InfrastructureServices(processes=ProcessService(run_fn=fake_run))
     )
 
-    assert system.run(["echo", "hello"], silent=True, env={"A": "1"}) == ["done"]
+    assert system.run(["echo", "hello"], silent=True, env={"A": "1"}) == [
+        "done"
+    ]
     assert calls == [(["echo", "hello"], True, {"A": "1"})]

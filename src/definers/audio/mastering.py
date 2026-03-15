@@ -1,27 +1,14 @@
-
 from __future__ import annotations
 
 import numpy as np
 from scipy import signal
+from scipy.ndimage import maximum_filter1d
 
 from .config import SmartMasteringConfig
 from .dsp import decoupled_envelope, limiter_smooth_env, resample
 from .effects import apply_exciter, mix_audio, pad_audio, stereo
 from .filters import freq_cut
-
-
-def generate_bands(start_freq: float, end_freq: float, num_bands: int) -> list[float]:
-    if num_bands < 2:
-        return [start_freq]
-
-    bands = []
-    factor = (end_freq / start_freq) ** (1 / (num_bands - 1))
-
-    for i in range(num_bands):
-        freq = start_freq * (factor**i)
-        bands.append(freq)
-
-    return bands
+from .utils import apply_lufs, generate_bands, stereo_widen
 
 
 class SmartMastering:
@@ -38,11 +25,20 @@ class SmartMastering:
         self,
         config: SmartMasteringConfig | dict | None = None,
     ) -> None:
-        cfg = config or SmartMasteringConfig()
+        cfg = SmartMasteringConfig()
+
+        if isinstance(config, dict):
+            for key, val in config.items():
+                if hasattr(cfg, key):
+                    setattr(cfg, key, val)
 
         self.config = cfg
 
-        self.resampling_target = 44100
+        self.resampling_target = (
+            cfg.resampling_target
+            if cfg.resampling_target is not None
+            else SmartMasteringConfig().resampling_target
+        )
 
         self.drive_db = (
             cfg.drive_db
@@ -171,6 +167,84 @@ class SmartMastering:
 
         return target_db
 
+    def apply_limiter(
+        self,
+        y: np.ndarray,
+        drive_db: float,
+        ceil_db: float,
+        os_factor: int = 2,
+        lookahead_ms: float = 5.0,
+        attack_ms: float = 0.1,
+        release_ms_min: float = 40.0,
+        release_ms_max: float = 140.0,
+        soft_clip_ratio: float = 0.7,
+        up_beta: float = 14.0,
+        down_beta: float = 18.0,
+    ) -> np.ndarray:
+
+        orig_len = y.shape[-1]
+        limit_lin = 10.0 ** (ceil_db / 20.0)
+        drive_lin = 10.0 ** (drive_db / 20.0)
+        sr_os = self.sr * os_factor
+
+        y_os = signal.resample_poly(
+            y, os_factor, 1, axis=-1, window=("kaiser", up_beta)
+        )
+        y_driven = y_os * drive_lin
+
+        y_env = (
+            np.max(np.abs(y_driven), axis=0)
+            if y_driven.ndim > 1
+            else np.abs(y_driven)
+        )
+        lookahead_samp = int(lookahead_ms * sr_os / 1000.0)
+        peak_env = maximum_filter1d(y_env, size=lookahead_samp)
+
+        rms_win = int(sr_os * 0.05)
+        rms_env = np.sqrt(maximum_filter1d(y_env**2, size=rms_win))
+        crest = peak_env / (rms_env + 1e-12)
+
+        rel_ms = np.clip(
+            release_ms_max / (crest + 1e-12), release_ms_min, release_ms_max
+        )
+        ac = np.exp(-1.0 / (sr_os * attack_ms / 1000.0))
+        rc = np.exp(-1.0 / (sr_os * rel_ms / 1000.0))
+
+        peak_smooth = limiter_smooth_env(peak_env, ac, rc)
+
+        gain = np.where(
+            peak_smooth > limit_lin, limit_lin / (peak_smooth + 1e-12), 1.0
+        )
+
+        y_delayed = np.zeros_like(y_driven)
+        if y_delayed.ndim > 1:
+            y_delayed[:, lookahead_samp:] = y_driven[:, :-lookahead_samp]
+        else:
+            y_delayed[lookahead_samp:] = y_driven[:-lookahead_samp]
+
+        y_lim = y_delayed * gain
+        y_sat = (
+            y_lim * (1.0 - soft_clip_ratio)
+            + np.tanh(y_lim / limit_lin) * limit_lin * soft_clip_ratio
+        )
+
+        y_down = signal.resample_poly(
+            y_sat, 1, os_factor, axis=-1, window=("kaiser", down_beta)
+        )
+
+        delay_samp = int(lookahead_ms * self.sr / 1000.0)
+        out = y_down[..., delay_samp : delay_samp + orig_len]
+
+        out -= (
+            np.mean(out, axis=-1, keepdims=True)
+            if out.ndim > 1
+            else np.mean(out)
+        )
+
+        out = np.clip(out, -limit_lin, limit_lin)
+
+        return out
+
     def smooth_curve(
         self,
         curve: np.ndarray,
@@ -196,8 +270,6 @@ class SmartMastering:
         return smoothed
 
     def apply_phase_correction(self, y: np.ndarray, tp: str) -> np.ndarray:
-        start = __import__("time").perf_counter()
-
         orig_len = y.shape[-1]
         y_mono = np.mean(y, axis=0) if y.ndim > 1 else y
 
@@ -267,8 +339,6 @@ class SmartMastering:
             assert np.all(np.isfinite(out)), (
                 "minimal_phase output contains non-finite values"
             )
-            end = __import__("time").perf_counter()
-            self._profile("minimal_phase", end - start)
 
         elif tp == "linear":
             H_full = np.concatenate([H_lin, H_lin[-2:0:-1]])
@@ -309,9 +379,6 @@ class SmartMastering:
         return out
 
     def multiband_compress(self, y: np.ndarray) -> np.ndarray:
-        if hasattr(self, "_profile"):
-            start = __import__("time").perf_counter()
-
         def lr4(x, fc):
             if x.shape[-1] <= 9:
                 return x, x
@@ -357,26 +424,26 @@ class SmartMastering:
             return bands
 
         def process_ch(ch):
-            fcs = [b.fc for b in self.bands if b.fc > 0]
+            fcs = [b["fc"] for b in self.bands if b["fc"] > 0]
             if not fcs:
                 return ch
 
-            sorted_bands = sorted(self.bands, key=lambda b: b.fc)
-            fcs_sorted = [b.fc for b in sorted_bands if b.fc > 0]
+            sorted_bands = sorted(self.bands, key=lambda b: b["fc"])
+            fcs_sorted = [b["fc"] for b in sorted_bands if b["fc"] > 0]
             signal_parts = split_bands(ch, fcs_sorted)
 
             comps: list[np.ndarray] = []
             for band_cfg, sig in zip(sorted_bands, signal_parts, strict=False):
-                thr = band_cfg.base_threshold + band_cfg.makeup_db
+                thr = band_cfg["base_threshold"] + band_cfg["makeup_db"]
                 comps.append(
                     compress(
                         sig,
                         thr,
-                        band_cfg.ratio,
-                        band_cfg.attack_ms,
-                        band_cfg.release_ms,
-                        band_cfg.makeup_db,
-                        knee_db=band_cfg.knee_db,
+                        band_cfg["ratio"],
+                        band_cfg["attack_ms"],
+                        band_cfg["release_ms"],
+                        band_cfg["makeup_db"],
+                        knee_db=band_cfg["knee_db"],
                     )
                 )
 
@@ -388,8 +455,6 @@ class SmartMastering:
             return process_ch(y)
 
     def process(self, y: np.ndarray, sr: int | None = None) -> np.ndarray:
-        orig_len = y.shape[-1]
-
         if sr is not None:
             self.sr = sr
 
@@ -411,19 +476,19 @@ class SmartMastering:
 
         y_stereo2 = stereo(p)
 
-        y_widen = self.apply_stereo_widening(y_stereo2)
+        y_widen = stereo_widen(y_stereo2)
 
         y_cut = freq_cut(
             y_widen, self.sr, low_cut=self.low_cut, high_cut=self.high_cut
         )
 
-        y_lufs = self.apply_lufs(y_cut, self.target_lufs)
+        y_lufs = apply_lufs(y_cut, self.target_lufs)
 
         y_limiter = self.apply_limiter(
             y_lufs, drive_db=self.drive_db, ceil_db=self.ceil_db
         )
 
-        y_lufs2 = self.apply_lufs(y_limiter, self.target_lufs)
+        y_lufs2 = apply_lufs(y_limiter, self.target_lufs)
 
         y_cut2 = freq_cut(
             y_lufs2, self.sr, low_cut=self.low_cut, high_cut=self.high_cut
@@ -433,39 +498,36 @@ class SmartMastering:
 
         y_clip = np.clip(y_cut2, -lin_amp, lin_amp)
 
-        if y_clip.shape[-1] != orig_len:
-            if y_clip.shape[-1] > orig_len:
-                y_clip = y_clip[..., :orig_len]
-            else:
-                y_clip = np.pad(
-                    y_clip,
-                    (
-                        *((0, 0),) * (y_clip.ndim - 1),
-                        (0, orig_len - y_clip.shape[-1]),
-                    ),
-                )
-
-        return y_clip, self.sr
+        return self.sr, y_clip
 
 
-def master(audio_file_path: str, audio_format: str = "mp3") -> str | None:
+def master(
+    input_path: str,
+    output_path: str = None,
+    target_format: str = "wav",
+    **kwargs: dict,
+) -> str | None:
+
+    from definers.system import tmp
 
     from .io import save_audio
-    from . import tmp
 
     try:
         from .io import read_audio
 
-        sr, y = read_audio(audio_file_path)
-        y_mastered, mastered_sr = SmartMastering().process(y, sr)
-        output_path = tmp(audio_format, keep=False)
+        sr, y = read_audio(input_path)
+
+        sr_mastered, y_mastered = SmartMastering(kwargs).process(y, sr)
+
+        output_path = output_path or tmp(target_format, keep=False)
         save_audio(
             destination_path=output_path,
             audio_signal=y_mastered,
-            sample_rate=mastered_sr,
-            output_format=audio_format,
+            sample_rate=sr_mastered,
+            output_format=target_format,
         )
         return output_path
+
     except Exception as e:
         from definers.system import catch
 

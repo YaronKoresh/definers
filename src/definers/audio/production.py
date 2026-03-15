@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import os
@@ -15,6 +14,7 @@ from definers.cuda import device
 from definers.logger import init_logger
 from definers.system import catch, delete, exist, get_ext, run, tmp
 from definers.text import random_string
+
 from .analysis import analyze_audio_features
 from .io import read_audio, save_audio
 from .utils import get_scale_notes, normalize_audio_to_peak, stretch_audio
@@ -27,7 +27,6 @@ def value_to_keys(dictionary: dict, target_value) -> list:
 
 
 def humanize_vocals(audio_path: str, amount: float = 0.5) -> str | None:
-    import pydub
     import soundfile as sf
 
     temp_dir = None
@@ -54,7 +53,9 @@ def humanize_vocals(audio_path: str, amount: float = 0.5) -> str | None:
             for i in range(len(f0)):
                 if voiced_flag[i] and f0[i] > 0:
                     cents_dev = np.random.normal(0, scale=deviation_scale)
-                    cents_dev = np.clip(cents_dev, -max_deviation_cents, max_deviation_cents)
+                    cents_dev = np.clip(
+                        cents_dev, -max_deviation_cents, max_deviation_cents
+                    )
                     target_f0[i] = f0[i] * 2 ** (cents_dev / 1200)
 
         freq_map_path = os.path.join(temp_dir, "freqmap.txt")
@@ -109,7 +110,9 @@ def transcribe_audio(audio_path: str, language: str) -> str | None:
     )["text"]
 
 
-def generate_voice(text: str, reference_audio: str, format_choice: str) -> str | None:
+def generate_voice(
+    text: str, reference_audio: str, format_choice: str
+) -> str | None:
     import pydub
     import soundfile as sf
 
@@ -120,7 +123,9 @@ def generate_voice(text: str, reference_audio: str, format_choice: str) -> str |
 
     try:
         temp_wav_path = tmp("wav", False)
-        wav = MODELS["tts"].generate(text=text, audio_prompt_path=reference_audio)
+        wav = MODELS["tts"].generate(
+            text=text, audio_prompt_path=reference_audio
+        )
         wav = normalize_audio_to_peak(wav)
         sf.write(temp_wav_path, wav, 24000)
         sound = pydub.AudioSegment.from_file(temp_wav_path)
@@ -138,10 +143,11 @@ def generate_voice(text: str, reference_audio: str, format_choice: str) -> str |
 
 def generate_music(prompt: str, duration_s: float, format_choice: str) -> str:
     import pydub
-
     from scipy.io.wavfile import write as write_wav
 
-    inputs = PROCESSORS["music"](text=[prompt], padding=True, return_tensors="pt").to(device())
+    inputs = PROCESSORS["music"](
+        text=[prompt], padding=True, return_tensors="pt"
+    ).to(device())
     max_new_tokens = int(duration_s * 50)
     audio_values = MODELS["music"].generate(
         **inputs,
@@ -165,7 +171,12 @@ def generate_music(prompt: str, duration_s: float, format_choice: str) -> str:
     return output_path
 
 
-def change_audio_speed(audio_path: str, speed_factor: float, preserve_pitch: bool, format_choice: str):
+def change_audio_speed(
+    audio_path: str,
+    speed_factor: float,
+    preserve_pitch: bool,
+    format_choice: str,
+):
     import pydub
 
     sound_out = None
@@ -201,7 +212,9 @@ def change_audio_speed(audio_path: str, speed_factor: float, preserve_pitch: boo
         return None
 
 
-def separate_stems(audio_path: str, separation_type=None, format_choice: str = "wav"):
+def separate_stems(
+    audio_path: str, separation_type=None, format_choice: str = "wav"
+):
     output_dir = tmp(dir=True)
     run(
         f'"{sys.executable}" -m demucs.separate -n hdemucs_mmi --shifts=2 --two-stems=vocals -o "{output_dir}" "{audio_path}"'
@@ -216,7 +229,9 @@ def separate_stems(audio_path: str, separation_type=None, format_choice: str = "
 
     def _export_stem(chosen_stem_path, suffix):
         sr, sound = read_audio(chosen_stem_path)
-        output_stem = str(Path(audio_path).with_name(Path(audio_path).stem + suffix))
+        output_stem = str(
+            Path(audio_path).with_name(Path(audio_path).stem + suffix)
+        )
         final_output_path = save_audio(
             audio_signal=sound,
             destination_path=output_stem,
@@ -243,14 +258,19 @@ def separate_stems(audio_path: str, separation_type=None, format_choice: str = "
 
 
 def pitch_shift_vocals(
-    audio_path: str, pitch_shift, format_choice: str = "wav", seperated: bool = False
+    audio_path: str,
+    pitch_shift,
+    format_choice: str = "wav",
+    seperated: bool = False,
 ):
     import pydub
     import soundfile as sf
 
     if seperated:
         (y_vocals, sr) = librosa.load(str(audio_path), sr=None)
-        y_shifted = librosa.effects.pitch_shift(y=y_vocals, sr=sr, n_steps=float(pitch_shift))
+        y_shifted = librosa.effects.pitch_shift(
+            y=y_vocals, sr=sr, n_steps=float(pitch_shift)
+        )
         output_path = tmp(format_choice, keep=False)
         sf.write(output_path, y_shifted, sr)
         return output_path
@@ -263,14 +283,18 @@ def pitch_shift_vocals(
         catch("Vocal separation failed.")
         return None
     (y_vocals, sr) = librosa.load(str(vocals_path), sr=None)
-    y_shifted = librosa.effects.pitch_shift(y=y_vocals, sr=sr, n_steps=float(pitch_shift))
+    y_shifted = librosa.effects.pitch_shift(
+        y=y_vocals, sr=sr, n_steps=float(pitch_shift)
+    )
     shifted_vocals_path = tmp("wav", keep=False)
     sf.write(shifted_vocals_path, y_shifted, sr)
     instrumental = pydub.AudioSegment.from_file(instrumental_path)
     shifted_vocals = pydub.AudioSegment.from_file(shifted_vocals_path)
     combined = instrumental.overlay(shifted_vocals)
     output_stem = str(
-        Path(audio_path).with_name(f"{Path(audio_path).stem}_vocal_pitch_shifted")
+        Path(audio_path).with_name(
+            f"{Path(audio_path).stem}_vocal_pitch_shifted"
+        )
     )
     final_output_path = save_audio(
         audio_signal=combined,
@@ -345,7 +369,9 @@ def create_spectrum_visualization(audio_path: str) -> str | None:
                 va="top",
             )
         fig.tight_layout()
-        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmpfile:
+        with tempfile.NamedTemporaryFile(
+            suffix=".png", delete=False
+        ) as tmpfile:
             temp_path = tmpfile.name
         fig.savefig(temp_path, facecolor=fig.get_facecolor())
         plt.close(fig)
@@ -369,7 +395,9 @@ def stem_mixer(files, format_choice):
     _logger.info("Processing stems for simple mixing")
     for i, _file in enumerate(files):
         file_obj = Path(_file)
-        _logger.info("Processing file %d/%d: %s", i + 1, len(files), file_obj.name)
+        _logger.info(
+            "Processing file %d/%d: %s", i + 1, len(files), file_obj.name
+        )
         try:
             (y, sr) = librosa.load(_file, sr=None)
         except Exception as e:
@@ -378,7 +406,9 @@ def stem_mixer(files, format_choice):
         if target_sr is None:
             target_sr = sr
         if sr != target_sr:
-            _logger.info("Resampling %s from %dHz to %dHz", file_obj.name, sr, target_sr)
+            _logger.info(
+                "Resampling %s from %dHz to %dHz", file_obj.name, sr, target_sr
+            )
             y = librosa.resample(y, orig_sr=sr, target_sr=target_sr)
         processed_stems.append(y)
         if len(y) > max_length:
@@ -400,7 +430,9 @@ def stem_mixer(files, format_choice):
     sound = pydub.AudioSegment.from_file(temp_wav_path)
     output_stem = Path(temp_wav_path).with_name(f"stem_mix_{random_string()}")
     output_path = save_audio(
-        audio_signal=sound, destination_path=output_stem, output_format=format_choice
+        audio_signal=sound,
+        destination_path=output_stem,
+        output_format=format_choice,
     )
     delete(temp_wav_path)
     _logger.info("Success! Mix saved to: %s", output_path)
@@ -490,7 +522,9 @@ def extend_audio(audio_path: str, extend_duration_s: float, format_choice: str):
         Path(audio_path).with_name(f"{Path(audio_path).stem}_extended")
     )
     final_output_path = save_audio(
-        audio_signal=final_sound, destination_path=output_stem, output_format=format_choice
+        audio_signal=final_sound,
+        destination_path=output_stem,
+        output_format=format_choice,
     )
     delete(temp_extension_path)
     return final_output_path

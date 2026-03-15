@@ -1,9 +1,12 @@
 import asyncio
 
-from definers.shared_kernel.resilience import ExponentialBackoffDelay
-from definers.shared_kernel.resilience import RetryPolicy
-from definers.shared_kernel.resilience import execute_with_retry_async
 import pytest
+
+from definers.shared_kernel.resilience import (
+    ExponentialBackoffDelay,
+    RetryPolicy,
+    execute_with_retry_async,
+)
 
 
 def test_retry_policy_rejects_non_positive_retry_count() -> None:

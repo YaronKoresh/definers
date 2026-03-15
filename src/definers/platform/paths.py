@@ -5,9 +5,9 @@ import shutil
 import sys
 import tempfile
 import unicodedata
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Generator
 
 
 def full_path(*p: str) -> str:
@@ -50,13 +50,7 @@ def _is_absolute_path(path_text: str) -> bool:
 
 
 def _is_relative_to(path: Path, base: Path) -> bool:
-    if sys.version_info >= (3, 9):
-        return path.is_relative_to(base)
-    try:
-        path.relative_to(base)
-    except ValueError:
-        return False
-    return True
+    return path.is_relative_to(base)
 
 
 @contextmanager
@@ -164,7 +158,9 @@ def secure_path(
         result = clean_str
     else:
         if traversal_pattern.search(clean_str):
-            raise ValueError("Security Error: Path traversal characters detected.")
+            raise ValueError(
+                "Security Error: Path traversal characters detected."
+            )
 
         try:
             result = full_path(clean_str)

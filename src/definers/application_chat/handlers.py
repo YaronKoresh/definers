@@ -19,7 +19,6 @@ from definers.application_chat.contracts import (
     Validator,
 )
 
-
 MEDIA_INSTRUCTION = "and please read the media from my new message carefully"
 
 
@@ -56,7 +55,9 @@ def create_chat_request(
     message: ChatMessage,
     history: ChatHistory | None = None,
 ) -> ChatRequest:
-    return ChatRequest(message=message, history=() if history is None else history)
+    return ChatRequest(
+        message=message, history=() if history is None else history
+    )
 
 
 def _copy_history(history: ChatHistory) -> list[HistoryItem]:
@@ -111,8 +112,7 @@ def _build_history(
     if media:
         included_types.append("files")
         normalized_history.extend(
-            {"role": "user", "content": {"path": item.path}}
-            for item in media
+            {"role": "user", "content": {"path": item.path}} for item in media
         )
     if text_context is not None:
         included_types.append("text")

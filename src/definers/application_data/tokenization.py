@@ -31,7 +31,9 @@ def init_tokenizer(
     model_name = model_name or "google-bert/bert-base-multilingual-cased"
     tokenizer_type = tokenizer_type or "general"
     current_model = TOKENIZERS.get(tokenizer_type, {}).get("model_name")
-    if (not TOKENIZERS[tokenizer_type]["tokenizer"]) or current_model != model_name:
+    if (
+        not TOKENIZERS[tokenizer_type]["tokenizer"]
+    ) or current_model != model_name:
         from transformers import AutoTokenizer
 
         TOKENIZERS[tokenizer_type] = {

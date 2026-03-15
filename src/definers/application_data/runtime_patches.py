@@ -76,21 +76,63 @@ def init_cupy_numpy():
         "swapcase": lambda s: s.swapcase(),
         "startswith": lambda s, prefix, *args: s.startswith(prefix, *args),
         "endswith": lambda s, suffix, *args: s.endswith(suffix, *args),
-        "strip": lambda s, chars=None: s.strip(chars) if chars is not None else s.strip(),
-        "lstrip": lambda s, chars=None: s.lstrip(chars) if chars is not None else s.lstrip(),
-        "rstrip": lambda s, chars=None: s.rstrip(chars) if chars is not None else s.rstrip(),
-        "replace": lambda s, old, new, count=-1: s.replace(old, new, count) if count != -1 else s.replace(old, new),
-        "split": lambda s, sep=None, maxsplit=-1: s.split(sep, maxsplit) if sep is not None else s.split(),
-        "rsplit": lambda s, sep=None, maxsplit=-1: s.rsplit(sep, maxsplit) if sep is not None else s.rsplit(),
+        "strip": lambda s, chars=None: (
+            s.strip(chars) if chars is not None else s.strip()
+        ),
+        "lstrip": lambda s, chars=None: (
+            s.lstrip(chars) if chars is not None else s.lstrip()
+        ),
+        "rstrip": lambda s, chars=None: (
+            s.rstrip(chars) if chars is not None else s.rstrip()
+        ),
+        "replace": lambda s, old, new, count=-1: (
+            s.replace(old, new, count) if count != -1 else s.replace(old, new)
+        ),
+        "split": lambda s, sep=None, maxsplit=-1: (
+            s.split(sep, maxsplit) if sep is not None else s.split()
+        ),
+        "rsplit": lambda s, sep=None, maxsplit=-1: (
+            s.rsplit(sep, maxsplit) if sep is not None else s.rsplit()
+        ),
         "splitlines": lambda s, keepends=False: s.splitlines(keepends),
         "partition": lambda s, sep: s.partition(sep),
         "rpartition": lambda s, sep: s.rpartition(sep),
         "join": lambda sep, iterable: sep.join(iterable),
-        "count": lambda s, sub, start=None, end=None: s.count(sub, start, end) if start is not None and end is not None else s.count(sub, start) if start is not None else s.count(sub),
-        "find": lambda s, sub, start=None, end=None: s.find(sub, start, end) if start is not None and end is not None else s.find(sub, start) if start is not None else s.find(sub),
-        "rfind": lambda s, sub, start=None, end=None: s.rfind(sub, start, end) if start is not None and end is not None else s.rfind(sub, start) if start is not None else s.rfind(sub),
-        "index": lambda s, sub, start=None, end=None: s.index(sub, start, end) if start is not None and end is not None else s.index(sub, start) if start is not None else s.index(sub),
-        "rindex": lambda s, sub, start=None, end=None: s.rindex(sub, start, end) if start is not None and end is not None else s.rindex(sub, start) if start is not None else s.rindex(sub),
+        "count": lambda s, sub, start=None, end=None: (
+            s.count(sub, start, end)
+            if start is not None and end is not None
+            else s.count(sub, start)
+            if start is not None
+            else s.count(sub)
+        ),
+        "find": lambda s, sub, start=None, end=None: (
+            s.find(sub, start, end)
+            if start is not None and end is not None
+            else s.find(sub, start)
+            if start is not None
+            else s.find(sub)
+        ),
+        "rfind": lambda s, sub, start=None, end=None: (
+            s.rfind(sub, start, end)
+            if start is not None and end is not None
+            else s.rfind(sub, start)
+            if start is not None
+            else s.rfind(sub)
+        ),
+        "index": lambda s, sub, start=None, end=None: (
+            s.index(sub, start, end)
+            if start is not None and end is not None
+            else s.index(sub, start)
+            if start is not None
+            else s.index(sub)
+        ),
+        "rindex": lambda s, sub, start=None, end=None: (
+            s.rindex(sub, start, end)
+            if start is not None and end is not None
+            else s.rindex(sub, start)
+            if start is not None
+            else s.rindex(sub)
+        ),
         "zfill": lambda s, width: s.zfill(width),
         "center": lambda s, width, fillchar=" ": s.center(width, fillchar),
         "ljust": lambda s, width, fillchar=" ": s.ljust(width, fillchar),
@@ -108,7 +150,9 @@ def init_cupy_numpy():
         "multiply": lambda a, n: a * n,
         "mod": lambda s, values: s % values,
         "string_": lambda s: str(s),
-        "bytes_": lambda s: bytes(s, "utf-8") if not isinstance(s, bytes) else s,
+        "bytes_": lambda s: (
+            bytes(s, "utf-8") if not isinstance(s, bytes) else s
+        ),
         "equal": lambda a, b: a == b,
         "not_equal": lambda a, b: a != b,
         "greater": lambda a, b: a > b,
@@ -126,7 +170,9 @@ def init_cupy_numpy():
         class NumpyRec:
             @staticmethod
             def append_fields(base, names, data, dtypes=None):
-                return recfunctions.append_fields(base, names, data, dtypes=dtypes)
+                return recfunctions.append_fields(
+                    base, names, data, dtypes=dtypes
+                )
 
             @staticmethod
             def drop_fields(base, names):
@@ -138,7 +184,9 @@ def init_cupy_numpy():
 
             @staticmethod
             def merge_arrays(arrays, fill_value=-1, flatten=False):
-                return recfunctions.merge_arrays(arrays, fill_value=fill_value, flatten=flatten)
+                return recfunctions.merge_arrays(
+                    arrays, fill_value=fill_value, flatten=flatten
+                )
 
         numpy_module.rec = NumpyRec()
     if "machar" not in getattr(numpy_module, "__dict__", {}):
@@ -179,7 +227,9 @@ def init_cupy_numpy():
                 return target
 
         numpy_module.core.machar = MachAr()
-    if hasattr(numpy_module, "testing") and not hasattr(numpy_module.testing, "Tester"):
+    if hasattr(numpy_module, "testing") and not hasattr(
+        numpy_module.testing, "Tester"
+    ):
 
         class Tester:
             def test(self, label="fast", _extra_argv=None):

@@ -119,9 +119,7 @@ def feed(
     concatenate: ArrayConcatenatePort,
 ):
     current_model = model or HybridModel()
-    current_X = _normalize_training_store(
-        getattr(current_model, "X_all", None)
-    )
+    current_X = _normalize_training_store(getattr(current_model, "X_all", None))
     if y_new is None:
         for epoch in range(epochs):
             logger(f"Feeding epoch {epoch + 1} X", X_new)

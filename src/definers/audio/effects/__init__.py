@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from .exciter import apply_exciter, calculate_dynamic_cutoff

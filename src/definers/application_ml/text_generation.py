@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from definers.application_ml.contracts import PromptProcessingPort, SummaryServicePort
-
+from definers.application_ml.contracts import (
+    PromptProcessingPort,
+    SummaryServicePort,
+)
 from definers.constants import (
     MODELS,
     TOKENIZERS,

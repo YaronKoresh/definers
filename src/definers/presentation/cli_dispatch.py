@@ -1,6 +1,6 @@
 import argparse
-from pathlib import Path
 from collections.abc import Sequence
+from pathlib import Path
 
 from definers.application_shell.commands import (
     CliRequest,
@@ -25,7 +25,9 @@ GUI_PROJECTS = (
     "train",
 )
 
-GUI_COMMANDS = tuple(normalize_gui_project_name(command) for command in GUI_PROJECTS)
+GUI_COMMANDS = tuple(
+    normalize_gui_project_name(command) for command in GUI_PROJECTS
+)
 
 KNOWN_COMMANDS = GUI_COMMANDS + (
     "start",
@@ -99,7 +101,9 @@ def build_cli_request(args: argparse.Namespace) -> CliRequest:
     return coerce_cli_request(args)
 
 
-def resolve_cli_handlers() -> tuple[StartProjectPort, MusicVideoPort, LyricVideoPort]:
+def resolve_cli_handlers() -> tuple[
+    StartProjectPort, MusicVideoPort, LyricVideoPort
+]:
     from definers.chat import lyric_video, music_video, start
 
     return start, music_video, lyric_video

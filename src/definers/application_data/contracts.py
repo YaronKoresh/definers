@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any, Protocol, TypeAlias
 
-
 ColumnName: TypeAlias = str
 ColumnNames: TypeAlias = Sequence[ColumnName]
 DatasetRow: TypeAlias = Mapping[str, Any]
@@ -52,7 +51,9 @@ class DatasetShaperPort(Protocol):
 
 
 class DatasetLoaderPort(Protocol):
-    def load_as_numpy(self, path: str, training: bool = False) -> LoadedValue: ...
+    def load_as_numpy(
+        self, path: str, training: bool = False
+    ) -> LoadedValue: ...
 
     def fetch_dataset(
         self,

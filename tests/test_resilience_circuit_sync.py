@@ -1,8 +1,10 @@
 import pytest
 
-from definers.shared_kernel.resilience import CircuitBreaker
-from definers.shared_kernel.resilience import CircuitBreakerOpenException
-from definers.shared_kernel.resilience import CircuitState
+from definers.shared_kernel.resilience import (
+    CircuitBreaker,
+    CircuitBreakerOpenException,
+    CircuitState,
+)
 
 
 class ScriptedClock:

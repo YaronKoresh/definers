@@ -4,6 +4,8 @@ import unittest
 from importlib import import_module
 from unittest.mock import patch
 
+import definers.platform.paths as platform_paths
+
 
 def _load_modules():
     return import_module("definers.path_utils"), import_module(
@@ -16,8 +18,9 @@ class TestTmp(unittest.TestCase):
         path_utils, platform_paths = _load_modules()
         self.assertIs(path_utils.tmp, platform_paths.tmp)
 
-    @patch(
-        "definers.platform.paths.tempfile.mkdtemp",
+    @patch.object(
+        platform_paths.tempfile,
+        "mkdtemp",
         return_value=os.path.join(tempfile.gettempdir(), "test_dir"),
     )
     def test_tmp_directory_keep(self, mock_mkdtemp):
@@ -27,12 +30,13 @@ class TestTmp(unittest.TestCase):
         self.assertEqual(result, expected)
         mock_mkdtemp.assert_called_once()
 
-    @patch(
-        "definers.platform.paths.tempfile.mkdtemp",
+    @patch.object(
+        platform_paths.tempfile,
+        "mkdtemp",
         return_value=os.path.join(tempfile.gettempdir(), "test_dir_to_delete"),
     )
-    @patch("definers.platform.paths.os.path.isdir", return_value=True)
-    @patch("definers.platform.paths.shutil.rmtree")
+    @patch.object(platform_paths.os.path, "isdir", return_value=True)
+    @patch.object(platform_paths.shutil, "rmtree")
     def test_tmp_directory_no_keep(self, mock_rmtree, mock_isdir, mock_mkdtemp):
         path_utils, _ = _load_modules()
         expected = os.path.join(tempfile.gettempdir(), "test_dir_to_delete")
@@ -42,7 +46,7 @@ class TestTmp(unittest.TestCase):
         mock_isdir.assert_called_once_with(expected)
         mock_rmtree.assert_called_once_with(expected, ignore_errors=True)
 
-    @patch("definers.platform.paths.tempfile.NamedTemporaryFile")
+    @patch.object(platform_paths.tempfile, "NamedTemporaryFile")
     def test_tmp_file_default_keep(self, mock_tempfile):
         path_utils, _ = _load_modules()
         expected = os.path.join(tempfile.gettempdir(), "test_file.data")
@@ -51,8 +55,8 @@ class TestTmp(unittest.TestCase):
         self.assertEqual(result, expected)
         mock_tempfile.assert_called_with(suffix=".data", delete=False)
 
-    @patch("definers.platform.paths.tempfile.NamedTemporaryFile")
-    @patch("definers.platform.paths.os.remove")
+    @patch.object(platform_paths.tempfile, "NamedTemporaryFile")
+    @patch.object(platform_paths.os, "remove")
     def test_tmp_file_no_keep(self, mock_remove, mock_tempfile):
         path_utils, _ = _load_modules()
         expected = os.path.join(
@@ -64,7 +68,7 @@ class TestTmp(unittest.TestCase):
         mock_tempfile.assert_called_with(suffix=".data", delete=False)
         mock_remove.assert_called_once_with(expected)
 
-    @patch("definers.platform.paths.tempfile.NamedTemporaryFile")
+    @patch.object(platform_paths.tempfile, "NamedTemporaryFile")
     def test_tmp_file_custom_suffix_with_dot(self, mock_tempfile):
         path_utils, _ = _load_modules()
         expected = os.path.join(tempfile.gettempdir(), "test_file.txt")
@@ -73,7 +77,7 @@ class TestTmp(unittest.TestCase):
         self.assertEqual(result, expected)
         mock_tempfile.assert_called_with(suffix=".txt", delete=False)
 
-    @patch("definers.platform.paths.tempfile.NamedTemporaryFile")
+    @patch.object(platform_paths.tempfile, "NamedTemporaryFile")
     def test_tmp_file_custom_suffix_without_dot(self, mock_tempfile):
         path_utils, _ = _load_modules()
         expected = os.path.join(tempfile.gettempdir(), "test_file.tmp")

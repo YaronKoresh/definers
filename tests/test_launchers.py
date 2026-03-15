@@ -78,7 +78,9 @@ def test_get_gui_project_names_merges_registry_and_namespace():
 
 
 def test_launch_installed_project_delegates_to_chat_start():
-    with patch("definers.presentation.launchers.import_module") as mock_import_module:
+    with patch(
+        "definers.presentation.launchers.import_module"
+    ) as mock_import_module:
         mock_import_module.return_value.start.return_value = "started"
 
         result = launch_installed_project("chat")

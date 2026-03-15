@@ -22,7 +22,9 @@ def test_history_applies_days_filter_and_returns_descending_records(
     ]
 
 
-def test_latest_uses_custom_identifier_and_filters_after_deduplication(tmp_path):
+def test_latest_uses_custom_identifier_and_filters_after_deduplication(
+    tmp_path,
+):
     database = Database(str(tmp_path))
 
     database.push(

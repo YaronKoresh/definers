@@ -29,7 +29,9 @@ def _load_mastering_module(package_name: str):
     package.__path__ = [str(AUDIO_ROOT)]
     sys.modules[package_name] = package
 
-    config_module = _load_module(f"{package_name}.config", AUDIO_ROOT / "config.py")
+    config_module = _load_module(
+        f"{package_name}.config", AUDIO_ROOT / "config.py"
+    )
     sys.modules[f"{package_name}.dsp"] = types.SimpleNamespace(
         decoupled_envelope=lambda x, *_: np.zeros_like(x),
         limiter_smooth_env=lambda x, *_: x,
@@ -42,27 +44,17 @@ def _load_mastering_module(package_name: str):
         stereo=lambda y: y if getattr(y, "ndim", 1) > 1 else np.vstack([y, y]),
     )
     sys.modules[f"{package_name}.filters"] = types.SimpleNamespace(
-        freq_cut=lambda y, *_ , **__: y,
+        freq_cut=lambda y, *_, **__: y,
     )
-    mastering_module = _load_module(f"{package_name}.mastering", AUDIO_ROOT / "mastering.py")
+    mastering_module = _load_module(
+        f"{package_name}.mastering", AUDIO_ROOT / "mastering.py"
+    )
     return config_module, mastering_module
 
 
-CONFIG_MODULE, MASTERING_MODULE = _load_mastering_module("_test_audio_mastering_generation_pkg")
-
-
-def test_generate_bands_returns_single_start_frequency():
-    assert MASTERING_MODULE.generate_bands(55.0, 220.0, 1) == [55.0]
-
-
-def test_generate_bands_uses_geometric_spacing():
-    bands = MASTERING_MODULE.generate_bands(20.0, 20000.0, 4)
-
-    assert bands[0] == pytest.approx(20.0)
-    assert bands[-1] == pytest.approx(20000.0)
-
-    log_steps = np.diff(np.log(bands))
-    assert np.allclose(log_steps, log_steps[0])
+CONFIG_MODULE, MASTERING_MODULE = _load_mastering_module(
+    "_test_audio_mastering_generation_pkg"
+)
 
 
 def test_make_bands_from_fcs_returns_expected_schema():
@@ -94,7 +86,9 @@ def test_slope_property_triggers_band_refresh(monkeypatch: pytest.MonkeyPatch):
         update_calls.append(self._slope_db)
         self.bands = []
 
-    monkeypatch.setattr(MASTERING_MODULE.SmartMastering, "update_bands", fake_update_bands)
+    monkeypatch.setattr(
+        MASTERING_MODULE.SmartMastering, "update_bands", fake_update_bands
+    )
 
     mastering = MASTERING_MODULE.SmartMastering()
     update_calls.clear()

@@ -5,10 +5,22 @@ from unittest import mock
 
 import pytest
 
+TEST_LAZY_SUBMODULES = (
+    "audio",
+    "cuda",
+    "logger",
+    "media",
+    "ml",
+    "platform",
+    "text",
+)
+
 
 def unload_package_root() -> None:
     sys.modules.pop("definers", None)
     sys.modules.pop("sox", None)
+    for submodule_name in TEST_LAZY_SUBMODULES:
+        sys.modules.pop(f"definers.{submodule_name}", None)
 
 
 def test_lazy_attribute_imports_once_and_caches_module():
@@ -81,4 +93,35 @@ def test_multiple_lazy_attributes_use_package_qualified_import_names():
 
     assert imported_names.count("definers.text") == 1
     assert imported_names.count("definers.platform") == 1
+    unload_package_root()
+
+
+@pytest.mark.parametrize("attribute_name", ["logger", "cuda", "media", "ml"])
+def test_lazy_attribute_caches_module_for_rca_regressions(attribute_name: str):
+    unload_package_root()
+    original_import_module = importlib.import_module
+    sox_module = types.ModuleType("sox")
+    lazy_module = types.ModuleType(f"definers.{attribute_name}")
+    imported_names: list[str] = []
+
+    def fake_import_module(name: str, package: str | None = None):
+        imported_names.append(name)
+        if name == "sox":
+            return sox_module
+        if name == f"definers.{attribute_name}":
+            return lazy_module
+        return original_import_module(name, package)
+
+    with mock.patch("importlib.import_module", side_effect=fake_import_module):
+        import definers
+
+        assert attribute_name not in definers.__dict__
+
+        first_value = getattr(definers, attribute_name)
+        second_value = getattr(definers, attribute_name)
+
+    assert first_value is lazy_module
+    assert second_value is lazy_module
+    assert definers.__dict__[attribute_name] is lazy_module
+    assert imported_names.count(f"definers.{attribute_name}") == 1
     unload_package_root()

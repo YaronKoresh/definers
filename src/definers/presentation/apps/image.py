@@ -1,5 +1,10 @@
 from definers.constants import MAX_INPUT_LENGTH
-from definers.image import get_max_resolution, init_upscale, upscale, write_on_image
+from definers.image import (
+    get_max_resolution,
+    init_upscale,
+    upscale,
+    write_on_image,
+)
 from definers.ml import init_pretrained_model, optimize_prompt_realism, pipe
 from definers.presentation.chat_handlers import validate_text_input
 from definers.presentation.gradio_shared import launch_blocks
@@ -30,8 +35,12 @@ def launch_image_app():
         gr.Markdown("### Realistic. Upscalable. Multilingual.")
         with gr.Row():
             with gr.Column(scale=1):
-                width_input = gr.Slider(minimum=1, maximum=16, step=1, label="Width")
-                height_input = gr.Slider(minimum=1, maximum=16, step=1, label="Height")
+                width_input = gr.Slider(
+                    minimum=1, maximum=16, step=1, label="Width"
+                )
+                height_input = gr.Slider(
+                    minimum=1, maximum=16, step=1, label="Height"
+                )
                 data = gr.Textbox(
                     placeholder="Input data",
                     value="",

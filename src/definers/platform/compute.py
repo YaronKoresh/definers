@@ -77,7 +77,9 @@ def free(*, catch_func, run_func, environ):
         catch_func(error)
 
     hf_home = environ.get("HF_HOME")
-    cache_dir = Path(hf_home) if hf_home else Path.home() / ".cache" / "huggingface"
+    cache_dir = (
+        Path(hf_home) if hf_home else Path.home() / ".cache" / "huggingface"
+    )
     if cache_dir.exists():
         for entry in cache_dir.iterdir():
             try:

@@ -1,7 +1,6 @@
 from collections.abc import Callable, Mapping
 from typing import Any
 
-
 GuiLauncher = Callable[[], Any]
 
 

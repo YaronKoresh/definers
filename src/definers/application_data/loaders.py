@@ -43,7 +43,7 @@ def _read(path: str):
         if os.path.isdir(path):
             return [os.path.join(path, name) for name in os.listdir(path)]
         try:
-            with open(path, "r", encoding="utf-8") as file:
+            with open(path, encoding="utf-8") as file:
                 return file.read()
         except OSError:
             return None
@@ -72,10 +72,7 @@ def _has_parameter(values: Sequence[str] | None) -> bool:
         isinstance(values, list)
         and (
             len(values) == 0
-            or (
-                isinstance(values[0], str)
-                and values[0].strip() == ""
-            )
+            or (isinstance(values[0], str) and values[0].strip() == "")
         )
     )
 
@@ -162,7 +159,9 @@ def _load_audio_values(path: str, training: bool):
         return values
     temp_mp3_path = _tmp("mp3")
     transformer.build_file(path, temp_mp3_path)
-    values = definers.numpy_to_cupy(definers.extract_audio_features(temp_mp3_path))
+    values = definers.numpy_to_cupy(
+        definers.extract_audio_features(temp_mp3_path)
+    )
     _delete(temp_mp3_path)
     return values
 
@@ -201,7 +200,9 @@ def _load_video_values(path: str):
 
     resized_video_file = definers.resize_video(path, 1024, 1024)
     adjusted_fps_file = definers.convert_video_fps(resized_video_file, 24)
-    return definers.numpy_to_cupy(definers.extract_video_features(adjusted_fps_file))
+    return definers.numpy_to_cupy(
+        definers.extract_video_features(adjusted_fps_file)
+    )
 
 
 def load_as_numpy(path: str, training: bool = False):
@@ -349,7 +350,9 @@ def _loaded_values_have_strings(loaded, numpy_module) -> bool:
 
 def _append_loaded_values(target: list[Any], loaded, convert_value) -> None:
     if isinstance(loaded, list):
-        target.extend(convert_value(item) for item in loaded if item is not None)
+        target.extend(
+            convert_value(item) for item in loaded if item is not None
+        )
         return
     target.append(convert_value(loaded))
 
@@ -367,7 +370,9 @@ def _collect_loaded_values(paths: Sequence[str], role: str, numpy_module):
             else:
                 _catch(Exception(f"Error loading label file: {path}"))
             return None
-        has_strings = has_strings or _loaded_values_have_strings(loaded, numpy_module)
+        has_strings = has_strings or _loaded_values_have_strings(
+            loaded, numpy_module
+        )
         _append_loaded_values(values, loaded, runtime.cupy_to_numpy)
     return values, has_strings
 
@@ -392,7 +397,9 @@ def _tokenize_loaded_values(values: Sequence[Any], numpy_module):
     return [runtime.cupy_to_numpy(row) for row in tokenized_values]
 
 
-def _stack_tensor_rows(values: Sequence[Any], max_lengths: Sequence[int], runtime):
+def _stack_tensor_rows(
+    values: Sequence[Any], max_lengths: Sequence[int], runtime
+):
     import torch
 
     return runtime.convert_tensor_dtype(
@@ -405,7 +412,9 @@ def _stack_tensor_rows(values: Sequence[Any], max_lengths: Sequence[int], runtim
     )
 
 
-def _build_tensor_dataset(features: Sequence[Any], labels: Sequence[Any], runtime):
+def _build_tensor_dataset(
+    features: Sequence[Any], labels: Sequence[Any], runtime
+):
     from torch.utils.data import TensorDataset
 
     all_data = list(features) + list(labels)
@@ -450,7 +459,9 @@ def files_to_dataset(
     try:
         return _build_tensor_dataset(features, labels, runtime)
     except Exception as tensor_error:
-        _catch(Exception(f"Error creating tensor dataset: {type(tensor_error)}"))
+        _catch(
+            Exception(f"Error creating tensor dataset: {type(tensor_error)}")
+        )
         _catch(tensor_error)
         return None
 

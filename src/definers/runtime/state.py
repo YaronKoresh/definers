@@ -12,7 +12,9 @@ def _normalize_scope(scope: str) -> str:
     return normalized_scope
 
 
-def _reset_mapping(target: MutableMapping[str, Any], values: dict[str, Any]) -> None:
+def _reset_mapping(
+    target: MutableMapping[str, Any], values: dict[str, Any]
+) -> None:
     target.clear()
     target.update(values)
 
@@ -163,7 +165,9 @@ class RuntimeStateRegistry:
     def delete_state(self, scope: str) -> None:
         normalized_scope = _normalize_scope(scope)
         if normalized_scope == self.default_scope:
-            raise ValueError(f"{self.default_scope} runtime scope cannot be deleted")
+            raise ValueError(
+                f"{self.default_scope} runtime scope cannot be deleted"
+            )
         self.states.pop(normalized_scope, None)
 
     def list_scopes(self) -> tuple[str, ...]:
@@ -196,7 +200,9 @@ def get_default_runtime_state() -> RuntimeState:
     return get_runtime_state(DEFAULT_RUNTIME_SCOPE)
 
 
-def get_runtime_collections(scope: str = DEFAULT_RUNTIME_SCOPE) -> RuntimeCollections:
+def get_runtime_collections(
+    scope: str = DEFAULT_RUNTIME_SCOPE,
+) -> RuntimeCollections:
     return get_runtime_state(scope).get_collections()
 
 
@@ -204,7 +210,9 @@ def get_default_runtime_collections() -> RuntimeCollections:
     return get_runtime_collections(DEFAULT_RUNTIME_SCOPE)
 
 
-def get_runtime_models(scope: str = DEFAULT_RUNTIME_SCOPE) -> MutableMapping[str, Any]:
+def get_runtime_models(
+    scope: str = DEFAULT_RUNTIME_SCOPE,
+) -> MutableMapping[str, Any]:
     return get_runtime_collections(scope).models
 
 
@@ -220,7 +228,9 @@ def get_runtime_processors(
     return get_runtime_collections(scope).processors
 
 
-def get_runtime_configs(scope: str = DEFAULT_RUNTIME_SCOPE) -> MutableMapping[str, Any]:
+def get_runtime_configs(
+    scope: str = DEFAULT_RUNTIME_SCOPE,
+) -> MutableMapping[str, Any]:
     return get_runtime_collections(scope).configs
 
 

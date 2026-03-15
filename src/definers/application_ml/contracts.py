@@ -93,7 +93,9 @@ class TextFeatureMatrixPort(Protocol):
 
 
 class TextFeatureVectorizerPort(Protocol):
-    def fit_transform(self, _raw_documents: list[str]) -> TextFeatureMatrixPort: ...
+    def fit_transform(
+        self, _raw_documents: list[str]
+    ) -> TextFeatureMatrixPort: ...
 
 
 class TextFeatureNameVectorizerPort(TextFeatureVectorizerPort, Protocol):

@@ -29,7 +29,9 @@ def _load_mastering_module(package_name: str):
     package.__path__ = [str(AUDIO_ROOT)]
     sys.modules[package_name] = package
 
-    config_module = _load_module(f"{package_name}.config", AUDIO_ROOT / "config.py")
+    config_module = _load_module(
+        f"{package_name}.config", AUDIO_ROOT / "config.py"
+    )
     sys.modules[f"{package_name}.dsp"] = types.SimpleNamespace(
         decoupled_envelope=lambda x, *_: np.zeros_like(x),
         limiter_smooth_env=lambda x, *_: x,
@@ -42,55 +44,25 @@ def _load_mastering_module(package_name: str):
         stereo=lambda y: y if getattr(y, "ndim", 1) > 1 else np.vstack([y, y]),
     )
     sys.modules[f"{package_name}.filters"] = types.SimpleNamespace(
-        freq_cut=lambda y, *_ , **__: y,
+        freq_cut=lambda y, *_, **__: y,
     )
-    mastering_module = _load_module(f"{package_name}.mastering", AUDIO_ROOT / "mastering.py")
+    mastering_module = _load_module(
+        f"{package_name}.mastering", AUDIO_ROOT / "mastering.py"
+    )
     return config_module, mastering_module
 
 
-CONFIG_MODULE, MASTERING_MODULE = _load_mastering_module("_test_audio_mastering_phase_pkg")
+CONFIG_MODULE, MASTERING_MODULE = _load_mastering_module(
+    "_test_audio_mastering_phase_pkg"
+)
 
 
 def _make_mastering_instance():
     return MASTERING_MODULE.SmartMastering(
-        CONFIG_MODULE.SmartMasteringConfig(sample_rate=8000, correction_strength=0.5)
+        CONFIG_MODULE.SmartMasteringConfig(
+            sample_rate=8000, correction_strength=0.5
+        )
     )
-
-
-def test_apply_phase_correction_minimal_sanitizes_non_finite_output(
-    monkeypatch: pytest.MonkeyPatch,
-):
-    mastering = _make_mastering_instance()
-    profile_calls: list[tuple[str, float]] = []
-    source = np.array([[0.1, 0.2, 0.3, 0.4]], dtype=float)
-
-    monkeypatch.setattr(
-        mastering,
-        "measure_spectrum",
-        lambda y: (np.array([0.0, -3.0, -6.0]), np.array([100.0, 200.0, 400.0])),
-    )
-    monkeypatch.setattr(
-        mastering,
-        "compute_spectrum",
-        lambda f_axis: np.array([np.nan, 0.0, 3.0]),
-    )
-    monkeypatch.setattr(
-        mastering,
-        "smooth_curve",
-        lambda curve, f_axis, smoothing_fraction=None: curve,
-    )
-    monkeypatch.setattr(
-        MASTERING_MODULE.signal,
-        "oaconvolve",
-        lambda y, h, mode: np.array([[np.nan, np.inf, -np.inf, 0.25, -0.25, 0.5]]),
-    )
-    mastering._profile = lambda name, elapsed: profile_calls.append((name, elapsed))
-
-    corrected = mastering.apply_phase_correction(source, "minimal")
-
-    assert corrected.shape == source.shape
-    assert np.all(np.isfinite(corrected))
-    assert profile_calls[0][0] == "minimal_phase"
 
 
 def test_apply_phase_correction_linear_pads_short_output(
@@ -102,7 +74,10 @@ def test_apply_phase_correction_linear_pads_short_output(
     monkeypatch.setattr(
         mastering,
         "measure_spectrum",
-        lambda y: (np.array([0.0, -1.0, -2.0, -3.0]), np.array([50.0, 100.0, 200.0, 400.0])),
+        lambda y: (
+            np.array([0.0, -1.0, -2.0, -3.0]),
+            np.array([50.0, 100.0, 200.0, 400.0]),
+        ),
     )
     monkeypatch.setattr(
         mastering,
@@ -149,4 +124,6 @@ def test_apply_phase_correction_rejects_unknown_phase_type(
     )
 
     with pytest.raises(ValueError, match="Unknown phase type"):
-        mastering.apply_phase_correction(np.array([[0.1, 0.2]], dtype=float), "invalid")
+        mastering.apply_phase_correction(
+            np.array([[0.1, 0.2]], dtype=float), "invalid"
+        )

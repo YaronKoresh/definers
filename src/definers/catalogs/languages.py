@@ -1,12 +1,24 @@
 from types import MappingProxyType
 from typing import Final, TypeAlias
 
-
 LanguageCatalogEntry: TypeAlias = tuple[str, str]
 UnescoCatalogEntry: TypeAlias = tuple[str, str | tuple[str, ...]]
 
 _UNESCO_CORE_GROUPS: Final[tuple[UnescoCatalogEntry, ...]] = (
-    ("ar", ("acm_Arab", "acq_Arab", "aeb_Arab", "ajp_Arab", "apc_Arab", "arb_Arab", "ars_Arab", "ary_Arab", "arz_Arab")),
+    (
+        "ar",
+        (
+            "acm_Arab",
+            "acq_Arab",
+            "aeb_Arab",
+            "ajp_Arab",
+            "apc_Arab",
+            "arb_Arab",
+            "ars_Arab",
+            "ary_Arab",
+            "arz_Arab",
+        ),
+    ),
     ("af", "afr_Latn"),
     ("ak", ("aka_Latn", "twi_Latn")),
     ("am", "amh_Ethi"),

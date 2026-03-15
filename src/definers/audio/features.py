@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import importlib
@@ -6,6 +5,7 @@ import importlib
 import numpy as np
 
 from definers.logger import init_logger
+from definers.platform.paths import full_path, tmp
 
 _logger = init_logger()
 
@@ -14,25 +14,49 @@ def _load_librosa_backend():
     return importlib.import_module("librosa")
 
 
-def extract_audio_features(file_path: str, n_mfcc: int = 20) -> np.ndarray | None:
+def _load_audio_analysis_backend():
+    return importlib.import_module("definers.audio.analysis")
+
+
+def _load_array_backend():
+    return importlib.import_module("definers.application_data.arrays")
+
+
+def _load_model_introspection_backend():
+    return importlib.import_module("definers.application_ml.introspection")
+
+
+def extract_audio_features(
+    file_path: str, n_mfcc: int = 20
+) -> np.ndarray | None:
     librosa_backend = _load_librosa_backend()
     try:
         (y, sr) = librosa_backend.load(file_path, sr=None)
     except Exception:
-        _logger.exception("Failed to load audio for feature extraction: %s", file_path)
+        _logger.exception(
+            "Failed to load audio for feature extraction: %s", file_path
+        )
         return None
 
     try:
         mfccs = librosa_backend.feature.mfcc(
             y=y, sr=sr, n_mfcc=n_mfcc, n_fft=2048, n_mels=80
         ).flatten()
-        spectral_centroid = librosa_backend.feature.spectral_centroid(y=y, sr=sr).flatten()
-        spectral_bandwidth = librosa_backend.feature.spectral_bandwidth(y=y, sr=sr).flatten()
-        spectral_rolloff = librosa_backend.feature.spectral_rolloff(y=y, sr=sr).flatten()
+        spectral_centroid = librosa_backend.feature.spectral_centroid(
+            y=y, sr=sr
+        ).flatten()
+        spectral_bandwidth = librosa_backend.feature.spectral_bandwidth(
+            y=y, sr=sr
+        ).flatten()
+        spectral_rolloff = librosa_backend.feature.spectral_rolloff(
+            y=y, sr=sr
+        ).flatten()
         spectral_features = np.concatenate(
             (spectral_centroid, spectral_bandwidth, spectral_rolloff)
         )
-        zero_crossing_rate = librosa_backend.feature.zero_crossing_rate(y=y).flatten()
+        zero_crossing_rate = librosa_backend.feature.zero_crossing_rate(
+            y=y
+        ).flatten()
         chroma = librosa_backend.feature.chroma_stft(y=y, sr=sr).flatten()
         all_features = np.concatenate(
             (mfccs, spectral_features, zero_crossing_rate, chroma)
@@ -169,16 +193,18 @@ def predict_audio(model, audio_file):
     import librosa
     import soundfile as sf
 
-    import definers as _d
+    audio_analysis_backend = _load_audio_analysis_backend()
+    array_backend = _load_array_backend()
+    model_introspection_backend = _load_model_introspection_backend()
 
-    audio_file = _d.full_path(audio_file)
+    audio_file = full_path(audio_file)
 
     if not os.path.exists(audio_file):
         return None
 
     try:
         (audio_data, sr) = librosa.load(audio_file, sr=32000, mono=True)
-        timeline = _d.get_active_audio_timeline(audio_file)
+        timeline = audio_analysis_backend.get_active_audio_timeline(audio_file)
         _logger.info("Audio shape: %s", audio_data.shape)
         _logger.info("Active audio timeline: %s", timeline)
         predicted_audio = np.zeros_like(audio_data)
@@ -197,7 +223,9 @@ def predict_audio(model, audio_file):
                     end_time,
                 )
                 continue
-            active_audio_part_model_input = _d.numpy_to_cupy(active_audio_part_np)
+            active_audio_part_model_input = array_backend.numpy_to_cupy(
+                active_audio_part_np
+            )
             _logger.info(
                 "Predicting segment %d/%d with shape %s",
                 i + 1,
@@ -205,21 +233,23 @@ def predict_audio(model, audio_file):
                 active_audio_part_model_input.shape,
             )
             prediction = model.predict(active_audio_part_model_input)
-            if _d.is_clusters_model(model):
+            if model_introspection_backend.is_clusters_model(model):
                 _logger.info(
                     "Getting prediction cluster content for segment %d", i + 1
                 )
-                part_feat = _d.cupy_to_numpy(
-                    _d.get_cluster_content(model, int(prediction[0]))
+                part_feat = array_backend.cupy_to_numpy(
+                    model_introspection_backend.get_cluster_content(
+                        model, int(prediction[0])
+                    )
                 )
             else:
-                part_feat = _d.cupy_to_numpy(prediction)
+                part_feat = array_backend.cupy_to_numpy(prediction)
             _logger.info(
                 "Predicted features shape for segment %d: %s",
                 i + 1,
                 part_feat.shape,
             )
-            part_aud = _d.features_to_audio(part_feat)
+            part_aud = features_to_audio(part_feat)
             if part_aud is None:
                 _logger.warning(
                     "Failed to convert features to audio for segment %d. Skipping.",
@@ -231,7 +261,7 @@ def predict_audio(model, audio_file):
             predicted_audio[start_sample : start_sample + min_len] = part_aud[
                 :min_len
             ]
-        output_file = _d.tmp("wav")
+        output_file = tmp("wav")
         sf.write(output_file, predicted_audio, sr)
         _logger.info("Predicted audio saved to: %s", output_file)
         return output_file

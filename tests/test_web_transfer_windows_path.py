@@ -81,7 +81,9 @@ def test_add_to_path_windows_skips_duplicate_folder(monkeypatch) -> None:
 
 
 def test_add_to_path_windows_suppresses_registry_errors(monkeypatch) -> None:
-    winreg_module = build_winreg_module(open_key_error=PermissionError("denied"))
+    winreg_module = build_winreg_module(
+        open_key_error=PermissionError("denied")
+    )
     monkeypatch.setattr(sys, "platform", "win32")
     monkeypatch.setitem(sys.modules, "winreg", winreg_module)
 

@@ -1,5 +1,4 @@
-import os
-import subprocess
+import importlib
 import sys
 
 from definers import __version__
@@ -27,13 +26,36 @@ def run_cli(args, monkeypatch=None):
     return code, combined
 
 
+def test_package_version_matches_top_level_version():
+    definers_package = importlib.import_module("definers")
+
+    assert hasattr(definers_package, "__version__")
+    assert definers_package.__version__ == __version__
+
+
+def test_chat_module_import_surface():
+    chat = importlib.import_module("definers.chat")
+
+    assert chat.__name__ == "definers.chat"
+    assert hasattr(chat, "start")
+    assert hasattr(chat, "_gui_chat")
+
+
 def test_help():
+    definers_package = importlib.import_module("definers")
+
+    assert definers_package.__version__ == __version__
+
     code, out = run_cli(["--help"])
     assert code == 0
     assert "usage:" in out.lower()
 
 
 def test_version():
+    definers_package = importlib.import_module("definers")
+
+    assert definers_package.__version__ == __version__
+
     code, out = run_cli(["--version"])
     assert code == 0
     assert __version__ in out
@@ -42,6 +64,8 @@ def test_version():
 def test_start_dispatch(monkeypatch, tmp_path):
 
     import definers.chat as chat
+
+    assert hasattr(chat, "start")
 
     called = {}
 
@@ -62,6 +86,8 @@ def test_start_dispatch(monkeypatch, tmp_path):
 def test_music_video(monkeypatch):
     import definers.chat as chat
 
+    assert hasattr(chat, "music_video")
+
     monkeypatch.setattr(chat, "music_video", lambda a, w, h, f: "/tmp/x.mp4")
     code, out = run_cli(["music-video", "foo.mp3", "320", "240", "15"])
     assert code == 0
@@ -70,6 +96,8 @@ def test_music_video(monkeypatch):
 
 def test_lyric_video(monkeypatch, tmp_path, capsys):
     import definers.chat as chat
+
+    assert hasattr(chat, "lyric_video")
 
     monkeypatch.setattr(chat, "lyric_video", lambda *args, **k: "/tmp/y.mp4")
 
@@ -83,6 +111,10 @@ def test_lyric_video(monkeypatch, tmp_path, capsys):
 
 
 def test_unknown_command():
+    definers_package = importlib.import_module("definers")
+
+    assert definers_package.__version__ == __version__
+
     code, out = run_cli(["nope"])
     assert code != 0
     assert "unknown command" in out.lower()
@@ -90,6 +122,8 @@ def test_unknown_command():
 
 def test_start_dispatch_uses_registry_resolution(monkeypatch):
     import definers.chat as chat
+
+    assert hasattr(chat, "_gui_chat")
 
     called = []
 

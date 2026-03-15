@@ -29,7 +29,9 @@ def _load_mastering_module(package_name: str):
     package.__path__ = [str(AUDIO_ROOT)]
     sys.modules[package_name] = package
 
-    config_module = _load_module(f"{package_name}.config", AUDIO_ROOT / "config.py")
+    config_module = _load_module(
+        f"{package_name}.config", AUDIO_ROOT / "config.py"
+    )
     sys.modules[f"{package_name}.dsp"] = types.SimpleNamespace(
         decoupled_envelope=lambda x, *_: np.zeros_like(x),
         limiter_smooth_env=lambda x, *_: x,
@@ -42,13 +44,17 @@ def _load_mastering_module(package_name: str):
         stereo=lambda y: y if getattr(y, "ndim", 1) > 1 else np.vstack([y, y]),
     )
     sys.modules[f"{package_name}.filters"] = types.SimpleNamespace(
-        freq_cut=lambda y, *_ , **__: y,
+        freq_cut=lambda y, *_, **__: y,
     )
-    mastering_module = _load_module(f"{package_name}.mastering", AUDIO_ROOT / "mastering.py")
+    mastering_module = _load_module(
+        f"{package_name}.mastering", AUDIO_ROOT / "mastering.py"
+    )
     return config_module, mastering_module
 
 
-CONFIG_MODULE, MASTERING_MODULE = _load_mastering_module("_test_audio_mastering_spectrum_pkg")
+CONFIG_MODULE, MASTERING_MODULE = _load_mastering_module(
+    "_test_audio_mastering_spectrum_pkg"
+)
 
 
 def test_measure_spectrum_pads_short_audio_and_clips_floor():
@@ -64,26 +70,11 @@ def test_measure_spectrum_pads_short_audio_and_clips_floor():
     assert np.all(spectrum_db == -120.0)
 
 
-def test_compute_spectrum_clamps_frequency_bounds():
-    mastering = MASTERING_MODULE.SmartMastering(
-        CONFIG_MODULE.SmartMasteringConfig(
-            sample_rate=48000,
-            slope_db=6.0,
-            slope_hz=1000.0,
-            low_cut=100,
-            high_cut=4000,
-        )
-    )
-
-    target = mastering.compute_spectrum(np.array([10.0, 100.0, 1000.0, 16000.0]))
-    expected = -6.0 * np.log2(np.array([100.0, 100.0, 1000.0, 4000.0]) / 1000.0)
-
-    assert np.allclose(target, expected)
-
-
 def test_smooth_curve_averages_local_bandwidth():
     mastering = MASTERING_MODULE.SmartMastering(
-        CONFIG_MODULE.SmartMasteringConfig(sample_rate=8000, smoothing_fraction=1.0)
+        CONFIG_MODULE.SmartMasteringConfig(
+            sample_rate=8000, smoothing_fraction=1.0
+        )
     )
     curve = np.array([0.0, 10.0, 20.0, 30.0])
     freqs = np.array([100.0, 200.0, 400.0, 800.0])

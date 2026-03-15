@@ -3,7 +3,6 @@ from typing import Any
 
 from definers.presentation.chat_handlers import get_chat_response
 
-
 ChatHandler = Callable[[Any, Any], Any]
 
 

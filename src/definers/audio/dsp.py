@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import numpy as np
@@ -6,20 +5,28 @@ from numba import njit
 
 
 def resample(y: np.ndarray, sr: int, target_sr: int = 44100) -> np.ndarray:
-    if np.issubdtype(y.dtype, np.integer):
-        import librosa
-
-        y = librosa.util.buf_to_float(y)
-    else:
-        y = y.astype(np.float64)
-
     import librosa
 
-    return librosa.resample(y, orig_sr=sr, target_sr=target_sr)
+    if sr == target_sr:
+        return y
+
+    y = np.ascontiguousarray(y)
+
+    if np.issubdtype(y.dtype, np.integer):
+        y = librosa.util.buf_to_float(y, n_bytes=y.itemsize)
+    else:
+        y = y.astype(np.float64, copy=False)
+
+    method = "fft" if target_sr < sr else "soxr_vhq"
+    return librosa.resample(
+        y, orig_sr=sr, target_sr=target_sr, res_type=method, axis=-1
+    )
 
 
 @njit(cache=True)
-def decoupled_envelope(env_db: np.ndarray, attack_coef: float, release_coef: float):
+def decoupled_envelope(
+    env_db: np.ndarray, attack_coef: float, release_coef: float
+):
     out = np.empty_like(env_db)
     prev = env_db[0]
     for i in range(len(env_db)):
@@ -30,7 +37,9 @@ def decoupled_envelope(env_db: np.ndarray, attack_coef: float, release_coef: flo
 
 
 @njit(cache=True)
-def limiter_smooth_env(env: np.ndarray, attack_coef: float, release_coef: float):
+def limiter_smooth_env(
+    env: np.ndarray, attack_coef: float, release_coef: float
+):
     out = np.empty_like(env)
     prev = env[0]
 
@@ -77,7 +86,8 @@ def process_audio_chunks(fn, data, chunk_size, overlap=0):
             processed_chunk = processed_chunk[np.newaxis, :]
 
         final_result[:, start:end] += (
-            processed_chunk[:, :current_chunk_size] * window[:, :current_chunk_size]
+            processed_chunk[:, :current_chunk_size]
+            * window[:, :current_chunk_size]
         )
         window_sum[:, start:end] += window[:, :current_chunk_size] ** 2
 

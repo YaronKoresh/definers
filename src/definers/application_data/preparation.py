@@ -101,9 +101,15 @@ def order_dataset(dataset, order_by=None):
                 item = dataset[index]
                 if isinstance(item, dict) and order_by in item:
                     keys.append(item[order_by])
-                elif hasattr(item, "__len__") and isinstance(item, (list, tuple)) and len(item) > 0:
+                elif (
+                    hasattr(item, "__len__")
+                    and isinstance(item, (list, tuple))
+                    and len(item) > 0
+                ):
                     try:
-                        keys.append(item[0] if order_by == 0 else item[order_by])
+                        keys.append(
+                            item[0] if order_by == 0 else item[order_by]
+                        )
                     except Exception:
                         keys.append(0)
                 else:
@@ -134,7 +140,10 @@ def split_dataset(
                 labels = list(dataset[stratify])
             elif isinstance(dataset, list):
                 try:
-                    labels = [item.get(stratify) if isinstance(item, dict) else None for item in dataset]
+                    labels = [
+                        item.get(stratify) if isinstance(item, dict) else None
+                        for item in dataset
+                    ]
                 except Exception:
                     labels = None
         else:
@@ -180,13 +189,17 @@ def split_dataset(
     test_ds = subset_from(test_idx) if test_idx else None
     train_loader = make_loader(train_ds, batch_size=batch_size)
     val_loader = make_loader(val_ds, batch_size=batch_size) if val_ds else None
-    test_loader = make_loader(test_ds, batch_size=batch_size) if test_ds else None
+    test_loader = (
+        make_loader(test_ds, batch_size=batch_size) if test_ds else None
+    )
     metadata = {
         "stratify": stratify,
         "val_frac": val_frac,
         "test_frac": test_frac,
     }
-    return TrainingData(train=train_loader, val=val_loader, test=test_loader, metadata=metadata)
+    return TrainingData(
+        train=train_loader, val=val_loader, test=test_loader, metadata=metadata
+    )
 
 
 _prepare_data_cache: dict[str, TrainingData] = {}
@@ -228,7 +241,9 @@ def prepare_data(
     cache_key = make_key()
     if cache_key in _prepare_data_cache:
         return _prepare_data_cache[cache_key]
-    dataset = data_module.load_source(remote_src, features, labels, url_type, revision)
+    dataset = data_module.load_source(
+        remote_src, features, labels, url_type, revision
+    )
     if dataset is None:
         return None
     if drop:
@@ -278,9 +293,7 @@ def process_rows(batch):
         try:
             import importlib
 
-            preprocessing_module = importlib.import_module(
-                "cuml.preprocessing"
-            )
+            preprocessing_module = importlib.import_module("cuml.preprocessing")
 
             scaler_cls = preprocessing_module.StandardScaler
             normalizer_cls = preprocessing_module.Normalizer

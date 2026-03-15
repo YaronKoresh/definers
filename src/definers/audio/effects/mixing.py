@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -87,7 +86,9 @@ def mix_audio(
 
     window_size = int(sr * 0.1)
     envelope = np.abs(y2_padded.mean(axis=1))
-    envelope = np.convolve(envelope, np.ones(window_size) / window_size, mode="same")
+    envelope = np.convolve(
+        envelope, np.ones(window_size) / window_size, mode="same"
+    )
 
     if np.max(envelope) > 0:
         envelope = envelope / np.max(envelope)
@@ -137,7 +138,9 @@ def dj_mix(
     import pydub
 
     if not files or len(files) < 2:
-        _logger.warning("Please provide at least two audio files for DJ mixing.")
+        _logger.warning(
+            "Please provide at least two audio files for DJ mixing."
+        )
         return None
 
     transition_ms = int(transition_sec * 1000)
@@ -187,7 +190,9 @@ def dj_mix(
                     temp_stretched_path = tmp(Path(current_path).suffix)
                     from definers.audio import stretch_audio
 
-                    stretch_audio(current_path, temp_stretched_path, speed_factor)
+                    stretch_audio(
+                        current_path, temp_stretched_path, speed_factor
+                    )
                     current_path = temp_stretched_path
 
             track_segment = pydub.AudioSegment.from_file(current_path)
@@ -208,10 +213,14 @@ def dj_mix(
 
     final_mix = processed_tracks[0]
     for i in range(1, len(processed_tracks)):
-        final_mix = final_mix.append(processed_tracks[i], crossfade=transition_ms)
+        final_mix = final_mix.append(
+            processed_tracks[i], crossfade=transition_ms
+        )
 
     output_stem = tmp("dj_mix", keep=False)
     final_output_path = save_audio(
-        destination_path=output_stem, audio_signal=final_mix, output_format=format_choice
+        destination_path=output_stem,
+        audio_signal=final_mix,
+        output_format=format_choice,
     )
     return final_output_path

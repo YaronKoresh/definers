@@ -8,7 +8,9 @@ class StartProjectPort(Protocol):
 
 
 class MusicVideoPort(Protocol):
-    def __call__(self, audio: str, width: int, height: int, fps: int) -> Any: ...
+    def __call__(
+        self, audio: str, width: int, height: int, fps: int
+    ) -> Any: ...
 
 
 class LyricVideoPort(Protocol):
@@ -83,7 +85,9 @@ class UnknownCommand:
     name: str | None
 
 
-CliCommand = StartCommand | MusicVideoCommand | LyricVideoCommand | UnknownCommand
+CliCommand = (
+    StartCommand | MusicVideoCommand | LyricVideoCommand | UnknownCommand
+)
 
 
 def _normalize_cli_name(value: str | None) -> str | None:

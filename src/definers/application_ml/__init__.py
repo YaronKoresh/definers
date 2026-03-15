@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from typing import Any
+
 from definers.application_ml.contracts import (
     AnswerModelPort,
     AnswerProcessorPort,
-    AnswerServicePort,
     AnswerRuntimePort,
+    AnswerServicePort,
     ErrorHandlerPort,
     HistoryMessage,
     LogPort,
@@ -63,7 +64,11 @@ def _read_answer_audio(path: str, soundfile_module: Any, librosa_module: Any):
 
 
 def _read_answer_image(path: str, image_module: Any):
-    from definers.image import get_max_resolution, image_resolution, resize_image
+    from definers.image import (
+        get_max_resolution,
+        image_resolution,
+        resize_image,
+    )
 
     try:
         return image_module.open(path)
@@ -121,7 +126,9 @@ def _prepare_answer_history(
         content = message["content"]
         role = message["role"]
         add_content = ""
-        is_text = not isinstance(content, dict) and not isinstance(content, tuple)
+        is_text = not isinstance(content, dict) and not isinstance(
+            content, tuple
+        )
         if is_text:
             add_content = _normalize_answer_text(content, required_lang)
         else:
@@ -261,7 +268,9 @@ def fit(
     )
 
 
-def feed(model, X_new, y_new=None, epochs: int = 1, logger=None, concatenate=None):
+def feed(
+    model, X_new, y_new=None, epochs: int = 1, logger=None, concatenate=None
+):
     from definers.application_ml.training import feed as _feed
 
     return _feed(
@@ -317,7 +326,9 @@ def train_linear_regression(
 
 
 def linear_regression(X, y, learning_rate=0.01, epochs=50):
-    from definers.application_ml.training import linear_regression as _linear_regression
+    from definers.application_ml.training import (
+        linear_regression as _linear_regression,
+    )
 
     return _linear_regression(X, y, learning_rate=learning_rate, epochs=epochs)
 
@@ -334,7 +345,9 @@ def extract_text_features(
 
 
 def features_to_text(predicted_features, vectorizer=None, vocabulary=None):
-    from definers.application_ml.inference import features_to_text as _features_to_text
+    from definers.application_ml.inference import (
+        features_to_text as _features_to_text,
+    )
 
     return _features_to_text(
         predicted_features,
@@ -351,8 +364,12 @@ def predict_linear_regression(X_new, model_path: str, *, factory):
     return _predict_linear_regression(X_new, model_path, factory=factory)
 
 
-def init_model_file(task: str, turbo: bool = True, model_type: str | None = None):
-    from definers.application_ml.repository_sync import init_model_file as _init_model_file
+def init_model_file(
+    task: str, turbo: bool = True, model_type: str | None = None
+):
+    from definers.application_ml.repository_sync import (
+        init_model_file as _init_model_file,
+    )
 
     return _init_model_file(task, turbo=turbo, model_type=model_type)
 

@@ -1,9 +1,10 @@
+import importlib
+import sys
 import unittest
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 
-import definers
 import definers.os_utils as os_utils
 import definers.path_utils as path_utils
 
@@ -50,9 +51,10 @@ class TestFeaturesToVideo(unittest.TestCase):
             self.hist_size + self.lbp_size + self.edge_size
         )
         self.num_frames = 2
-        self.features = np.random.rand(
-            self.num_frames, self.total_features_per_frame
-        ).astype(np.float32)
+        self.features = np.arange(
+            self.num_frames * self.total_features_per_frame,
+            dtype=np.float32,
+        ).reshape(self.num_frames, self.total_features_per_frame)
         self.mock_cv2 = MagicMock()
         self.mock_cv2.VideoWriter_fourcc.return_value = "mp4v"
         self.mock_writer = MagicMock()
@@ -67,9 +69,31 @@ class TestFeaturesToVideo(unittest.TestCase):
         )
         self.mock_cv2.cvtColor.side_effect = lambda src, code: src
 
-    @patch.object(definers, "tmp", create=True, return_value="/fake/video.mp4")
-    def test_successful_video_generation(self, mock_tmp):
-        with patch.dict("sys.modules", {"cv2": self.mock_cv2}):
+    def get_runtime_package(self):
+        runtime_package = importlib.import_module("definers")
+        self.assertIn("definers", sys.modules)
+        self.assertIs(sys.modules["definers"], runtime_package)
+        return runtime_package
+
+    def test_package_identity_for_runtime_import(self):
+        runtime_package = self.get_runtime_package()
+
+        self.assertIs(importlib.import_module("definers"), runtime_package)
+
+    def test_successful_video_generation(self):
+        runtime_package = self.get_runtime_package()
+
+        with (
+            patch.object(
+                runtime_package,
+                "tmp",
+                create=True,
+                return_value="/fake/video.mp4",
+            ) as mock_tmp,
+            patch.dict("sys.modules", {"cv2": self.mock_cv2}),
+        ):
+            self.assertIs(importlib.import_module("definers"), runtime_package)
+            self.assertIs(importlib.import_module("definers").tmp, mock_tmp)
             result = features_to_video(
                 self.features, video_shape=self.video_shape
             )
@@ -79,17 +103,50 @@ class TestFeaturesToVideo(unittest.TestCase):
         )
         self.assertEqual(self.mock_writer.write.call_count, self.num_frames)
         self.mock_writer.release.assert_called_once()
+        mock_tmp.assert_called_once_with("mp4")
 
-    @patch.object(definers, "tmp", create=True, return_value="/fake/video.mp4")
-    def test_exception_during_processing(self, mock_tmp):
+    def test_patched_tmp_visible_from_fresh_runtime_import(self):
+        runtime_package = self.get_runtime_package()
+
+        with (
+            patch.object(
+                runtime_package,
+                "tmp",
+                create=True,
+                return_value="/fresh/video.mp4",
+            ) as mock_tmp,
+            patch.dict("sys.modules", {"cv2": self.mock_cv2}),
+        ):
+            fresh_package = importlib.import_module("definers")
+            self.assertIs(fresh_package, runtime_package)
+            self.assertIs(fresh_package.tmp, mock_tmp)
+            result = features_to_video(
+                self.features[:1], video_shape=self.video_shape
+            )
+        self.assertEqual(result, "/fresh/video.mp4")
+        mock_tmp.assert_called_once_with("mp4")
+
+    def test_exception_during_processing(self):
+        runtime_package = self.get_runtime_package()
         self.mock_cv2.normalize.side_effect = Exception(
             "Test processing exception"
         )
-        with patch.dict("sys.modules", {"cv2": self.mock_cv2}):
+        with (
+            patch.object(
+                runtime_package,
+                "tmp",
+                create=True,
+                return_value="/fake/video.mp4",
+            ) as mock_tmp,
+            patch.dict("sys.modules", {"cv2": self.mock_cv2}),
+        ):
+            self.assertIs(importlib.import_module("definers"), runtime_package)
+            self.assertIs(importlib.import_module("definers").tmp, mock_tmp)
             result = features_to_video(
                 self.features, video_shape=self.video_shape
             )
         self.assertFalse(result)
+        mock_tmp.assert_called_once_with("mp4")
 
     def test_empty_features_input(self):
         empty_features = np.array([])

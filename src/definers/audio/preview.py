@@ -1,11 +1,10 @@
-
 from __future__ import annotations
 
-from .io import read_audio
-from .analysis import get_active_audio_timeline
-from .io import split_audio
-from definers.system import catch
 from definers.logger import init_logger
+from definers.system import catch
+
+from .analysis import get_active_audio_timeline
+from .io import read_audio, split_audio
 
 _logger = init_logger()
 
@@ -39,9 +38,14 @@ def audio_preview(file_path: str, max_duration: float = 30) -> str | None:
         _logger.debug("Total audio duration: %s seconds", total_duration)
 
         if total_duration <= max_duration:
-            _logger.debug("Audio duration <= max_duration: returning original copy")
+            _logger.debug(
+                "Audio duration <= max_duration: returning original copy"
+            )
             preview_paths = split_audio(
-                file_path, chunk_duration=total_duration, chunks_limit=1, skip_time=0
+                file_path,
+                chunk_duration=total_duration,
+                chunks_limit=1,
+                skip_time=0,
             )
             return preview_paths[0] if preview_paths else None
 
@@ -65,9 +69,13 @@ def audio_preview(file_path: str, max_duration: float = 30) -> str | None:
             ideal_start = longest_segment_center - max_duration / 2.0
             start_time = max(0.0, ideal_start)
             start_time = min(start_time, total_duration - max_duration)
-            _logger.debug("Calculated preview start time: %s seconds", start_time)
+            _logger.debug(
+                "Calculated preview start time: %s seconds", start_time
+            )
         else:
-            start_time = min(total_duration * 0.1, total_duration - max_duration)
+            start_time = min(
+                total_duration * 0.1, total_duration - max_duration
+            )
             start_time = max(0.0, start_time)
             _logger.debug(
                 "No significant active segments found; defaulting preview start time to %s seconds",
@@ -80,13 +88,18 @@ def audio_preview(file_path: str, max_duration: float = 30) -> str | None:
             start_time + max_duration,
         )
         preview_paths = split_audio(
-            file_path, chunk_duration=max_duration, chunks_limit=1, skip_time=start_time
+            file_path,
+            chunk_duration=max_duration,
+            chunks_limit=1,
+            skip_time=start_time,
         )
         if preview_paths:
             _logger.debug("Preview extraction successful: %s", preview_paths[0])
             return preview_paths[0]
         else:
-            catch("Error: split_audio did not return any paths for the preview.")
+            catch(
+                "Error: split_audio did not return any paths for the preview."
+            )
             return None
     except Exception as e:
         catch(f"An unexpected error occurred in audio_preview: {e}")

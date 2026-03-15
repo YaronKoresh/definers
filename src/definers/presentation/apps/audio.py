@@ -144,14 +144,22 @@ def launch_audio_app():
 
         with gr.Row(elem_id="main-row"):
             with gr.Column(scale=1, elem_id="main-content"):
-                with gr.Group(visible=True, elem_classes="tool-container") as view_enhancer:
+                with gr.Group(
+                    visible=True, elem_classes="tool-container"
+                ) as view_enhancer:
                     gr.Markdown("## Audio Enhancer")
                     with gr.Row():
                         with gr.Column():
-                            enhancer_input = gr.Audio(label="Upload Track", type="filepath")
+                            enhancer_input = gr.Audio(
+                                label="Upload Track", type="filepath"
+                            )
                             with gr.Row():
-                                enhancer_btn = gr.Button("Enhance Audio", variant="primary")
-                                clear_enhancer_btn = gr.Button("Clear", variant="secondary")
+                                enhancer_btn = gr.Button(
+                                    "Enhance Audio", variant="primary"
+                                )
+                                clear_enhancer_btn = gr.Button(
+                                    "Clear", variant="secondary"
+                                )
                         with gr.Column():
                             with gr.Group(visible=False) as enhancer_output_box:
                                 enhancer_output = gr.Audio(
@@ -160,54 +168,91 @@ def launch_audio_app():
                                     show_download_button=True,
                                 )
                                 enhancer_share_links = gr.Markdown()
-                with gr.Group(visible=False, elem_classes="tool-container") as view_midi_tools:
+                with gr.Group(
+                    visible=False, elem_classes="tool-container"
+                ) as view_midi_tools:
                     gr.Markdown("## MIDI Tools")
                     with gr.Tabs():
                         with gr.TabItem("Audio to MIDI"):
                             with gr.Row():
                                 with gr.Column():
-                                    a2m_input = gr.Audio(label="Upload Audio", type="filepath")
+                                    a2m_input = gr.Audio(
+                                        label="Upload Audio", type="filepath"
+                                    )
                                     with gr.Row():
-                                        a2m_btn = gr.Button("Convert to MIDI", variant="primary")
-                                        clear_a2m_btn = gr.Button("Clear", variant="secondary")
+                                        a2m_btn = gr.Button(
+                                            "Convert to MIDI", variant="primary"
+                                        )
+                                        clear_a2m_btn = gr.Button(
+                                            "Clear", variant="secondary"
+                                        )
                                 with gr.Column():
-                                    with gr.Group(visible=False) as a2m_output_box:
-                                        a2m_output = gr.File(label="Output MIDI", interactive=False)
+                                    with gr.Group(
+                                        visible=False
+                                    ) as a2m_output_box:
+                                        a2m_output = gr.File(
+                                            label="Output MIDI",
+                                            interactive=False,
+                                        )
                                         a2m_share_links = gr.Markdown()
                         with gr.TabItem("MIDI to Audio"):
                             with gr.Row():
                                 with gr.Column():
-                                    m2a_input = gr.File(label="Upload MIDI", file_types=[".mid", ".midi"])
+                                    m2a_input = gr.File(
+                                        label="Upload MIDI",
+                                        file_types=[".mid", ".midi"],
+                                    )
                                     m2a_format = gr.Radio(
                                         format_choices,
                                         label="Output Format",
                                         value=format_choices[0],
                                     )
                                     with gr.Row():
-                                        m2a_btn = gr.Button("Convert to Audio", variant="primary")
-                                        clear_m2a_btn = gr.Button("Clear", variant="secondary")
+                                        m2a_btn = gr.Button(
+                                            "Convert to Audio",
+                                            variant="primary",
+                                        )
+                                        clear_m2a_btn = gr.Button(
+                                            "Clear", variant="secondary"
+                                        )
                                 with gr.Column():
-                                    with gr.Group(visible=False) as m2a_output_box:
+                                    with gr.Group(
+                                        visible=False
+                                    ) as m2a_output_box:
                                         m2a_output = gr.Audio(
                                             label="Output Audio",
                                             interactive=False,
                                             show_download_button=True,
                                         )
                                         m2a_share_links = gr.Markdown()
-                with gr.Group(visible=False, elem_classes="tool-container") as view_audio_extender:
+                with gr.Group(
+                    visible=False, elem_classes="tool-container"
+                ) as view_audio_extender:
                     gr.Markdown("## Audio Extender")
                     with gr.Row():
                         with gr.Column():
-                            extender_input = gr.Audio(label="Upload Audio to Extend", type="filepath")
-                            extender_duration = gr.Slider(5, 60, 15, step=1, label="Extend Duration (seconds)")
+                            extender_input = gr.Audio(
+                                label="Upload Audio to Extend", type="filepath"
+                            )
+                            extender_duration = gr.Slider(
+                                5,
+                                60,
+                                15,
+                                step=1,
+                                label="Extend Duration (seconds)",
+                            )
                             extender_format = gr.Radio(
                                 format_choices,
                                 label="Output Format",
                                 value=format_choices[0],
                             )
                             with gr.Row():
-                                extender_btn = gr.Button("Extend Audio", variant="primary")
-                                clear_extender_btn = gr.Button("Clear", variant="secondary")
+                                extender_btn = gr.Button(
+                                    "Extend Audio", variant="primary"
+                                )
+                                clear_extender_btn = gr.Button(
+                                    "Clear", variant="secondary"
+                                )
                         with gr.Column():
                             with gr.Group(visible=False) as extender_output_box:
                                 extender_output = gr.Audio(
@@ -216,7 +261,9 @@ def launch_audio_app():
                                     show_download_button=True,
                                 )
                                 extender_share_links = gr.Markdown()
-                with gr.Group(visible=False, elem_classes="tool-container") as view_stem_mixer:
+                with gr.Group(
+                    visible=False, elem_classes="tool-container"
+                ) as view_stem_mixer:
                     gr.Markdown("## Stem Mixer")
                     with gr.Row():
                         with gr.Column():
@@ -231,57 +278,95 @@ def launch_audio_app():
                                 value=format_choices[0],
                             )
                             with gr.Row():
-                                stem_mixer_btn = gr.Button("Mix Stems", variant="primary")
-                                clear_stem_mixer_btn = gr.Button("Clear", variant="secondary")
+                                stem_mixer_btn = gr.Button(
+                                    "Mix Stems", variant="primary"
+                                )
+                                clear_stem_mixer_btn = gr.Button(
+                                    "Clear", variant="secondary"
+                                )
                         with gr.Column():
-                            with gr.Group(visible=False) as stem_mixer_output_box:
+                            with gr.Group(
+                                visible=False
+                            ) as stem_mixer_output_box:
                                 stem_mixer_output = gr.Audio(
                                     label="Mixed Track",
                                     interactive=False,
                                     show_download_button=True,
                                 )
                                 stem_mixer_share_links = gr.Markdown()
-                with gr.Group(visible=False, elem_classes="tool-container") as view_feedback:
+                with gr.Group(
+                    visible=False, elem_classes="tool-container"
+                ) as view_feedback:
                     gr.Markdown("## AI Track Feedback")
                     with gr.Row():
                         with gr.Column():
-                            feedback_input = gr.Audio(label="Upload Your Track", type="filepath")
+                            feedback_input = gr.Audio(
+                                label="Upload Your Track", type="filepath"
+                            )
                             with gr.Row():
-                                feedback_btn = gr.Button("Get Feedback", variant="primary")
-                                clear_feedback_btn = gr.Button("Clear", variant="secondary")
+                                feedback_btn = gr.Button(
+                                    "Get Feedback", variant="primary"
+                                )
+                                clear_feedback_btn = gr.Button(
+                                    "Clear", variant="secondary"
+                                )
                         with gr.Column():
                             feedback_output = gr.Markdown(label="Feedback")
-                with gr.Group(visible=False, elem_classes="tool-container") as view_instrument_id:
+                with gr.Group(
+                    visible=False, elem_classes="tool-container"
+                ) as view_instrument_id:
                     gr.Markdown("## Instrument Identification")
                     with gr.Row():
                         with gr.Column():
-                            instrument_id_input = gr.Audio(label="Upload Audio", type="filepath")
+                            instrument_id_input = gr.Audio(
+                                label="Upload Audio", type="filepath"
+                            )
                             with gr.Row():
-                                instrument_id_btn = gr.Button("Identify Instruments", variant="primary")
-                                clear_instrument_id_btn = gr.Button("Clear", variant="secondary")
+                                instrument_id_btn = gr.Button(
+                                    "Identify Instruments", variant="primary"
+                                )
+                                clear_instrument_id_btn = gr.Button(
+                                    "Clear", variant="secondary"
+                                )
                         with gr.Column():
-                            instrument_id_output = gr.Markdown(label="Detected Instruments")
-                with gr.Group(visible=False, elem_classes="tool-container") as view_video_gen:
+                            instrument_id_output = gr.Markdown(
+                                label="Detected Instruments"
+                            )
+                with gr.Group(
+                    visible=False, elem_classes="tool-container"
+                ) as view_video_gen:
                     gr.Markdown("## AI Music Clip Generation")
                     with gr.Row():
                         with gr.Column():
-                            video_gen_audio = gr.Audio(label="Upload Audio", type="filepath")
+                            video_gen_audio = gr.Audio(
+                                label="Upload Audio", type="filepath"
+                            )
                             with gr.Row():
-                                video_gen_btn = gr.Button("Generate Video", variant="primary")
-                                clear_video_gen_btn = gr.Button("Clear", variant="secondary")
+                                video_gen_btn = gr.Button(
+                                    "Generate Video", variant="primary"
+                                )
+                                clear_video_gen_btn = gr.Button(
+                                    "Clear", variant="secondary"
+                                )
                         with gr.Column():
-                            with gr.Group(visible=False) as video_gen_output_box:
+                            with gr.Group(
+                                visible=False
+                            ) as video_gen_output_box:
                                 video_gen_output = gr.Video(
                                     label="Generated Clip",
                                     interactive=False,
                                     show_download_button=True,
                                 )
                                 video_gen_share_links = gr.Markdown()
-                with gr.Group(visible=False, elem_classes="tool-container") as view_speed:
+                with gr.Group(
+                    visible=False, elem_classes="tool-container"
+                ) as view_speed:
                     gr.Markdown("## Speed & Pitch")
                     with gr.Row():
                         with gr.Column():
-                            speed_input = gr.Audio(label="Upload Track", type="filepath")
+                            speed_input = gr.Audio(
+                                label="Upload Track", type="filepath"
+                            )
                             speed_factor = gr.Slider(
                                 minimum=0.5,
                                 maximum=2.0,
@@ -299,8 +384,12 @@ def launch_audio_app():
                                 value=format_choices[0],
                             )
                             with gr.Row():
-                                speed_btn = gr.Button("Change Speed", variant="primary")
-                                clear_speed_btn = gr.Button("Clear", variant="secondary")
+                                speed_btn = gr.Button(
+                                    "Change Speed", variant="primary"
+                                )
+                                clear_speed_btn = gr.Button(
+                                    "Clear", variant="secondary"
+                                )
                         with gr.Column():
                             with gr.Group(visible=False) as speed_output_box:
                                 speed_output = gr.Audio(
@@ -309,13 +398,20 @@ def launch_audio_app():
                                     show_download_button=True,
                                 )
                                 speed_share_links = gr.Markdown()
-                with gr.Group(visible=False, elem_classes="tool-container") as view_stem:
+                with gr.Group(
+                    visible=False, elem_classes="tool-container"
+                ) as view_stem:
                     gr.Markdown("## Stem Separation")
                     with gr.Row():
                         with gr.Column():
-                            stem_input = gr.Audio(label="Upload Full Mix", type="filepath")
+                            stem_input = gr.Audio(
+                                label="Upload Full Mix", type="filepath"
+                            )
                             stem_type = gr.Radio(
-                                ["Acapella (Vocals Only)", "Karaoke (Instrumental Only)"],
+                                [
+                                    "Acapella (Vocals Only)",
+                                    "Karaoke (Instrumental Only)",
+                                ],
                                 label="Separation Type",
                                 value="Acapella (Vocals Only)",
                             )
@@ -325,8 +421,12 @@ def launch_audio_app():
                                 value=format_choices[0],
                             )
                             with gr.Row():
-                                stem_btn = gr.Button("Separate Stems", variant="primary")
-                                clear_stem_btn = gr.Button("Clear", variant="secondary")
+                                stem_btn = gr.Button(
+                                    "Separate Stems", variant="primary"
+                                )
+                                clear_stem_btn = gr.Button(
+                                    "Clear", variant="secondary"
+                                )
                         with gr.Column():
                             with gr.Group(visible=False) as stem_output_box:
                                 stem_output = gr.Audio(
@@ -335,20 +435,34 @@ def launch_audio_app():
                                     show_download_button=True,
                                 )
                                 stem_share_links = gr.Markdown()
-                with gr.Group(visible=False, elem_classes="tool-container") as view_vps:
+                with gr.Group(
+                    visible=False, elem_classes="tool-container"
+                ) as view_vps:
                     gr.Markdown("## Vocal Pitch Shifter")
                     with gr.Row():
                         with gr.Column():
-                            vps_input = gr.Audio(label="Upload Full Song", type="filepath")
-                            vps_pitch = gr.Slider(-12, 12, 0, step=1, label="Vocal Pitch Shift (Semitones)")
+                            vps_input = gr.Audio(
+                                label="Upload Full Song", type="filepath"
+                            )
+                            vps_pitch = gr.Slider(
+                                -12,
+                                12,
+                                0,
+                                step=1,
+                                label="Vocal Pitch Shift (Semitones)",
+                            )
                             vps_format = gr.Radio(
                                 format_choices,
                                 label="Output Format",
                                 value=format_choices[0],
                             )
                             with gr.Row():
-                                vps_btn = gr.Button("Shift Vocal Pitch", variant="primary")
-                                clear_vps_btn = gr.Button("Clear", variant="secondary")
+                                vps_btn = gr.Button(
+                                    "Shift Vocal Pitch", variant="primary"
+                                )
+                                clear_vps_btn = gr.Button(
+                                    "Clear", variant="secondary"
+                                )
                         with gr.Column():
                             with gr.Group(visible=False) as vps_output_box:
                                 vps_output = gr.Audio(
@@ -357,21 +471,42 @@ def launch_audio_app():
                                     show_download_button=True,
                                 )
                                 vps_share_links = gr.Markdown()
-                with gr.Group(visible=False, elem_classes="tool-container") as view_voice_lab:
+                with gr.Group(
+                    visible=False, elem_classes="tool-container"
+                ) as view_voice_lab:
                     gr.Markdown("## 🔬 Voice Lab")
                     with gr.Row(visible=False):
                         experiment = gr.Textbox(value=random_string())
                     with gr.Row():
                         inp = gr.File(label="Input", type="filepath")
-                        outp = gr.File(label="Output", type="filepath", file_count="multiple")
+                        outp = gr.File(
+                            label="Output",
+                            type="filepath",
+                            file_count="multiple",
+                        )
                     with gr.Row(visible=False):
-                        lvl = gr.Number(label="(re-)training step", value=1, minimum=1, step=1)
+                        lvl = gr.Number(
+                            label="(re-)training step",
+                            value=1,
+                            minimum=1,
+                            step=1,
+                        )
                     with gr.Row():
                         but1 = gr.Button("Train", variant="primary")
-                        but1.click(fn=handle_training, inputs=[experiment, inp, lvl], outputs=[outp, lvl])
+                        but1.click(
+                            fn=handle_training,
+                            inputs=[experiment, inp, lvl],
+                            outputs=[outp, lvl],
+                        )
                         but2 = gr.Button("Convert", variant="primary")
-                        but2.click(fn=convert_vocal_rvc, inputs=[experiment, inp], outputs=[outp])
-                with gr.Group(visible=False, elem_classes="tool-container") as view_dj:
+                        but2.click(
+                            fn=convert_vocal_rvc,
+                            inputs=[experiment, inp],
+                            outputs=[outp],
+                        )
+                with gr.Group(
+                    visible=False, elem_classes="tool-container"
+                ) as view_dj:
                     gr.Markdown("## DJ AutoMix")
                     with gr.Row():
                         with gr.Column():
@@ -386,16 +521,28 @@ def launch_audio_app():
                                 label="Mix Type",
                                 value="Beatmatched Crossfade",
                             )
-                            dj_target_bpm = gr.Number(label="Target BPM (Optional)")
-                            dj_transition = gr.Slider(1, 15, 5, step=1, label="Transition Duration (seconds)")
+                            dj_target_bpm = gr.Number(
+                                label="Target BPM (Optional)"
+                            )
+                            dj_transition = gr.Slider(
+                                1,
+                                15,
+                                5,
+                                step=1,
+                                label="Transition Duration (seconds)",
+                            )
                             dj_format = gr.Radio(
                                 format_choices,
                                 label="Output Format",
                                 value=format_choices[0],
                             )
                             with gr.Row():
-                                dj_btn = gr.Button("Create DJ Mix", variant="primary")
-                                clear_dj_btn = gr.Button("Clear", variant="secondary")
+                                dj_btn = gr.Button(
+                                    "Create DJ Mix", variant="primary"
+                                )
+                                clear_dj_btn = gr.Button(
+                                    "Clear", variant="secondary"
+                                )
                         with gr.Column():
                             with gr.Group(visible=False) as dj_output_box:
                                 dj_output = gr.Audio(
@@ -404,7 +551,9 @@ def launch_audio_app():
                                     show_download_button=True,
                                 )
                                 dj_share_links = gr.Markdown()
-                with gr.Group(visible=False, elem_classes="tool-container") as view_music_gen:
+                with gr.Group(
+                    visible=False, elem_classes="tool-container"
+                ) as view_music_gen:
                     gr.Markdown("## AI Music Generation")
                     if device() == "cpu":
                         gr.Markdown(
@@ -417,15 +566,23 @@ def launch_audio_app():
                                 label="Music Prompt",
                                 placeholder="e.g., '80s synthwave, retro, upbeat'",
                             )
-                            gen_duration = gr.Slider(5, 30, 10, step=1, label="Duration (seconds)")
+                            gen_duration = gr.Slider(
+                                5, 30, 10, step=1, label="Duration (seconds)"
+                            )
                             gen_format = gr.Radio(
                                 format_choices,
                                 label="Output Format",
                                 value=format_choices[0],
                             )
                             with gr.Row():
-                                gen_btn = gr.Button("Generate Music", variant="primary", interactive=True)
-                                clear_gen_btn = gr.Button("Clear", variant="secondary")
+                                gen_btn = gr.Button(
+                                    "Generate Music",
+                                    variant="primary",
+                                    interactive=True,
+                                )
+                                clear_gen_btn = gr.Button(
+                                    "Clear", variant="secondary"
+                                )
                         with gr.Column():
                             with gr.Group(visible=False) as gen_output_box:
                                 gen_output = gr.Audio(
@@ -434,7 +591,9 @@ def launch_audio_app():
                                     show_download_button=True,
                                 )
                                 gen_share_links = gr.Markdown()
-                with gr.Group(visible=False, elem_classes="tool-container") as view_voice_gen:
+                with gr.Group(
+                    visible=False, elem_classes="tool-container"
+                ) as view_voice_gen:
                     gr.Markdown("## AI Voice Generation")
                     with gr.Row():
                         with gr.Column():
@@ -453,8 +612,14 @@ def launch_audio_app():
                                 value=format_choices[0],
                             )
                             with gr.Row():
-                                vg_btn = gr.Button("Generate Voice", variant="primary", interactive=True)
-                                clear_vg_btn = gr.Button("Clear", variant="secondary")
+                                vg_btn = gr.Button(
+                                    "Generate Voice",
+                                    variant="primary",
+                                    interactive=True,
+                                )
+                                clear_vg_btn = gr.Button(
+                                    "Clear", variant="secondary"
+                                )
                         with gr.Column():
                             with gr.Group(visible=False) as vg_output_box:
                                 vg_output = gr.Audio(
@@ -463,32 +628,50 @@ def launch_audio_app():
                                     show_download_button=True,
                                 )
                                 vg_share_links = gr.Markdown()
-                with gr.Group(visible=False, elem_classes="tool-container") as view_analysis:
+                with gr.Group(
+                    visible=False, elem_classes="tool-container"
+                ) as view_analysis:
                     gr.Markdown("## BPM & Key Analysis")
                     with gr.Row():
                         with gr.Column(scale=1):
-                            analysis_input = gr.Audio(label="Upload Audio", type="filepath")
+                            analysis_input = gr.Audio(
+                                label="Upload Audio", type="filepath"
+                            )
                             with gr.Row():
-                                analysis_btn = gr.Button("Analyze Audio", variant="primary")
-                                clear_analysis_btn = gr.Button("Clear", variant="secondary")
+                                analysis_btn = gr.Button(
+                                    "Analyze Audio", variant="primary"
+                                )
+                                clear_analysis_btn = gr.Button(
+                                    "Clear", variant="secondary"
+                                )
                         with gr.Column(scale=1):
                             analysis_bpm_key_output = gr.Textbox(
                                 label="Detected Key & BPM",
                                 interactive=False,
                             )
-                with gr.Group(visible=False, elem_classes="tool-container") as view_stt:
+                with gr.Group(
+                    visible=False, elem_classes="tool-container"
+                ) as view_stt:
                     gr.Markdown("## Speech-to-Text")
                     with gr.Row():
                         with gr.Column():
-                            stt_input = gr.Audio(label="Upload Speech Audio", type="filepath")
+                            stt_input = gr.Audio(
+                                label="Upload Speech Audio", type="filepath"
+                            )
                             stt_language = gr.Dropdown(
                                 language_choices,
                                 label="Language",
                                 value="english",
                             )
                             with gr.Row():
-                                stt_btn = gr.Button("Transcribe Audio", variant="primary", interactive=True)
-                                clear_stt_btn = gr.Button("Clear", variant="secondary")
+                                stt_btn = gr.Button(
+                                    "Transcribe Audio",
+                                    variant="primary",
+                                    interactive=True,
+                                )
+                                clear_stt_btn = gr.Button(
+                                    "Clear", variant="secondary"
+                                )
                         with gr.Column():
                             stt_output = gr.Textbox(
                                 label="Transcription Result",
@@ -500,22 +683,40 @@ def launch_audio_app():
                                 interactive=False,
                                 visible=False,
                             )
-                with gr.Group(visible=False, elem_classes="tool-container") as view_spectrum:
+                with gr.Group(
+                    visible=False, elem_classes="tool-container"
+                ) as view_spectrum:
                     gr.Markdown("## Spectrum Analyzer")
                     spec_input = gr.Audio(label="Upload Audio", type="filepath")
                     with gr.Row():
-                        spec_btn = gr.Button("Generate Spectrum", variant="primary")
+                        spec_btn = gr.Button(
+                            "Generate Spectrum", variant="primary"
+                        )
                         clear_spec_btn = gr.Button("Clear", variant="secondary")
-                    spec_output = gr.Image(label="Spectrum Plot", interactive=False)
-                with gr.Group(visible=False, elem_classes="tool-container") as view_beat_vis:
+                    spec_output = gr.Image(
+                        label="Spectrum Plot", interactive=False
+                    )
+                with gr.Group(
+                    visible=False, elem_classes="tool-container"
+                ) as view_beat_vis:
                     gr.Markdown("## Beat Visualizer")
                     with gr.Row():
                         with gr.Column():
-                            vis_image_input = gr.Image(label="Upload Image", type="filepath")
-                            vis_audio_input = gr.Audio(label="Upload Audio", type="filepath")
+                            vis_image_input = gr.Image(
+                                label="Upload Image", type="filepath"
+                            )
+                            vis_audio_input = gr.Audio(
+                                label="Upload Audio", type="filepath"
+                            )
                         with gr.Column():
                             vis_effect = gr.Radio(
-                                ["None", "Blur", "Sharpen", "Contour", "Emboss"],
+                                [
+                                    "None",
+                                    "Blur",
+                                    "Sharpen",
+                                    "Contour",
+                                    "Emboss",
+                                ],
                                 label="Image Effect",
                                 value="None",
                             )
@@ -524,18 +725,34 @@ def launch_audio_app():
                                 label="Animation Style",
                                 value="None",
                             )
-                            vis_intensity = gr.Slider(1.05, 1.5, 1.15, step=0.01, label="Beat Intensity")
+                            vis_intensity = gr.Slider(
+                                1.05,
+                                1.5,
+                                1.15,
+                                step=0.01,
+                                label="Beat Intensity",
+                            )
                             with gr.Row():
-                                vis_btn = gr.Button("Create Beat Visualizer", variant="primary")
-                                clear_vis_btn = gr.Button("Clear", variant="secondary")
+                                vis_btn = gr.Button(
+                                    "Create Beat Visualizer", variant="primary"
+                                )
+                                clear_vis_btn = gr.Button(
+                                    "Clear", variant="secondary"
+                                )
                     with gr.Group(visible=False) as vis_output_box:
-                        vis_output = gr.Video(label="Visualizer Output", show_download_button=True)
+                        vis_output = gr.Video(
+                            label="Visualizer Output", show_download_button=True
+                        )
                         vis_share_links = gr.Markdown()
-                with gr.Group(visible=False, elem_classes="tool-container") as view_lyric_vid:
+                with gr.Group(
+                    visible=False, elem_classes="tool-container"
+                ) as view_lyric_vid:
                     gr.Markdown("## Lyric Video Creator")
                     with gr.Row():
                         with gr.Column():
-                            lyric_audio = gr.Audio(label="Upload Song", type="filepath")
+                            lyric_audio = gr.Audio(
+                                label="Upload Song", type="filepath"
+                            )
                             lyric_bg = gr.File(
                                 label="Upload Background (Image or Video)",
                                 type="filepath",
@@ -560,15 +777,21 @@ def launch_audio_app():
                                 value="english",
                             )
                     with gr.Row():
-                        lyric_btn = gr.Button("Create Lyric Video", variant="primary")
-                        clear_lyric_btn = gr.Button("Clear", variant="secondary")
+                        lyric_btn = gr.Button(
+                            "Create Lyric Video", variant="primary"
+                        )
+                        clear_lyric_btn = gr.Button(
+                            "Clear", variant="secondary"
+                        )
                     with gr.Group(visible=False) as lyric_output_box:
                         lyric_output = gr.Video(
                             label="Lyric Video Output",
                             show_download_button=True,
                         )
                         lyric_share_links = gr.Markdown()
-                with gr.Group(visible=False, elem_classes="tool-container") as view_chatbot:
+                with gr.Group(
+                    visible=False, elem_classes="tool-container"
+                ) as view_chatbot:
                     init_chat("Definers Audio support")
 
         views = {
@@ -607,7 +830,9 @@ def launch_audio_app():
             outputs=list(views.values()),
         )
 
-        def create_ui_handler(btn, out_el, out_box, out_share, logic_func, *inputs):
+        def create_ui_handler(
+            btn, out_el, out_box, out_share, logic_func, *inputs
+        ):
             def ui_handler_generator(*args):
                 try:
                     result = logic_func(*args)
@@ -778,26 +1003,36 @@ def launch_audio_app():
 
         def feedback_ui(audio_path):
             yield {
-                feedback_btn: gr.update(value="Analyzing...", interactive=False),
+                feedback_btn: gr.update(
+                    value="Analyzing...", interactive=False
+                ),
                 feedback_output: "",
             }
             try:
                 feedback_text = get_audio_feedback(audio_path)
                 yield {
-                    feedback_btn: gr.update(value="Get Feedback", interactive=True),
+                    feedback_btn: gr.update(
+                        value="Get Feedback", interactive=True
+                    ),
                     feedback_output: feedback_text,
                 }
             except Exception as error:
                 yield {
-                    feedback_btn: gr.update(value="Get Feedback", interactive=True)
+                    feedback_btn: gr.update(
+                        value="Get Feedback", interactive=True
+                    )
                 }
                 raise gr.Error(str(error))
 
-        feedback_btn.click(feedback_ui, [feedback_input], [feedback_btn, feedback_output])
+        feedback_btn.click(
+            feedback_ui, [feedback_input], [feedback_btn, feedback_output]
+        )
 
         def instrument_id_ui(audio_path):
             yield {
-                instrument_id_btn: gr.update(value="Identifying...", interactive=False),
+                instrument_id_btn: gr.update(
+                    value="Identifying...", interactive=False
+                ),
                 instrument_id_output: "",
             }
             try:
@@ -826,18 +1061,24 @@ def launch_audio_app():
 
         def analysis_ui(audio_path):
             yield {
-                analysis_btn: gr.update(value="Analyzing...", interactive=False),
+                analysis_btn: gr.update(
+                    value="Analyzing...", interactive=False
+                ),
                 analysis_bpm_key_output: "",
             }
             try:
                 bpm_key = analyze_audio_features(audio_path)
                 yield {
-                    analysis_btn: gr.update(value="Analyze Audio", interactive=True),
+                    analysis_btn: gr.update(
+                        value="Analyze Audio", interactive=True
+                    ),
                     analysis_bpm_key_output: bpm_key,
                 }
             except Exception as error:
                 yield {
-                    analysis_btn: gr.update(value="Analyze Audio", interactive=True)
+                    analysis_btn: gr.update(
+                        value="Analyze Audio", interactive=True
+                    )
                 }
                 raise gr.Error(str(error))
 
@@ -857,13 +1098,17 @@ def launch_audio_app():
                 transcript = transcribe_audio(audio_path, language)
                 file_path = save_text_to_file(transcript)
                 yield {
-                    stt_btn: gr.update(value="Transcribe Audio", interactive=True),
+                    stt_btn: gr.update(
+                        value="Transcribe Audio", interactive=True
+                    ),
                     stt_output: transcript,
                     stt_file_output: gr.update(visible=True, value=file_path),
                 }
             except Exception as error:
                 yield {
-                    stt_btn: gr.update(value="Transcribe Audio", interactive=True)
+                    stt_btn: gr.update(
+                        value="Transcribe Audio", interactive=True
+                    )
                 }
                 raise gr.Error(str(error))
 
@@ -881,12 +1126,16 @@ def launch_audio_app():
             try:
                 spec_image = create_spectrum_visualization(audio_path)
                 yield {
-                    spec_btn: gr.update(value="Generate Spectrum", interactive=True),
+                    spec_btn: gr.update(
+                        value="Generate Spectrum", interactive=True
+                    ),
                     spec_output: spec_image,
                 }
             except Exception as error:
                 yield {
-                    spec_btn: gr.update(value="Generate Spectrum", interactive=True)
+                    spec_btn: gr.update(
+                        value="Generate Spectrum", interactive=True
+                    )
                 }
                 raise gr.Error(str(error))
 
@@ -912,7 +1161,9 @@ def launch_audio_app():
             return updates
 
         clear_enhancer_btn.click(
-            lambda: clear_ui(enhancer_input, enhancer_output, enhancer_output_box),
+            lambda: clear_ui(
+                enhancer_input, enhancer_output, enhancer_output_box
+            ),
             [],
             [enhancer_input, enhancer_output, enhancer_output_box],
         )
@@ -927,7 +1178,9 @@ def launch_audio_app():
             [m2a_input, m2a_output, m2a_output_box],
         )
         clear_extender_btn.click(
-            lambda: clear_ui(extender_input, extender_output, extender_output_box),
+            lambda: clear_ui(
+                extender_input, extender_output, extender_output_box
+            ),
             [],
             [extender_input, extender_output, extender_output_box],
         )
@@ -951,7 +1204,9 @@ def launch_audio_app():
             [instrument_id_input, instrument_id_output],
         )
         clear_video_gen_btn.click(
-            lambda: clear_ui(video_gen_audio, video_gen_output, video_gen_output_box),
+            lambda: clear_ui(
+                video_gen_audio, video_gen_output, video_gen_output_box
+            ),
             [],
             [video_gen_audio, video_gen_output, video_gen_output_box],
         )
@@ -976,17 +1231,26 @@ def launch_audio_app():
             [dj_files, dj_output, dj_output_box],
         )
         clear_gen_btn.click(
-            lambda: {**clear_ui(gen_output, gen_output_box), **{gen_prompt: ""}},
+            lambda: {
+                **clear_ui(gen_output, gen_output_box),
+                **{gen_prompt: ""},
+            },
             [],
             [gen_output, gen_output_box, gen_prompt],
         )
         clear_vg_btn.click(
-            lambda: {**clear_ui(vg_ref, vg_output, vg_output_box), **{vg_text: ""}},
+            lambda: {
+                **clear_ui(vg_ref, vg_output, vg_output_box),
+                **{vg_text: ""},
+            },
             [],
             [vg_ref, vg_output, vg_output_box, vg_text],
         )
         clear_analysis_btn.click(
-            lambda: {**clear_ui(analysis_input), **{analysis_bpm_key_output: ""}},
+            lambda: {
+                **clear_ui(analysis_input),
+                **{analysis_bpm_key_output: ""},
+            },
             [],
             [analysis_input, analysis_bpm_key_output],
         )
@@ -1001,13 +1265,17 @@ def launch_audio_app():
             [spec_input, spec_output],
         )
         clear_vis_btn.click(
-            lambda: clear_ui(vis_image_input, vis_audio_input, vis_output, vis_output_box),
+            lambda: clear_ui(
+                vis_image_input, vis_audio_input, vis_output, vis_output_box
+            ),
             [],
             [vis_image_input, vis_audio_input, vis_output, vis_output_box],
         )
         clear_lyric_btn.click(
             lambda: {
-                **clear_ui(lyric_audio, lyric_bg, lyric_output, lyric_output_box),
+                **clear_ui(
+                    lyric_audio, lyric_bg, lyric_output, lyric_output_box
+                ),
                 **{lyric_text: ""},
             },
             [],

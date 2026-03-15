@@ -3,7 +3,9 @@ import os
 from definers.persistence.database import Database
 
 
-def test_clean_keeps_latest_record_per_identifier_and_preserves_timestamps(tmp_path):
+def test_clean_keeps_latest_record_per_identifier_and_preserves_timestamps(
+    tmp_path,
+):
     database = Database(str(tmp_path))
 
     database.push("items", {"id": "1", "value": "old"}, timestamp=1_000)

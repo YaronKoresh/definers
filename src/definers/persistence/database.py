@@ -5,7 +5,6 @@ from datetime import datetime
 from time import time
 from typing import Any
 
-
 SECONDS_PER_DAY = 86400
 
 
@@ -173,7 +172,9 @@ class Database:
                 for db_name in db
             }
         full_history = self._get_history(db, days=days)
-        latest_items = self._latest_items_by_identifier(full_history, identifierKey)
+        latest_items = self._latest_items_by_identifier(
+            full_history, identifierKey
+        )
         filtered_results = list(latest_items.values())
         if filters:
             filtered_results = [
@@ -188,7 +189,9 @@ class Database:
         )
         return [item.data for item in sorted_results]
 
-    def clean(self, db: str | list[str] = "*", identifierKey: str = "id") -> None:
+    def clean(
+        self, db: str | list[str] = "*", identifierKey: str = "id"
+    ) -> None:
         if db == "*":
             for db_name in self._list_database_names():
                 self.clean(db_name, identifierKey)
@@ -198,7 +201,9 @@ class Database:
                 self.clean(db_name, identifierKey)
             return
         full_history = self._get_history(db)
-        latest_items = self._latest_items_by_identifier(full_history, identifierKey)
+        latest_items = self._latest_items_by_identifier(
+            full_history, identifierKey
+        )
         db_path = self._database_path(db)
         if os.path.isdir(db_path):
             shutil.rmtree(db_path)
