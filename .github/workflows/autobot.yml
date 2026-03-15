@@ -264,7 +264,7 @@ jobs:
             const prompt = [
               "You are an expert issue and pull request classifier.",
               "You will receive an AI-generated technical summary of code changes.",
-              `Based ONLY on the summary below, select up to ${MAX_AI_LABELS} of the most relevant labels from the allowed list.",
+              `Based ONLY on the summary below, select up to ${MAX_AI_LABELS} of the most relevant labels from the allowed list.`,
               "",
               "RULES:",
               `- Return at most ${MAX_AI_LABELS} labels, ordered from most to least relevant.`,
