@@ -7,31 +7,12 @@ from unittest import mock
 
 
 class TestSoxLazyImport(unittest.TestCase):
-    def setUp(self):
-
-        self._orig_import = importlib.import_module
-
-        def fake_import(name, package=None):
-            if name == "sox":
-                raise ImportError
-            return self._orig_import(name, package)
-
-        self._patcher = mock.patch(
-            "importlib.import_module", side_effect=fake_import
-        )
-        self._patcher.start()
-
     def tearDown(self):
-        if hasattr(self, "_patcher"):
-            self._patcher.stop()
         for name in ("sox", "definers"):
             if name in sys.modules:
                 del sys.modules[name]
 
     def test_import_with_missing_sox_module(self):
-        if "definers" in sys.modules:
-            del sys.modules["definers"]
-
         original_import = importlib.import_module
 
         def fake_import(name, package=None):
@@ -65,10 +46,28 @@ class TestSoxLazyImport(unittest.TestCase):
                 pass
 
     def test_import_again_after_failure(self):
+        original_import = importlib.import_module
 
-        import definers
+        def fake_import(name, package=None):
+            if name == "sox":
+                raise ImportError("Mocked SoX missing")
+            return original_import(name, package)
 
-        sys.modules["sox"] = mock.MagicMock()
-        importlib.reload(definers)
+        with mock.patch("importlib.import_module", side_effect=fake_import):
+            import definers
 
-        self.assertTrue(hasattr(definers.sox, "Transformer"))
+            importlib.reload(definers)
+
+        self.assertFalse(definers.has_sox())
+
+        cached_sox = mock.MagicMock()
+        sys.modules["sox"] = cached_sox
+
+        with mock.patch(
+            "importlib.import_module", side_effect=AssertionError
+        ) as mocked_import:
+            importlib.reload(definers)
+
+        self.assertTrue(definers.has_sox())
+        self.assertIs(definers.sox, cached_sox)
+        mocked_import.assert_not_called()

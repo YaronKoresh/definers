@@ -1,6 +1,6 @@
 import unittest
 
-from definers import path_name
+from definers.path_utils import path_name
 
 
 class TestPathName(unittest.TestCase):

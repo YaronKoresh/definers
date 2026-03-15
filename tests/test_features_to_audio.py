@@ -1,9 +1,27 @@
+import importlib.util
+import sys
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 
-from definers import features_to_audio
+
+def _load_module(module_name: str, module_path: Path):
+    spec = importlib.util.spec_from_file_location(module_name, module_path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
+ROOT = Path(__file__).resolve().parents[1]
+AUDIO_FEATURES_MODULE = _load_module(
+    "_test_features_to_audio_module",
+    ROOT / "src" / "definers" / "audio" / "features.py",
+)
+features_to_audio = AUDIO_FEATURES_MODULE.features_to_audio
 
 
 class TestFeaturesToAudio(unittest.TestCase):

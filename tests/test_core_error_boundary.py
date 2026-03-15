@@ -1,7 +1,7 @@
 import asyncio
 import logging
 
-from src.definers._core import CriticalSystemFailure, enforce_error_boundary
+from definers.core import CriticalSystemFailure, enforce_error_boundary
 
 
 @enforce_error_boundary
@@ -56,5 +56,5 @@ def test_enforce_error_boundary_preserves_function_name() -> None:
 
 
 def test_logger_pipeline_remains_accessible() -> None:
-    logger = logging.getLogger("src.definers._core")
+    logger = logging.getLogger("definers.core")
     assert isinstance(logger, logging.Logger)

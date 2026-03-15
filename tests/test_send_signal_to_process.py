@@ -1,9 +1,8 @@
-import os
 import signal
 import unittest
-from unittest.mock import call, patch
+from unittest.mock import patch
 
-from definers import send_signal_to_process
+from definers.system import send_signal_to_process
 
 
 class TestSendSignalToProcess(unittest.TestCase):

@@ -1,7 +1,7 @@
 import tempfile
 import unittest
 
-from definers import image_resolution
+from definers.media.image_helpers import image_resolution
 
 
 class TestImageResolution(unittest.TestCase):

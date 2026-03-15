@@ -1,6 +1,6 @@
 import unittest
 
-from definers import big_number
+from definers.system import big_number
 
 
 class TestBigNumber(unittest.TestCase):

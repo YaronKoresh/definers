@@ -1,6 +1,6 @@
 import unittest
 
-from definers import lang_code_to_name
+from definers.application_ml import lang_code_to_name
 
 
 class TestLangCodeToName(unittest.TestCase):

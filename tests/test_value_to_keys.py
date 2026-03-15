@@ -1,6 +1,6 @@
 import unittest
 
-from definers import value_to_keys
+from definers.audio import value_to_keys
 
 
 class TestValueToKeys(unittest.TestCase):

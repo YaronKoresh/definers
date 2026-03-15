@@ -1,7 +1,7 @@
 import re
 import unittest
 
-from definers import regex_utils
+import definers.regex_utils as regex_utils
 
 
 class TestRegexUtils(unittest.TestCase):

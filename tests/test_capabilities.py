@@ -2,7 +2,7 @@ import asyncio
 
 import pytest
 
-from src.definers._capabilities import (
+from definers.capabilities import (
     CircuitBreaker,
     CircuitBreakerOpenException,
     CircuitState,

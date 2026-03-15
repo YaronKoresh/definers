@@ -1,6 +1,6 @@
 import unittest
 
-from definers import is_ai_model
+from definers.system import is_ai_model
 
 
 class TestIsAiModel(unittest.TestCase):

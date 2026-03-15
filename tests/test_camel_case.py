@@ -1,6 +1,6 @@
 import pytest
 
-from definers._text import camel_case
+from definers.text import camel_case
 
 
 def test_camel_case_basic():

@@ -1,10 +1,14 @@
 import os
+from importlib import import_module
 from pathlib import Path
 
 import pytest
 
-from definers import git
-from definers._system import secure_path
+from definers.system import secure_path
+
+
+def ml_module():
+    return import_module("definers.ml")
 
 
 def test_sanitize_path_allows_and_rejects(tmp_path):
@@ -45,7 +49,7 @@ def test_sanitize_path_prevents_traversal(tmp_path):
 
 
 def test_git_branch_and_run_list(monkeypatch, tmp_path):
-    from definers import run
+    from definers.system import run
 
     calls = []
 
@@ -53,70 +57,58 @@ def test_git_branch_and_run_list(monkeypatch, tmp_path):
         calls.append(arg)
         return []
 
-    monkeypatch.setattr("definers._ml.run", fake_run)
+    monkeypatch.setattr("definers.ml.run", fake_run)
 
     os.environ["DEFINERS_TRUSTED_PATHS"] = str(tmp_path)
-    git("u", "r", branch="feature/x", parent=str(tmp_path))
+    ml_module().git("u", "r", branch="feature/x", parent=str(tmp_path))
     assert calls
     assert isinstance(calls[-1], list)
     assert calls[-1][0] == "git"
     assert "--branch" in calls[-1]
 
     with pytest.raises(ValueError):
-        git("u", "r", branch="bad;rm -rf /", parent=str(tmp_path))
+        ml_module().git("u", "r", branch="bad;rm -rf /", parent=str(tmp_path))
 
 
 def test_find_latest_checkpoint_untrusted(tmp_path):
-    from definers import find_latest_checkpoint
-
     base = tmp_path / "base"
     base.mkdir()
     os.environ["DEFINERS_TRUSTED_PATHS"] = str(tmp_path / "other")
-    assert find_latest_checkpoint(str(base), "model") is None
+    assert ml_module().find_latest_checkpoint(str(base), "model") is None
 
 
 def test_rvc_to_onnx_untrusted(tmp_path):
     pytest.importorskip("definers.configs")
-    from definers import rvc_to_onnx
-
     fake = tmp_path / "w.pth"
     fake.write_text("")
     os.environ["DEFINERS_TRUSTED_PATHS"] = str(tmp_path / "nothing")
-    assert rvc_to_onnx(str(fake)) is None
+    assert ml_module().rvc_to_onnx(str(fake)) is None
 
 
 def test_train_model_rvc_untrusted(tmp_path):
     pytest.importorskip("definers.configs")
-    from definers import train_model_rvc
-
     audio = tmp_path / "input.wav"
     audio.write_text("")
     os.environ["DEFINERS_TRUSTED_PATHS"] = str(tmp_path / "other")
-    assert train_model_rvc("exp", str(audio)) is None
+    assert ml_module().train_model_rvc("exp", str(audio)) is None
 
 
 def test_convert_vocal_rvc_untrusted(tmp_path):
     pytest.importorskip("definers.configs")
-    from definers import convert_vocal_rvc
-
     audio = tmp_path / "input.wav"
     audio.write_text("")
     os.environ["DEFINERS_TRUSTED_PATHS"] = str(tmp_path / "nothing")
-    assert convert_vocal_rvc("exp", str(audio)) is None
+    assert ml_module().convert_vocal_rvc("exp", str(audio)) is None
 
 
 def test_convert_vocal_rvc_missing_deps(tmp_path):
-    from definers import convert_vocal_rvc
-
     audio = tmp_path / "input.wav"
     audio.write_text("")
 
-    assert convert_vocal_rvc("exp", str(audio)) is None
+    assert ml_module().convert_vocal_rvc("exp", str(audio)) is None
 
 
 def test_sanitize_basename_and_experiment(tmp_path, capsys):
-    from definers import convert_vocal_rvc, export_files_rvc, train_model_rvc
-
     assert secure_path("abc_123", basename=True) == "abc_123"
 
     with pytest.raises(ValueError):
@@ -126,9 +118,14 @@ def test_sanitize_basename_and_experiment(tmp_path, capsys):
     with pytest.raises(ValueError):
         secure_path("", basename=True)
 
-    assert export_files_rvc("good") == [] or isinstance(
-        export_files_rvc("good"), list
+    assert ml_module().export_files_rvc("good") == [] or isinstance(
+        ml_module().export_files_rvc("good"), list
     )
-    assert export_files_rvc("../bad") == []
-    assert train_model_rvc("../bad", str(tmp_path / "foo.wav")) is None
-    assert convert_vocal_rvc("bad/name", str(tmp_path / "foo.wav")) is None
+    assert ml_module().export_files_rvc("../bad") == []
+    assert (
+        ml_module().train_model_rvc("../bad", str(tmp_path / "foo.wav")) is None
+    )
+    assert (
+        ml_module().convert_vocal_rvc("bad/name", str(tmp_path / "foo.wav"))
+        is None
+    )

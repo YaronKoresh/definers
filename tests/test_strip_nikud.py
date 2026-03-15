@@ -1,6 +1,6 @@
 import unittest
 
-from definers import strip_nikud
+from definers.text import strip_nikud
 
 
 class TestStripNikud(unittest.TestCase):

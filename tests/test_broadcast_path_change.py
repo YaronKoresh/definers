@@ -2,7 +2,7 @@ import sys
 import unittest
 from unittest.mock import MagicMock, patch
 
-from src.definers._web import broadcast_path_change
+from definers.media.web_transfer import broadcast_path_change
 
 
 class TestBroadcastPathChange(unittest.TestCase):

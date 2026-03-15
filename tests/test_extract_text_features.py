@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 
-from definers import extract_text_features
+from definers.application_ml.inference import extract_text_features
 
 
 class TestExtractTextFeatures(unittest.TestCase):

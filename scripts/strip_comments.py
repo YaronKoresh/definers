@@ -1,42 +1,67 @@
 import ast
 import io
 import pathlib
-import re
 import tokenize
 
 
-def remove_docstrings(source):
+def _is_string_docstring_statement(node: ast.stmt) -> bool:
+    if not isinstance(node, ast.Expr):
+        return False
+    value = node.value
+    if isinstance(value, ast.Str):
+        return True
+    return isinstance(value, ast.Constant) and isinstance(value.value, str)
+
+
+def remove_docstrings(source: str) -> str:
     try:
         tree = ast.parse(source)
-        docstring_positions = set()
+        source_lines = source.split("\n")
+        docstring_replacements: dict[int, tuple[int, list[str]]] = {}
 
         for node in ast.walk(tree):
-            if isinstance(node, (ast.FunctionDef, ast.ClassDef, ast.Module)):
-                if (
-                    node.body
-                    and isinstance(node.body[0], ast.Expr)
-                    and isinstance(node.body[0].value, (ast.Str, ast.Constant))
-                ):
+            if isinstance(
+                node,
+                (
+                    ast.AsyncFunctionDef,
+                    ast.ClassDef,
+                    ast.FunctionDef,
+                    ast.Module,
+                ),
+            ):
+                if node.body and _is_string_docstring_statement(node.body[0]):
                     stmt = node.body[0]
-                    docstring_positions.add((stmt.lineno, stmt.end_lineno))
+                    replacement: list[str] = []
+                    if len(node.body) == 1 and not isinstance(node, ast.Module):
+                        indent = source_lines[stmt.lineno - 1][
+                            : len(source_lines[stmt.lineno - 1])
+                            - len(source_lines[stmt.lineno - 1].lstrip())
+                        ]
+                        replacement = [f"{indent}pass"]
+                    docstring_replacements[stmt.lineno] = (
+                        stmt.end_lineno,
+                        replacement,
+                    )
 
-        lines = source.split("\n")
+        lines = source_lines
         result_lines = []
-        for i, line in enumerate(lines, 1):
-            skip = False
-            for start, end in docstring_positions:
-                if start <= i <= end:
-                    skip = True
-                    break
-            if not skip:
-                result_lines.append(line)
+        line_number = 1
+        while line_number <= len(lines):
+            replacement_info = docstring_replacements.get(line_number)
+            if replacement_info is None:
+                result_lines.append(lines[line_number - 1])
+                line_number += 1
+                continue
+            end_line, replacement_lines = replacement_info
+            result_lines.extend(replacement_lines)
+            line_number = end_line + 1
 
         return "\n".join(result_lines)
-    except:
+    except SyntaxError:
         return source
 
 
-def strip_comments_and_format(file_path):
+def strip_comments_and_format(file_path: pathlib.Path) -> None:
     try:
         with open(file_path, encoding="utf-8", newline="") as f:
             source = f.read()
@@ -72,9 +97,14 @@ def strip_comments_and_format(file_path):
 
         print(f"Stripped: {file_path}")
 
-    except Exception as e:
-        print(f"Failed {file_path}: {e}")
+    except (IndentationError, OSError, tokenize.TokenError) as error:
+        print(f"Failed {file_path}: {error}")
 
 
-for p in pathlib.Path(".").rglob("*.py"):
-    strip_comments_and_format(p)
+def main() -> None:
+    for path in pathlib.Path(".").rglob("*.py"):
+        strip_comments_and_format(path)
+
+
+if __name__ == "__main__":
+    main()

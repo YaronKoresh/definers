@@ -1,14 +1,13 @@
 import os
-import sys
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-from definers import install_audio_effects
+from definers.system import install_audio_effects
 
 
 class TestInstallAudioEffects(unittest.TestCase):
-    @patch("definers.get_os_name", return_value="linux")
-    @patch("definers.run")
+    @patch("definers.system.get_os_name", return_value="linux")
+    @patch("definers.system.run")
     @patch("builtins.print")
     def test_install_on_linux(self, mock_print, mock_run, mock_get_os):
         install_audio_effects()
@@ -26,12 +25,12 @@ class TestInstallAudioEffects(unittest.TestCase):
         )
         mock_print.assert_any_call("\nInstalling Python packages with pip...")
 
-    @patch("definers.get_os_name", return_value="windows")
-    @patch("os.path.exists", return_value=False)
+    @patch("definers.system.get_os_name", return_value="windows")
+    @patch("definers.system.exist", return_value=False)
     @patch("os.makedirs")
-    @patch("definers.download_and_unzip", return_value=True)
-    @patch("definers.download_file", return_value=True)
-    @patch("definers.add_to_path_windows")
+    @patch("definers.media.web_transfer.download_and_unzip", return_value=True)
+    @patch("definers.media.web_transfer.download_file", return_value=True)
+    @patch("definers.media.web_transfer.add_to_path_windows")
     @patch("os.listdir", return_value=["rubberband-dir", "fluidsynth-dir"])
     @patch.dict(os.environ, {"PATH": ""})
     @patch("builtins.print")
@@ -69,8 +68,8 @@ class TestInstallAudioEffects(unittest.TestCase):
             ),
         )
 
-    @patch("definers.get_os_name", return_value="windows")
-    @patch("os.path.exists", return_value=True)
+    @patch("definers.system.get_os_name", return_value="windows")
+    @patch("definers.system.exist", return_value=True)
     @patch.dict(os.environ, {"PATH": "C:\\rubberband;C:\\fluidsynth"})
     @patch("builtins.print")
     def test_install_on_windows_already_installed(
@@ -79,7 +78,7 @@ class TestInstallAudioEffects(unittest.TestCase):
         install_audio_effects()
         mock_print.assert_any_call("\nInstalling Python packages with pip...")
 
-    @patch("definers.get_os_name", return_value="darwin")
+    @patch("definers.system.get_os_name", return_value="darwin")
     @patch("builtins.print")
     def test_unsupported_os(self, mock_print, mock_get_os):
         install_audio_effects()

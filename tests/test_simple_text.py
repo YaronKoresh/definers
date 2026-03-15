@@ -1,6 +1,6 @@
 import unittest
 
-from definers import simple_text
+from definers.text import simple_text
 
 
 class TestSimpleText(unittest.TestCase):
@@ -55,7 +55,7 @@ class TestSimpleText(unittest.TestCase):
         self.assertEqual(simple_text(prompt), expected)
 
     def test_too_long_raises(self):
-        from definers._constants import MAX_INPUT_LENGTH
+        from definers.constants import MAX_INPUT_LENGTH
 
         prompt = "a" * (MAX_INPUT_LENGTH + 1)
         with self.assertRaises(ValueError):

@@ -1,6 +1,6 @@
 import unittest
 
-from definers import random_string
+from definers.text import random_string
 
 
 class TestRandomString(unittest.TestCase):

@@ -4,7 +4,7 @@ import unittest
 from queue import Queue
 from unittest.mock import Mock
 
-from definers import thread, wait
+from definers.system import thread, wait
 
 
 class TestWait(unittest.TestCase):

@@ -2,7 +2,7 @@ import os
 import tempfile
 import unittest
 
-from definers import compress
+from definers.system import compress
 
 
 class TestCompress(unittest.TestCase):

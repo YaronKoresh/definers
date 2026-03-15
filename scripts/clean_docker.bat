@@ -1,15 +1,26 @@
 @echo off
+setlocal EnableExtensions EnableDelayedExpansion
 
 echo [+] Stopping all running containers...
-for /f %%i in ('docker ps -aq') do docker stop %%i
+set "has_containers="
+for /f %%i in ('docker ps -aq 2^>nul') do (
+	set "has_containers=1"
+	docker stop %%i
+)
+if not defined has_containers echo [i] No containers found.
 
 echo.
 echo [+] Removing all containers...
-for /f %%i in ('docker ps -aq') do docker rm %%i
+for /f %%i in ('docker ps -aq 2^>nul') do docker rm %%i
 
 echo.
 echo [+] Removing all images...
-for /f %%i in ('docker images -aq') do docker rmi -f %%i
+set "has_images="
+for /f %%i in ('docker images -aq 2^>nul') do (
+	set "has_images=1"
+	docker rmi -f %%i
+)
+if not defined has_images echo [i] No images found.
 
 pause
-exit /B 0
+exit /B %ERRORLEVEL%

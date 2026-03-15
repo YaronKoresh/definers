@@ -3,26 +3,23 @@ from __future__ import annotations
 import re
 from re import Pattern
 
-MAX_PATTERN_LENGTH = 1000
-
-
-_NESTED_QUANTIFIER_RE = re.compile(r"\([^()+*]*[+*][^()]*\)[+*]")
+from definers.constants import MAX_PATTERN_LENGTH, NESTED_QUANTIFIER_RE
 
 
 def escape(text: str) -> str:
     return re.escape(text)
 
 
-def _check_complexity(pattern: str) -> None:
+def check_complexity(pattern: str) -> None:
     if len(pattern) > MAX_PATTERN_LENGTH:
         raise ValueError(f"regex pattern too long ({len(pattern)} characters)")
 
-    if _NESTED_QUANTIFIER_RE.search(pattern):
+    if NESTED_QUANTIFIER_RE.search(pattern):
         raise ValueError("regex pattern contains nested quantifiers")
 
 
 def compile(pattern: str, flags: int = 0) -> Pattern:
-    _check_complexity(pattern)
+    check_complexity(pattern)
     return re.compile(pattern, flags)
 
 

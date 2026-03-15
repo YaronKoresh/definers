@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from definers import is_package_path
+from definers.path_utils import is_package_path
 
 
 class TestIsPackagePath(unittest.TestCase):

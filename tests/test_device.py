@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from definers import device
+from definers.cuda import device
 
 
 class TestDevice(unittest.TestCase):

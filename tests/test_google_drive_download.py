@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from definers import google_drive_download
+from definers.media.web_transfer import google_drive_download
 
 
 class TestGoogleDriveDownload(unittest.TestCase):

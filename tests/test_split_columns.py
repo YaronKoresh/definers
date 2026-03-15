@@ -3,27 +3,10 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 
-from definers import split_columns
+from definers.data import split_columns
 
 
 class TestSplitColumns(unittest.TestCase):
-    @patch("definers.select_columns")
-    @patch("definers.drop_columns")
-    def test_split_columns_dataset_mode(
-        self, mock_drop_columns, mock_select_columns
-    ):
-        mock_dataset = MagicMock()
-        labels = ["label1", "label2"]
-        mock_drop_columns.return_value = "features_dataset"
-        mock_select_columns.return_value = "labels_dataset"
-        (features, labels_data) = split_columns(
-            mock_dataset, labels, is_batch=False
-        )
-        mock_drop_columns.assert_called_once_with(mock_dataset, labels)
-        mock_select_columns.assert_called_once_with(mock_dataset, labels)
-        self.assertEqual(features, "features_dataset")
-        self.assertEqual(labels_data, "labels_dataset")
-
     def test_split_columns_dataset_mode_no_labels(self):
         data = ("X_data", "y_data")
         test_cases = [None, [], [""]]

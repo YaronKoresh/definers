@@ -7,7 +7,8 @@ from unittest.mock import patch
 import numpy as np
 import torch
 
-from definers import LinearRegressionTorch, predict_linear_regression
+from definers import system as runtime_system
+from definers.ml import LinearRegressionTorch, predict_linear_regression
 
 
 class TestPredictLinearRegression(unittest.TestCase):
@@ -23,7 +24,9 @@ class TestPredictLinearRegression(unittest.TestCase):
 
     def test_successful_prediction(self):
         X_new = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32)
-        with patch("definers._system.secure_path", side_effect=lambda x: x):
+        with patch.object(
+            runtime_system, "secure_path", side_effect=lambda x: x
+        ):
             predictions = predict_linear_regression(X_new, self.model_path)
         self.assertIsNotNone(predictions)
         self.assertIsInstance(predictions, np.ndarray)
@@ -32,30 +35,48 @@ class TestPredictLinearRegression(unittest.TestCase):
     def test_model_file_not_found(self):
         non_existent_path = os.path.join(self.test_dir, "non_existent.pth")
         X_new = np.array([[1.0, 2.0]], dtype=np.float32)
-        with patch("definers._system.secure_path", side_effect=lambda x: x):
+        with patch.object(
+            runtime_system, "secure_path", side_effect=lambda x: x
+        ):
             predictions = predict_linear_regression(X_new, non_existent_path)
         self.assertIsNone(predictions)
 
     def test_input_dimension_mismatch(self):
         X_new = np.array([[1.0, 2.0, 3.0]], dtype=np.float32)
-        with patch("definers._system.secure_path", side_effect=lambda x: x):
+        with patch.object(
+            runtime_system, "secure_path", side_effect=lambda x: x
+        ):
             predictions = predict_linear_regression(X_new, self.model_path)
         self.assertIsNone(predictions)
 
     def test_empty_input(self):
         X_new = np.empty((0, self.input_dim), dtype=np.float32)
-        with patch("definers._system.secure_path", side_effect=lambda x: x):
+        with patch.object(
+            runtime_system, "secure_path", side_effect=lambda x: x
+        ):
             predictions = predict_linear_regression(X_new, self.model_path)
         self.assertIsNotNone(predictions)
         self.assertEqual(predictions.shape, (0,))
 
     def test_single_prediction(self):
         X_new = np.array([[5.0, 6.0]], dtype=np.float32)
-        with patch("definers._system.secure_path", side_effect=lambda x: x):
+        with patch.object(
+            runtime_system, "secure_path", side_effect=lambda x: x
+        ):
             predictions = predict_linear_regression(X_new, self.model_path)
         self.assertIsNotNone(predictions)
         self.assertIsInstance(predictions, np.ndarray)
         self.assertEqual(predictions.shape, (1,))
+
+    def test_rejected_model_path(self):
+        X_new = np.array([[5.0, 6.0]], dtype=np.float32)
+        with patch.object(
+            runtime_system,
+            "secure_path",
+            side_effect=ValueError("blocked path"),
+        ):
+            predictions = predict_linear_regression(X_new, self.model_path)
+        self.assertIsNone(predictions)
 
 
 if __name__ == "__main__":

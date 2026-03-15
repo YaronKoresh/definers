@@ -3,7 +3,7 @@ import shutil
 import tempfile
 import unittest
 
-from definers import directory
+from definers.platform.filesystem import directory
 
 
 class TestDirectory(unittest.TestCase):

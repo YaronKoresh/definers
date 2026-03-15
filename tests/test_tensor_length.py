@@ -2,7 +2,7 @@ import unittest
 
 import torch
 
-from definers import tensor_length
+from definers.data import tensor_length
 
 
 class TestTensorLength(unittest.TestCase):

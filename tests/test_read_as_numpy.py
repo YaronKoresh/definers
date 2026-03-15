@@ -4,7 +4,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from definers import read_as_numpy
+import definers.application_data.loaders as loaders_module
+from definers.data import read_as_numpy
 
 
 class TestReadAsNumpy(unittest.TestCase):
@@ -17,7 +18,7 @@ class TestReadAsNumpy(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.test_dir)
 
-    @patch("definers.load_as_numpy")
+    @patch.object(loaders_module, "load_as_numpy")
     def test_read_as_numpy_calls_load_as_numpy(self, mock_load_as_numpy):
         expected_result = "mocked_numpy_array"
         mock_load_as_numpy.return_value = expected_result

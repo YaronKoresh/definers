@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 
 import numpy as np
 
-from definers import get_cluster_content
+from definers.application_ml import get_cluster_content
 
 
 class TestGetClusterContent(unittest.TestCase):

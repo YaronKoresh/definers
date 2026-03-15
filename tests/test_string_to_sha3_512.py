@@ -1,6 +1,6 @@
 import unittest
 
-from definers import string_to_sha3_512
+from definers.text import string_to_sha3_512
 
 
 class TestStringToSha3512(unittest.TestCase):

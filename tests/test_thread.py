@@ -1,8 +1,7 @@
-import time
 import unittest
 from unittest.mock import MagicMock
 
-from definers import thread
+from definers.system import thread
 
 
 class TestThread(unittest.TestCase):

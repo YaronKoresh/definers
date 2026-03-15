@@ -3,14 +3,14 @@ import io
 import zipfile
 from pathlib import Path
 
-from src.definers._capabilities import CircuitBreaker
-from src.definers._web import (
+from definers.capabilities import CircuitBreaker
+from definers.media.web_transfer import (
     HttpChunkedTransferStrategy,
     ResourceRetrievalOrchestrator,
     ZipExtractTransferStrategy,
-    _execute_async_operation,
-    download_file,
+    execute_async_operation,
 )
+from definers.web import download_file
 
 
 class FlakyTransferStrategy:
@@ -87,7 +87,7 @@ def test_orchestrator_open_circuit_blocks_subsequent_call() -> None:
 def test_execute_async_operation_inside_running_loop() -> None:
 
     async def probe() -> int:
-        return _execute_async_operation(asyncio.sleep(0, result=42))
+        return execute_async_operation(asyncio.sleep(0, result=42))
 
     assert asyncio.run(probe()) == 42
 

@@ -1,6 +1,7 @@
 @echo off
+setlocal EnableExtensions
 
-cd %~dp0..
+cd /d "%~dp0.."
 
 set "INSTALL_GROUP="
 echo.
@@ -12,9 +13,8 @@ echo   4. video     - Video processing
 echo   5. ml        - Machine learning
 echo   6. nlp       - Natural language processing
 echo   7. web       - Web scraping and UI
-echo   8. gpu       - GPU support
-echo   9. all       - All optional groups
-echo   10. cuda     - CUDA acceleration (requires CUDA Toolkit)
+echo   8. all       - All optional groups, except "dev" and "cuda"
+echo   9. cuda     - CUDA acceleration (requires CUDA Toolkit)
 echo.
 echo You can combine groups with commas, e.g.: dev,audio,ml
 echo.
@@ -22,7 +22,8 @@ set /p "INSTALL_GROUP= Enter groups to install (default: dev): "
 
 if "%INSTALL_GROUP%"=="" set "INSTALL_GROUP=dev"
 
-call pip install -e ".[%INSTALL_GROUP%]" --extra-index-url https://pypi.nvidia.com
+call python -m pip install -e ".[%INSTALL_GROUP%]" --extra-index-url https://pypi.nvidia.com
+if errorlevel 1 exit /B %ERRORLEVEL%
 call poe hook
 
 pause

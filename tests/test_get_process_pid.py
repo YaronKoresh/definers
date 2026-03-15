@@ -2,7 +2,7 @@ import subprocess
 import unittest
 from unittest.mock import patch
 
-from definers import get_process_pid
+from definers.system import get_process_pid
 
 
 class TestGetProcessPid(unittest.TestCase):

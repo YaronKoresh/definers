@@ -2,11 +2,11 @@ import unittest
 
 import numpy as np
 
-import definers._data as _data
+import definers.data as data
 
-_data.np = np
-_data._np = np
-from definers import guess_numpy_type
+data.np = np
+data._np = np
+from definers.data import guess_numpy_type
 
 
 class TestGuessNumpyType(unittest.TestCase):

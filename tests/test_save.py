@@ -3,7 +3,7 @@ import shutil
 import tempfile
 import unittest
 
-from definers import read, save
+from definers.platform.filesystem import read, save
 
 
 class TestSave(unittest.TestCase):

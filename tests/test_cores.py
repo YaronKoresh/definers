@@ -1,7 +1,7 @@
 import multiprocessing
 import unittest
 
-from definers import cores
+from definers.system import cores
 
 
 class TestCores(unittest.TestCase):

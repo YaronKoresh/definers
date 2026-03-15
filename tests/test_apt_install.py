@@ -1,13 +1,13 @@
 import unittest
 from unittest.mock import call, patch
 
-from definers import apt_install
+from definers.system import apt_install
 
 
 class TestAptInstall(unittest.TestCase):
-    @patch("definers.run")
-    @patch("definers.post_install")
-    @patch("definers.pre_install")
+    @patch("definers.system.run")
+    @patch("definers.system.post_install")
+    @patch("definers.system.pre_install")
     def test_apt_install_calls_all_stages(
         self, mock_pre_install, mock_post_install, mock_run
     ):
