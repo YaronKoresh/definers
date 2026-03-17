@@ -9,13 +9,13 @@ from definers.platform.filesystem import exist
 from definers.platform.paths import full_path, tmp
 
 
-def _is_audio_segment(audio_signal) -> bool:
+def is_audio_segment(audio_signal) -> bool:
     return hasattr(audio_signal, "export") and hasattr(
         audio_signal, "frame_rate"
     )
 
 
-def _run_ffmpeg(command: list[str]):
+def run_ffmpeg(command: list[str]):
     import subprocess
 
     try:
@@ -43,8 +43,9 @@ def save_audio(
     sample_rate: int = 44100,
     output_format: str = "mp3",
     *,
-    audio_bit_depth: int = 32,
-    audio_bitrate: int = 320,
+    bit_depth: int = 32,
+    bitrate: int = 320,
+    compression_level: int = 9,
 ) -> None:
     import pydub
     import soundfile as sf
@@ -53,8 +54,23 @@ def save_audio(
     ext = output_format.lower()
     final_path = f"{base_path}.{ext}"
 
-    if hasattr(audio_signal, "export"):
-        audio_signal.export(final_path, format=ext, bitrate=f"{audio_bitrate}k")
+    lossy_params = [
+        "-compression_level",
+        str(compression_level),
+        "-b:a",
+        f"{bitrate}k",
+    ]
+
+    if is_audio_segment(audio_signal):
+        if ext == "wav":
+            audio_signal.export(final_path, format=ext)
+        else:
+            audio_signal.export(
+                final_path,
+                format=ext,
+                bitrate=f"{bitrate}k",
+                parameters=lossy_params,
+            )
         return final_path
 
     if audio_signal.ndim == 2 and audio_signal.shape[0] < 10:
@@ -62,7 +78,7 @@ def save_audio(
 
     if ext == "wav":
         subtype = {16: "PCM_16", 32: "FLOAT", 64: "DOUBLE"}.get(
-            audio_bit_depth, "FLOAT"
+            bit_depth, "FLOAT"
         )
         sf.write(
             final_path,
@@ -79,7 +95,12 @@ def save_audio(
         sf.write(buffer, audio_signal, sample_rate, format="WAV")
         buffer.seek(0)
         song = pydub.AudioSegment.from_wav(buffer)
-        song.export(final_path, format=ext, bitrate=f"{audio_bitrate}k")
+        song.export(
+            final_path,
+            format=ext,
+            bitrate=f"{bitrate}k",
+            parameters=lossy_params,
+        )
 
     return final_path
 
@@ -151,7 +172,7 @@ def split_audio(
 
 
 def remove_silence(input_file: str, output_file: str):
-    return _run_ffmpeg(
+    return run_ffmpeg(
         [
             "ffmpeg",
             "-y",
@@ -167,7 +188,7 @@ def remove_silence(input_file: str, output_file: str):
 
 
 def compact_audio(input_file: str, output_file: str):
-    return _run_ffmpeg(
+    return run_ffmpeg(
         [
             "ffmpeg",
             "-y",

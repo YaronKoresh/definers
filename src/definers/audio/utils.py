@@ -69,8 +69,16 @@ def apply_rms(y: np.ndarray, rms: float):
     return y
 
 
-def get_lufs(y: np.ndarray) -> np.ndarray:
+def get_lufs(y: np.ndarray, sr: int) -> float:
     from scipy import signal
+
+    y_array = np.asarray(y, dtype=np.float64)
+    if y_array.ndim == 0:
+        y_array = y_array.reshape(1)
+    if y_array.size == 0 or not np.isfinite(sr) or sr <= 0:
+        return -70.0
+
+    y_array = np.nan_to_num(y_array, nan=0.0, posinf=0.0, neginf=0.0)
 
     b1, a1 = (
         [1.5309096471, -2.6511690392, 1.1691662955],
@@ -78,48 +86,94 @@ def get_lufs(y: np.ndarray) -> np.ndarray:
     )
     b2, a2 = [1.0, -2.0, 1.0], [1.0, -1.9900474541, 0.9900722501]
 
-    y_filt = signal.lfilter(b1, a1, y, axis=-1)
+    y_filt = signal.lfilter(b1, a1, y_array, axis=-1)
     y_filt = signal.lfilter(b2, a2, y_filt, axis=-1)
 
-    win_size = 4
-    hop_size = 1
+    win_size = max(int(sr * 0.4), 1)
+    hop_size = max(int(sr * 0.1), 1)
 
     if y_filt.ndim > 1:
-        y_sq = np.sum(y_filt**2, axis=0)
-        n_samples = y_filt.shape[1]
+        sum_axes = tuple(range(y_filt.ndim - 1))
+        y_sq = np.sum(np.square(y_filt, dtype=np.float64), axis=sum_axes)
+        n_samples = y_filt.shape[-1]
     else:
-        y_sq = y_filt**2
+        y_sq = np.square(y_filt, dtype=np.float64)
         n_samples = len(y_sq)
 
-    shape = ((n_samples - win_size) // hop_size + 1, win_size)
-    strides = (y_sq.strides[0] * hop_size, y_sq.strides[0])
-    y_strided = np.lib.stride_tricks.as_strided(
-        y_sq, shape=shape, strides=strides
-    )
-    ms = np.mean(y_strided, axis=-1)
+    if n_samples == 0:
+        return -70.0
 
-    abs_threshold = 10.0 ** (-70.0 / 10.0)
+    if n_samples < win_size:
+        ms = np.array(
+            [float(np.mean(y_sq, dtype=np.float64))], dtype=np.float64
+        )
+    else:
+        y_windows = np.lib.stride_tricks.sliding_window_view(y_sq, win_size)[
+            ::hop_size
+        ]
+        if y_windows.size == 0:
+            ms = np.array(
+                [float(np.mean(y_sq, dtype=np.float64))], dtype=np.float64
+            )
+        else:
+            ms = np.mean(y_windows, axis=-1, dtype=np.float64)
+
+    ms = np.nan_to_num(ms, nan=0.0, posinf=0.0, neginf=0.0)
+
+    abs_threshold = 10.0 ** ((-70.0 + 0.691) / 10.0)
     ms_gated = ms[ms > abs_threshold]
 
     if len(ms_gated) == 0:
-        return y
+        return -70.0
 
-    gamma_rel = 0.1 * np.mean(ms_gated)
+    gamma_rel = max(
+        0.1 * float(np.mean(ms_gated, dtype=np.float64)), abs_threshold
+    )
     ms_final = ms_gated[ms_gated > gamma_rel]
 
-    loudness_ms = np.mean(ms_final) if len(ms_final) > 0 else np.mean(ms_gated)
+    loudness_ms = float(
+        np.mean(ms_final, dtype=np.float64)
+        if len(ms_final) > 0
+        else np.mean(ms_gated, dtype=np.float64)
+    )
+
+    if not np.isfinite(loudness_ms) or loudness_ms <= 0.0:
+        return -70.0
 
     current_lufs = -0.691 + 10.0 * np.log10(np.maximum(loudness_ms, 1e-12))
 
-    return current_lufs
+    return float(current_lufs)
 
 
-def apply_lufs(y: np.ndarray, target_lufs: float) -> np.ndarray:
-    current_lufs = get_lufs(y)
-    gain_lin = 10.0 ** ((target_lufs - current_lufs) / 20.0)
-    out = y * gain_lin
+def adjust_final_output_lufs(
+    y: np.ndarray, sr: int, target_lufs: float
+) -> np.ndarray:
+    y_array = np.asarray(y)
+    if y_array.ndim == 0:
+        y_array = y_array.reshape(1)
 
-    return out
+    finite_y = np.nan_to_num(y_array, nan=0.0, posinf=0.0, neginf=0.0)
+    if finite_y.size == 0 or not np.isfinite(sr) or sr <= 0:
+        return finite_y
+    if not np.isfinite(target_lufs):
+        return finite_y
+
+    current_lufs = get_lufs(finite_y, sr)
+    if not np.isfinite(current_lufs):
+        return finite_y
+
+    gain_db = float(np.clip(target_lufs - current_lufs, -60.0, 60.0))
+    gain_lin = float(10.0 ** (gain_db / 20.0))
+    if not np.isfinite(gain_lin):
+        return finite_y
+
+    out = finite_y * gain_lin
+
+    return np.nan_to_num(out, nan=0.0, posinf=0.0, neginf=0.0)
+
+
+def apply_lufs(y: np.ndarray, sr: int, target_lufs: float) -> np.ndarray:
+    return adjust_final_output_lufs(y, sr, target_lufs)
 
 
 def calculate_active_rms(
@@ -234,7 +288,7 @@ def compute_gain_envelope(
 
 
 def loudness_maximizer(
-    signal: np.ndarray, threshold: float = -1.0
+    signal: np.ndarray, threshold: float = -0.1
 ) -> np.ndarray:
     max_value = np.max(np.abs(signal))
     if max_value == 0:

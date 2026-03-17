@@ -1,52 +1,31 @@
 from __future__ import annotations
 
 import numpy as np
-from scipy.signal import butter, lfilter
 
-from .dsp import resample
+from ..file_ops import log
 
 
 def freq_cut(
-    y: np.ndarray, sr: int, low_cut: int | None, high_cut: int | None
+    y: np.ndarray, sr: int, low_cut: float | None, high_cut: float | None
 ) -> np.ndarray:
     y = np.asarray(y, dtype=np.float64)
-    original_length = y.shape[-1]
 
-    if y.ndim > 1:
-        for i in range(y.shape[0]):
-            y[i] -= np.mean(y[i])
-    else:
-        y -= np.mean(y)
+    y = y - np.mean(y, axis=-1, keepdims=True)
 
-    original_length = y.shape[-1]
+    n = y.shape[-1]
+    freqs = np.fft.rfftfreq(n, d=1.0 / sr)
+    y_fft = np.fft.rfft(y, axis=-1)
 
-    if high_cut:
-        target_high_sr = high_cut * 2
-
-        y_high_cut_resampled = resample(y, target_high_sr)
-        y_main = resample(y_high_cut_resampled, sr)
-
-        if y_main.shape[-1] > original_length:
-            y = y_main[..., :original_length]
-        elif y_main.shape[-1] < original_length:
-            pad_width = original_length - y_main.shape[-1]
-            y = np.pad(y_main, (*((0, 0),) * (y_main.ndim - 1), (0, pad_width)))
+    mask = np.ones_like(freqs)
 
     if low_cut:
-        target_low_sr = low_cut * 2
+        mask[freqs < low_cut] = 0.0
 
-        y_low_only_resampled = resample(y, target_low_sr)
-        y_low_reconstructed = resample(y_low_only_resampled, sr)
+    if high_cut:
+        mask[freqs > high_cut] = 0.0
 
-        if y_low_reconstructed.shape[-1] > original_length:
-            y_low_reconstructed = y_low_reconstructed[..., :original_length]
-        elif y_low_reconstructed.shape[-1] < original_length:
-            pad_width = original_length - y_low_reconstructed.shape[-1]
-            y_low_reconstructed = np.pad(
-                y_low_reconstructed,
-                (*((0, 0),) * (y_low_reconstructed.ndim - 1), (0, pad_width)),
-            )
+    y_filtered_fft = y_fft * mask
 
-        y -= y_low_reconstructed
+    y_res = np.fft.irfft(y_filtered_fft, n=n, axis=-1)
 
-    return y
+    return np.ascontiguousarray(y_res)

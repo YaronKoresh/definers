@@ -1,49 +1,49 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 
 import numpy as np
 
 
 @dataclass
 class SmartMasteringConfig:
-    num_bands: int = 16
+    num_bands: int = 6
     intensity: float = 1.0
 
-    bass_ratio: float = 1.5
+    bass_ratio: float = 2.4
     bass_attack_ms: float = 10.0
-    bass_release_ms: float = 140.0
-    bass_threshold_db: float = -25.0
+    bass_release_ms: float = 160.0
+    bass_threshold_db: float = -23.0
 
-    treb_ratio: float = 2.0
-    treb_attack_ms: float = 0.1
-    treb_release_ms: float = 40.0
-    treb_threshold_db: float = -15.0
+    treb_ratio: float = 1.9
+    treb_attack_ms: float = 0.001
+    treb_release_ms: float = 14.0
+    treb_threshold_db: float = -17.0
 
-    sample_rate: int | None = None
-    resampling_target: int = 96000
+    resampling_target: int = 44100
 
     target_lufs: float = -9.0
 
     slope_db: float = 3.0
-    slope_hz: float = 1000.0
+    slope_hz: float = 320.0
 
-    smoothing_fraction: float = 1.0 / 3.0
+    phase_type: str = "minimal"
+
+    anchors: list[list[float]] | None = None
+
+    smoothing_fraction: float = 1.0 / 4.0
 
     correction_strength: float = 1.0
 
-    low_cut: int | None = None
-    high_cut: int | None = None
-
-    phase_type: str = "linear"
+    low_cut: float | None = None
+    high_cut: float | None = None
 
     drive_db: float = 1.0
-    ceil_db: float = -0.3
+    ceil_db: float | None = -1.0
 
     @classmethod
     def make_bands_from_fcs(
-        cls, fcs: list[float], freq_min: int, freq_max: int
+        cls, fcs: list[float], freq_min: float, freq_max: float
     ) -> list[dict]:
         if not fcs:
             return []
@@ -77,8 +77,8 @@ class SmartMasteringConfig:
         makeups = np.zeros_like(fcs_arr, dtype=float)
 
         ratios = 1.0 + (ratios - 1.0) * cls.intensity
-        attacks *= 1.0 - 0.5 * cls.intensity
-        releases *= 1.0 + 0.5 * cls.intensity
+        attacks *= cls.intensity
+        releases *= cls.intensity
 
         knees = np.full_like(fcs, 6.0, dtype=float)
 

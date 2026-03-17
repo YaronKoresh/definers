@@ -21,9 +21,16 @@ AUDIO_ROOT = ROOT / "src" / "definers" / "audio"
 
 
 def _load_mastering_module(package_name: str):
+    parent_name, _, _ = package_name.rpartition(".")
+
     for name in list(sys.modules):
         if name == package_name or name.startswith(f"{package_name}."):
             del sys.modules[name]
+
+    if parent_name:
+        parent_package = types.ModuleType(parent_name)
+        parent_package.__path__ = [str(ROOT / "src" / "definers")]
+        sys.modules[parent_name] = parent_package
 
     package = types.ModuleType(package_name)
     package.__path__ = [str(AUDIO_ROOT)]
@@ -35,6 +42,7 @@ def _load_mastering_module(package_name: str):
     sys.modules[f"{package_name}.dsp"] = types.SimpleNamespace(
         decoupled_envelope=lambda x, *_: np.zeros_like(x),
         limiter_smooth_env=lambda x, *_: x,
+        remove_spectral_spikes=lambda y, *_: y,
         resample=lambda y, *_: y,
     )
     sys.modules[f"{package_name}.effects"] = types.SimpleNamespace(
@@ -46,6 +54,17 @@ def _load_mastering_module(package_name: str):
     sys.modules[f"{package_name}.filters"] = types.SimpleNamespace(
         freq_cut=lambda y, *_, **__: y,
     )
+    sys.modules[f"{package_name}.utils"] = types.SimpleNamespace(
+        apply_lufs=lambda y, *_, **__: y,
+        generate_bands=lambda start, stop, count: np.geomspace(
+            float(start), float(stop), int(count)
+        ).tolist(),
+        stereo_widen=lambda y, *_, **__: y,
+    )
+    if parent_name:
+        sys.modules[f"{parent_name}.file_ops"] = types.SimpleNamespace(
+            log=lambda *_, **__: None,
+        )
     mastering_module = _load_module(
         f"{package_name}.mastering", AUDIO_ROOT / "mastering.py"
     )
@@ -53,7 +72,7 @@ def _load_mastering_module(package_name: str):
 
 
 CONFIG_MODULE, MASTERING_MODULE = _load_mastering_module(
-    "_test_audio_mastering_generation_pkg"
+    "_test_audio_mastering_generation_pkg.audio"
 )
 
 
@@ -90,7 +109,7 @@ def test_slope_property_triggers_band_refresh(monkeypatch: pytest.MonkeyPatch):
         MASTERING_MODULE.SmartMastering, "update_bands", fake_update_bands
     )
 
-    mastering = MASTERING_MODULE.SmartMastering()
+    mastering = MASTERING_MODULE.SmartMastering(8000, resampling_target=8000)
     update_calls.clear()
 
     mastering.slope_db = 6.0

@@ -12,9 +12,10 @@ from .dsp import (
     decoupled_envelope,
     limiter_smooth_env,
     process_audio_chunks,
+    remove_spectral_spikes,
     resample,
 )
-from .effects.exciter import apply_exciter, calculate_dynamic_cutoff
+from .effects.exciter import apply_exciter
 from .effects.mixing import dj_mix, mix_audio, pad_audio, stereo
 from .features import (
     extract_audio_features,
@@ -26,12 +27,13 @@ from .filters import freq_cut
 from .io import (
     compact_audio,
     export_to_pkl,
+    is_audio_segment,
     read_audio,
     remove_silence,
     save_audio,
     split_audio,
 )
-from .mastering import SmartMastering, master
+from .mastering import AudioEqualizer, SmartMastering, master
 from .preview import audio_preview, get_audio_duration
 from .production import (
     audio_to_midi,
@@ -71,6 +73,8 @@ from .utils import (
 )
 
 __all__ = [
+    "is_audio_segment",
+    "AudioEqualizer",
     "stereo_widen",
     "get_rms",
     "apply_rms",
@@ -80,7 +84,7 @@ __all__ = [
     "analyze_audio_features",
     "beat_visualizer",
     "apply_exciter",
-    "calculate_dynamic_cutoff",
+    "remove_spectral_spikes",
     "decoupled_envelope",
     "detect_silence_mask",
     "dj_mix",
