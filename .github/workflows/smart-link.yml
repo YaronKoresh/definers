@@ -26,6 +26,48 @@ jobs:
             const explicitCloses = [];
             const strongConnects = [];
             const relatedPrs = [];
+            const trustedAssociations = new Set(["MEMBER", "OWNER", "COLLABORATOR"]);
+            const isForkSource = pr.head?.repo?.full_name !== `${owner}/${repo}`;
+            if (isForkSource && !trustedAssociations.has(pr.author_association || "NONE")) return;
+
+            const maxCandidateLinks = 25;
+            const scannedText = `${title}\n${(body || "").slice(0, 80000)}`;
+
+            const pushBounded = (target, value) => {
+              const normalized = Number.parseInt(String(value), 10);
+              if (!Number.isFinite(normalized) || normalized <= 0) return;
+              if (target.length >= maxCandidateLinks) return;
+              target.push(normalized);
+            };
+
+            const directiveRegex = /\b(close[sd]?|fix(?:e[sd])?|resolve[sd]?|connect(?:s|ed|ing)?|relate(?:s|d|ing)?|reference[sd]?|see|depend(?:s|ed|ing)?(?:\s+on)?)\s+(?:to\s+|on\s+)?(?:(?<repo>[a-z0-9_.-]+\/[a-z0-9_.-]+))?#(?<id>\d+)\b/g;
+            for (const match of scannedText.matchAll(directiveRegex)) {
+              const refRepo = match.groups?.repo;
+              if (refRepo && refRepo.toLowerCase() !== `${owner}/${repo}`.toLowerCase()) continue;
+              const directive = (match[1] || "").toLowerCase();
+              const id = match.groups?.id;
+              if (directive.startsWith("close") || directive.startsWith("fix") || directive.startsWith("resolve")) {
+              pushBounded(explicitCloses, id);
+              } else if (directive.startsWith("connect") || directive.startsWith("relate") || directive.startsWith("depend")) {
+              pushBounded(strongConnects, id);
+              } else {
+              pushBounded(relatedPrs, id);
+              }
+            }
+
+            const prReferenceRegex = /\b(?:pull\s*request|pr)\s*(?:(?<repo>[a-z0-9_.-]+\/[a-z0-9_.-]+))?#(?<id>\d+)\b/g;
+            for (const match of scannedText.matchAll(prReferenceRegex)) {
+              const refRepo = match.groups?.repo;
+              if (refRepo && refRepo.toLowerCase() !== `${owner}/${repo}`.toLowerCase()) continue;
+              pushBounded(relatedPrs, match.groups?.id);
+            }
+
+            const genericRefRegex = /(?:(?<repo>[a-z0-9_.-]+\/[a-z0-9_.-]+))?#(?<id>\d+)\b/g;
+            for (const match of scannedText.matchAll(genericRefRegex)) {
+              const refRepo = match.groups?.repo;
+              if (refRepo && refRepo.toLowerCase() !== `${owner}/${repo}`.toLowerCase()) continue;
+              pushBounded(strongConnects, match.groups?.id);
+            }
 
             const branchIds = branch.match(/(?:^|\/|[a-z]-)(\d+)/g);
             if (branchIds) {
@@ -134,3 +176,270 @@ jobs:
                 body: newBody
               });
             }
+            const crypto = require("crypto");
+
+            const normalizeIds = (values) =>
+              [...new Set(values.map((value) => Number.parseInt(String(value), 10)).filter((value) => Number.isFinite(value) && value > 0))].sort((a, b) => a - b);
+
+            const closesSet = new Set(normalizeIds(finalCloses));
+            const connectsSet = new Set(normalizeIds(finalConnects));
+            const relatedSet = new Set(normalizeIds(finalRelatedPrs));
+
+            const allTargetIds = normalizeIds([...closesSet, ...connectsSet, ...relatedSet]).filter((id) => id !== pr.number);
+            if (allTargetIds.length === 0) return;
+
+            const runLimited = async (items, limit, worker) => {
+              const output = [];
+              let cursor = 0;
+              const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+              while (cursor < items.length) {
+                const index = cursor;
+                cursor += 1;
+                output[index] = await worker(items[index]);
+              }
+              });
+              await Promise.all(runners);
+              return output;
+            };
+
+            const targetDetails = await runLimited(allTargetIds, 8, async (id) => {
+              try {
+              const { data } = await github.rest.issues.get({
+                owner,
+                repo,
+                issue_number: id
+              });
+              return {
+                id,
+                exists: true,
+                isPullRequest: Boolean(data.pull_request),
+                state: String(data.state || "unknown").toLowerCase(),
+                title: String(data.title || ""),
+                updatedAt: data.updated_at || null
+              };
+              } catch (error) {
+              return {
+                id,
+                exists: false,
+                isPullRequest: false,
+                state: "unknown",
+                title: "",
+                updatedAt: null
+              };
+              }
+            });
+
+            const keywordSet = new Set(prKeywords);
+            const scoreTarget = (target) => {
+              const semantics = [];
+              if (closesSet.has(target.id)) semantics.push("close");
+              if (connectsSet.has(target.id)) semantics.push("connect");
+              if (relatedSet.has(target.id)) semantics.push("related");
+              const semanticsWeight = semantics.includes("close") ? 0.76 : semantics.includes("connect") ? 0.61 : 0.46;
+              const titleWords = tokenizer(target.title.toLowerCase());
+              const overlapCount = titleWords.filter((word) => keywordSet.has(word)).length;
+              const overlapWeight = Math.min(0.24, overlapCount * 0.08);
+              const ageDays = target.updatedAt ? (Date.now() - Date.parse(target.updatedAt)) / 86400000 : 9999;
+              const recencyWeight = ageDays <= 7 ? 0.14 : ageDays <= 30 ? 0.08 : 0.03;
+              const validityWeight = target.exists ? 0.09 : -0.2;
+              const rawScore = semanticsWeight + overlapWeight + recencyWeight + validityWeight;
+              const confidence = Math.max(0, Math.min(0.99, rawScore));
+              return {
+              ...target,
+              semantics: semantics.join("+"),
+              confidence
+              };
+            };
+
+            const rankedTargets = targetDetails
+              .map(scoreTarget)
+              .filter((target) => target.exists)
+              .sort((a, b) => (b.confidence === a.confidence ? a.id - b.id : b.confidence - a.confidence))
+              .slice(0, 20);
+
+            if (rankedTargets.length === 0) return;
+
+            const rows = rankedTargets.map((target) => {
+              const kind = target.isPullRequest ? "PR" : "Issue";
+              const confidence = (target.confidence * 100).toFixed(1) + "%";
+              const semantics = target.semantics || "related";
+              return `| #${target.id} | ${kind} | ${target.state} | ${confidence} | ${semantics} |`;
+            });
+
+            const digestPayload = rankedTargets.map((target) => `${target.id}:${target.state}:${target.semantics}:${target.confidence.toFixed(6)}`).join("|");
+            const digest = crypto.createHash("sha256").update(digestPayload).digest("hex").slice(0, 20);
+
+            const intelligenceBlock = [
+              "<!-- smart-autolinker:start -->",
+              "### Smart Link Intelligence",
+              "",
+              "| Target | Kind | State | Confidence | Semantics |",
+              "|---|---|---|---:|---|",
+              ...rows,
+              "",
+              `Integrity Fingerprint: \`${digest}\``,
+              "<!-- smart-autolinker:end -->"
+            ].join("\n");
+
+            const latestPr = await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: pr.number
+            });
+
+            const latestBody = String(latestPr.data.body || "");
+            const blockRegex = /<!-- smart-autolinker:start -->[\s\S]*?<!-- smart-autolinker:end -->/g;
+            const bodyWithoutOldBlock = latestBody.replace(blockRegex, "").trimEnd();
+            const updatedBody = `${bodyWithoutOldBlock}\n\n${intelligenceBlock}`.trim();
+
+            if (updatedBody !== latestBody) {
+              await github.rest.pulls.update({
+              owner,
+              repo,
+              pull_number: pr.number,
+              body: updatedBody
+              });
+            }
+            const mermaidGraph = [];
+            mermaidGraph.push("graph TD");
+            mermaidGraph.push(`    PR${pr.number}["PR #${pr.number}<br/>${pr.title.replace(/"/g, '&quot;')}"]`);
+            mermaidGraph.push(`    style PR${pr.number} fill:#9f7,stroke:#333,stroke-width:2px`);
+
+            const connectionStyles = {
+              close: "-->|Closes|",
+              connect: "-.->|Connects|",
+              related: "-.->|Related|",
+            };
+
+            const nodeStyles = {
+              open_issue: "fill:#f9f,stroke:#333,stroke-width:2px",
+              closed_issue: "fill:#ccc,stroke:#333,stroke-width:2px",
+              open_pr: "fill:#9cf,stroke:#333,stroke-width:2px",
+              merged_pr: "fill:#c9f,stroke:#333,stroke-width:2px",
+            };
+
+            const processedNodes = new Set([`PR${pr.number}`]);
+
+            for (const target of rankedTargets) {
+              const targetType = target.isPullRequest ? "pr" : "issue";
+              const targetNodeId = `${targetType.toUpperCase()}${target.id}`;
+
+              if (!processedNodes.has(targetNodeId)) {
+                processedNodes.add(targetNodeId);
+                const nodeLabel = `"${targetType.toUpperCase()} #${target.id}<br/>${target.title.replace(/"/g, '&quot;')}"`;
+                mermaidGraph.push(`    ${targetNodeId}[${nodeLabel}]`);
+
+                let styleKey = `${target.state}_${targetType}`;
+                if (target.state === "closed" && target.isPullRequest) {
+                   styleKey = "merged_pr";
+                }
+                if (nodeStyles[styleKey]) {
+                   mermaidGraph.push(`    style ${targetNodeId} ${nodeStyles[styleKey]}`);
+                }
+              }
+
+              let connectionType = "related";
+              if (closesSet.has(target.id)) connectionType = "close";
+              else if (connectsSet.has(target.id)) connectionType = "connect";
+
+              const connection = connectionStyles[connectionType] || connectionStyles.related;
+              mermaidGraph.push(`    PR${pr.number} ${connection} ${targetNodeId}`);
+            }
+
+            if (mermaidGraph.length > 3) {
+              const graphCommentIdentifier = `<!-- smart-link-graph-comment:${digest} -->`;
+
+              const commentBody = `### Relationship Graph\n\n\`\`\`mermaid\n${mermaidGraph.join("\n")}\n\`\`\`\n${graphCommentIdentifier}`;
+
+              const { data: comments } = await github.rest.issues.listComments({
+                owner,
+                repo,
+                issue_number: pr.number,
+              });
+
+              const existingComment = comments.find(comment => comment.body.includes(graphCommentIdentifier));
+
+              if (!existingComment) {
+                const oldGraphComment = comments.find(comment => comment.user.login === "github-actions[bot]" && comment.body.includes("### Relationship Graph"));
+                if (oldGraphComment) {
+                  await github.rest.issues.updateComment({
+                    owner,
+                    repo,
+                    comment_id: oldGraphComment.id,
+                    body: commentBody,
+                  });
+                } else {
+                  await github.rest.issues.createComment({
+                    owner,
+                    repo,
+                    issue_number: pr.number,
+                    body: commentBody,
+                  });
+                }
+              }
+            }
+            const checksConclusion = {
+              SUCCESS: "success",
+              FAILURE: "failure",
+              NEUTRAL: "neutral",
+            };
+
+            async function createDependencyCheck() {
+              let conclusion = checksConclusion.SUCCESS;
+              let title = "All dependency links are valid and actionable.";
+              const summary = [];
+
+              const closingTargets = rankedTargets.filter(target => closesSet.has(target.id));
+
+              if (closingTargets.length > 0) {
+                const nonexistent = closingTargets.filter(t => !t.exists);
+                const alreadyClosed = closingTargets.filter(t => t.exists && t.state !== "open");
+
+                if (nonexistent.length > 0) {
+                conclusion = checksConclusion.FAILURE;
+                title = "Invalid dependency references found.";
+                summary.push(`🔴 **Action Required:** This PR attempts to resolve non-existent issues: ${nonexistent.map(t => `#${t.id}`).join(", ")}.`);
+                }
+
+                if (alreadyClosed.length > 0) {
+                conclusion = conclusion === checksConclusion.FAILURE ? checksConclusion.FAILURE : checksConclusion.NEUTRAL;
+                if (title.startsWith("All")) title = "Redundant dependency links found.";
+                summary.push(`🟡 **Warning:** This PR references issues that are already closed: ${alreadyClosed.map(t => `#${t.id} (${t.state})`).join(", ")}.`);
+                }
+
+                if (conclusion === checksConclusion.SUCCESS) {
+                summary.push(`✅ All ${closingTargets.length} issues targeted for closure are valid and in an 'open' state.`);
+                }
+              } else {
+                conclusion = checksConclusion.NEUTRAL;
+                title = "No closing dependencies to validate.";
+                summary.push("ℹ️ No issues were marked with closing keywords (e.g., 'closes', 'fixes'). The dependency check is neutral.");
+              }
+
+              const allTargetsCount = new Set(rankedTargets.map(t => t.id)).size;
+              summary.push(`\n---\n*A total of ${allTargetsCount} related items were analyzed.*`);
+
+              try {
+                await github.rest.checks.create({
+                owner,
+                repo,
+                name: "Smart Link Dependency Integrity",
+                head_sha: pr.head.sha,
+                status: "completed",
+                conclusion: conclusion,
+                output: {
+                  title: title,
+                  summary: summary.join("\n"),
+                },
+                });
+              } catch (error) {
+                if (error.status === 403) {
+                core.warning("Could not create a dependency status check. Please ensure the workflow has `checks: write` permissions.");
+                } else {
+                core.error(`Failed to create dependency status check: ${error.message}`);
+                throw error;
+                }
+              }
+            }
+
+            await createDependencyCheck();
