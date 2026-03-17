@@ -40,17 +40,16 @@ class TestRunLinux(unittest.TestCase):
     @patch.object(processes.subprocess, "Popen")
     def test_run_linux_with_env(self, mock_popen):
         mock_proc = MagicMock()
-        mock_proc.communicate.return_value = ("test_value\n", "")
+        mock_proc.communicate.return_value = ("hello\n", "")
         mock_proc.returncode = 0
         mock_popen.return_value = mock_proc
+
         if sys.platform.startswith("win"):
             self.skipTest("Linux-specific test")
+
         custom_env = {"MY_VAR": "test_value"}
-        run_linux(
-            ["/bin/sh", "-lc", 'printf %s "$MY_VAR"'],
-            silent=True,
-            env=custom_env,
-        )
+        run_linux(["echo", "hello"], silent=True, env=custom_env)
+
         (_, called_kwargs) = mock_popen.call_args
         self.assertEqual(called_kwargs["env"], {**os.environ, **custom_env})
 

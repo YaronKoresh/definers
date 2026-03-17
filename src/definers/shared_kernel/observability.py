@@ -75,16 +75,18 @@ def log_message(
     now = datetime.now().time()
     payload = str(data)
 
+    print("   \n" + "-" * 30 + "\n")
+
     if status is True:
-        active_logger.info(f"[{now}] SUCCESS - {subject}\n{payload}")
+        active_logger.info(f"[{now}] SUCCESS - {subject}\n\n{payload}")
         return
     if status is False:
-        active_logger.error(f"[{now}] ERROR - {subject}\n{payload}")
+        active_logger.error(f"[{now}] ERROR - {subject}\n\n{payload}")
         return
     if isinstance(status, str) and status.strip():
-        active_logger.info(f"[{now}] {status.strip()} - {subject}\n{payload}")
+        active_logger.info(f"[{now}] {status.strip()} - {subject}\n\n{payload}")
         return
-    active_logger.info(f"[{now}] {subject}\n{payload}")
+    active_logger.info(f"[{now}] {subject}\n\n{payload}")
 
 
 def catch_exception(
@@ -93,8 +95,11 @@ def catch_exception(
     message: str | None = None,
     reraise: bool = False,
 ) -> None:
+
+    print("   \n" + "-" * 30 + "\n")
+
     if message:
-        active_logger.error(message)
+        active_logger.error(str(message))
     if isinstance(error, BaseException):
         active_logger.exception(error)
     else:
