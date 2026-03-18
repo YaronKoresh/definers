@@ -137,7 +137,7 @@ cuda = [
     "cudf-cu12==26.2.1",
     "cuml-cu12==26.2.0",
     "cupy-cuda12x==14.0.1",
-    "dask[complete]==2026.1.2",
+    "dask[complete]==2026.3.0",
     "dask-cuda==26.2.0",
     "dask-cudf-cu12==26.2.1",
     "distributed==2026.1.2",
