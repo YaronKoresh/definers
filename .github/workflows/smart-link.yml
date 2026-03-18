@@ -2,36 +2,204 @@ name: Smart Auto-Linker
 
 on:
   pull_request:
-    types: [opened, edited]
+    types: [opened, edited, synchronize, reopened]
 
 permissions:
   issues: read
   pull-requests: write
+  models: read
+  checks: write
 
 jobs:
   link-relationships:
     runs-on: ubuntu-latest
     steps:
+      - name: Build AI Link Prompt
+        id: build-ai-prompt
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require("fs");
+            const { owner, repo } = context.repo;
+            const pr = context.payload.pull_request;
+            const trustedAssociations = new Set(["MEMBER", "OWNER", "COLLABORATOR"]);
+            const isForkSource = pr.head?.repo?.full_name !== `${owner}/${repo}`;
+            if (isForkSource && !trustedAssociations.has(pr.author_association || "NONE")) {
+              core.setOutput("ready", "false");
+              return;
+            }
+
+            const title = String(pr.title || "").toLowerCase();
+            const body = String(pr.body || "").toLowerCase();
+            const scannedText = `${title}\n${body.slice(0, 90000)}`;
+            const stopWords = [
+              "fix", "fixed", "fixes", "fixing", "bug", "bugs", "issue", "issues",
+              "feat", "feature", "features", "add", "added", "adding", "new",
+              "chore", "docs", "doc", "documentation", "style", "refactor", "perf",
+              "test", "tests", "update", "updated", "updating", "upgrade",
+              "change", "changed", "changing", "improve", "improved", "improving",
+              "optimize", "optimized", "optimizing", "bump", "deploy", "release",
+              "merge", "revert", "build", "ci", "cd", "remove", "removed", "delete",
+              "and", "or", "for", "to", "in", "at", "on", "with", "by", "the", "a", "an",
+              "is", "it", "as", "be", "of", "that", "this", "from", "which"
+            ];
+            const tokenizer = (text) => text
+              .replace(/[^\w\s-]/g, " ")
+              .split(/\s+/)
+              .filter((w) => w && !stopWords.includes(w) && w.length > 2);
+            const prKeywords = tokenizer(title);
+
+            const explicitIds = new Set();
+            const genericRefRegex = /(?:(?<repo>[a-z0-9_.-]+\/[a-z0-9_.-]+))?#(?<id>\d+)\b/g;
+            for (const match of scannedText.matchAll(genericRefRegex)) {
+              const refRepo = match.groups?.repo;
+              if (refRepo && refRepo.toLowerCase() !== `${owner}/${repo}`.toLowerCase()) continue;
+              const id = Number.parseInt(String(match.groups?.id || "0"), 10);
+              if (Number.isFinite(id) && id > 0) explicitIds.add(id);
+            }
+
+            const candidateMap = new Map();
+            const addCandidate = (item, source) => {
+              if (!item || !Number.isFinite(item.number) || item.number <= 0 || item.number === pr.number) return;
+              const existing = candidateMap.get(item.number);
+              const next = {
+                id: item.number,
+                kind: item.pull_request ? "pr" : "issue",
+                title: String(item.title || ""),
+                state: String(item.state || "unknown"),
+                labels: (item.labels || []).map((label) => typeof label === "string" ? label : label.name).filter(Boolean),
+                updatedAt: item.updated_at || null,
+                url: item.html_url || "",
+                sources: new Set(existing?.sources || [])
+              };
+              next.sources.add(source);
+              candidateMap.set(item.number, next);
+            };
+
+            for (const id of explicitIds) {
+              try {
+                const { data } = await github.rest.issues.get({ owner, repo, issue_number: id });
+                addCandidate(data, "explicit");
+              } catch (e) {}
+            }
+
+            if (prKeywords.length > 0) {
+              const keywordQuery = prKeywords.slice(0, 6).join(" ");
+              try {
+                const issues = await github.rest.search.issuesAndPullRequests({
+                  q: `repo:${owner}/${repo} state:open is:issue ${keywordQuery}`,
+                  sort: "relevance",
+                  per_page: 20
+                });
+                for (const item of issues.data.items || []) addCandidate(item, "search-issue");
+              } catch (e) {}
+              try {
+                const prs = await github.rest.search.issuesAndPullRequests({
+                  q: `repo:${owner}/${repo} state:open is:pr ${keywordQuery} -number:${pr.number}`,
+                  sort: "relevance",
+                  per_page: 20
+                });
+                for (const item of prs.data.items || []) addCandidate(item, "search-pr");
+              } catch (e) {}
+            }
+
+            try {
+              const recent = await github.rest.issues.listForRepo({ owner, repo, state: "open", sort: "updated", direction: "desc", per_page: 30 });
+              for (const item of recent.data || []) addCandidate(item, "recent");
+            } catch (e) {}
+
+            const candidates = [...candidateMap.values()]
+              .map((candidate) => ({ ...candidate, sources: [...candidate.sources] }))
+              .sort((a, b) => {
+                const explicitBias = Number(b.sources.includes("explicit")) - Number(a.sources.includes("explicit"));
+                if (explicitBias !== 0) return explicitBias;
+                return String(b.updatedAt || "").localeCompare(String(a.updatedAt || ""));
+              })
+              .slice(0, 80);
+
+            if (candidates.length === 0) {
+              core.setOutput("ready", "false");
+              return;
+            }
+
+            const prompt = [
+              "You are selecting relationship links for one pull request.",
+              "Return ONLY JSON, with no markdown or explanation.",
+              "Only use candidate IDs listed below. Do not invent IDs.",
+              "Prefer precision over recall.",
+              "Use high confidence for explicit references and strong semantic matches.",
+              "Use lower confidence when evidence is weak.",
+              "",
+              "Output schema:",
+              "{",
+              "  \"closes\": [{\"id\": 123, \"confidence\": 0.0, \"reason\": \"...\"}],",
+              "  \"connects\": [{\"id\": 123, \"confidence\": 0.0, \"reason\": \"...\"}],",
+              "  \"related\": [{\"id\": 123, \"confidence\": 0.0, \"reason\": \"...\"}]",
+              "}",
+              "",
+              "Rules:",
+              "- closes: only when the PR very likely resolves the item.",
+              "- connects: strong dependency or implementation relationship.",
+              "- related: looser thematic relation.",
+              "- Max 8 closes, 12 connects, 12 related.",
+              "- A candidate can appear in multiple lists only if strongly justified.",
+              "",
+              "PULL REQUEST:",
+              `Number: ${pr.number}`,
+              `Title: ${pr.title || ""}`,
+              `Branch: ${pr.head?.ref || ""}`,
+              "Body:",
+              String(pr.body || "").slice(0, 15000),
+              "",
+              "CANDIDATES:",
+              candidates.map((candidate) => {
+                return [
+                  `#${candidate.id}`,
+                  `kind=${candidate.kind}`,
+                  `state=${candidate.state}`,
+                  `title=${candidate.title}`,
+                  `labels=${candidate.labels.join(",") || "(none)"}`,
+                  `sources=${candidate.sources.join(",") || "(none)"}`
+                ].join(" | ");
+              }).join("\n")
+            ].join("\n");
+
+            fs.writeFileSync("/tmp/smart_link_prompt.txt", prompt);
+            core.setOutput("ready", "true");
+      - name: AI Suggest Relationships
+        if: steps.build-ai-prompt.outputs.ready == 'true'
+        id: ai-links
+        uses: actions/ai-inference@v2
+        with:
+          model: openai/gpt-4o
+          prompt-file: /tmp/smart_link_prompt.txt
+          max-completion-tokens: 1200
       - name: Analyze and Link
+        env:
+          AI_LINKS_RAW: ${{ steps.ai-links.outputs.response }}
         uses: actions/github-script@v8
         with:
           script: |
             const { owner, repo } = context.repo;
             const pr = context.payload.pull_request;
-            const branch = pr.head.ref;
-            const title = pr.title.toLowerCase();
-            const body = pr.body ? pr.body.toLowerCase() : "";
+            const branch = String(pr.head.ref || "");
+            const title = String(pr.title || "").toLowerCase();
+            const body = pr.body ? String(pr.body).toLowerCase() : "";
+            const aiLinksRaw = process.env.AI_LINKS_RAW || "";
 
             const unique = (arr) => [...new Set(arr)];
             const explicitCloses = [];
             const strongConnects = [];
             const relatedPrs = [];
+            const aiCloseCandidates = [];
+            const aiConnectCandidates = [];
+            const aiRelatedCandidates = [];
             const trustedAssociations = new Set(["MEMBER", "OWNER", "COLLABORATOR"]);
             const isForkSource = pr.head?.repo?.full_name !== `${owner}/${repo}`;
             if (isForkSource && !trustedAssociations.has(pr.author_association || "NONE")) return;
 
-            const maxCandidateLinks = 25;
-            const scannedText = `${title}\n${(body || "").slice(0, 80000)}`;
+            const maxCandidateLinks = 30;
+            const scannedText = `${title}\n${(body || "").slice(0, 90000)}`;
 
             const pushBounded = (target, value) => {
               const normalized = Number.parseInt(String(value), 10);
@@ -40,6 +208,41 @@ jobs:
               target.push(normalized);
             };
 
+            const parseAiLinks = (raw) => {
+              if (!raw) return { closes: [], connects: [], related: [] };
+              const cleaned = raw.replace(/```json\s*/gi, "").replace(/```\s*/gi, "").trim();
+              try {
+                const parsed = JSON.parse(cleaned);
+                const toList = (value) => Array.isArray(value) ? value : [];
+                return {
+                  closes: toList(parsed.closes),
+                  connects: toList(parsed.connects),
+                  related: toList(parsed.related)
+                };
+              } catch (e) {
+                return { closes: [], connects: [], related: [] };
+              }
+            };
+
+            const normalizeAiItems = (items, minConfidence) => items
+              .map((item) => {
+                if (typeof item === "number") return { id: item, confidence: 0.8 };
+                if (typeof item === "string") return { id: Number.parseInt(item, 10), confidence: 0.8 };
+                return {
+                  id: Number.parseInt(String(item?.id || 0), 10),
+                  confidence: Number(item?.confidence || 0)
+                };
+              })
+              .filter((item) => Number.isFinite(item.id) && item.id > 0 && Number.isFinite(item.confidence) && item.confidence >= minConfidence);
+
+            const aiLinks = parseAiLinks(aiLinksRaw);
+            const aiCloses = normalizeAiItems(aiLinks.closes, 0.75);
+            const aiConnects = normalizeAiItems(aiLinks.connects, 0.62);
+            const aiRelated = normalizeAiItems(aiLinks.related, 0.55);
+            for (const item of aiCloses) pushBounded(aiCloseCandidates, item.id);
+            for (const item of aiConnects) pushBounded(aiConnectCandidates, item.id);
+            for (const item of aiRelated) pushBounded(aiRelatedCandidates, item.id);
+
             const directiveRegex = /\b(close[sd]?|fix(?:e[sd])?|resolve[sd]?|connect(?:s|ed|ing)?|relate(?:s|d|ing)?|reference[sd]?|see|depend(?:s|ed|ing)?(?:\s+on)?)\s+(?:to\s+|on\s+)?(?:(?<repo>[a-z0-9_.-]+\/[a-z0-9_.-]+))?#(?<id>\d+)\b/g;
             for (const match of scannedText.matchAll(directiveRegex)) {
               const refRepo = match.groups?.repo;
@@ -47,11 +250,11 @@ jobs:
               const directive = (match[1] || "").toLowerCase();
               const id = match.groups?.id;
               if (directive.startsWith("close") || directive.startsWith("fix") || directive.startsWith("resolve")) {
-              pushBounded(explicitCloses, id);
+                pushBounded(explicitCloses, id);
               } else if (directive.startsWith("connect") || directive.startsWith("relate") || directive.startsWith("depend")) {
-              pushBounded(strongConnects, id);
+                pushBounded(strongConnects, id);
               } else {
-              pushBounded(relatedPrs, id);
+                pushBounded(relatedPrs, id);
               }
             }
 
@@ -71,132 +274,79 @@ jobs:
 
             const branchIds = branch.match(/(?:^|\/|[a-z]-)(\d+)/g);
             if (branchIds) {
-              branchIds.forEach(id => {
-                const num = id.replace(/\D/g, '');
+              branchIds.forEach((id) => {
+                const num = id.replace(/\D/g, "");
                 if (num) explicitCloses.push(num);
               });
             }
 
-            const stopWords = [
-              'fix', 'fixed', 'fixes', 'fixing', 'bug', 'bugs', 'issue', 'issues',
-              'feat', 'feature', 'features', 'add', 'added', 'adding', 'new',
-              'chore', 'docs', 'doc', 'documentation', 'style', 'refactor', 'perf',
-              'test', 'tests', 'update', 'updated', 'updating', 'upgrade',
-              'change', 'changed', 'changing', 'improve', 'improved', 'improving',
-              'optimize', 'optimized', 'optimizing', 'bump', 'deploy', 'release',
-              'merge', 'revert', 'build', 'ci', 'cd', 'remove', 'removed', 'delete',
-              'and', 'or', 'for', 'to', 'in', 'at', 'on', 'with', 'by', 'the', 'a', 'an',
-              'is', 'it', 'as', 'be', 'of', 'that', 'this', 'from', 'which'
-            ];
+            aiCloseCandidates.forEach((id) => pushBounded(explicitCloses, id));
+            aiConnectCandidates.forEach((id) => pushBounded(strongConnects, id));
+            aiRelatedCandidates.forEach((id) => pushBounded(relatedPrs, id));
 
-            const tokenizer = (text) => text.replace(/[^\w\s-]/g, '').split(/\s+/).filter(w => !stopWords.includes(w) && w.length > 2);
+            const stopWords = [
+              "fix", "fixed", "fixes", "fixing", "bug", "bugs", "issue", "issues",
+              "feat", "feature", "features", "add", "added", "adding", "new",
+              "chore", "docs", "doc", "documentation", "style", "refactor", "perf",
+              "test", "tests", "update", "updated", "updating", "upgrade",
+              "change", "changed", "changing", "improve", "improved", "improving",
+              "optimize", "optimized", "optimizing", "bump", "deploy", "release",
+              "merge", "revert", "build", "ci", "cd", "remove", "removed", "delete",
+              "and", "or", "for", "to", "in", "at", "on", "with", "by", "the", "a", "an",
+              "is", "it", "as", "be", "of", "that", "this", "from", "which"
+            ];
+            const tokenizer = (text) => text.replace(/[^\w\s-]/g, "").split(/\s+/).filter((w) => !stopWords.includes(w) && w.length > 2);
             const prKeywords = tokenizer(title);
 
             if (prKeywords.length > 0) {
-              const query = `repo:${owner}/${repo} state:open ${prKeywords.slice(0, 4).join(' ')}`;
+              const query = `repo:${owner}/${repo} state:open ${prKeywords.slice(0, 5).join(" ")}`;
 
               try {
                 const issues = await github.rest.search.issuesAndPullRequests({
                   q: `${query} is:issue`,
-                  sort: 'relevance',
-                  per_page: 5
+                  sort: "relevance",
+                  per_page: 10
                 });
 
-                issues.data.items.forEach(issue => {
-                  const issueWords = tokenizer(issue.title.toLowerCase());
-                  const intersection = prKeywords.filter(w => issueWords.includes(w));
-
+                issues.data.items.forEach((issue) => {
+                  const issueWords = tokenizer(String(issue.title || "").toLowerCase());
+                  const intersection = prKeywords.filter((w) => issueWords.includes(w));
                   const score = intersection.length;
                   const isVeryRelevant = score >= 2 || (prKeywords.length < 3 && score >= 1);
-
-                  if (isVeryRelevant) {
-                    strongConnects.push(issue.number);
-                  }
+                  if (isVeryRelevant) strongConnects.push(issue.number);
                 });
 
                 const prs = await github.rest.search.issuesAndPullRequests({
                   q: `${query} is:pr -id:${pr.id}`,
-                  sort: 'relevance',
-                  per_page: 5
+                  sort: "relevance",
+                  per_page: 10
                 });
 
-                prs.data.items.forEach(p => {
-                  if (p.number === pr.number) return;
-                  const pWords = tokenizer(p.title.toLowerCase());
-                  const intersection = prKeywords.filter(w => pWords.includes(w));
-                  if (intersection.length >= 2) {
-                    relatedPrs.push(p.number);
-                  }
+                prs.data.items.forEach((item) => {
+                  if (item.number === pr.number) return;
+                  const pWords = tokenizer(String(item.title || "").toLowerCase());
+                  const intersection = prKeywords.filter((w) => pWords.includes(w));
+                  if (intersection.length >= 2) relatedPrs.push(item.number);
                 });
-
               } catch (e) {}
             }
 
             const finalCloses = unique(explicitCloses);
-            const finalConnects = unique(strongConnects.filter(id => !finalCloses.includes(id.toString())));
+            const finalConnects = unique(strongConnects.filter((id) => !finalCloses.includes(id.toString())));
             const finalRelatedPrs = unique(relatedPrs);
-
-            if (finalCloses.length === 0 && finalConnects.length === 0 && finalRelatedPrs.length === 0) return;
-
-            let newBody = context.payload.pull_request.body || "";
-            let hasUpdates = false;
-
-            if (finalCloses.length > 0) {
-               const links = finalCloses.map(id => `Closes #${id}`);
-               const missing = links.filter(l => !newBody.includes(l));
-               if (missing.length > 0) {
-                 newBody += `\n\n${missing.join(', ')}`;
-                 hasUpdates = true;
-               }
-            }
-
-            if (finalConnects.length > 0) {
-               const links = finalConnects.map(id => `#${id}`);
-               const missing = links.filter(l => !newBody.includes(l));
-               if (missing.length > 0) {
-                 newBody += `\nConnects to ${missing.join(', ')}`;
-                 hasUpdates = true;
-               }
-            }
-
-            if (finalRelatedPrs.length > 0) {
-               const links = finalRelatedPrs.map(id => `#${id}`);
-               const missing = links.filter(l => !newBody.includes(l));
-               if (missing.length > 0) {
-                 newBody += `\nRelated Work: ${missing.join(', ')}`;
-                 hasUpdates = true;
-               }
-            }
-
-            if (hasUpdates) {
-              await github.rest.pulls.update({
-                owner,
-                repo,
-                pull_number: pr.number,
-                body: newBody
-              });
-            }
-            const crypto = require("crypto");
-
-            const normalizeIds = (values) =>
-              [...new Set(values.map((value) => Number.parseInt(String(value), 10)).filter((value) => Number.isFinite(value) && value > 0))].sort((a, b) => a - b);
-
-            const closesSet = new Set(normalizeIds(finalCloses));
-            const connectsSet = new Set(normalizeIds(finalConnects));
-            const relatedSet = new Set(normalizeIds(finalRelatedPrs));
-
-            const allTargetIds = normalizeIds([...closesSet, ...connectsSet, ...relatedSet]).filter((id) => id !== pr.number);
+            const normalizeIds = (values) => [...new Set(values.map((value) => Number.parseInt(String(value), 10)).filter((value) => Number.isFinite(value) && value > 0))].sort((a, b) => a - b);
+            const allTargetIds = normalizeIds([...finalCloses, ...finalConnects, ...finalRelatedPrs]).filter((id) => id !== pr.number);
             if (allTargetIds.length === 0) return;
 
             const runLimited = async (items, limit, worker) => {
               const output = [];
               let cursor = 0;
               const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
-              while (cursor < items.length) {
-                const index = cursor;
-                cursor += 1;
-                output[index] = await worker(items[index]);
-              }
+                while (cursor < items.length) {
+                  const index = cursor;
+                  cursor += 1;
+                  output[index] = await worker(items[index]);
+                }
               });
               await Promise.all(runners);
               return output;
@@ -204,30 +354,66 @@ jobs:
 
             const targetDetails = await runLimited(allTargetIds, 8, async (id) => {
               try {
-              const { data } = await github.rest.issues.get({
-                owner,
-                repo,
-                issue_number: id
-              });
-              return {
-                id,
-                exists: true,
-                isPullRequest: Boolean(data.pull_request),
-                state: String(data.state || "unknown").toLowerCase(),
-                title: String(data.title || ""),
-                updatedAt: data.updated_at || null
-              };
+                const { data } = await github.rest.issues.get({ owner, repo, issue_number: id });
+                return {
+                  id,
+                  exists: true,
+                  isPullRequest: Boolean(data.pull_request),
+                  state: String(data.state || "unknown").toLowerCase(),
+                  title: String(data.title || ""),
+                  updatedAt: data.updated_at || null
+                };
               } catch (error) {
-              return {
-                id,
-                exists: false,
-                isPullRequest: false,
-                state: "unknown",
-                title: "",
-                updatedAt: null
-              };
+                return {
+                  id,
+                  exists: false,
+                  isPullRequest: false,
+                  state: "unknown",
+                  title: "",
+                  updatedAt: null
+                };
               }
             });
+
+            const openIssueIds = new Set(targetDetails.filter((target) => target.exists && !target.isPullRequest && target.state === "open").map((target) => target.id));
+            const closesSet = new Set(normalizeIds(finalCloses).filter((id) => openIssueIds.has(id)));
+            const connectsSet = new Set(normalizeIds(finalConnects));
+            const relatedSet = new Set(normalizeIds(finalRelatedPrs));
+            if (closesSet.size === 0 && connectsSet.size === 0 && relatedSet.size === 0) return;
+
+            let newBody = context.payload.pull_request.body || "";
+            let hasUpdates = false;
+
+            if (closesSet.size > 0) {
+              const links = [...closesSet].map((id) => `Closes #${id}`);
+              const missing = links.filter((l) => !newBody.includes(l));
+              if (missing.length > 0) {
+                newBody += `\n\n${missing.join(", ")}`;
+                hasUpdates = true;
+              }
+            }
+
+            if (connectsSet.size > 0) {
+              const links = [...connectsSet].map((id) => `#${id}`);
+              const missing = links.filter((l) => !newBody.includes(l));
+              if (missing.length > 0) {
+                newBody += `\nConnects to ${missing.join(", ")}`;
+                hasUpdates = true;
+              }
+            }
+
+            if (relatedSet.size > 0) {
+              const links = [...relatedSet].map((id) => `#${id}`);
+              const missing = links.filter((l) => !newBody.includes(l));
+              if (missing.length > 0) {
+                newBody += `\nRelated Work: ${missing.join(", ")}`;
+                hasUpdates = true;
+              }
+            }
+
+            if (hasUpdates) {
+              await github.rest.pulls.update({ owner, repo, pull_number: pr.number, body: newBody });
+            }
 
             const keywordSet = new Set(prKeywords);
             const scoreTarget = (target) => {
@@ -244,11 +430,7 @@ jobs:
               const validityWeight = target.exists ? 0.09 : -0.2;
               const rawScore = semanticsWeight + overlapWeight + recencyWeight + validityWeight;
               const confidence = Math.max(0, Math.min(0.99, rawScore));
-              return {
-              ...target,
-              semantics: semantics.join("+"),
-              confidence
-              };
+              return { ...target, semantics: semantics.join("+"), confidence };
             };
 
             const rankedTargets = targetDetails
@@ -266,6 +448,7 @@ jobs:
               return `| #${target.id} | ${kind} | ${target.state} | ${confidence} | ${semantics} |`;
             });
 
+            const crypto = require("crypto");
             const digestPayload = rankedTargets.map((target) => `${target.id}:${target.state}:${target.semantics}:${target.confidence.toFixed(6)}`).join("|");
             const digest = crypto.createHash("sha256").update(digestPayload).digest("hex").slice(0, 20);
 
@@ -281,61 +464,46 @@ jobs:
               "<!-- smart-autolinker:end -->"
             ].join("\n");
 
-            const latestPr = await github.rest.pulls.get({
-              owner,
-              repo,
-              pull_number: pr.number
-            });
-
+            const latestPr = await github.rest.pulls.get({ owner, repo, pull_number: pr.number });
             const latestBody = String(latestPr.data.body || "");
             const blockRegex = /<!-- smart-autolinker:start -->[\s\S]*?<!-- smart-autolinker:end -->/g;
             const bodyWithoutOldBlock = latestBody.replace(blockRegex, "").trimEnd();
             const updatedBody = `${bodyWithoutOldBlock}\n\n${intelligenceBlock}`.trim();
 
             if (updatedBody !== latestBody) {
-              await github.rest.pulls.update({
-              owner,
-              repo,
-              pull_number: pr.number,
-              body: updatedBody
-              });
+              await github.rest.pulls.update({ owner, repo, pull_number: pr.number, body: updatedBody });
             }
+
             const mermaidGraph = [];
             mermaidGraph.push("graph TD");
-            mermaidGraph.push(`    PR${pr.number}["PR #${pr.number}<br/>${pr.title.replace(/"/g, '&quot;')}"]`);
+            mermaidGraph.push(`    PR${pr.number}[\"PR #${pr.number}<br/>${pr.title.replace(/\"/g, "&quot;")}\"]`);
             mermaidGraph.push(`    style PR${pr.number} fill:#9f7,stroke:#333,stroke-width:2px`);
 
             const connectionStyles = {
               close: "-->|Closes|",
               connect: "-.->|Connects|",
-              related: "-.->|Related|",
+              related: "-.->|Related|"
             };
 
             const nodeStyles = {
               open_issue: "fill:#f9f,stroke:#333,stroke-width:2px",
               closed_issue: "fill:#ccc,stroke:#333,stroke-width:2px",
               open_pr: "fill:#9cf,stroke:#333,stroke-width:2px",
-              merged_pr: "fill:#c9f,stroke:#333,stroke-width:2px",
+              merged_pr: "fill:#c9f,stroke:#333,stroke-width:2px"
             };
 
             const processedNodes = new Set([`PR${pr.number}`]);
-
             for (const target of rankedTargets) {
               const targetType = target.isPullRequest ? "pr" : "issue";
               const targetNodeId = `${targetType.toUpperCase()}${target.id}`;
 
               if (!processedNodes.has(targetNodeId)) {
                 processedNodes.add(targetNodeId);
-                const nodeLabel = `"${targetType.toUpperCase()} #${target.id}<br/>${target.title.replace(/"/g, '&quot;')}"`;
+                const nodeLabel = `\"${targetType.toUpperCase()} #${target.id}<br/>${target.title.replace(/\"/g, "&quot;")}\"`;
                 mermaidGraph.push(`    ${targetNodeId}[${nodeLabel}]`);
-
                 let styleKey = `${target.state}_${targetType}`;
-                if (target.state === "closed" && target.isPullRequest) {
-                   styleKey = "merged_pr";
-                }
-                if (nodeStyles[styleKey]) {
-                   mermaidGraph.push(`    style ${targetNodeId} ${nodeStyles[styleKey]}`);
-                }
+                if (target.state === "closed" && target.isPullRequest) styleKey = "merged_pr";
+                if (nodeStyles[styleKey]) mermaidGraph.push(`    style ${targetNodeId} ${nodeStyles[styleKey]}`);
               }
 
               let connectionType = "related";
@@ -348,96 +516,74 @@ jobs:
 
             if (mermaidGraph.length > 3) {
               const graphCommentIdentifier = `<!-- smart-link-graph-comment:${digest} -->`;
-
               const commentBody = `### Relationship Graph\n\n\`\`\`mermaid\n${mermaidGraph.join("\n")}\n\`\`\`\n${graphCommentIdentifier}`;
-
-              const { data: comments } = await github.rest.issues.listComments({
-                owner,
-                repo,
-                issue_number: pr.number,
-              });
-
-              const existingComment = comments.find(comment => comment.body.includes(graphCommentIdentifier));
+              const { data: comments } = await github.rest.issues.listComments({ owner, repo, issue_number: pr.number });
+              const existingComment = comments.find((comment) => comment.body.includes(graphCommentIdentifier));
 
               if (!existingComment) {
-                const oldGraphComment = comments.find(comment => comment.user.login === "github-actions[bot]" && comment.body.includes("### Relationship Graph"));
+                const oldGraphComment = comments.find((comment) => comment.user.login === "github-actions[bot]" && comment.body.includes("### Relationship Graph"));
                 if (oldGraphComment) {
-                  await github.rest.issues.updateComment({
-                    owner,
-                    repo,
-                    comment_id: oldGraphComment.id,
-                    body: commentBody,
-                  });
+                  await github.rest.issues.updateComment({ owner, repo, comment_id: oldGraphComment.id, body: commentBody });
                 } else {
-                  await github.rest.issues.createComment({
-                    owner,
-                    repo,
-                    issue_number: pr.number,
-                    body: commentBody,
-                  });
+                  await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body: commentBody });
                 }
               }
             }
-            const checksConclusion = {
-              SUCCESS: "success",
-              FAILURE: "failure",
-              NEUTRAL: "neutral",
-            };
 
+            const checksConclusion = { SUCCESS: "success", FAILURE: "failure", NEUTRAL: "neutral" };
             async function createDependencyCheck() {
               let conclusion = checksConclusion.SUCCESS;
-              let title = "All dependency links are valid and actionable.";
+              let titleText = "All dependency links are valid and actionable.";
               const summary = [];
-
-              const closingTargets = rankedTargets.filter(target => closesSet.has(target.id));
+              const closingTargets = rankedTargets.filter((target) => closesSet.has(target.id));
 
               if (closingTargets.length > 0) {
-                const nonexistent = closingTargets.filter(t => !t.exists);
-                const alreadyClosed = closingTargets.filter(t => t.exists && t.state !== "open");
+                const nonexistent = closingTargets.filter((target) => !target.exists);
+                const alreadyClosed = closingTargets.filter((target) => target.exists && target.state !== "open");
 
                 if (nonexistent.length > 0) {
-                conclusion = checksConclusion.FAILURE;
-                title = "Invalid dependency references found.";
-                summary.push(`🔴 **Action Required:** This PR attempts to resolve non-existent issues: ${nonexistent.map(t => `#${t.id}`).join(", ")}.`);
+                  conclusion = checksConclusion.FAILURE;
+                  titleText = "Invalid dependency references found.";
+                  summary.push(`Action Required: This PR attempts to resolve non-existent issues: ${nonexistent.map((target) => `#${target.id}`).join(", ")}.`);
                 }
 
                 if (alreadyClosed.length > 0) {
-                conclusion = conclusion === checksConclusion.FAILURE ? checksConclusion.FAILURE : checksConclusion.NEUTRAL;
-                if (title.startsWith("All")) title = "Redundant dependency links found.";
-                summary.push(`🟡 **Warning:** This PR references issues that are already closed: ${alreadyClosed.map(t => `#${t.id} (${t.state})`).join(", ")}.`);
+                  conclusion = conclusion === checksConclusion.FAILURE ? checksConclusion.FAILURE : checksConclusion.NEUTRAL;
+                  if (titleText.startsWith("All")) titleText = "Redundant dependency links found.";
+                  summary.push(`Warning: This PR references issues that are already closed: ${alreadyClosed.map((target) => `#${target.id} (${target.state})`).join(", ")}.`);
                 }
 
                 if (conclusion === checksConclusion.SUCCESS) {
-                summary.push(`✅ All ${closingTargets.length} issues targeted for closure are valid and in an 'open' state.`);
+                  summary.push(`All ${closingTargets.length} issues targeted for closure are valid and in an open state.`);
                 }
               } else {
                 conclusion = checksConclusion.NEUTRAL;
-                title = "No closing dependencies to validate.";
-                summary.push("ℹ️ No issues were marked with closing keywords (e.g., 'closes', 'fixes'). The dependency check is neutral.");
+                titleText = "No closing dependencies to validate.";
+                summary.push("No issues were marked with closing directives (such as closes or fixes). The dependency check is neutral.");
               }
 
-              const allTargetsCount = new Set(rankedTargets.map(t => t.id)).size;
-              summary.push(`\n---\n*A total of ${allTargetsCount} related items were analyzed.*`);
+              const allTargetsCount = new Set(rankedTargets.map((target) => target.id)).size;
+              summary.push(`A total of ${allTargetsCount} related items were analyzed.`);
 
               try {
                 await github.rest.checks.create({
-                owner,
-                repo,
-                name: "Smart Link Dependency Integrity",
-                head_sha: pr.head.sha,
-                status: "completed",
-                conclusion: conclusion,
-                output: {
-                  title: title,
-                  summary: summary.join("\n"),
-                },
+                  owner,
+                  repo,
+                  name: "Smart Link Dependency Integrity",
+                  head_sha: pr.head.sha,
+                  status: "completed",
+                  conclusion,
+                  output: {
+                    title: titleText,
+                    summary: summary.join("\n")
+                  }
                 });
               } catch (error) {
                 if (error.status === 403) {
-                core.warning("Could not create a dependency status check. Please ensure the workflow has `checks: write` permissions.");
+                  core.warning("Could not create a dependency status check. Ensure workflow permissions include checks: write.");
                 } else {
-                core.error(`Failed to create dependency status check: ${error.message}`);
-                throw error;
+                  core.error(`Failed to create dependency status check: ${error.message}`);
+                  throw error;
                 }
               }
             }
