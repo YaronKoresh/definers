@@ -34,7 +34,7 @@ class AudioEqualizer:
         sr: int,
         anchors: list[list[float]] | np.ndarray,
         *,
-        taps: int = 131071,
+        taps: int = 4095,
         correction_strength: float = 1.0,
     ) -> None:
         sample_rate = int(sr)
@@ -87,23 +87,15 @@ class AudioEqualizer:
         freqs = freqs[order]
         gains = gains[order]
 
-        unique_freqs, inverse = np.unique(freqs, return_inverse=True)
-        unique_gains = np.zeros_like(unique_freqs)
-        counts = np.zeros_like(unique_freqs)
+        if freqs[0] > 0.1:
+            freqs = np.insert(freqs, 0, 0.1)
+            gains = np.insert(gains, 0, gains[0])
 
-        np.add.at(unique_gains, inverse, gains)
-        np.add.at(counts, inverse, 1.0)
-        unique_gains /= np.maximum(counts, 1.0)
+        if freqs[-1] < nyquist:
+            freqs = np.append(freqs, nyquist)
+            gains = np.append(gains, gains[-1])
 
-        if unique_freqs[0] > 0.1:
-            unique_freqs = np.insert(unique_freqs, 0, 0.1)
-            unique_gains = np.insert(unique_gains, 0, unique_gains[0])
-
-        if unique_freqs[-1] < nyquist:
-            unique_freqs = np.append(unique_freqs, nyquist)
-            unique_gains = np.append(unique_gains, unique_gains[-1])
-
-        normalized = np.column_stack((unique_freqs, unique_gains)).astype(
+        normalized = np.column_stack((freqs, gains)).astype(
             np.float64, copy=False
         )
 
@@ -172,21 +164,18 @@ class AudioEqualizer:
 
         anchor_freqs = self.anchors[:, 0]
         anchor_dbs = self.anchors[:, 1] * self.correction_strength
-        nyquist = self.sr / 2.0
+        nyquist = self.sr / 2.0 - 0.1
 
         dense_count = int(
-            min(
-                262144,
-                max(
-                    32768,
-                    1
-                    << int(
-                        np.ceil(
-                            np.log2(
-                                max(self.num_taps, self.anchors.shape[0] * 4096)
-                            )
+            max(
+                131072,
+                1
+                << int(
+                    np.ceil(
+                        np.log2(
+                            max(self.num_taps, self.anchors.shape[0] * 4096)
                         )
-                    ),
+                    )
                 ),
             )
         )
@@ -214,7 +203,7 @@ class AudioEqualizer:
             numtaps=self.num_taps,
             freq=norm_freqs,
             gain=linear_gains,
-            window=("kaiser", 8.6),
+            window=("kaiser", 18.0),
         ).astype(np.float64, copy=False)
 
         if not np.all(np.isfinite(kernel)):
@@ -352,25 +341,32 @@ class SmartMastering:
 
         self.resampling_target = cfg.resampling_target
 
-        default_anchors = [
-            [9000.0, 0.0],
-            [self.resampling_target / 2.0, 3.0],
+        nyquist_hz = self.resampling_target / 2.0 - 0.1
+        self.slope_hz = float(np.clip(cfg.stop_bass_boost_hz, 0.1, nyquist_hz))
+        self._slope_db = cfg.bass_boost_db_per_oct
+
+        bass_octaves = float(np.log2(self.slope_hz / 0.1))
+        float(np.log2(nyquist_hz / cfg.start_treble_boost_hz))
+
+        bass_gain_db = bass_octaves * self._slope_db
+        treble_gain_db = bass_gain_db * cfg.treble_boost_ratio
+
+        self.anchors = [
+            [0.1, bass_gain_db],
+            [self.slope_hz, 0.0],
+            [cfg.start_treble_boost_hz, 0.0],
+            [nyquist_hz, treble_gain_db],
         ]
 
-        self.anchors = (
-            cfg.anchors if cfg.anchors is not None else default_anchors
-        )
+        self.low_cut = cfg.low_cut or 0.1
+        self.high_cut = cfg.high_cut or nyquist_hz
 
         self.sr = sr
         self.drive_db = cfg.drive_db
         self.ceil_db = cfg.ceil_db
         self.num_bands = cfg.num_bands
-        self._slope_db = cfg.slope_db
-        self.slope_hz = cfg.slope_hz
         self.smoothing_fraction = cfg.smoothing_fraction
         self.target_lufs = cfg.target_lufs
-        self.low_cut = cfg.low_cut
-        self.high_cut = cfg.high_cut
         self.correction_strength = cfg.correction_strength
         self.phase_type = cfg.phase_type
 
@@ -380,20 +376,14 @@ class SmartMastering:
 
         self.target_freqs_hz = np.array(
             generate_bands(0.1, self.resampling_target / 2.0, self.num_bands),
-            dtype=float,
+            dtype=np.float64,
         )
 
     def update_bands(self) -> None:
         count = self.num_bands
-        fcs = generate_bands(
-            self.low_cut or 0.1,
-            self.high_cut or (self.resampling_target / 2 - 0.1),
-            count,
-        )
+        fcs = generate_bands(self.low_cut, self.high_cut, count)
         self.bands = SmartMasteringConfig.make_bands_from_fcs(
-            fcs,
-            self.low_cut or 0.1,
-            self.high_cut or (self.resampling_target / 2 - 0.1),
+            fcs, self.low_cut, self.high_cut
         )
 
     def measure_spectrum(self, y_mono: np.ndarray) -> np.ndarray:
@@ -423,19 +413,10 @@ class SmartMastering:
         return psd_db, f_axis
 
     def compute_spectrum(self, f_axis: np.ndarray) -> np.ndarray:
-        min_freq = self.low_cut if self.low_cut else 0.1
-        max_freq = self.high_cut if self.high_cut else f_axis[-1]
+        f_axis_safe = np.maximum(f_axis, self.low_cut)
+        f_axis_safe = np.minimum(f_axis_safe, self.high_cut)
 
-        f_axis_safe = np.maximum(f_axis, min_freq)
-        f_axis_safe = np.minimum(f_axis_safe, max_freq)
-        bounded_octaves = np.clip(
-            np.log2(f_axis_safe / np.clip(self.slope_hz, min_freq, max_freq)),
-            -2.0,
-            2.0,
-        )
-        target_db = -self.slope_db * bounded_octaves
-
-        return np.nan_to_num(target_db, nan=0.0, posinf=0.0, neginf=0.0)
+        return np.ones_like(f_axis_safe)
 
     def apply_anchor_correction(self, y: np.ndarray) -> np.ndarray:
         return AudioEqualizer(
@@ -594,14 +575,10 @@ class SmartMastering:
         input_db, f_axis = self.measure_spectrum(y_mono)
         target_db = self.compute_spectrum(f_axis)
 
-        if not np.all(np.isfinite(target_db)):
-            target_db = np.nan_to_num(
-                target_db, nan=0.0, posinf=0.0, neginf=0.0
+        if self.smoothing_fraction:
+            target_db = self.smooth_curve(
+                target_db, f_axis, self.smoothing_fraction
             )
-
-        target_db = self.smooth_curve(
-            target_db, f_axis, self.smoothing_fraction
-        )
 
         min_len = min(len(target_db), len(input_db))
 
@@ -617,28 +594,11 @@ class SmartMastering:
             correction_db, nan=0.0, posinf=0.0, neginf=0.0
         )
 
-        correction_center = float(np.median(correction_db))
-        centered_correction = correction_db - correction_center
-        phase_limit_db = 12.0
-        max_abs_correction = float(
-            np.quantile(np.abs(centered_correction), 0.98)
-        )
-        correction_scale = (
-            phase_limit_db / max_abs_correction
-            if np.isfinite(max_abs_correction)
-            and max_abs_correction > phase_limit_db
-            else 1.0
-        )
-        correction_db_norm = np.clip(
-            centered_correction * correction_scale,
-            -phase_limit_db,
-            phase_limit_db,
-        )
         H_lin = np.nan_to_num(
-            10.0 ** (correction_db_norm / 20.0),
+            10.0 ** (correction_db / 20.0),
             nan=1.0,
-            posinf=10.0 ** (phase_limit_db / 20.0),
-            neginf=10.0 ** (-phase_limit_db / 20.0),
+            posinf=1.0,
+            neginf=1.0,
         )
 
         out = None
@@ -661,7 +621,7 @@ class SmartMastering:
 
             h_ir = np.fft.irfft(min_phase_spectrum)
 
-            FIR_LEN = min(len(h_ir), 8192)
+            FIR_LEN = min(len(h_ir), 4096)
             h_ir_cut = h_ir[:FIR_LEN]
 
             window = np.ones(FIR_LEN)
@@ -701,7 +661,7 @@ class SmartMastering:
             h = np.real(np.fft.ifft(H_full))
 
             h_centered = np.fft.fftshift(h)
-            FIR_LEN = min(len(h), 8192)
+            FIR_LEN = min(len(h), 4096)
 
             center = len(h_centered) // 2
             half_len = FIR_LEN // 2
@@ -943,12 +903,14 @@ def master(
         sr_mastered, y_mastered = SmartMastering(sr, **kwargs).process(y, sr)
 
         output_path = output_path or tmp(target_format, keep=False)
+
         save_audio(
             destination_path=output_path,
             audio_signal=y_mastered,
             sample_rate=sr_mastered,
             output_format=target_format,
         )
+
         return output_path
 
     except Exception as e:

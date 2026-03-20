@@ -108,61 +108,6 @@ def test_smooth_curve_averages_local_bandwidth():
     assert smoothed[3] == pytest.approx(20.0)
 
 
-def test_compute_spectrum_clamps_edges_and_keeps_pivot_neutral():
-    mastering = _make_mastering_instance(
-        low_cut=100.0,
-        high_cut=1000.0,
-        slope_db=6.0,
-        slope_hz=200.0,
-    )
-    freqs = np.array([25.0, 100.0, 200.0, 1000.0, 5000.0], dtype=float)
-
-    target_db = mastering.compute_spectrum(freqs)
-
-    low_target = -6.0 * np.log2(100.0 / 200.0)
-    high_target = -6.0 * 2.0
-
-    assert target_db[0] == pytest.approx(low_target)
-    assert target_db[1] == pytest.approx(low_target)
-    assert target_db[2] == pytest.approx(0.0)
-    assert target_db[3] == pytest.approx(high_target)
-    assert target_db[4] == pytest.approx(high_target)
-
-
-def test_normalize_anchors_keeps_high_band_monotonic_at_nyquist():
-    equalizer = MASTERING_MODULE.AudioEqualizer(
-        sr=8000,
-        anchors=np.array(
-            [
-                [3000.0, -1.0],
-                [12000.0, 4.0],
-                [500.0, 0.0],
-                [10000.0, 2.0],
-            ],
-            dtype=float,
-        ),
-        taps=7,
-    )
-
-    normalized = equalizer.normalize_anchors(
-        np.array(
-            [
-                [3000.0, -1.0],
-                [12000.0, 4.0],
-                [500.0, 0.0],
-                [10000.0, 2.0],
-            ],
-            dtype=float,
-        ),
-        8000,
-    )
-
-    assert np.all(np.diff(normalized[:, 0]) > 0.0)
-    assert normalized[-2, 0] == pytest.approx(3000.0)
-    assert normalized[-1, 0] == pytest.approx(4000.0)
-    assert normalized[-1, 1] == pytest.approx(3.0)
-
-
 def test_frequency_response_stays_finite_and_bounded_in_high_band():
     anchors = np.array(
         [

@@ -22,23 +22,24 @@ class SmartMasteringConfig:
 
     resampling_target: int = 44100
 
-    target_lufs: float = -9.0
+    target_lufs: float = -11.0
 
-    slope_db: float = 3.0
-    slope_hz: float = 320.0
+    stop_bass_boost_hz: float = 9500.0
+    start_treble_boost_hz: float = 10500.0
+
+    bass_boost_db_per_oct: float = 3.0
+    treble_boost_ratio: float = 0.1
 
     phase_type: str = "minimal"
 
-    anchors: list[list[float]] | None = None
-
-    smoothing_fraction: float = 1.0 / 4.0
+    smoothing_fraction: float | None = None
 
     correction_strength: float = 1.0
 
     low_cut: float | None = None
     high_cut: float | None = None
 
-    drive_db: float = 1.0
+    drive_db: float = 0.0
     ceil_db: float | None = -1.0
 
     @classmethod

@@ -8,7 +8,7 @@ from ..file_ops import log
 def freq_cut(
     y: np.ndarray, sr: int, low_cut: float | None, high_cut: float | None
 ) -> np.ndarray:
-    y = np.asarray(y, dtype=np.float64)
+    y = np.asarray(y, dtype=np.float32)
 
     y = y - np.mean(y, axis=-1, keepdims=True)
 

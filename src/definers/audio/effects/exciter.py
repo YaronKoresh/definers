@@ -255,7 +255,6 @@ def _baseline_apply_exciter(
     spectral_gain = np.sqrt(
         gain_shape / np.maximum(residual_power_smooth, 1e-24)
     )
-    spectral_gain = np.clip(spectral_gain, 0.0, 8.0)
     spectral_gain = remove_spectral_spikes(spectral_gain)
     spectral_gain = smooth_last_axis(spectral_gain, smoothing_bins)
 
@@ -547,12 +546,8 @@ def analyze_exciter(
     peak_level = float(np.max(np.abs(gated_band))) if gated_band.size else 0.0
     crest_factor = peak_level / max(band_rms, 1e-9)
     drive = float(
-        np.clip(
-            (0.28 / max(band_rms, 1e-9))
-            * float(np.clip(crest_factor / 3.0, 0.75, 1.35)),
-            0.8,
-            4.5,
-        )
+        (0.28 / max(band_rms, 1e-9))
+        * float(np.clip(crest_factor / 3.0, 0.75, 1.35))
     )
 
     mono_signal = _collapse_to_mono(oversampled_signal)
@@ -686,7 +681,6 @@ def _apply_exciter_core(
         (1,) * (residual_power.ndim - 1) + (-1,)
     )
     spectral_gain = np.sqrt(desired_shape / np.maximum(residual_power, 1e-24))
-    spectral_gain = np.clip(spectral_gain, 0.0, 2.0)
     spectral_gain = remove_spectral_spikes(spectral_gain)
     spectral_gain = _moving_average_last_axis(spectral_gain, smoothing_bins)
 

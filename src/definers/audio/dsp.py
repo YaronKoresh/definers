@@ -514,14 +514,14 @@ def process_audio_chunks(fn, data, chunk_size, overlap=0):
     if overlap >= chunk_size:
         raise ValueError("Overlap must be smaller than chunk size")
 
-    data = data.astype(np.float32)
+    data = data.astype(np.float64)
     if data.ndim == 1:
         data = data[np.newaxis, :]
 
     (_num_channels, audio_length) = data.shape
     step = chunk_size - overlap
-    final_result = np.zeros_like(data, dtype=np.float32)
-    window_sum = np.zeros_like(data, dtype=np.float32)
+    final_result = np.zeros_like(data, dtype=np.float64)
+    window_sum = np.zeros_like(data, dtype=np.float64)
     window = np.hanning(chunk_size)
     window = window[np.newaxis, :]
 
