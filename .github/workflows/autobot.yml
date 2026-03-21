@@ -624,8 +624,21 @@ jobs:
               const created = await github.rest.issues.createMilestone({ owner, repo, title: nextVersion });
               return created.data;
             }
+            async function getOrCreateMilestoneByTitle(title) {
+              const milestones = await github.rest.issues.listMilestones({ owner, repo, state: 'open', sort: 'due_on', direction: 'asc' });
+              const existing = milestones.data.find((milestone) => String(milestone.title || '').trim() === title);
+              if (existing) return existing;
+              const created = await github.rest.issues.createMilestone({ owner, repo, title });
+              return created.data;
+            }
+            async function seedMilestoneMetadata(milestone, baseVersion, managedTitle) {
+              const nextDescription = buildMilestoneMetadataDescription(milestone.description || '', baseVersion, managedTitle);
+              if (nextDescription === String(milestone.description || '').trim()) return milestone;
+              const updated = await github.rest.issues.updateMilestone({ owner, repo, milestone_number: milestone.number, description: nextDescription });
+              return updated.data;
+            }
             async function consolidateSupersededMilestones(targetMilestone) {
-              if (!isVersionTag(targetMilestone.title)) return targetMilestone;
+              if (!isVersionTag(targetMilestone.title)) return { milestone: targetMilestone, supersededMilestones: [] };
               const milestones = await github.rest.issues.listMilestones({ owner, repo, state: 'open', sort: 'due_on', direction: 'asc' });
               const supersededMilestones = milestones.data.filter((milestone) => {
                 if (milestone.number === targetMilestone.number) return false;
@@ -644,6 +657,27 @@ jobs:
               if (supersededMilestones.length === 0) return { milestone: targetMilestone, supersededMilestones: [] };
               const refreshed = await github.rest.issues.getMilestone({ owner, repo, milestone_number: targetMilestone.number });
               return { milestone: refreshed.data, supersededMilestones };
+            }
+            async function listManagedSemverMilestones(targetMilestone) {
+              if (!isVersionTag(targetMilestone.title)) return [targetMilestone];
+              const milestones = await github.rest.issues.listMilestones({ owner, repo, state: 'open', sort: 'due_on', direction: 'asc' });
+              return milestones.data.filter((milestone) => isVersionTag(milestone.title) && compareVersions(milestone.title, targetMilestone.title) <= 0);
+            }
+            async function listReleaseItemsForMilestones(milestones) {
+              const releaseItems = [];
+              for (const milestone of milestones) {
+                const milestoneItems = await github.paginate(github.rest.issues.listForRepo, { owner, repo, milestone: milestone.number, state: 'all' });
+                releaseItems.push(...milestoneItems.filter((item) => item.pull_request && item.labels.some((label) => RELEASE_RELEVANT_LABELS.includes(label.name))));
+              }
+              return releaseItems;
+            }
+            function resolveRequiredBump(releaseItems, currentLabelNames) {
+              const releaseBump = releaseItems.reduce((bump, item) => {
+                const itemLabels = item.labels.map((label) => normalizeLabelName(label.name));
+                const itemBump = bumpForLabels(itemLabels);
+                return maxBump(bump, itemBump);
+              }, bumpForLabels(currentLabelNames));
+              return releaseBump === 'none' ? 'patch' : releaseBump;
             }
             function parseAILabels(raw) {
               if (!raw) return [];
@@ -744,33 +778,28 @@ jobs:
               const existingMilestone = freshIssue.data.milestone
                 ? (await github.rest.issues.getMilestone({ owner, repo, milestone_number: freshIssue.data.milestone.number })).data
                 : null;
+              if (existingMilestone && !isVersionTag(existingMilestone.title)) {
+                return;
+              }
               const highestOpenVersionMilestone = await getOrCreateMilestone();
               let milestone = existingMilestone || highestOpenVersionMilestone;
               if (isVersionTag(highestOpenVersionMilestone.title) && (!existingMilestone || isVersionTag(milestone.title) && compareVersions(highestOpenVersionMilestone.title, milestone.title) > 0)) {
                 milestone = highestOpenVersionMilestone;
               }
+              const previewMilestoneWithBase = await ensureMilestoneBaseVersion(milestone);
+              const currentIssueLabels = freshIssue.data.labels.map(label => normalizeLabelName(label.name));
+              const previewManagedMilestones = await listManagedSemverMilestones(previewMilestoneWithBase.milestone);
+              const previewReleaseItems = await listReleaseItemsForMilestones(previewManagedMilestones);
+              const previewRequiredBump = resolveRequiredBump(previewReleaseItems, currentIssueLabels);
+              const targetVersion = computeTargetVersion(previewMilestoneWithBase.baseVersion, previewRequiredBump);
+              if (isVersionTag(targetVersion) && compareVersions(targetVersion, milestone.title) > 0) {
+                milestone = await getOrCreateMilestoneByTitle(targetVersion);
+                milestone = await seedMilestoneMetadata(milestone, previewMilestoneWithBase.baseVersion, targetVersion);
+              }
               const consolidation = await consolidateSupersededMilestones(milestone);
               milestone = consolidation.milestone;
               const milestoneChanged = !freshIssue.data.milestone || freshIssue.data.milestone.number !== milestone.number;
               if (milestoneChanged) await github.rest.issues.update({ owner, repo, issue_number: issueNumber, milestone: milestone.number });
-              if (isPR && (milestoneChanged || consolidation.supersededMilestones.length > 0)) {
-                const previousMilestoneTitle = existingMilestone ? existingMilestone.title : null;
-                const mergedMilestones = consolidation.supersededMilestones.map((item) => item.title);
-                const noteLines = [
-                  "# Autobot — Milestone Update",
-                  "",
-                  milestoneChanged
-                    ? `This PR was moved ${previousMilestoneTitle ? `from **${previousMilestoneTitle}** ` : ""}to **${milestone.title}** so the highest open semantic-version milestone stays canonical.`
-                    : `Autobot kept this PR on **${milestone.title}** and consolidated lower semantic-version milestones into it.`,
-                  ""
-                ];
-                if (mergedMilestones.length > 0) {
-                  noteLines.push(`Consolidated milestones: ${mergedMilestones.map((title) => `**${title}**`).join(", ")}`);
-                  noteLines.push("");
-                }
-                noteLines.push("This only affects open semantic-version milestones and keeps release tracking on a single highest version.");
-                await upsertMilestoneComment(noteLines.join('\n'), { milestone: milestone.title, previousMilestone: previousMilestoneTitle, consolidatedMilestones: mergedMilestones });
-              }
               const items = await github.paginate(github.rest.issues.listForRepo, { owner, repo, milestone: milestone.number, state: 'all' });
               const releaseItems = items.filter(item => item.pull_request && item.labels.some(label => RELEASE_RELEVANT_LABELS.includes(label.name)));
               const isBreaking = releaseItems.some(item => item.labels.some(label => label.name === 'breaking-change'));
@@ -782,17 +811,31 @@ jobs:
               const milestoneWithBase = await ensureMilestoneBaseVersion(milestone);
               const shouldRespectManualMilestone = milestoneWithBase.manualTitleLocked || (issueHadMilestoneBeforeAutobot && !milestoneWithBase.hadManagedMarker && !isVersionTag(milestoneWithBase.milestone.title));
               if (shouldRespectManualMilestone) return;
-              const releaseBump = releaseItems.reduce((bump, item) => {
-                const itemLabels = item.labels.map(label => normalizeLabelName(label.name));
-                const itemBump = bumpForLabels(itemLabels);
-                return maxBump(bump, itemBump);
-              }, 'none');
-              const requiredBump = releaseBump === 'none' && releaseItems.length > 0 ? 'patch' : releaseBump;
+              const requiredBump = resolveRequiredBump(releaseItems, currentIssueLabels);
               const computedTitle = computeTargetVersion(milestoneWithBase.baseVersion, requiredBump);
               const newTitle = compareVersions(computedTitle, milestoneWithBase.milestone.title) > 0 ? computedTitle : milestoneWithBase.milestone.title;
               if (newTitle !== milestoneWithBase.milestone.title) {
                 const metadataDescription = buildMilestoneMetadataDescription(milestoneWithBase.milestone.description || milestone.description || '', milestoneWithBase.baseVersion, newTitle);
                 await github.rest.issues.updateMilestone({ owner, repo, milestone_number: milestone.number, title: newTitle, description: metadataDescription });
+              }
+              if (isPR && (milestoneChanged || consolidation.supersededMilestones.length > 0 || newTitle !== milestoneWithBase.milestone.title)) {
+                const previousMilestoneTitle = existingMilestone ? existingMilestone.title : null;
+                const mergedMilestones = consolidation.supersededMilestones.map((item) => item.title);
+                const finalMilestoneTitle = newTitle;
+                const noteLines = [
+                  "# Autobot — Milestone Update",
+                  "",
+                  milestoneChanged || newTitle !== milestoneWithBase.milestone.title
+                    ? `This PR was moved ${previousMilestoneTitle ? `from **${previousMilestoneTitle}** ` : ""}to **${finalMilestoneTitle}** based on the current semantic-version impact of the PR and the canonical open release milestone.`
+                    : `Autobot kept this PR on **${finalMilestoneTitle}** and consolidated lower semantic-version milestones into it.`,
+                  ""
+                ];
+                if (mergedMilestones.length > 0) {
+                  noteLines.push(`Consolidated milestones: ${mergedMilestones.map((title) => `**${title}**`).join(", ")}`);
+                  noteLines.push("");
+                }
+                noteLines.push("This only affects open semantic-version milestones and keeps release tracking on a single highest version that matches the current release impact.");
+                await upsertMilestoneComment(noteLines.join('\n'), { milestone: finalMilestoneTitle, previousMilestone: previousMilestoneTitle, consolidatedMilestones: mergedMilestones, targetVersion: finalMilestoneTitle, requiredBump });
               }
             }
             if (payload.action === 'closed') {
