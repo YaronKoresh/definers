@@ -32,7 +32,7 @@ def stereo(*y_s, lr: bool = True, sr: int = 44100) -> np.ndarray:
         if y.shape[1] < y.shape[0]:
             y = y.T
 
-        y = np.asarray(y, dtype=np.float64)
+        y = np.asarray(y, dtype=np.float32)
 
         if stereo_result is None:
             stereo_result = y
@@ -48,8 +48,8 @@ def pad_audio(y1: np.ndarray, y2: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
 
     max_len = max(y1.shape[1], y2.shape[1])
 
-    y1_padded = np.zeros((y1.shape[0], max_len), dtype=np.float64)
-    y2_padded = np.zeros((y2.shape[0], max_len), dtype=np.float64)
+    y1_padded = np.zeros((y1.shape[0], max_len), dtype=np.float32)
+    y2_padded = np.zeros((y2.shape[0], max_len), dtype=np.float32)
     y1_padded[:, : y1.shape[1]] = y1
     y2_padded[:, : y2.shape[1]] = y2
 
@@ -65,8 +65,8 @@ def mix_audio(
     duck_depth: float = 0.3,
     cutoff_hz: int | None = None,
 ) -> np.ndarray:
-    y1 = np.asarray(y1, dtype=np.float64)
-    y2 = np.asarray(y2, dtype=np.float64)
+    y1 = np.asarray(y1, dtype=np.float32)
+    y2 = np.asarray(y2, dtype=np.float32)
 
     y1, y2 = stereo(y1), stereo(y2)
     y1_padded, y2_padded = pad_audio(y1, y2)
@@ -79,7 +79,7 @@ def mix_audio(
     else:
         from scipy.signal import butter, lfilter
 
-        nyquist = 0.5 * sr
+        nyquist = sr / 2.0 - 1.0
         normal_cutoff = cutoff_hz / nyquist
         b, a = butter(4, normal_cutoff, btype="low", analog=False)
         y1_filtered = lfilter(b, a, y1_padded, axis=0)

@@ -320,10 +320,16 @@ script_formats = [
     "zsh",
 ]
 
-ai_model_formats = [
+safe_model_formats = [
     "safetensors",
     "gguf",
     "ggml",
+    "lite",
+    "tflite",
+]
+
+ai_model_formats = [
+    *safe_model_formats,
     "pt",
     "pth",
     "onnx",
@@ -338,8 +344,6 @@ ai_model_formats = [
     "protobuf",
     "torchscript",
     "savedmodel",
-    "lite",
-    "tflite",
     "mlmodel",
     "rknn",
     "neuro",
@@ -359,6 +363,7 @@ SAFE_EXTENSIONS = [
     *common_audio_formats,
     *common_text_formats,
     *common_video_formats,
+    *safe_model_formats,
     "data",
     "tmp",
 ]

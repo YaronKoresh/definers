@@ -1,13 +1,8 @@
 from __future__ import annotations
 
-import hashlib
-from collections import OrderedDict
-from threading import RLock
-
 import numpy as np
 from scipy import signal
 from scipy.ndimage import maximum_filter1d
-from scipy.signal import fftconvolve, firwin2
 
 from ..file_ops import log
 from .config import SmartMasteringConfig
@@ -21,311 +16,50 @@ from .effects import apply_exciter, stereo
 from .filters import freq_cut
 from .utils import apply_lufs, generate_bands, stereo_widen
 
-_AUDIO_EQUALIZER_CACHE_LOCK = RLock()
-_AUDIO_EQUALIZER_KERNEL_CACHE: OrderedDict[
-    tuple[int, int, float, bytes], np.ndarray
-] = OrderedDict()
-_AUDIO_EQUALIZER_CACHE_LIMIT = 32
 
+def audio_eq(
+    audio_data: np.ndarray, anchors: list[list[float]], sample_rate: int = 44100
+) -> np.ndarray:
+    anchors = sorted(anchors, key=lambda x: x[0])
+    anchor_freqs = np.array([a[0] for a in anchors])
+    anchor_gains_db = np.array([a[1] for a in anchors])
 
-class AudioEqualizer:
-    def __init__(
-        self,
-        sr: int,
-        anchors: list[list[float]] | np.ndarray,
-        *,
-        taps: int = 131071,
-        correction_strength: float = 1.0,
-    ) -> None:
-        sample_rate = int(sr)
-        if sample_rate <= 0:
-            raise ValueError("sr must be a positive integer")
+    nperseg = 4096
+    f, _t, Zxx = signal.stft(audio_data, fs=sample_rate, nperseg=nperseg)
 
-        num_taps = int(taps)
-        if num_taps < 3:
-            raise ValueError("taps must be at least 3")
-        if num_taps % 2 == 0:
-            num_taps += 1
+    log_f = np.log10(f + 1e-5)
+    log_anchor_freqs = np.log10(anchor_freqs)
 
-        strength = float(correction_strength)
-        if not np.isfinite(strength):
-            raise ValueError("correction_strength must be finite")
+    interp_gains_db = np.interp(
+        log_f,
+        log_anchor_freqs,
+        anchor_gains_db,
+        left=anchor_gains_db[0],
+        right=anchor_gains_db[-1],
+    )
 
-        self.sr = sample_rate
-        self.correction_strength = strength
-        self.num_taps = num_taps
-        self.anchors = self.normalize_anchors(anchors, sample_rate)
-        self.build_filter()
+    gain_multipliers = 10 ** (interp_gains_db / 20)
 
-    def normalize_anchors(
-        self,
-        anchors: list[list[float]] | np.ndarray,
-        sr: int,
-    ) -> np.ndarray:
-        anchor_array = np.asarray(anchors, dtype=np.float64)
+    Zxx_modified = Zxx * gain_multipliers[:, None]
 
-        if (
-            anchor_array.ndim != 2
-            or anchor_array.shape[1] != 2
-            or anchor_array.shape[0] < 2
-        ):
-            raise ValueError(
-                "anchors must be a 2D array of [frequency_hz, gain_db] pairs with at least two rows"
-            )
+    _, output_audio = signal.istft(
+        Zxx_modified, fs=sample_rate, nperseg=nperseg
+    )
 
-        if not np.all(np.isfinite(anchor_array)):
-            raise ValueError("anchors must contain only finite values")
-
-        nyquist = float(sr) / 2.0
-        if nyquist <= 0.1:
-            raise ValueError("sample rate is too low for equalizer design")
-
-        freqs = np.clip(anchor_array[:, 0], 0.1, nyquist)
-        gains = anchor_array[:, 1]
-
-        order = np.argsort(freqs, kind="mergesort")
-        freqs = freqs[order]
-        gains = gains[order]
-
-        unique_freqs, inverse = np.unique(freqs, return_inverse=True)
-        unique_gains = np.zeros_like(unique_freqs)
-        counts = np.zeros_like(unique_freqs)
-
-        np.add.at(unique_gains, inverse, gains)
-        np.add.at(counts, inverse, 1.0)
-        unique_gains /= np.maximum(counts, 1.0)
-
-        if unique_freqs[0] > 0.1:
-            unique_freqs = np.insert(unique_freqs, 0, 0.1)
-            unique_gains = np.insert(unique_gains, 0, unique_gains[0])
-
-        if unique_freqs[-1] < nyquist:
-            unique_freqs = np.append(unique_freqs, nyquist)
-            unique_gains = np.append(unique_gains, unique_gains[-1])
-
-        normalized = np.column_stack((unique_freqs, unique_gains)).astype(
-            np.float64, copy=False
+    if len(output_audio) > len(audio_data):
+        output_audio = output_audio[: len(audio_data)]
+    elif len(output_audio) < len(audio_data):
+        output_audio = np.pad(
+            output_audio, (0, len(audio_data) - len(output_audio))
         )
 
-        if normalized.shape[0] < 2:
-            raise ValueError(
-                "normalized anchors must contain at least two unique frequency points"
-            )
-
-        return normalized
-
-    def cache_key(
-        self,
-        sr: int,
-        taps: int,
-        correction_strength: float,
-        anchors: np.ndarray,
-    ) -> tuple[int, int, float, bytes]:
-        digest = hashlib.blake2b(
-            np.ascontiguousarray(anchors, dtype=np.float64).tobytes(),
-            digest_size=16,
-        ).digest()
-        return sr, taps, round(float(correction_strength), 12), digest
-
-    def cache_get(
-        self,
-        key: tuple[int, int, float, bytes],
-    ) -> np.ndarray | None:
-        with _AUDIO_EQUALIZER_CACHE_LOCK:
-            kernel = _AUDIO_EQUALIZER_KERNEL_CACHE.get(key)
-            if kernel is None:
-                return None
-            _AUDIO_EQUALIZER_KERNEL_CACHE.move_to_end(key)
-            return kernel
-
-    def cache_put(
-        self,
-        key: tuple[int, int, float, bytes],
-        kernel: np.ndarray,
-    ) -> None:
-        with _AUDIO_EQUALIZER_CACHE_LOCK:
-            _AUDIO_EQUALIZER_KERNEL_CACHE[key] = kernel
-            _AUDIO_EQUALIZER_KERNEL_CACHE.move_to_end(key)
-            while (
-                len(_AUDIO_EQUALIZER_KERNEL_CACHE)
-                > _AUDIO_EQUALIZER_CACHE_LIMIT
-            ):
-                _AUDIO_EQUALIZER_KERNEL_CACHE.popitem(last=False)
-
-    def clear_kernel_cache(self) -> None:
-        with _AUDIO_EQUALIZER_CACHE_LOCK:
-            _AUDIO_EQUALIZER_KERNEL_CACHE.clear()
-
-    def build_filter(self) -> None:
-        self.anchors = self.normalize_anchors(self.anchors, self.sr)
-        cache_key = self.cache_key(
-            self.sr,
-            self.num_taps,
-            self.correction_strength,
-            self.anchors,
-        )
-        cached_kernel = self.cache_get(cache_key)
-
-        if cached_kernel is not None:
-            self.fir_kernel = cached_kernel
-            return
-
-        anchor_freqs = self.anchors[:, 0]
-        anchor_dbs = self.anchors[:, 1] * self.correction_strength
-        nyquist = self.sr / 2.0
-
-        dense_count = int(
-            min(
-                262144,
-                max(
-                    32768,
-                    1
-                    << int(
-                        np.ceil(
-                            np.log2(
-                                max(self.num_taps, self.anchors.shape[0] * 4096)
-                            )
-                        )
-                    ),
-                ),
-            )
+    if np.issubdtype(audio_data.dtype, np.integer):
+        info = np.iinfo(audio_data.dtype)
+        return np.clip(output_audio, info.min, info.max).astype(
+            audio_data.dtype
         )
 
-        dense_freqs_log = np.geomspace(
-            anchor_freqs[0], nyquist, num=dense_count
-        )
-        dense_dbs = np.interp(
-            np.log10(dense_freqs_log),
-            np.log10(anchor_freqs),
-            anchor_dbs,
-        )
-
-        dense_freqs = np.insert(dense_freqs_log, 0, 0.0)
-        dense_dbs = np.insert(dense_dbs, 0, dense_dbs[0])
-
-        norm_freqs = np.clip(dense_freqs / nyquist, 0.0, 1.0)
-        norm_freqs[-1] = 1.0
-
-        linear_gains = np.asarray(10.0 ** (dense_dbs / 20.0), dtype=np.float64)
-        if not np.all(np.isfinite(linear_gains)):
-            raise ValueError("equalizer gain curve contains non-finite values")
-
-        kernel = firwin2(
-            numtaps=self.num_taps,
-            freq=norm_freqs,
-            gain=linear_gains,
-            window=("kaiser", 8.6),
-        ).astype(np.float64, copy=False)
-
-        if not np.all(np.isfinite(kernel)):
-            raise RuntimeError("equalizer kernel contains non-finite values")
-
-        kernel.setflags(write=False)
-        self.fir_kernel = kernel
-        self.cache_put(cache_key, kernel)
-
-    def select_convolver(self, signal_length: int, kernel_length: int):
-        if signal_length <= 0:
-            return signal.oaconvolve
-        if kernel_length >= 16384 or signal_length >= kernel_length * 4:
-            return signal.oaconvolve
-        return fftconvolve
-
-    def apply_correction(self, y: np.ndarray) -> np.ndarray:
-        input_array = np.asarray(y)
-        input_dtype = (
-            input_array.dtype
-            if np.issubdtype(input_array.dtype, np.floating)
-            else np.float64
-        )
-        sanitized = np.nan_to_num(
-            input_array, copy=False, nan=0.0, posinf=0.0, neginf=0.0
-        )
-        signal_array = np.asarray(sanitized, dtype=np.float64, order="C")
-
-        convolver = self.select_convolver(
-            signal_array.shape[-1], self.fir_kernel.shape[0]
-        )
-
-        if signal_array.ndim == 1:
-            corrected = convolver(signal_array, self.fir_kernel, mode="same")
-        elif signal_array.ndim == 2:
-            corrected = convolver(
-                signal_array,
-                self.fir_kernel[np.newaxis, :],
-                mode="same",
-                axes=-1,
-            )
-        else:
-            raise ValueError("audio signal must be 1D or 2D")
-
-        corrected = np.nan_to_num(
-            corrected, copy=False, nan=0.0, posinf=0.0, neginf=0.0
-        )
-        return np.asarray(corrected, dtype=input_dtype)
-
-    def frequency_response(
-        self,
-        worN: int = 8192,
-    ) -> tuple[np.ndarray, np.ndarray]:
-        freqs, response = signal.freqz(
-            self.fir_kernel,
-            worN=int(worN),
-            fs=float(self.sr),
-        )
-        magnitude_db = 20.0 * np.log10(np.maximum(np.abs(response), 1e-12))
-        return freqs.astype(np.float64, copy=False), magnitude_db.astype(
-            np.float64, copy=False
-        )
-
-    def reconfigure(
-        self,
-        *,
-        sr: int | None = None,
-        anchors: list[list[float]] | np.ndarray | None = None,
-        taps: int | None = None,
-        correction_strength: float | None = None,
-    ) -> AudioEqualizer:
-        changed = False
-
-        if sr is not None:
-            sample_rate = int(sr)
-            if sample_rate <= 0:
-                raise ValueError("sr must be a positive integer")
-            if sample_rate != self.sr:
-                self.sr = sample_rate
-                changed = True
-
-        if taps is not None:
-            num_taps = int(taps)
-            if num_taps < 3:
-                raise ValueError("taps must be at least 3")
-            if num_taps % 2 == 0:
-                num_taps += 1
-            if num_taps != self.num_taps:
-                self.num_taps = num_taps
-                changed = True
-
-        if correction_strength is not None:
-            strength = float(correction_strength)
-            if not np.isfinite(strength):
-                raise ValueError("correction_strength must be finite")
-            if strength != self.correction_strength:
-                self.correction_strength = strength
-                changed = True
-
-        if anchors is not None:
-            normalized_anchors = self.normalize_anchors(anchors, self.sr)
-            if not np.array_equal(normalized_anchors, self.anchors):
-                self.anchors = normalized_anchors
-                changed = True
-        elif changed:
-            self.anchors = self.normalize_anchors(self.anchors, self.sr)
-
-        if changed:
-            self.build_filter()
-
-        return self
+    return output_audio.astype(np.float32)
 
 
 class SmartMastering:
@@ -352,66 +86,77 @@ class SmartMastering:
 
         self.resampling_target = cfg.resampling_target
 
-        default_anchors = [
-            [9000.0, 0.0],
-            [self.resampling_target / 2.0, 3.0],
-        ]
+        nyquist_hz = self.resampling_target / 2.0 - 1.0
 
-        self.anchors = (
-            cfg.anchors if cfg.anchors is not None else default_anchors
+        self.low_cut = cfg.low_cut or 0.1
+        self.high_cut = cfg.high_cut or nyquist_hz
+
+        self.slope_hz = float(
+            np.clip(cfg.stop_bass_boost_hz, self.low_cut, self.high_cut)
         )
+        self._slope_db = cfg.bass_boost_db_per_oct
+
+        bass_octaves = float(np.log2(self.slope_hz / self.low_cut))
+        float(np.log2(self.high_cut / cfg.start_treble_boost_hz))
+
+        bass_gain_db = bass_octaves * self._slope_db
+        treble_gain_db = bass_gain_db * cfg.treble_boost_ratio
+
+        self.anchors = [
+            [self.low_cut, 0.0],
+            [self.low_cut + 1.0, bass_gain_db],
+            [self.slope_hz, 0.0],
+            [cfg.start_treble_boost_hz, 0.0],
+            [self.high_cut - 1.0, treble_gain_db],
+            [self.high_cut, 0.0],
+        ]
 
         self.sr = sr
         self.drive_db = cfg.drive_db
         self.ceil_db = cfg.ceil_db
         self.num_bands = cfg.num_bands
-        self._slope_db = cfg.slope_db
-        self.slope_hz = cfg.slope_hz
         self.smoothing_fraction = cfg.smoothing_fraction
         self.target_lufs = cfg.target_lufs
-        self.low_cut = cfg.low_cut
-        self.high_cut = cfg.high_cut
         self.correction_strength = cfg.correction_strength
-        self.phase_type = cfg.phase_type
 
         self.update_bands()
 
-        self.nperseg = int(2 ** np.ceil(np.log2(self.resampling_target / 5)))
+        self.analysis_nperseg = int(
+            2 ** np.ceil(np.log2(self.resampling_target / 5))
+        )
+        self.fft_n = self.analysis_nperseg * 2
 
         self.target_freqs_hz = np.array(
             generate_bands(0.1, self.resampling_target / 2.0, self.num_bands),
-            dtype=float,
+            dtype=np.float32,
         )
 
     def update_bands(self) -> None:
         count = self.num_bands
-        fcs = generate_bands(
-            self.low_cut or 0.1,
-            self.high_cut or (self.resampling_target / 2 - 0.1),
-            count,
-        )
+        fcs = generate_bands(self.low_cut, self.high_cut, count)
         self.bands = SmartMasteringConfig.make_bands_from_fcs(
-            fcs,
-            self.low_cut or 0.1,
-            self.high_cut or (self.resampling_target / 2 - 0.1),
+            fcs, self.low_cut, self.high_cut
         )
 
     def measure_spectrum(self, y_mono: np.ndarray) -> np.ndarray:
-        NPERSEG = self.nperseg
         FLOOR_DB = -120.0
         CEILING_DB = 20.0
 
-        if len(y_mono) < NPERSEG:
-            y_mono_padded = np.pad(y_mono, (0, NPERSEG - len(y_mono)))
+        if len(y_mono) < self.analysis_nperseg:
+            y_mono_padded = np.pad(
+                y_mono,
+                (0, self.analysis_nperseg - len(y_mono)),
+            )
         else:
             y_mono_padded = y_mono
 
         f_axis, psd = signal.welch(
             y_mono_padded,
             fs=self.resampling_target,
-            nperseg=NPERSEG,
-            noverlap=int(NPERSEG * 0.75),
-            window=("kaiser", 18),
+            nperseg=self.analysis_nperseg,
+            nfft=self.fft_n,
+            noverlap=int(self.analysis_nperseg * 0.875),
+            window=("kaiser", 18.0),
             scaling="density",
             average="median",
             detrend="constant",
@@ -420,48 +165,28 @@ class SmartMastering:
         psd_db = 10.0 * np.log10(np.maximum(psd, 1e-24))
         psd_db = np.clip(psd_db, FLOOR_DB, CEILING_DB)
 
+        f_axis = np.clip(f_axis, self.low_cut, self.high_cut)
+
         return psd_db, f_axis
-
-    def compute_spectrum(self, f_axis: np.ndarray) -> np.ndarray:
-        min_freq = self.low_cut if self.low_cut else 0.1
-        max_freq = self.high_cut if self.high_cut else f_axis[-1]
-
-        f_axis_safe = np.maximum(f_axis, min_freq)
-        f_axis_safe = np.minimum(f_axis_safe, max_freq)
-        bounded_octaves = np.clip(
-            np.log2(f_axis_safe / np.clip(self.slope_hz, min_freq, max_freq)),
-            -2.0,
-            2.0,
-        )
-        target_db = -self.slope_db * bounded_octaves
-
-        return np.nan_to_num(target_db, nan=0.0, posinf=0.0, neginf=0.0)
-
-    def apply_anchor_correction(self, y: np.ndarray) -> np.ndarray:
-        return AudioEqualizer(
-            sr=self.resampling_target,
-            anchors=self.anchors,
-            correction_strength=self.correction_strength,
-        ).apply_correction(y)
 
     def apply_limiter(
         self,
         y: np.ndarray,
-        drive_db: float,
-        ceil_db: float | None,
+        drive_db: float = 0.0,
+        ceil_db: float | None = -0.1,
         os_factor: int = 2,
-        lookahead_ms: float = 3.0,
-        attack_ms: float = 0.03,
-        release_ms_min: float = 24.0,
-        release_ms_max: float = 110.0,
-        soft_clip_ratio: float = 0.82,
-        up_beta: float = 16.0,
-        down_beta: float = 20.0,
+        lookahead_ms: float = 5.0,
+        attack_ms: float = 3.0,
+        release_ms_min: float = 50.0,
+        release_ms_max: float = 200.0,
+        soft_clip_ratio: float = 0.6,
+        up_beta: float = 14.0,
+        down_beta: float = 18.0,
     ) -> np.ndarray:
         input_dtype = (
-            y.dtype if np.issubdtype(y.dtype, np.floating) else np.float64
+            y.dtype if np.issubdtype(y.dtype, np.floating) else np.float32
         )
-        y_in = np.asarray(y, dtype=np.float64)
+        y_in = np.asarray(y, dtype=np.float32)
 
         orig_len = y_in.shape[-1]
         drive_lin = 10.0 ** (drive_db / 20.0)
@@ -570,7 +295,7 @@ class SmartMastering:
         smoothing_fraction: float | None = None,
     ) -> np.ndarray:
         if smoothing_fraction is None:
-            smoothing_fraction = self.smoothing_fraction
+            return curve
 
         smoothed = np.copy(curve)
 
@@ -587,165 +312,44 @@ class SmartMastering:
 
         return smoothed
 
-    def apply_phase_correction(self, y: np.ndarray, tp: str) -> np.ndarray:
-        orig_len = y.shape[-1]
+    def apply_eq(self, y: np.ndarray) -> np.ndarray:
         y_mono = np.mean(y, axis=0) if y.ndim > 1 else y
 
         input_db, f_axis = self.measure_spectrum(y_mono)
-        target_db = self.compute_spectrum(f_axis)
 
-        if not np.all(np.isfinite(target_db)):
-            target_db = np.nan_to_num(
-                target_db, nan=0.0, posinf=0.0, neginf=0.0
-            )
+        input_db = self.smooth_curve(input_db, f_axis, self.smoothing_fraction)
 
-        target_db = self.smooth_curve(
-            target_db, f_axis, self.smoothing_fraction
-        )
-
-        min_len = min(len(target_db), len(input_db))
-
-        target_db = target_db[:min_len]
-        input_db = input_db[:min_len]
-
-        mean_target = np.mean(target_db)
-        mean_input = np.mean(input_db)
-        target_db = target_db - mean_target + mean_input
-
-        correction_db = (target_db - input_db) * self.correction_strength
+        correction_db = -input_db
         correction_db = np.nan_to_num(
             correction_db, nan=0.0, posinf=0.0, neginf=0.0
         )
 
-        correction_center = float(np.median(correction_db))
-        centered_correction = correction_db - correction_center
-        phase_limit_db = 12.0
-        max_abs_correction = float(
-            np.quantile(np.abs(centered_correction), 0.98)
-        )
-        correction_scale = (
-            phase_limit_db / max_abs_correction
-            if np.isfinite(max_abs_correction)
-            and max_abs_correction > phase_limit_db
-            else 1.0
-        )
-        correction_db_norm = np.clip(
-            centered_correction * correction_scale,
-            -phase_limit_db,
-            phase_limit_db,
-        )
-        H_lin = np.nan_to_num(
-            10.0 ** (correction_db_norm / 20.0),
-            nan=1.0,
-            posinf=10.0 ** (phase_limit_db / 20.0),
-            neginf=10.0 ** (-phase_limit_db / 20.0),
+        eq_flat = max(1, len(correction_db) // 128)
+
+        correction_db = np.append(correction_db[:-1:eq_flat], correction_db[-1])
+        f_axis = np.append(f_axis[:-1:eq_flat], f_axis[-1])
+
+        dec_eq = np.average([correction_db[0], correction_db[-1]])
+        correction_db -= dec_eq
+        correction_db[0], correction_db[-1] = 0.0, 0.0
+
+        flat_anchors = np.column_stack((f_axis, correction_db))
+
+        print("Equalizer anchors (Hz, dB):")
+        for anchor in flat_anchors:
+            print(f"{anchor[0]:.2f} Hz, {anchor[1]:.2f} dB")
+
+        equalized = audio_eq(
+            audio_data=y_mono,
+            anchors=flat_anchors,
+            sample_rate=self.resampling_target,
         )
 
-        out = None
-
-        if tp == "minimal":
-            log_mag = np.log(np.maximum(H_lin, 1e-12))
-
-            cepstrum = np.fft.irfft(log_mag)
-            n = len(cepstrum)
-
-            lifter = np.zeros(n)
-            lifter[0] = 1.0
-            lifter[1 : n // 2] = 2.0
-            if n % 2 == 0:
-                lifter[n // 2] = 1.0
-
-            causal_cepstrum = cepstrum * lifter
-
-            min_phase_spectrum = np.exp(np.fft.rfft(causal_cepstrum))
-
-            h_ir = np.fft.irfft(min_phase_spectrum)
-
-            FIR_LEN = min(len(h_ir), 8192)
-            h_ir_cut = h_ir[:FIR_LEN]
-
-            window = np.ones(FIR_LEN)
-            fade_size = FIR_LEN // 2
-            if fade_size > 0:
-                window[-fade_size:] = np.hamming(fade_size * 2)[fade_size:]
-
-            h_ir_final = h_ir_cut * window
-
-            h_ir_final = h_ir_final[np.newaxis, :]
-
-            phase_pad = min(max(FIR_LEN // 2, 1), max(orig_len - 1, 0))
-            if phase_pad > 0:
-                pad_mode = "reflect" if phase_pad <= orig_len - 1 else "edge"
-                y_work = np.pad(
-                    y,
-                    (*((0, 0),) * (y.ndim - 1), (phase_pad, phase_pad)),
-                    mode=pad_mode,
-                )
-            else:
-                y_work = y
-
-            out = signal.oaconvolve(y_work, h_ir_final, mode="full")
-            out = out[..., : y_work.shape[-1]]
-            if phase_pad > 0:
-                out = out[..., phase_pad : phase_pad + orig_len]
-
-            if not np.all(np.isfinite(out)):
-                out = np.nan_to_num(out, nan=0.0, posinf=0.0, neginf=0.0)
-            assert np.all(np.isfinite(out)), (
-                "minimal_phase output contains non-finite values"
-            )
-
-        elif tp == "linear":
-            H_full = np.concatenate([H_lin, H_lin[-2:0:-1]])
-
-            h = np.real(np.fft.ifft(H_full))
-
-            h_centered = np.fft.fftshift(h)
-            FIR_LEN = min(len(h), 8192)
-
-            center = len(h_centered) // 2
-            half_len = FIR_LEN // 2
-            h_final = h_centered[center - half_len : center + half_len]
-
-            h_final *= signal.windows.hamming(len(h_final))
-            h_final = h_final[np.newaxis, :]
-
-            phase_pad = min(max(len(h_final) // 2, 1), max(orig_len - 1, 0))
-            if phase_pad > 0:
-                pad_mode = "reflect" if phase_pad <= orig_len - 1 else "edge"
-                y_work = np.pad(
-                    y,
-                    (*((0, 0),) * (y.ndim - 1), (phase_pad, phase_pad)),
-                    mode=pad_mode,
-                )
-            else:
-                y_work = y
-
-            out = signal.oaconvolve(y_work, h_final, mode="same")
-            if phase_pad > 0:
-                out = out[..., phase_pad : phase_pad + orig_len]
-            if not np.all(np.isfinite(out)):
-                out = np.nan_to_num(out, nan=0.0, posinf=0.0, neginf=0.0)
-            assert np.all(np.isfinite(out)), (
-                "linear_phase output contains non-finite values"
-            )
-        else:
-            raise ValueError(f"Unknown phase type: {tp}")
-
-        if out is None:
-            raise RuntimeError("Phase correction failed to produce output")
-
-        out = (
-            out[..., :orig_len]
-            if out.shape[-1] > orig_len
-            else np.pad(
-                out,
-                (*((0, 0),) * (out.ndim - 1), (0, orig_len - out.shape[-1])),
-                mode="edge" if out.shape[-1] > 0 else "constant",
-            )
+        return audio_eq(
+            audio_data=equalized,
+            anchors=self.anchors,
+            sample_rate=self.resampling_target,
         )
-
-        return out
 
     def multiband_compress(self, y: np.ndarray) -> np.ndarray:
         def lr4(x, fc):
@@ -859,13 +463,9 @@ class SmartMastering:
 
         y = remove_spectral_spikes(y)
 
-        log("Mastering", "Applying phase correction...")
+        log("Mastering", "Applying equalizer...")
 
-        y = self.apply_phase_correction(y, self.phase_type)
-
-        log("Mastering", "Applying anchor correction...")
-
-        y = self.apply_anchor_correction(y)
+        y = self.apply_eq(y)
 
         y = stereo(y)
 
@@ -943,12 +543,14 @@ def master(
         sr_mastered, y_mastered = SmartMastering(sr, **kwargs).process(y, sr)
 
         output_path = output_path or tmp(target_format, keep=False)
+
         save_audio(
             destination_path=output_path,
             audio_signal=y_mastered,
             sample_rate=sr_mastered,
             output_format=target_format,
         )
+
         return output_path
 
     except Exception as e:

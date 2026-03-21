@@ -14,11 +14,6 @@ logger = init_logger()
 def init_model_file(
     task: str, turbo: bool = True, model_type: str | None = None
 ):
-    import pickle
-
-    import joblib
-    import onnxruntime
-    import torch
     from safetensors.torch import load_file
 
     from definers.system import secure_path
@@ -52,37 +47,47 @@ def init_model_file(
 
 def _load_model(model_path: str, model_type: str) -> Any:
     supported_types = ["onnx", "pkl", "pt", "pth", "safetensors", "joblib"]
+
     if model_type not in supported_types:
         logger.error(
             f'Error: Model type "{model_type}" is not supported. Must be one of {supported_types}'
         )
         return None
+
     logger.info(
         f"Attempting to load a {model_type.upper()} model from: {model_path}"
     )
+
     if model_type == "joblib":
         import joblib
 
         return joblib.load(model_path)
+
     if model_type == "onnx":
         import onnxruntime
 
         return onnxruntime.InferenceSession(model_path)
+
     if model_type == "pkl":
         import pickle
 
         with open(model_path, "rb") as file_obj:
             return pickle.load(file_obj)
-    import torch
-    from safetensors.torch import load_file
 
     if model_type in ["pt", "pth"]:
-        model = torch.load(model_path, map_location=device())
+        import torch
+
+        model = torch.load(model_path, map_location=device(), weights_only=True)
+
     else:
-        model = load_file(model_path, map_location=device())
+        from safetensors.torch import load_file
+
+        model = load_file(model_path, device=device())
+
     if hasattr(model, "eval"):
         model.eval()
         logger.info("Model set to evaluation mode.")
+
     return model
 
 

@@ -84,11 +84,12 @@ def _make_mastering_instance():
     )
 
 
-def test_apply_phase_correction_linear_pads_short_output(
+def test_apply_eq_handles_small_spectrum_and_preserves_samples(
     monkeypatch: pytest.MonkeyPatch,
 ):
     mastering = _make_mastering_instance()
-    source = np.array([[0.1, 0.2, 0.3, 0.4]], dtype=float)
+    source = np.array([0.1, 0.2, 0.3, 0.4], dtype=float)
+    calls: list[tuple[np.ndarray, object, int]] = []
 
     monkeypatch.setattr(
         mastering,
@@ -100,35 +101,69 @@ def test_apply_phase_correction_linear_pads_short_output(
     )
     monkeypatch.setattr(
         mastering,
-        "compute_spectrum",
-        lambda f_axis: np.array([0.0, 0.0, 0.0, 0.0]),
+        "smooth_curve",
+        lambda curve, f_axis, smoothing_fraction=None: curve,
+    )
+
+    def fake_audio_eq(audio_data, anchors, sample_rate):
+        calls.append((np.array(audio_data, copy=True), anchors, sample_rate))
+        return np.array(audio_data, copy=True)
+
+    monkeypatch.setattr(MASTERING_MODULE, "audio_eq", fake_audio_eq)
+
+    corrected = mastering.apply_eq(source)
+
+    assert np.array_equal(corrected, source)
+    assert len(calls) == 2
+    assert np.array_equal(calls[0][0], source)
+    assert calls[0][2] == mastering.resampling_target
+
+
+def test_apply_eq_sanitizes_non_finite_anchor_values(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    mastering = _make_mastering_instance()
+    captured: list[object] = []
+
+    monkeypatch.setattr(
+        mastering,
+        "measure_spectrum",
+        lambda y: (
+            np.array([np.nan, np.inf, -np.inf, 10.0]),
+            np.array([50.0, 100.0, 200.0, 400.0]),
+        ),
     )
     monkeypatch.setattr(
         mastering,
         "smooth_curve",
         lambda curve, f_axis, smoothing_fraction=None: curve,
     )
-    monkeypatch.setattr(
-        MASTERING_MODULE.signal,
-        "oaconvolve",
-        lambda y, h, mode: np.array(
-            [[9.0, 9.0, 9.0, 0.5, -0.5, 0.0, 0.0, 9.0, 9.0, 9.0]],
-            dtype=float,
-        ),
-    )
 
-    corrected = mastering.apply_phase_correction(source, "linear")
+    def fake_audio_eq(audio_data, anchors, sample_rate):
+        captured.append(np.array(anchors, copy=True))
+        return np.array(audio_data, copy=True)
 
-    assert corrected.shape == source.shape
+    monkeypatch.setattr(MASTERING_MODULE, "audio_eq", fake_audio_eq)
+
+    corrected = mastering.apply_eq(np.array([0.2, -0.1, 0.4, -0.3]))
+
     assert np.all(np.isfinite(corrected))
-    assert np.max(np.abs(corrected)) > 0.0
+    assert len(captured) == 2
+    flat_anchors = captured[0]
+    assert np.all(np.isfinite(flat_anchors[:, 1]))
+    assert flat_anchors[0, 1] == pytest.approx(0.0)
+    assert flat_anchors[-1, 1] == pytest.approx(0.0)
 
 
-def test_apply_phase_correction_minimal_preserves_shape(
+def test_apply_eq_uses_mono_average_and_mastering_anchors(
     monkeypatch: pytest.MonkeyPatch,
 ):
     mastering = _make_mastering_instance()
-    source = np.array([[0.2, -0.1, 0.4, -0.3]], dtype=float)
+    source = np.array(
+        [[0.1, 0.3, 0.5, 0.7], [0.3, 0.5, 0.7, 0.9]],
+        dtype=float,
+    )
+    calls: list[tuple[np.ndarray, object, int]] = []
 
     monkeypatch.setattr(
         mastering,
@@ -140,177 +175,20 @@ def test_apply_phase_correction_minimal_preserves_shape(
     )
     monkeypatch.setattr(
         mastering,
-        "compute_spectrum",
-        lambda f_axis: np.array([0.0, 0.0, 0.0, 0.0]),
-    )
-    monkeypatch.setattr(
-        mastering,
-        "smooth_curve",
-        lambda curve, f_axis, smoothing_fraction=None: curve,
-    )
-    monkeypatch.setattr(
-        MASTERING_MODULE.signal,
-        "oaconvolve",
-        lambda y, h, mode: np.array(
-            [[9.0, 9.0, 9.0, 1.0, 2.0, 3.0, 4.0, 5.0, 9.0, 9.0]],
-            dtype=float,
-        ),
-    )
-
-    corrected = mastering.apply_phase_correction(source, "minimal")
-
-    assert corrected.shape == source.shape
-    assert np.allclose(corrected, np.array([[1.0, 2.0, 3.0, 4.0]], dtype=float))
-
-
-def test_apply_phase_correction_minimal_sanitizes_non_finite_output(
-    monkeypatch: pytest.MonkeyPatch,
-):
-    mastering = _make_mastering_instance()
-    source = np.array([[0.1, 0.2, 0.3, 0.4]], dtype=float)
-
-    monkeypatch.setattr(
-        mastering,
-        "measure_spectrum",
-        lambda y: (
-            np.array([0.0, -1.0, -2.0, -3.0]),
-            np.array([50.0, 100.0, 200.0, 400.0]),
-        ),
-    )
-    monkeypatch.setattr(
-        mastering,
-        "compute_spectrum",
-        lambda f_axis: np.array([0.0, 0.0, 0.0, 0.0]),
-    )
-    monkeypatch.setattr(
-        mastering,
-        "smooth_curve",
-        lambda curve, f_axis, smoothing_fraction=None: curve,
-    )
-    monkeypatch.setattr(
-        MASTERING_MODULE.signal,
-        "oaconvolve",
-        lambda y, h, mode: np.array(
-            [[9.0, 9.0, 9.0, np.nan, np.inf, -np.inf, 1.25, 9.0, 9.0, 9.0]],
-            dtype=float,
-        ),
-    )
-
-    corrected = mastering.apply_phase_correction(source, "minimal")
-
-    assert corrected.shape == source.shape
-    assert np.all(np.isfinite(corrected))
-    assert np.allclose(
-        corrected, np.array([[0.0, 0.0, 0.0, 1.25]], dtype=float)
-    )
-
-
-def test_apply_phase_correction_linear_supports_positive_relative_correction(
-    monkeypatch: pytest.MonkeyPatch,
-):
-    mastering = _make_mastering_instance()
-    source = np.array([[0.1, 0.2, 0.3, 0.4]], dtype=float)
-    captured: dict[str, np.ndarray] = {}
-
-    monkeypatch.setattr(
-        mastering,
-        "measure_spectrum",
-        lambda y: (
-            np.array([0.0, 0.0, 0.0, 0.0]),
-            np.array([50.0, 100.0, 200.0, 400.0]),
-        ),
-    )
-    monkeypatch.setattr(
-        mastering,
-        "compute_spectrum",
-        lambda f_axis: np.array([0.0, 8.0, 0.0, 0.0]),
-    )
-    monkeypatch.setattr(
-        mastering,
         "smooth_curve",
         lambda curve, f_axis, smoothing_fraction=None: curve,
     )
 
-    def fake_ifft(values: np.ndarray):
-        captured["H_full"] = values.copy()
-        return np.ones_like(values, dtype=complex)
+    def fake_audio_eq(audio_data, anchors, sample_rate):
+        calls.append((np.array(audio_data, copy=True), anchors, sample_rate))
+        return np.array(audio_data, copy=True)
 
-    monkeypatch.setattr(MASTERING_MODULE.np.fft, "ifft", fake_ifft)
-    monkeypatch.setattr(
-        MASTERING_MODULE.signal,
-        "oaconvolve",
-        lambda y, h, mode: y,
-    )
+    monkeypatch.setattr(MASTERING_MODULE, "audio_eq", fake_audio_eq)
 
-    corrected = mastering.apply_phase_correction(source, "linear")
+    corrected = mastering.apply_eq(source)
 
-    assert np.allclose(corrected, source)
-    assert captured["H_full"][1] > 1.0
-    assert captured["H_full"][0] < captured["H_full"][1]
-    assert captured["H_full"][2] < captured["H_full"][1]
-
-
-def test_apply_phase_correction_minimal_tail_padding_repeats_last_value(
-    monkeypatch: pytest.MonkeyPatch,
-):
-    mastering = _make_mastering_instance()
-    source = np.array([[0.1, 0.2, 0.3, 0.4, 0.5]], dtype=float)
-
-    monkeypatch.setattr(
-        mastering,
-        "measure_spectrum",
-        lambda y: (
-            np.array([0.0, -1.0, -2.0, -3.0]),
-            np.array([50.0, 100.0, 200.0, 400.0]),
-        ),
-    )
-    monkeypatch.setattr(
-        mastering,
-        "compute_spectrum",
-        lambda f_axis: np.array([0.0, 0.0, 0.0, 0.0]),
-    )
-    monkeypatch.setattr(
-        mastering,
-        "smooth_curve",
-        lambda curve, f_axis, smoothing_fraction=None: curve,
-    )
-    monkeypatch.setattr(
-        MASTERING_MODULE.signal,
-        "oaconvolve",
-        lambda y, h, mode: np.array(
-            [[9.0, 9.0, 9.0, 0.75, -0.5, 0.25]], dtype=float
-        ),
-    )
-
-    corrected = mastering.apply_phase_correction(source, "minimal")
-
-    assert corrected.shape == source.shape
-    assert np.allclose(corrected[0, :3], [0.75, -0.5, 0.25])
-    assert np.allclose(corrected[0, 3:], [0.25, 0.25])
-
-
-def test_apply_phase_correction_rejects_unknown_phase_type(
-    monkeypatch: pytest.MonkeyPatch,
-):
-    mastering = _make_mastering_instance()
-
-    monkeypatch.setattr(
-        mastering,
-        "measure_spectrum",
-        lambda y: (np.array([0.0, -1.0]), np.array([100.0, 200.0])),
-    )
-    monkeypatch.setattr(
-        mastering,
-        "compute_spectrum",
-        lambda f_axis: np.array([0.0, 0.0]),
-    )
-    monkeypatch.setattr(
-        mastering,
-        "smooth_curve",
-        lambda curve, f_axis, smoothing_fraction=None: curve,
-    )
-
-    with pytest.raises(ValueError, match=r"^Unknown phase type: invalid$"):
-        mastering.apply_phase_correction(
-            np.array([[0.1, 0.2]], dtype=float), "invalid"
-        )
+    assert len(calls) == 2
+    assert np.allclose(calls[0][0], np.mean(source, axis=0))
+    assert calls[1][1] == mastering.anchors
+    assert calls[1][2] == mastering.resampling_target
+    assert np.allclose(corrected, np.mean(source, axis=0))

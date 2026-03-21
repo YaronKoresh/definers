@@ -86,7 +86,8 @@ def _make_mastering_instance(**overrides):
 
 def test_measure_spectrum_pads_short_audio_and_clips_floor():
     mastering = _make_mastering_instance()
-    mastering.nperseg = 16
+    mastering.analysis_nperseg = 16
+    mastering.fft_n = 16
 
     spectrum_db, freqs = mastering.measure_spectrum(np.zeros(4, dtype=float))
 
@@ -108,119 +109,24 @@ def test_smooth_curve_averages_local_bandwidth():
     assert smoothed[3] == pytest.approx(20.0)
 
 
-def test_compute_spectrum_clamps_edges_and_keeps_pivot_neutral():
-    mastering = _make_mastering_instance(
-        low_cut=100.0,
-        high_cut=1000.0,
-        slope_db=6.0,
-        slope_hz=200.0,
-    )
-    freqs = np.array([25.0, 100.0, 200.0, 1000.0, 5000.0], dtype=float)
-
-    target_db = mastering.compute_spectrum(freqs)
-
-    low_target = -6.0 * np.log2(100.0 / 200.0)
-    high_target = -6.0 * 2.0
-
-    assert target_db[0] == pytest.approx(low_target)
-    assert target_db[1] == pytest.approx(low_target)
-    assert target_db[2] == pytest.approx(0.0)
-    assert target_db[3] == pytest.approx(high_target)
-    assert target_db[4] == pytest.approx(high_target)
-
-
-def test_normalize_anchors_keeps_high_band_monotonic_at_nyquist():
-    equalizer = MASTERING_MODULE.AudioEqualizer(
-        sr=8000,
-        anchors=np.array(
-            [
-                [3000.0, -1.0],
-                [12000.0, 4.0],
-                [500.0, 0.0],
-                [10000.0, 2.0],
-            ],
-            dtype=float,
-        ),
-        taps=7,
-    )
-
-    normalized = equalizer.normalize_anchors(
-        np.array(
-            [
-                [3000.0, -1.0],
-                [12000.0, 4.0],
-                [500.0, 0.0],
-                [10000.0, 2.0],
-            ],
-            dtype=float,
-        ),
-        8000,
-    )
-
-    assert np.all(np.diff(normalized[:, 0]) > 0.0)
-    assert normalized[-2, 0] == pytest.approx(3000.0)
-    assert normalized[-1, 0] == pytest.approx(4000.0)
-    assert normalized[-1, 1] == pytest.approx(3.0)
-
-
-def test_frequency_response_stays_finite_and_bounded_in_high_band():
-    anchors = np.array(
-        [
-            [40.0, -3.0],
-            [400.0, 0.0],
-            [1800.0, 1.0],
-            [3600.0, 2.0],
-        ],
-        dtype=float,
-    )
-    equalizer = MASTERING_MODULE.AudioEqualizer(
-        sr=8000,
-        anchors=anchors,
-        taps=257,
-        correction_strength=0.5,
-    )
-
-    freqs, magnitude_db = equalizer.frequency_response(worN=512)
-    high_band = magnitude_db[freqs >= 3000.0]
-    expected_high = anchors[-1, 1] * 0.5
-
-    assert freqs.shape == magnitude_db.shape
-    assert np.all(np.isfinite(freqs))
-    assert np.all(np.isfinite(magnitude_db))
-    assert high_band.size > 0
-    assert np.max(high_band) <= expected_high + 1.5
-    assert np.min(high_band) >= -20.0
-
-
-def test_apply_anchor_correction_passes_correction_strength_from_state(
+def test_measure_spectrum_clips_frequency_axis_to_cut_range(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    mastering = _make_mastering_instance(correction_strength=0.35)
-    captured = {}
+    mastering = _make_mastering_instance()
 
-    class DummyEqualizer:
-        def __init__(
-            self,
-            *,
-            sr: int,
-            anchors,
-            correction_strength: float = 1.0,
-            taps: int = 131071,
-        ):
-            captured["sr"] = sr
-            captured["anchors"] = anchors
-            captured["correction_strength"] = correction_strength
-            captured["taps"] = taps
+    monkeypatch.setattr(
+        MASTERING_MODULE.signal,
+        "welch",
+        lambda *args, **kwargs: (
+            np.array([0.0, 100.0, 10000.0], dtype=float),
+            np.array([1e-30, 1.0, 1e3], dtype=float),
+        ),
+    )
 
-        def apply_correction(self, y: np.ndarray) -> np.ndarray:
-            return y
+    spectrum_db, freqs = mastering.measure_spectrum(np.ones(8, dtype=float))
 
-    monkeypatch.setattr(MASTERING_MODULE, "AudioEqualizer", DummyEqualizer)
-
-    source = np.array([0.1, -0.2, 0.3], dtype=float)
-    corrected = mastering.apply_anchor_correction(source)
-
-    assert np.array_equal(corrected, source)
-    assert captured["sr"] == 8000
-    assert captured["anchors"] == mastering.anchors
-    assert captured["correction_strength"] == pytest.approx(0.35)
+    assert spectrum_db.shape == freqs.shape
+    assert freqs[0] == pytest.approx(mastering.low_cut)
+    assert freqs[-1] == pytest.approx(mastering.high_cut)
+    assert np.all(freqs >= mastering.low_cut)
+    assert np.all(freqs <= mastering.high_cut)
