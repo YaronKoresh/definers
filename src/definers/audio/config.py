@@ -7,40 +7,38 @@ import numpy as np
 
 @dataclass
 class SmartMasteringConfig:
-    num_bands: int = 6
+    num_bands: int = 16
     intensity: float = 1.0
 
-    bass_ratio: float = 2.4
-    bass_attack_ms: float = 10.0
-    bass_release_ms: float = 160.0
-    bass_threshold_db: float = -23.0
+    bass_ratio: float = 4.2
+    bass_attack_ms: float = 7.0
+    bass_release_ms: float = 135.0
+    bass_threshold_db: float = -27.0
 
-    treb_ratio: float = 1.9
-    treb_attack_ms: float = 0.001
-    treb_release_ms: float = 14.0
-    treb_threshold_db: float = -17.0
+    treb_ratio: float = 1.35
+    treb_attack_ms: float = 4.0
+    treb_release_ms: float = 38.0
+    treb_threshold_db: float = -14.5
 
     resampling_target: int = 44100
 
-    target_lufs: float = -11.0
+    target_lufs: float = -5.5
 
-    stop_bass_boost_hz: float = 9500.0
-    start_treble_boost_hz: float = 10500.0
+    stop_bass_boost_hz: float = 140.0
+    start_treble_boost_hz: float = 9500.0
 
-    bass_boost_db_per_oct: float = 3.0
-    treble_boost_ratio: float = 0.1
+    bass_boost_db_per_oct: float = 1.6
+    treble_boost_ratio: float = 0.08
 
-    phase_type: str = "minimal"
-
-    smoothing_fraction: float | None = None
+    smoothing_fraction: float | None = 0.25
 
     correction_strength: float = 1.0
 
     low_cut: float | None = None
     high_cut: float | None = None
 
-    drive_db: float = 0.0
-    ceil_db: float | None = -1.0
+    drive_db: float = 1.5
+    ceil_db: float | None = -0.6
 
     @classmethod
     def make_bands_from_fcs(

@@ -33,7 +33,7 @@ from .io import (
     save_audio,
     split_audio,
 )
-from .mastering import AudioEqualizer, SmartMastering, master
+from .mastering import SmartMastering, audio_eq, master
 from .preview import audio_preview, get_audio_duration
 from .production import (
     audio_to_midi,
@@ -74,7 +74,7 @@ from .utils import (
 
 __all__ = [
     "is_audio_segment",
-    "AudioEqualizer",
+    "audio_eq",
     "stereo_widen",
     "get_rms",
     "apply_rms",

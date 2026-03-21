@@ -6,7 +6,7 @@ from scipy.ndimage import median_filter
 
 from ..file_ops import log
 
-_FLOAT_EPSILON = np.finfo(np.float64).eps
+_FLOAT_EPSILON = np.finfo(np.float32).eps
 _ROBUST_SIGMA_SCALE = 1.4826
 _AUDIO_WINDOWS_CACHE: dict[int, tuple[int, ...]] = {}
 _SPECTRAL_WINDOWS_CACHE: dict[int, tuple[int, ...]] = {}
@@ -41,29 +41,15 @@ def _audio_windows(length: int) -> tuple[int, ...]:
         return cached
 
     maximum = _max_supported_odd_window(length)
-    if maximum < 3:
-        _AUDIO_WINDOWS_CACHE[length] = ()
-        return ()
-
-    candidates = [3, 17]
-    window = 33
-    while window <= maximum:
-        candidates.append(window)
-        next_window = window * 8 + 7
-        if next_window <= window:
-            break
-        window = next_window
-
-    candidates.extend(
+    windows = _unique_odd_windows(
         [
-            max(33, length // 4096),
-            max(65, length // 1024),
-            max(1025, length // 128),
-            maximum,
-        ]
+            max(21, length // 256),
+            max(321, length // 16),
+            max(1021, length // 4),
+        ],
+        maximum=maximum,
+        minimum=3,
     )
-
-    windows = _unique_odd_windows(candidates, maximum=maximum, minimum=3)
 
     log("Despiker", f"Selected audio despiking windows: {windows}")
 
@@ -77,26 +63,7 @@ def _spectral_windows(length: int) -> tuple[int, ...]:
         return cached
 
     maximum = _max_supported_odd_window(length)
-    if maximum < 5:
-        _SPECTRAL_WINDOWS_CACHE[length] = ()
-        return ()
-
-    windows = _unique_odd_windows(
-        [
-            5,
-            9,
-            17,
-            max(11, length // 512),
-            max(21, length // 256),
-            max(41, length // 128),
-            max(81, length // 64),
-            max(161, length // 32),
-            max(321, length // 16),
-            maximum,
-        ],
-        maximum=maximum,
-        minimum=5,
-    )
+    windows = (13,) if maximum >= 13 else ()
 
     log("Despiker", f"Selected spectral despiking windows: {windows}")
 
@@ -114,9 +81,9 @@ def _sanitize_nonfinite_channel(channel: np.ndarray) -> np.ndarray:
     finite_values = channel[finite_indices]
     if finite_indices.size == 1:
         return np.full_like(channel, finite_values[0])
-    full_index = np.arange(channel.size, dtype=np.float64)
+    full_index = np.arange(channel.size, dtype=np.float32)
     return np.interp(
-        full_index, finite_indices.astype(np.float64), finite_values
+        full_index, finite_indices.astype(np.float32), finite_values
     )
 
 
@@ -132,8 +99,8 @@ def _interp_last_axis(
             values[..., :1], values.shape[:-1] + (output_length,)
         ).copy()
 
-    full_index = np.arange(output_length, dtype=np.float64)
-    decimated_index = np.arange(values.shape[-1], dtype=np.float64) * hop
+    full_index = np.arange(output_length, dtype=np.float32)
+    decimated_index = np.arange(values.shape[-1], dtype=np.float32) * hop
 
     if values.ndim == 1:
         return np.interp(full_index, decimated_index, values)
@@ -243,8 +210,8 @@ def _despike_audio(data: np.ndarray, windows: tuple[int, ...]) -> np.ndarray:
         median, mad = _windowed_median_and_mad(data, window, mode="reflect")
         sigma = _ROBUST_SIGMA_SCALE * np.maximum(mad, 1e-9)
 
-        threshold = 3.15 + (0.3 * scale_index)
-        prominence_threshold = (0.45 + (0.08 * scale_index)) * sigma
+        threshold = 2.75 + (0.25 * scale_index)
+        prominence_threshold = (0.35 + (0.07 * scale_index)) * sigma
 
         upper_limit = median + (threshold * sigma)
         lower_limit = median - (threshold * sigma)
@@ -263,24 +230,24 @@ def _despike_audio(data: np.ndarray, windows: tuple[int, ...]) -> np.ndarray:
         )
         vote_count += upper_flag | lower_flag
 
-        scale_weight = 1.35 / np.sqrt(float(window))
-        upper_strength = np.minimum(
-            8.0, 1.0 + (upper_excess / sigma)
-        ) * np.minimum(6.0, 1.0 + (upper_prominence / sigma))
-        lower_strength = np.minimum(
-            8.0, 1.0 + (lower_excess / sigma)
-        ) * np.minimum(6.0, 1.0 + (lower_prominence / sigma))
+        scale_weight = 1.5 / np.sqrt(float(window))
+        upper_strength = (1.0 + (upper_excess / sigma)) * (
+            1.0 + (upper_prominence / sigma)
+        )
+        lower_strength = (1.0 + (lower_excess / sigma)) * (
+            1.0 + (lower_prominence / sigma)
+        )
 
         upper_weight = np.where(upper_flag, scale_weight * upper_strength, 0.0)
         lower_weight = np.where(lower_flag, scale_weight * lower_strength, 0.0)
 
         upper_target = np.minimum(
             upper_limit,
-            np.maximum(median, upper_reference) + (0.35 * sigma),
+            np.maximum(median, upper_reference) + (0.2 * sigma),
         )
         lower_target = np.maximum(
             lower_limit,
-            np.minimum(median, lower_reference) - (0.35 * sigma),
+            np.minimum(median, lower_reference) - (0.2 * sigma),
         )
 
         upper_value_sum += upper_weight * upper_target
@@ -311,6 +278,10 @@ def _suppress_spectral_peaks(
     data: np.ndarray, windows: tuple[int, ...]
 ) -> np.ndarray:
     if not windows:
+        log(
+            "Despiker",
+            "No spectral windows available, applying non-negativity clamp",
+        )
         return np.maximum(data, 0.0)
 
     nonnegative = np.maximum(data, 0.0)
@@ -331,8 +302,8 @@ def _suppress_spectral_peaks(
         median, mad = _windowed_median_and_mad(log_data, window, mode="nearest")
         sigma = _ROBUST_SIGMA_SCALE * np.maximum(mad, 1e-9)
 
-        threshold = 2.85 + (0.22 * scale_index)
-        prominence_threshold = (0.35 + (0.06 * scale_index)) * sigma
+        threshold = 3.5 + (0.35 * scale_index)
+        prominence_threshold = (0.75 + (0.12 * scale_index)) * sigma
 
         upper_limit = median + (threshold * sigma)
         excess = log_data - upper_limit
@@ -342,9 +313,7 @@ def _suppress_spectral_peaks(
         vote_count += flag
 
         scale_weight = 1.5 / np.sqrt(float(window))
-        strength = np.minimum(10.0, 1.0 + (excess / sigma)) * np.minimum(
-            7.0, 1.0 + (prominence / sigma)
-        )
+        strength = (1.0 + (excess / sigma)) * (1.0 + (prominence / sigma))
         weight = np.where(flag, scale_weight * strength, 0.0)
 
         upper_target = np.minimum(
@@ -355,10 +324,17 @@ def _suppress_spectral_peaks(
         upper_value_sum += weight * upper_target
         upper_weight_sum += weight
 
-    consensus = 1 if len(windows) <= 2 else 2 if len(windows) <= 6 else 3
-    corrected_log = log_data.copy()
+    consensus = max(2, int(np.ceil(len(windows) * 0.5)))
 
     mask = (vote_count >= consensus) & (upper_weight_sum > 0.0)
+
+    max_reduction_db = 1.5
+    max_reduction_ln = max_reduction_db * np.log(10.0) / 20.0
+    target = upper_value_sum[mask] / upper_weight_sum[mask]
+
+    corrected_log = log_data.copy()
+    corrected_log[mask] = np.maximum(target, log_data[mask] - max_reduction_ln)
+
     if np.any(mask):
         corrected_log[mask] = upper_value_sum[mask] / upper_weight_sum[mask]
 
@@ -380,9 +356,9 @@ def remove_spectral_spikes(data: np.ndarray) -> np.ndarray:
     output_dtype = (
         data.dtype
         if np.issubdtype(data.dtype, np.floating) and data.dtype.itemsize >= 4
-        else np.float64
+        else np.float32
     )
-    working = np.ascontiguousarray(data, dtype=np.float64)
+    working = np.ascontiguousarray(data, dtype=np.float32)
     channels = working[np.newaxis, :] if working.ndim == 1 else working
 
     if not np.isfinite(channels).all():
@@ -435,7 +411,7 @@ def resample(
     if np.issubdtype(y.dtype, np.integer):
         y = librosa.util.buf_to_float(y, n_bytes=y.itemsize)
     else:
-        y = y.astype(np.float64, copy=False)
+        y = y.astype(np.float32, copy=False)
 
     if sr > target_sr and sr % target_sr == 0 and allow_brickwall:
         log(
@@ -514,14 +490,14 @@ def process_audio_chunks(fn, data, chunk_size, overlap=0):
     if overlap >= chunk_size:
         raise ValueError("Overlap must be smaller than chunk size")
 
-    data = data.astype(np.float64)
+    data = data.astype(np.float32)
     if data.ndim == 1:
         data = data[np.newaxis, :]
 
     (_num_channels, audio_length) = data.shape
     step = chunk_size - overlap
-    final_result = np.zeros_like(data, dtype=np.float64)
-    window_sum = np.zeros_like(data, dtype=np.float64)
+    final_result = np.zeros_like(data, dtype=np.float32)
+    window_sum = np.zeros_like(data, dtype=np.float32)
     window = np.hanning(chunk_size)
     window = window[np.newaxis, :]
 

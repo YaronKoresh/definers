@@ -72,7 +72,7 @@ def apply_rms(y: np.ndarray, rms: float):
 def get_lufs(y: np.ndarray, sr: int) -> float:
     from scipy import signal
 
-    y_array = np.asarray(y, dtype=np.float64)
+    y_array = np.asarray(y, dtype=np.float32)
     if y_array.ndim == 0:
         y_array = y_array.reshape(1)
     if y_array.size == 0 or not np.isfinite(sr) or sr <= 0:
@@ -94,10 +94,10 @@ def get_lufs(y: np.ndarray, sr: int) -> float:
 
     if y_filt.ndim > 1:
         sum_axes = tuple(range(y_filt.ndim - 1))
-        y_sq = np.sum(np.square(y_filt, dtype=np.float64), axis=sum_axes)
+        y_sq = np.sum(np.square(y_filt, dtype=np.float32), axis=sum_axes)
         n_samples = y_filt.shape[-1]
     else:
-        y_sq = np.square(y_filt, dtype=np.float64)
+        y_sq = np.square(y_filt, dtype=np.float32)
         n_samples = len(y_sq)
 
     if n_samples == 0:
@@ -105,7 +105,7 @@ def get_lufs(y: np.ndarray, sr: int) -> float:
 
     if n_samples < win_size:
         ms = np.array(
-            [float(np.mean(y_sq, dtype=np.float64))], dtype=np.float64
+            [float(np.mean(y_sq, dtype=np.float32))], dtype=np.float32
         )
     else:
         y_windows = np.lib.stride_tricks.sliding_window_view(y_sq, win_size)[
@@ -113,10 +113,10 @@ def get_lufs(y: np.ndarray, sr: int) -> float:
         ]
         if y_windows.size == 0:
             ms = np.array(
-                [float(np.mean(y_sq, dtype=np.float64))], dtype=np.float64
+                [float(np.mean(y_sq, dtype=np.float32))], dtype=np.float32
             )
         else:
-            ms = np.mean(y_windows, axis=-1, dtype=np.float64)
+            ms = np.mean(y_windows, axis=-1, dtype=np.float32)
 
     ms = np.nan_to_num(ms, nan=0.0, posinf=0.0, neginf=0.0)
 
@@ -127,14 +127,14 @@ def get_lufs(y: np.ndarray, sr: int) -> float:
         return -70.0
 
     gamma_rel = max(
-        0.1 * float(np.mean(ms_gated, dtype=np.float64)), abs_threshold
+        0.1 * float(np.mean(ms_gated, dtype=np.float32)), abs_threshold
     )
     ms_final = ms_gated[ms_gated > gamma_rel]
 
     loudness_ms = float(
-        np.mean(ms_final, dtype=np.float64)
+        np.mean(ms_final, dtype=np.float32)
         if len(ms_final) > 0
-        else np.mean(ms_gated, dtype=np.float64)
+        else np.mean(ms_gated, dtype=np.float32)
     )
 
     if not np.isfinite(loudness_ms) or loudness_ms <= 0.0:
