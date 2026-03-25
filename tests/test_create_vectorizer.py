@@ -2,7 +2,7 @@ import unittest
 
 from sklearn.feature_extraction.text import TfidfVectorizer
 
-from definers.data import create_vectorizer
+from definers.application_data.vectorizers import create_vectorizer
 
 
 class TestCreateVectorizer(unittest.TestCase):

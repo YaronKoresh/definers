@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Any, Protocol, TypeAlias
+from typing import Any, Protocol, TypeAlias, TypedDict
 
 ColumnName: TypeAlias = str
 ColumnNames: TypeAlias = Sequence[ColumnName]
@@ -12,6 +12,20 @@ VectorizedValue: TypeAlias = Sequence[Sequence[float]] | Any
 LoadedValue: TypeAlias = Any
 FeatureLabelPair: TypeAlias = tuple[Any, Any]
 FeatureLabelBatch: TypeAlias = tuple[list[dict[str, Any]], list[dict[str, Any]]]
+
+
+class PrepareDataCacheEntry(TypedDict):
+    remote_src: Any
+    features: Any
+    labels: Any
+    url_type: Any
+    revision: Any
+    drop: Any
+    order_by: Any
+    stratify: Any
+    val_frac: float
+    test_frac: float
+    batch_size: int
 
 
 class ColumnDatasetPort(Protocol):
@@ -54,6 +68,12 @@ class DatasetLoaderPort(Protocol):
     def load_as_numpy(
         self, path: str, training: bool = False
     ) -> LoadedValue: ...
+
+
+class PrepareDataCacheControlPort(Protocol):
+    def clear_prepare_data_cache(self) -> int: ...
+
+    def prepare_data_cache_manifest(self) -> list[PrepareDataCacheEntry]: ...
 
     def fetch_dataset(
         self,

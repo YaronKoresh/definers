@@ -18,13 +18,15 @@ from .utils import apply_lufs, generate_bands, stereo_widen
 
 
 def audio_eq(
-    audio_data: np.ndarray, anchors: list[list[float]], sample_rate: int = 44100
+    audio_data: np.ndarray,
+    anchors: list[list[float]],
+    sample_rate: int = 44100,
+    nperseg: int = 8192,
 ) -> np.ndarray:
     anchors = sorted(anchors, key=lambda x: x[0])
     anchor_freqs = np.array([a[0] for a in anchors])
     anchor_gains_db = np.array([a[1] for a in anchors])
 
-    nperseg = 4096
     f, _t, Zxx = signal.stft(audio_data, fs=sample_rate, nperseg=nperseg)
 
     log_f = np.log10(f + 1e-5)
@@ -121,10 +123,10 @@ class SmartMastering:
 
         self.update_bands()
 
-        self.analysis_nperseg = int(
-            2 ** np.ceil(np.log2(self.resampling_target / 5))
+        self.analysis_nperseg = (
+            int(2 ** np.ceil(np.log2(self.resampling_target / 5))) * 8
         )
-        self.fft_n = self.analysis_nperseg * 2
+        self.fft_n = self.analysis_nperseg * 8
 
         self.target_freqs_hz = np.array(
             generate_bands(0.1, self.resampling_target / 2.0, self.num_bands),
@@ -175,11 +177,11 @@ class SmartMastering:
         drive_db: float = 0.0,
         ceil_db: float | None = -0.1,
         os_factor: int = 2,
-        lookahead_ms: float = 5.0,
-        attack_ms: float = 3.0,
-        release_ms_min: float = 50.0,
-        release_ms_max: float = 200.0,
-        soft_clip_ratio: float = 0.6,
+        lookahead_ms: float = 2.5,
+        attack_ms: float = 25.0,
+        release_ms_min: float = 40.0,
+        release_ms_max: float = 160.0,
+        soft_clip_ratio: float = 0.8,
         up_beta: float = 14.0,
         down_beta: float = 18.0,
     ) -> np.ndarray:
@@ -324,7 +326,7 @@ class SmartMastering:
             correction_db, nan=0.0, posinf=0.0, neginf=0.0
         )
 
-        eq_flat = max(1, len(correction_db) // 128)
+        eq_flat = max(1, len(correction_db) // self.analysis_nperseg)
 
         correction_db = np.append(correction_db[:-1:eq_flat], correction_db[-1])
         f_axis = np.append(f_axis[:-1:eq_flat], f_axis[-1])
@@ -335,20 +337,18 @@ class SmartMastering:
 
         flat_anchors = np.column_stack((f_axis, correction_db))
 
-        print("Equalizer anchors (Hz, dB):")
-        for anchor in flat_anchors:
-            print(f"{anchor[0]:.2f} Hz, {anchor[1]:.2f} dB")
-
         equalized = audio_eq(
             audio_data=y_mono,
             anchors=flat_anchors,
             sample_rate=self.resampling_target,
+            nperseg=self.analysis_nperseg,
         )
 
         return audio_eq(
             audio_data=equalized,
             anchors=self.anchors,
             sample_rate=self.resampling_target,
+            nperseg=self.analysis_nperseg,
         )
 
     def multiband_compress(self, y: np.ndarray) -> np.ndarray:

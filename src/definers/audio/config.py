@@ -10,25 +10,25 @@ class SmartMasteringConfig:
     num_bands: int = 16
     intensity: float = 1.0
 
-    bass_ratio: float = 4.2
-    bass_attack_ms: float = 7.0
-    bass_release_ms: float = 135.0
-    bass_threshold_db: float = -27.0
+    bass_ratio: float = 1.4
+    bass_attack_ms: float = 80.0
+    bass_release_ms: float = 140.0
+    bass_threshold_db: float = -16.0
 
-    treb_ratio: float = 1.35
-    treb_attack_ms: float = 4.0
-    treb_release_ms: float = 38.0
-    treb_threshold_db: float = -14.5
+    treb_ratio: float = 1.4
+    treb_attack_ms: float = 80.0
+    treb_release_ms: float = 20.0
+    treb_threshold_db: float = -16.0
 
     resampling_target: int = 44100
 
-    target_lufs: float = -5.5
+    target_lufs: float = -9.0
 
-    stop_bass_boost_hz: float = 140.0
-    start_treble_boost_hz: float = 9500.0
+    stop_bass_boost_hz: float = 4000.0
+    start_treble_boost_hz: float = 5000.0
 
-    bass_boost_db_per_oct: float = 1.6
-    treble_boost_ratio: float = 0.08
+    bass_boost_db_per_oct: float = 3.0
+    treble_boost_ratio: float = 0.05
 
     smoothing_fraction: float | None = 0.25
 
@@ -37,8 +37,8 @@ class SmartMasteringConfig:
     low_cut: float | None = None
     high_cut: float | None = None
 
-    drive_db: float = 1.5
-    ceil_db: float | None = -0.6
+    drive_db: float = 0.0
+    ceil_db: float | None = -1.0
 
     @classmethod
     def make_bands_from_fcs(

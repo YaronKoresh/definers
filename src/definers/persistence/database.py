@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from time import time
 from typing import Any
+from uuid import uuid4
 
 SECONDS_PER_DAY = 86400
 
@@ -32,6 +33,36 @@ class Database:
     def _record_path(self, db: str, timestamp: int) -> str:
         return os.path.join(self._database_path(db), str(timestamp))
 
+    def _parse_record_timestamp(self, directory_name: str) -> int | None:
+        timestamp_token = directory_name.split("-", 1)[0].strip()
+        if not timestamp_token:
+            return None
+        try:
+            return int(timestamp_token)
+        except ValueError:
+            return None
+
+    def _create_record_path(self, db: str, timestamp: int) -> str:
+        db_path = self._database_path(db)
+        os.makedirs(db_path, exist_ok=True)
+        primary_path = self._record_path(db, timestamp)
+        try:
+            os.mkdir(primary_path)
+            return primary_path
+        except FileExistsError:
+            pass
+
+        while True:
+            candidate_path = os.path.join(
+                db_path,
+                f"{timestamp}-{uuid4().hex[:12]}",
+            )
+            try:
+                os.mkdir(candidate_path)
+                return candidate_path
+            except FileExistsError:
+                continue
+
     def _history_start_timestamp(self, days: int | float | None) -> float:
         if days is None or not isinstance(days, (int, float)):
             return 0
@@ -58,17 +89,20 @@ class Database:
         self,
         db_path: str,
         start_timestamp: float,
-    ) -> list[int]:
+    ) -> list[tuple[int, str]]:
         try:
-            timestamps: list[int] = []
+            timestamps: list[tuple[int, str]] = []
             for directory_name in os.listdir(db_path):
-                try:
-                    timestamp = int(directory_name)
-                except ValueError:
+                timestamp = self._parse_record_timestamp(directory_name)
+                if timestamp is None:
                     continue
                 if timestamp >= start_timestamp:
-                    timestamps.append(timestamp)
-            return timestamps
+                    timestamps.append((timestamp, directory_name))
+            return sorted(
+                timestamps,
+                key=lambda item: (item[0], item[1]),
+                reverse=True,
+            )
         except FileNotFoundError:
             return []
 
@@ -121,14 +155,14 @@ class Database:
         start_timestamp = self._history_start_timestamp(days)
         timestamp_dirs = self._list_record_timestamps(db_path, start_timestamp)
         results: list[DatabaseRecord] = []
-        for timestamp_value in timestamp_dirs:
-            record_path = os.path.join(db_path, str(timestamp_value))
+        for timestamp_value, directory_name in timestamp_dirs:
+            record_path = os.path.join(db_path, directory_name)
             if not os.path.isdir(record_path):
                 continue
             item_data = self._read_record(record_path)
             if self._matches_filters(item_data, filters):
                 results.append(DatabaseRecord(timestamp_value, item_data))
-        return sorted(results, key=lambda item: item.timestamp, reverse=True)
+        return results
 
     def history(
         self,
@@ -146,8 +180,7 @@ class Database:
         timestamp: int | None = None,
     ) -> None:
         normalized_timestamp = self._normalize_timestamp(timestamp)
-        record_path = self._record_path(db, normalized_timestamp)
-        os.makedirs(record_path, exist_ok=True)
+        record_path = self._create_record_path(db, normalized_timestamp)
         for key, value in data.items():
             file_path = os.path.join(record_path, key)
             with open(file_path, "w", encoding="utf-8") as file_handle:

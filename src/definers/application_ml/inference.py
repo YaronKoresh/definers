@@ -1,109 +1,73 @@
-from __future__ import annotations
+class InferenceService:
+    @staticmethod
+    def catch(error: Exception) -> None:
+        try:
+            from definers.system import catch as runtime_catch
 
-from typing import Any
+            runtime_catch(error)
+        except Exception:
+            return None
 
-import numpy as np
-
-from definers.application_ml.contracts import (
-    LinearRegressionFactoryPort,
-    TextFeatureNameVectorizerPort,
-    TextFeatureVectorizerPort,
-)
-
-
-def _catch(error: Exception) -> None:
-    try:
-        from definers.system import catch as runtime_catch
-
-        runtime_catch(error)
-    except Exception:
-        return None
-
-
-def extract_text_features(
-    text: str | None,
-    vectorizer: TextFeatureVectorizerPort | None = None,
-):
-    from sklearn.feature_extraction.text import TfidfVectorizer
-
-    try:
-        active_vectorizer = vectorizer or TfidfVectorizer(
-            token_pattern="(?u)\\b\\w+\\b"
+    @staticmethod
+    def extract_text_features(text, vectorizer=None):
+        from definers.application_ml.text_feature_extractor import (
+            TextFeatureExtractor,
         )
-        tfidf_matrix = active_vectorizer.fit_transform([text])
-        return tfidf_matrix.toarray().flatten().astype(np.float32)
-    except Exception as error:
-        _catch(error)
-        return None
 
+        return TextFeatureExtractor.extract(text, vectorizer)
 
-def features_to_text(
-    predicted_features: Any,
-    vectorizer: TextFeatureNameVectorizerPort | None = None,
-    vocabulary: list[str] | None = None,
-) -> str | None:
-    from sklearn.feature_extraction.text import TfidfVectorizer
-
-    if vectorizer is None and vocabulary is None:
-        raise ValueError(
-            "Either a vectorizer or a vocabulary must be provided."
+    @staticmethod
+    def rank_reconstructed_tokens(
+        predicted_features, feature_names
+    ) -> list[str]:
+        from definers.application_ml.text_feature_reconstructor import (
+            TextFeatureReconstructor,
         )
-    try:
-        active_vectorizer = vectorizer
-        if active_vectorizer is None:
-            active_vectorizer = TfidfVectorizer(token_pattern="(?u)\\b\\w+\\b")
-            active_vectorizer.fit(vocabulary)
-        tfidf_matrix = np.asarray(predicted_features).reshape(1, -1)
-        word_indices = tfidf_matrix.nonzero()[1]
-        feature_names = active_vectorizer.get_feature_names_out()
-        reconstructed_words = [feature_names[i] for i in word_indices]
-        return " ".join(reconstructed_words)
-    except Exception as error:
-        _catch(error)
-        return None
 
-
-def _sanitize_prediction_path(model_path: str) -> str | None:
-    from definers.system import secure_path
-
-    try:
-        return secure_path(model_path)
-    except Exception as error:
-        _catch(error)
-        return None
-
-
-def predict_linear_regression(
-    X_new,
-    model_path: str,
-    *,
-    factory: LinearRegressionFactoryPort,
-):
-    import torch
-
-    sanitized_path = _sanitize_prediction_path(model_path)
-    if sanitized_path is None:
-        return None
-    try:
-        input_dim = X_new.shape[1]
-        model_torch = factory(input_dim)
-        model_torch.load_state_dict(
-            torch.load(sanitized_path, map_location="cpu")
+        return TextFeatureReconstructor.rank_tokens(
+            predicted_features,
+            feature_names,
         )
-        model_torch.eval()
-        target_device = torch.device(
-            "cuda" if torch.cuda.is_available() else "cpu"
+
+    @staticmethod
+    def features_to_text(predicted_features, vectorizer=None, vocabulary=None):
+        from definers.application_ml.text_feature_reconstructor import (
+            TextFeatureReconstructor,
         )
-        if hasattr(model_torch, "to"):
-            model_torch.to(target_device)
-        X_new_torch = torch.tensor(
+
+        return TextFeatureReconstructor.reconstruct(
+            predicted_features,
+            vectorizer=vectorizer,
+            vocabulary=vocabulary,
+        )
+
+    @staticmethod
+    def sanitize_prediction_path(model_path: str):
+        from definers.application_ml.regression_predictor import (
+            RegressionPredictor,
+        )
+
+        return RegressionPredictor.sanitize_path(model_path)
+
+    @staticmethod
+    def predict_linear_regression(X_new, model_path: str, *, factory):
+        sanitized_path = _sanitize_prediction_path(model_path)
+        if sanitized_path is None:
+            return None
+        from definers.application_ml.regression_predictor import (
+            RegressionPredictor,
+        )
+
+        return RegressionPredictor.predict(
             X_new,
-            dtype=torch.float32,
-            device=target_device,
+            sanitized_path,
+            factory=factory,
         )
-        with torch.no_grad():
-            predictions_torch = model_torch(X_new_torch).reshape(-1)
-        return predictions_torch.cpu().numpy().reshape(-1)
-    except Exception as error:
-        _catch(error)
-        return None
+
+
+_catch = InferenceService.catch
+_rank_reconstructed_tokens = InferenceService.rank_reconstructed_tokens
+_sanitize_prediction_path = InferenceService.sanitize_prediction_path
+extract_text_features = InferenceService.extract_text_features
+features_to_text = InferenceService.features_to_text
+predict_linear_regression = InferenceService.predict_linear_regression

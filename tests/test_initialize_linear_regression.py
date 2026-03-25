@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import torch
 
-import definers.ml as ml
+from definers.application_ml.training import initialize_linear_regression
 
 
 class DummyModel(torch.nn.Module):
@@ -36,7 +36,7 @@ class TestInitializeLinearRegression(unittest.TestCase):
         mock_model_instance = factory.return_value
         mock_model_instance.to = MagicMock()
         mock_model_instance.load_state_dict = MagicMock()
-        model = ml._initialize_linear_regression(
+        model = initialize_linear_regression(
             input_dim,
             model_path,
             runtime=self.runtime,
@@ -68,7 +68,7 @@ class TestInitializeLinearRegression(unittest.TestCase):
         mock_model_instance = factory.return_value
         mock_model_instance.to = MagicMock()
         mock_model_instance.load_state_dict = MagicMock()
-        model = ml._initialize_linear_regression(
+        model = initialize_linear_regression(
             input_dim,
             model_path,
             runtime=self.runtime,
@@ -99,7 +99,7 @@ class TestInitializeLinearRegression(unittest.TestCase):
         factory = MagicMock(return_value=DummyModel(4))
         mock_model_instance = factory.return_value
         mock_model_instance.to = MagicMock()
-        model = ml._initialize_linear_regression(
+        model = initialize_linear_regression(
             4,
             "../blocked_model.pth",
             runtime=self.runtime,

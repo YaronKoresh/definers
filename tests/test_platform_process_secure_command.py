@@ -1,8 +1,58 @@
 from __future__ import annotations
 
+import os
+
 import pytest
 
 from definers.platform import processes
+
+
+def test_secure_command_allows_current_python_executable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    python_path = os.path.normpath(
+        "C:/Users/User/AppData/Local/Programs/Python/Python310/python.exe"
+    )
+    monkeypatch.setattr(processes.sys, "executable", python_path)
+
+    result = processes.secure_command([python_path, "-m", "pip", "--version"])
+
+    assert result == [python_path, "-m", "pip", "--version"]
+
+
+def test_secure_command_allows_absolute_executable_resolved_from_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cmake_path = os.path.normpath("/usr/bin/cmake")
+    monkeypatch.setattr(processes.sys, "executable", "/usr/bin/python3")
+    monkeypatch.setattr(
+        processes.shutil,
+        "which",
+        lambda name: cmake_path if name == "cmake" else None,
+    )
+
+    result = processes.secure_command([cmake_path, "--version"])
+
+    assert result == [cmake_path, "--version"]
+
+
+def test_secure_command_still_uses_secure_path_for_untrusted_absolute_executable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+
+    def fake_secure_path(path: str) -> str:
+        calls.append(path)
+        return "C:/safe/tool.exe"
+
+    monkeypatch.setattr(processes.sys, "executable", "C:/Python/python.exe")
+    monkeypatch.setattr(processes.shutil, "which", lambda name: None)
+    monkeypatch.setattr(processes, "secure_path", fake_secure_path)
+
+    result = processes.secure_command(["C:/outside/tool.exe", "--help"])
+
+    assert result == ["C:/safe/tool.exe", "--help"]
+    assert calls == ["C:/outside/tool.exe"]
 
 
 def test_secure_command_splits_safe_string() -> None:

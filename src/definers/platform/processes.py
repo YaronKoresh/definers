@@ -1,12 +1,41 @@
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 from collections.abc import Sequence
 
 from definers.platform.contracts import CommandInput, ProcessEnvironment
 from definers.platform.paths import secure_path
+
+
+def _normalize_absolute_path(path: str) -> str:
+    return os.path.normcase(
+        os.path.normpath(os.path.abspath(os.path.expanduser(path)))
+    )
+
+
+def _secure_executable(executable: str) -> str:
+    if "/" not in executable and "\\" not in executable:
+        return executable
+
+    if not os.path.isabs(executable):
+        return secure_path(executable)
+
+    normalized_executable = _normalize_absolute_path(executable)
+    normalized_python = _normalize_absolute_path(sys.executable)
+
+    if normalized_executable == normalized_python:
+        return normalized_executable
+
+    resolved_from_path = shutil.which(os.path.basename(normalized_executable))
+    if resolved_from_path is not None:
+        normalized_resolved = _normalize_absolute_path(resolved_from_path)
+        if normalized_executable == normalized_resolved:
+            return normalized_executable
+
+    return secure_path(executable)
 
 
 def secure_command(command: CommandInput) -> list[str]:
@@ -34,9 +63,7 @@ def secure_command(command: CommandInput) -> list[str]:
     else:
         raise TypeError("Command must be a string or a list.")
 
-    executable = cmd_list[0]
-    if "/" in executable or "\\" in executable:
-        cmd_list[0] = secure_path(executable)
+    cmd_list[0] = _secure_executable(cmd_list[0])
     return cmd_list
 
 
@@ -45,7 +72,16 @@ def _run_command(
     silent: bool = False,
     env: ProcessEnvironment = None,
 ):
-    command_environment = {**os.environ, **(env or {})}
+    command_environment = dict(os.environ)
+    if env is not None:
+        for key, value in env.items():
+            normalized_key = str(key)
+            if not normalized_key:
+                continue
+            if value is None:
+                command_environment.pop(normalized_key, None)
+                continue
+            command_environment[normalized_key] = str(value)
     try:
         args = secure_command(command)
     except ValueError as error:

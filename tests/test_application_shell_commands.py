@@ -5,29 +5,40 @@ from definers.application_shell.commands import (
     MusicVideoCommand,
     StartCommand,
     UnknownCommand,
+    coerce_cli_request,
+    create_cli_command_registry,
     dispatch_cli_command,
+    get_known_cli_names,
     parse_cli_command,
 )
+
+COMMAND_REGISTRY = create_cli_command_registry(("chat", "video"))
 
 
 def test_parse_cli_command_builds_start_command_from_default_start():
     command = parse_cli_command(
         Namespace(command=None, project="chat"),
         read_lyrics_text=lambda value: value,
-        gui_commands=("chat", "video"),
+        command_registry=COMMAND_REGISTRY,
     )
 
-    assert command == StartCommand(project="chat")
+    assert isinstance(command, StartCommand)
+    assert command.project == "chat"
+    assert command.metadata is not None
+    assert command.metadata.resolved_name == "start"
 
 
 def test_parse_cli_command_normalizes_gui_command_names():
     command = parse_cli_command(
         Namespace(command=" Video ", project=" Chat "),
         read_lyrics_text=lambda value: value,
-        gui_commands=("chat", "video"),
+        command_registry=COMMAND_REGISTRY,
     )
 
-    assert command == StartCommand(project="video")
+    assert isinstance(command, StartCommand)
+    assert command.project == "video"
+    assert command.metadata is not None
+    assert command.metadata.resolved_name == "video"
 
 
 def test_parse_cli_command_builds_lyric_video_command_with_loaded_lyrics():
@@ -46,21 +57,22 @@ def test_parse_cli_command_builds_lyric_video_command_with_loaded_lyrics():
             fade=0.5,
         ),
         read_lyrics_text=lambda value: f"loaded:{value}",
-        gui_commands=("chat", "video"),
+        command_registry=COMMAND_REGISTRY,
     )
 
-    assert command == LyricVideoCommand(
-        audio="a.mp3",
-        background="b.png",
-        lyrics="loaded:lyrics.txt",
-        position="top",
-        max_dim=640,
-        font_size=70,
-        text_color="white",
-        stroke_color="black",
-        stroke_width=2,
-        fade=0.5,
-    )
+    assert isinstance(command, LyricVideoCommand)
+    assert command.audio == "a.mp3"
+    assert command.background == "b.png"
+    assert command.lyrics == "loaded:lyrics.txt"
+    assert command.position == "top"
+    assert command.max_dim == 640
+    assert command.font_size == 70
+    assert command.text_color == "white"
+    assert command.stroke_color == "black"
+    assert command.stroke_width == 2
+    assert command.fade == 0.5
+    assert command.metadata is not None
+    assert command.metadata.resolved_name == "lyric-video"
 
 
 def test_dispatch_cli_command_writes_music_video_result():
@@ -102,7 +114,37 @@ def test_parse_cli_command_normalizes_unknown_names():
     command = parse_cli_command(
         Namespace(command=" Nope ", project="chat"),
         read_lyrics_text=lambda value: value,
-        gui_commands=("chat", "video"),
+        command_registry=COMMAND_REGISTRY,
     )
 
-    assert command == UnknownCommand(name="nope")
+    assert isinstance(command, UnknownCommand)
+    assert command.name == "nope"
+    assert command.metadata is not None
+    assert command.metadata.resolved_name is None
+
+
+def test_create_cli_command_registry_rejects_builtin_command_conflicts():
+    try:
+        create_cli_command_registry(("music-video",))
+    except ValueError as exc:
+        assert str(exc) == "CLI command name conflict: music-video"
+    else:
+        raise AssertionError("expected ValueError")
+
+
+def test_get_known_cli_names_can_exclude_option_flags():
+    assert get_known_cli_names(COMMAND_REGISTRY, include_options=False) == (
+        "start",
+        "music-video",
+        "lyric-video",
+        "chat",
+        "video",
+    )
+
+
+def test_coerce_cli_request_uses_namespace_defaults():
+    request = coerce_cli_request(Namespace(command="start"))
+
+    assert request.project == "chat"
+    assert request.position == "bottom"
+    assert request.fade == 0.5

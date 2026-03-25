@@ -207,6 +207,32 @@ model_path = train(
 print(model_path)
 ```
 
+### Train With AutoTrainer
+
+```python
+from definers.ml import AutoTrainer
+
+trainer = AutoTrainer(batch_size=32)
+
+model_path = trainer.train_url(
+    "https://huggingface.co/datasets/owner/dataset",
+    target="label",
+    save_as="answer-model.joblib",
+)
+
+file_model_path = trainer.train_files(
+    ["./features.csv"],
+    target=["./labels.csv"],
+    save_as="offline-model.joblib",
+)
+
+predictions = trainer.predict([[0.2, 0.4], [0.8, 0.6]])
+
+print(model_path)
+print(file_model_path)
+print(predictions)
+```
+
 ### Extract Audio Features
 
 ```python
@@ -500,6 +526,14 @@ Treat `cuda` as an advanced path. Start with CPU-oriented or non-CUDA extras fir
 ### Heavy Extras Install Slowly
 
 Install only the extras you need. The project is intentionally segmented so narrow adoption does not require the full stack.
+
+### Hugging Face Model URLs Or Sharded Files Fail To Load
+
+Prefer a Hugging Face repo id, a `resolve` URL, or even a copied `blob` URL. Definers now normalizes Hugging Face references through the Hub client instead of treating them as generic web downloads.
+
+If a model is split into numbered files such as `model-001.safetensors`, `model-002.safetensors`, or `001-model.safetensors`, Definers can discover sibling shards automatically from the shared prefix or suffix around the numeric segment. For Hugging Face repositories it also checks index manifests when they exist.
+
+If you are using a non-Hugging Face HTTP source, prefer raw artifact URLs rather than HTML pages. Definers rejects obvious HTML and Git LFS pointer downloads before deserialization.
 
 ### A Shell Command Works Outside `run()` But Not Inside It
 

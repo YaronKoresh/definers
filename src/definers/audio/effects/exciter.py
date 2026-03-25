@@ -7,7 +7,7 @@ import numpy as np
 from scipy.signal import butter, sosfiltfilt
 
 from ...file_ops import catch, log
-from ..dsp import resample
+from ..dsp import remove_spectral_spikes, resample
 from ..utils import get_rms
 from .mixing import pad_audio
 
@@ -603,6 +603,7 @@ def _apply_exciter_core(
     )
     spectral_gain = _moving_average_last_axis(spectral_gain, smoothing_bins)
     spectral_gain = np.clip(spectral_gain, 0.0, config.max_spectral_gain)
+    spectral_gain = remove_spectral_spikes(spectral_gain)
 
     residual_spectrum *= spectral_gain
     wet_oversampled = np.fft.irfft(residual_spectrum, n=sample_count, axis=-1)

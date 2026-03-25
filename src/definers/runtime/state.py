@@ -1,5 +1,8 @@
-from collections.abc import Iterable, MutableMapping
+from __future__ import annotations
+
+from collections.abc import Iterable, Iterator, MutableMapping
 from dataclasses import dataclass, field
+from threading import RLock
 from typing import Any
 
 DEFAULT_RUNTIME_SCOPE = "default"
@@ -17,6 +20,89 @@ def _reset_mapping(
 ) -> None:
     target.clear()
     target.update(values)
+
+
+class LockedMapping(MutableMapping[str, Any]):
+    __slots__ = ("_data", "_lock")
+
+    def __init__(
+        self,
+        initial: MutableMapping[str, Any] | dict[str, Any] | None = None,
+        *,
+        lock: RLock | None = None,
+    ) -> None:
+        self._data: dict[str, Any] = {}
+        self._lock = lock or RLock()
+        if initial:
+            self.update(initial)
+
+    def __getitem__(self, key: str) -> Any:
+        with self._lock:
+            return self._data[key]
+
+    def __setitem__(self, key: str, value: Any) -> None:
+        with self._lock:
+            self._data[key] = value
+
+    def __delitem__(self, key: str) -> None:
+        with self._lock:
+            del self._data[key]
+
+    def __iter__(self) -> Iterator[str]:
+        with self._lock:
+            return iter(tuple(self._data))
+
+    def __len__(self) -> int:
+        with self._lock:
+            return len(self._data)
+
+    def clear(self) -> None:
+        with self._lock:
+            self._data.clear()
+
+    def update(self, other: Any = (), /, **kwargs: Any) -> None:
+        with self._lock:
+            if isinstance(other, MutableMapping):
+                for key, value in other.items():
+                    self._data[str(key)] = value
+            else:
+                for key, value in dict(other).items():
+                    self._data[str(key)] = value
+            for key, value in kwargs.items():
+                self._data[str(key)] = value
+
+    def get(self, key: str, default: Any = None) -> Any:
+        with self._lock:
+            return self._data.get(key, default)
+
+    def setdefault(self, key: str, default: Any = None) -> Any:
+        with self._lock:
+            return self._data.setdefault(key, default)
+
+    def pop(self, key: str, default: Any = None) -> Any:
+        with self._lock:
+            if default is None and key not in self._data:
+                raise KeyError(key)
+            return self._data.pop(key, default)
+
+
+def _wrap_mapping(
+    values: MutableMapping[str, Any] | dict[str, Any],
+    lock: RLock,
+) -> LockedMapping:
+    if isinstance(values, LockedMapping):
+        return values
+    return LockedMapping(values, lock=lock)
+
+
+def _wrap_tokenizers(
+    values: MutableMapping[str, dict[str, Any]] | dict[str, dict[str, Any]],
+    lock: RLock,
+) -> LockedMapping:
+    wrapped_values = {
+        key: _wrap_mapping(value, lock) for key, value in dict(values).items()
+    }
+    return LockedMapping(wrapped_values, lock=lock)
 
 
 def _default_models() -> dict[str, Any]:
@@ -69,6 +155,26 @@ class RuntimeState:
     )
     processors: dict[str, Any] = field(default_factory=_default_processors)
     configs: dict[str, Any] = field(default_factory=_default_configs)
+    _lock: RLock = field(default_factory=RLock, init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        self.models = _wrap_mapping(self.models, self._lock)
+        self.tokenizers = _wrap_tokenizers(self.tokenizers, self._lock)
+        self.processors = _wrap_mapping(self.processors, self._lock)
+        self.configs = _wrap_mapping(self.configs, self._lock)
+
+    def _get_tokenizer_entry_mapping(
+        self, name: str
+    ) -> MutableMapping[str, Any]:
+        with self._lock:
+            entry = self.tokenizers.get(name)
+            if entry is None:
+                entry = LockedMapping(lock=self._lock)
+                self.tokenizers[name] = entry
+            elif not isinstance(entry, LockedMapping):
+                entry = _wrap_mapping(entry, self._lock)
+                self.tokenizers[name] = entry
+            return entry
 
     def get_collections(self) -> RuntimeCollections:
         return RuntimeCollections(
@@ -103,7 +209,7 @@ class RuntimeState:
         *,
         model_name: str | None = None,
     ) -> dict[str, Any]:
-        entry = self.tokenizers.setdefault(name, {})
+        entry = self._get_tokenizer_entry_mapping(name)
         entry["tokenizer"] = tokenizer
         if model_name is not None:
             entry["model_name"] = model_name
@@ -126,24 +232,36 @@ class RuntimeState:
         return value
 
     def reset(self) -> None:
-        _reset_mapping(self.models, _default_models())
-        _reset_mapping(self.tokenizers, _default_tokenizers())
-        _reset_mapping(self.processors, _default_processors())
-        _reset_mapping(self.configs, _default_configs())
+        with self._lock:
+            _reset_mapping(self.models, _default_models())
+            _reset_mapping(
+                self.tokenizers,
+                _wrap_tokenizers(_default_tokenizers(), self._lock),
+            )
+            _reset_mapping(self.processors, _default_processors())
+            _reset_mapping(self.configs, _default_configs())
 
 
 @dataclass(slots=True)
 class RuntimeStateRegistry:
     states: dict[str, RuntimeState] = field(default_factory=dict)
     default_scope: str = DEFAULT_RUNTIME_SCOPE
+    _lock: RLock = field(default_factory=RLock, init=False, repr=False)
 
     def __post_init__(self) -> None:
-        self.default_scope = _normalize_scope(self.default_scope)
-        if self.default_scope not in self.states:
-            self.states[self.default_scope] = RuntimeState()
+        with self._lock:
+            self.default_scope = _normalize_scope(self.default_scope)
+            if self.default_scope not in self.states:
+                self.states[self.default_scope] = RuntimeState()
 
     def get_state(self, scope: str = DEFAULT_RUNTIME_SCOPE) -> RuntimeState:
-        return self.states.setdefault(_normalize_scope(scope), RuntimeState())
+        normalized_scope = _normalize_scope(scope)
+        with self._lock:
+            state = self.states.get(normalized_scope)
+            if state is None:
+                state = RuntimeState()
+                self.states[normalized_scope] = state
+            return state
 
     def create_state(
         self,
@@ -152,15 +270,16 @@ class RuntimeStateRegistry:
         replace: bool = False,
     ) -> RuntimeState:
         normalized_scope = _normalize_scope(scope)
-        if replace and normalized_scope == self.default_scope:
-            state = self.states.setdefault(normalized_scope, RuntimeState())
-            state.reset()
+        with self._lock:
+            if replace and normalized_scope == self.default_scope:
+                state = self.states.setdefault(normalized_scope, RuntimeState())
+                state.reset()
+                return state
+            if not replace and normalized_scope in self.states:
+                return self.states[normalized_scope]
+            state = RuntimeState()
+            self.states[normalized_scope] = state
             return state
-        if not replace and normalized_scope in self.states:
-            return self.states[normalized_scope]
-        state = RuntimeState()
-        self.states[normalized_scope] = state
-        return state
 
     def delete_state(self, scope: str) -> None:
         normalized_scope = _normalize_scope(scope)
@@ -168,10 +287,12 @@ class RuntimeStateRegistry:
             raise ValueError(
                 f"{self.default_scope} runtime scope cannot be deleted"
             )
-        self.states.pop(normalized_scope, None)
+        with self._lock:
+            self.states.pop(normalized_scope, None)
 
     def list_scopes(self) -> tuple[str, ...]:
-        return tuple(sorted(self.states))
+        with self._lock:
+            return tuple(sorted(self.states))
 
     def reset(self, scope: str = DEFAULT_RUNTIME_SCOPE) -> RuntimeState:
         state = self.get_state(scope)

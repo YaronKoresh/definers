@@ -1,38 +1,32 @@
-from collections.abc import Callable
-from typing import Any
+class GradioShared:
+    @staticmethod
+    def theme():
+        import gradio as gr
 
-from definers.presentation.chat_handlers import get_chat_response
+        return gr.themes.Base(
+            primary_hue=gr.themes.colors.slate,
+            secondary_hue=gr.themes.colors.indigo,
+            font=(
+                gr.themes.GoogleFont("Inter"),
+                "ui-sans-serif",
+                "system-ui",
+                "sans-serif",
+            ),
+        ).set(
+            body_background_fill_dark="#111827",
+            block_background_fill_dark="#1f2937",
+            block_border_width="1px",
+            block_title_background_fill_dark="#374151",
+            button_primary_background_fill_dark="linear-gradient(90deg, #4f46e5, #7c3aed)",
+            button_primary_text_color_dark="#ffffff",
+            button_secondary_background_fill_dark="#374151",
+            button_secondary_text_color_dark="#ffffff",
+            slider_color_dark="#6366f1",
+        )
 
-ChatHandler = Callable[[Any, Any], Any]
-
-
-def theme():
-    import gradio as gr
-
-    return gr.themes.Base(
-        primary_hue=gr.themes.colors.slate,
-        secondary_hue=gr.themes.colors.indigo,
-        font=(
-            gr.themes.GoogleFont("Inter"),
-            "ui-sans-serif",
-            "system-ui",
-            "sans-serif",
-        ),
-    ).set(
-        body_background_fill_dark="#111827",
-        block_background_fill_dark="#1f2937",
-        block_border_width="1px",
-        block_title_background_fill_dark="#374151",
-        button_primary_background_fill_dark="linear-gradient(90deg, #4f46e5, #7c3aed)",
-        button_primary_text_color_dark="#ffffff",
-        button_secondary_background_fill_dark="#374151",
-        button_secondary_text_color_dark="#ffffff",
-        slider_color_dark="#6366f1",
-    )
-
-
-def css() -> str:
-    return """
+    @staticmethod
+    def css() -> str:
+        return """
 video {
     border-radius: 20px;
 }
@@ -145,37 +139,48 @@ h3 {
 }
 """
 
+    @staticmethod
+    def init_chat(title: str = "Chatbot", handler=None):
+        import gradio as gr
 
-def init_chat(title: str = "Chatbot", handler: ChatHandler = get_chat_response):
-    import gradio as gr
+        from definers.presentation.chat_handlers import get_chat_response
 
-    chatbot = gr.Chatbot(
-        elem_id="chatbot",
-        type="messages",
-        show_copy_button=True,
-    )
-    return gr.ChatInterface(
-        fn=handler,
-        type="messages",
-        chatbot=chatbot,
-        multimodal=True,
-        title=title,
-        save_history=True,
-        show_progress="hidden",
-        concurrency_limit=None,
-    )
+        active_handler = get_chat_response if handler is None else handler
+        chatbot = gr.Chatbot(
+            elem_id="chatbot",
+            type="messages",
+            show_copy_button=True,
+        )
+        return gr.ChatInterface(
+            fn=active_handler,
+            type="messages",
+            chatbot=chatbot,
+            multimodal=True,
+            title=title,
+            save_history=True,
+            show_progress="hidden",
+            concurrency_limit=None,
+        )
+
+    @classmethod
+    def launch_blocks(
+        cls,
+        app,
+        *,
+        custom_css: str | None = None,
+        custom_theme=None,
+        server_port: int = 7860,
+    ):
+        app.launch(
+            server_name="0.0.0.0",
+            theme=cls.theme() if custom_theme is None else custom_theme,
+            css=cls.css() if custom_css is None else custom_css,
+            server_port=server_port,
+        )
 
 
-def launch_blocks(
-    app,
-    *,
-    custom_css: str | None = None,
-    custom_theme=None,
-    server_port: int = 7860,
-):
-    app.launch(
-        server_name="0.0.0.0",
-        theme=theme() if custom_theme is None else custom_theme,
-        css=css() if custom_css is None else custom_css,
-        server_port=server_port,
-    )
+ChatHandler = object
+theme = GradioShared.theme
+css = GradioShared.css
+init_chat = GradioShared.init_chat
+launch_blocks = GradioShared.launch_blocks

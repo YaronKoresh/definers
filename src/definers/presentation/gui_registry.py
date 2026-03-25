@@ -1,41 +1,50 @@
-from collections.abc import Callable, Mapping
-from typing import Any
+class GuiLauncherRegistry:
+    @staticmethod
+    def normalize_gui_project_name(project_name):
+        return project_name.strip().lower()
 
-GuiLauncher = Callable[[], Any]
-
-
-def normalize_gui_project_name(project_name: str) -> str:
-    return project_name.strip().lower()
-
-
-def _create_live_gui_launcher(
-    namespace: Mapping[str, object],
-    launcher_name: str,
-) -> GuiLauncher:
-    def launch() -> Any:
+    @staticmethod
+    def call_live_launcher(namespace, launcher_name):
         launcher = namespace.get(launcher_name)
         if not callable(launcher):
             raise LookupError(f"No GUI launcher called {launcher_name}")
         return launcher()
 
-    return launch
+    @classmethod
+    def register_gui_launchers(cls, launchers, namespace=None):
+        from functools import partial
 
-
-def register_gui_launchers(
-    launchers: Mapping[str, object],
-    namespace: Mapping[str, object] | None = None,
-) -> dict[str, GuiLauncher]:
-    registry: dict[str, GuiLauncher] = {}
-    for project_name, launcher in launchers.items():
-        normalized_project_name = normalize_gui_project_name(project_name)
-        if not normalized_project_name:
-            continue
-        if callable(launcher):
-            registry[normalized_project_name] = launcher
-            continue
-        if isinstance(launcher, str) and namespace is not None:
-            registry[normalized_project_name] = _create_live_gui_launcher(
-                namespace,
-                launcher,
+        registry = {}
+        for project_name, launcher in launchers.items():
+            normalized_project_name = cls.normalize_gui_project_name(
+                project_name
             )
-    return registry
+            if not normalized_project_name:
+                continue
+            if normalized_project_name in registry:
+                raise ValueError(
+                    f"Duplicate GUI launcher for project {normalized_project_name}"
+                )
+            if callable(launcher):
+                registry[normalized_project_name] = launcher
+                continue
+            if isinstance(launcher, str):
+                if namespace is None:
+                    raise ValueError(
+                        f"GUI launcher {normalized_project_name} requires a namespace"
+                    )
+                registry[normalized_project_name] = partial(
+                    cls.call_live_launcher,
+                    namespace,
+                    launcher,
+                )
+                continue
+            raise ValueError(
+                f"Unsupported GUI launcher for project {normalized_project_name}"
+            )
+        return registry
+
+
+normalize_gui_project_name = GuiLauncherRegistry.normalize_gui_project_name
+register_gui_launchers = GuiLauncherRegistry.register_gui_launchers
+GuiLauncher = object

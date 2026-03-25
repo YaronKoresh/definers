@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from definers.data import cupy_to_numpy
+from definers.application_data.arrays import cupy_to_numpy
 
 
 class TestCupyToNumpy(unittest.TestCase):

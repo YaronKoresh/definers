@@ -1,5 +1,9 @@
+import os
+from unittest.mock import patch
+
 import definers.command_runner as command_runner
 import definers.system as system
+from definers.platform import processes as process_module
 from definers.platform.services import (
     EnvironmentService,
     FileSystemService,
@@ -93,3 +97,38 @@ def test_system_run_uses_configured_process_service():
         "done"
     ]
     assert calls == [(["echo", "hello"], True, {"A": "1"})]
+
+
+def test_process_run_isolates_environment_overrides(monkeypatch):
+    captured_env: dict[str, str] = {}
+
+    class FakeProcess:
+        def __init__(self, *args, **kwargs):
+            nonlocal captured_env
+            captured_env = dict(kwargs["env"])
+            self.returncode = 0
+
+        def communicate(self):
+            return ("ok\n", "")
+
+    monkeypatch.setenv("DEFINERS_PROCESS_KEEP", "present")
+    monkeypatch.setenv("DEFINERS_PROCESS_REMOVE", "present")
+
+    with patch.object(
+        process_module, "secure_command", return_value=["echo", "ok"]
+    ):
+        with patch.object(process_module.subprocess, "Popen", FakeProcess):
+            result = process_module.run(
+                ["echo", "ok"],
+                silent=True,
+                env={
+                    "DEFINERS_PROCESS_REMOVE": None,
+                    "DEFINERS_PROCESS_NEW": 7,
+                },
+            )
+
+    assert result == ["ok"]
+    assert captured_env["DEFINERS_PROCESS_KEEP"] == "present"
+    assert captured_env["DEFINERS_PROCESS_NEW"] == "7"
+    assert "DEFINERS_PROCESS_REMOVE" not in captured_env
+    assert os.environ["DEFINERS_PROCESS_REMOVE"] == "present"

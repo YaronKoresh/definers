@@ -14,6 +14,7 @@ from collections import Counter, OrderedDict
 from pathlib import Path
 from time import sleep, time
 from types import SimpleNamespace
+from urllib.parse import urlparse
 
 import numpy as _np
 import numpy as np
@@ -54,7 +55,6 @@ from definers.constants import (
     PROCESSORS,
     TOKENIZERS,
     common_audio_formats,
-    language_codes,
     tasks,
 )
 
@@ -193,7 +193,9 @@ except Exception:
     download_file = None
     google_drive_download = None
 
-logger = init_logger()
+_FAILED_MODEL_LOADS: dict[str, str] = {}
+
+logger = init_logger("definers.ml")
 
 
 def _answer_runtime_adapter():
@@ -416,26 +418,6 @@ def kmeans_k_suggestions(X, k_range=range(2, 20), random_state=None):
     }
 
 
-def fit(model):
-    return _fit(
-        model,
-        array_adapter=_training_array_adapter(),
-        logger=log,
-        error_handler=catch,
-    )
-
-
-def feed(model, X_new, y_new=None, epochs=1):
-    return _feed(
-        model,
-        X_new,
-        y_new,
-        epochs=epochs,
-        logger=log,
-        concatenate=_concatenate_training_rows(),
-    )
-
-
 from definers.constants import MAX_CONSECUTIVE_SPACES, MAX_INPUT_LENGTH
 
 
@@ -449,153 +431,6 @@ def _validate_str_param(name: str, value: str) -> str:
     if " " * (MAX_CONSECUTIVE_SPACES + 1) in value:
         raise ValueError(f"{name} contains too many consecutive spaces")
     return value
-
-
-def train(
-    model_path=None,
-    remote_src=None,
-    revision=None,
-    url_type="parquet",
-    features=None,
-    labels=None,
-    dataset_label_columns=None,
-    drop_list=None,
-    selected_rows=None,
-    order_by=None,
-    stratify=None,
-    val_frac: float = 0.0,
-    test_frac: float = 0.0,
-    batch_size: int = 1,
-):
-    import joblib
-
-    from definers.application_data.arrays import numpy_to_cupy
-    from definers.application_data.loaders import (
-        drop_columns,
-        fetch_dataset,
-        files_to_dataset,
-        select_rows,
-        split_columns,
-    )
-    from definers.application_data.preparation import (
-        pad_sequences,
-        prepare_data,
-        to_loader,
-    )
-    from definers.application_data.tokenization import (
-        init_tokenizer,
-        tokenize_and_pad,
-    )
-    from definers.system import log, secure_path
-
-    if check_parameter(remote_src):
-        remote_src = _validate_str_param("remote_src", remote_src)
-    got_inp = check_parameter(features) or check_parameter(remote_src)
-
-    if check_parameter(selected_rows):
-        selected_rows = _validate_str_param("selected_rows", selected_rows)
-    is_supv = check_parameter(dataset_label_columns) or check_parameter(labels)
-    tokenizer = init_tokenizer()
-    model = None
-    if check_parameter(model_path):
-        try:
-            model_path = secure_path(model_path)
-        except Exception as e:
-            print(f"Unsafe model path in train(): {e}")
-            return None
-        model = joblib.load(model_path)
-        print(f"cuML model loaded from {model_path}")
-        if model is None:
-            logging.error(f"Could not load model from {model_path}")
-            return None
-    model_path = f"model_{random_string()}.joblib"
-    if not got_inp:
-        return None
-
-    loaders = []
-    if check_parameter(selected_rows):
-        selected_rows = _validate_str_param("selected_rows", selected_rows)
-        if check_parameter(remote_src):
-            dataset = fetch_dataset(remote_src, url_type, revision)
-        else:
-            dataset = files_to_dataset(features, labels)
-        dataset = drop_columns(dataset, drop_list)
-        log("Full dataset length", len(dataset))
-        selected_rows = simple_text(selected_rows).split()
-        for part in selected_rows:
-            if "-" in part:
-                start_end = part.split("-")
-                loaders.append(
-                    to_loader(
-                        select_rows(
-                            dataset, int(start_end[0]) - 1, int(start_end[-1])
-                        )
-                    )
-                )
-            else:
-                loaders.append(
-                    to_loader(select_rows(dataset, int(part) - 1, int(part)))
-                )
-    else:
-        td = prepare_data(
-            remote_src=remote_src,
-            features=features,
-            labels=labels,
-            url_type=url_type,
-            revision=revision,
-            drop=drop_list,
-            order_by=order_by,
-            stratify=stratify,
-            val_frac=val_frac,
-            test_frac=test_frac,
-            batch_size=batch_size,
-        )
-        if td is None:
-            return None
-
-        loaders.append(td.train)
-        if td.val is not None:
-            loaders.append(td.val)
-        if td.test is not None:
-            loaders.append(td.test)
-        try:
-            dataset_len = len(td.train.dataset)
-        except Exception:
-            dataset_len = None
-        if dataset_len is not None:
-            log("Full dataset length", dataset_len)
-    if is_supv:
-        for l, loader in enumerate(loaders):
-            logger.info(f"Loader {l + 1}")
-            for i, b in enumerate(loader):
-                logger.info(f"Batch {i + 1}: {b}")
-                (X, y) = split_columns(b, dataset_label_columns, is_batch=True)
-                X = tokenize_and_pad(X, tokenizer)
-                y = tokenize_and_pad(y, tokenizer)
-                X = pad_sequences(X)
-                X = numpy_to_cupy(X)
-                y = numpy_to_cupy(y)
-                logger.info("Feeding model")
-                model = feed(model, X, y)
-    else:
-        for l, loader in enumerate(loaders):
-            logger.info(f"Loader {l + 1}")
-            for i, b in enumerate(loader):
-                logger.info(f"Batch {i + 1}: {b}")
-                X = tokenize_and_pad(b, tokenizer)
-                X = pad_sequences(X)
-                X = numpy_to_cupy(X)
-                logger.info("Feeding model")
-                model = feed(model, X)
-    logger.info("Fitting model")
-    fit(model)
-    try:
-        joblib.dump(model, model_path)
-        log("Trained model path", model_path, status=True)
-        return model_path
-    except Exception as e:
-        print(f"Error saving cuML model: {e}")
-        return None
 
 
 def extract_text_features(text, vectorizer=None):
@@ -756,54 +591,6 @@ def build_faiss():
         catch(f"File not found error: {e}")
     except Exception as e:
         catch(f"An unexpected error occurred: {e}")
-
-
-def predict(prediction_file: str, model_path: str | list):
-    import joblib
-
-    try:
-        model_path = secure_path(model_path)
-    except Exception as e:
-        catch(e)
-        return None
-
-    model = joblib.load(model_path)
-    if model is None:
-        return None
-    ext = os.path.splitext(prediction_file)[1].lstrip(".").lower()
-    if ext in common_audio_formats:
-        return predict_audio(model, prediction_file)
-    if ext == "txt":
-        data = read(prediction_file)
-        vectorizer = create_vectorizer([data])
-        features = extract_text_features(data, vectorizer)
-    else:
-        features = load_as_numpy(prediction_file)
-        if features is None:
-            return None
-    gpu_features = numpy_to_cupy(features)
-    flat = one_dim_numpy(gpu_features)
-    prediction = model.predict(flat)
-    if prediction is None:
-        return None
-    if is_clusters_model(model):
-        prediction = get_cluster_content(model, int(prediction[0]))
-    output_type = guess_numpy_type(prediction)
-    if output_type == "text":
-        text = features_to_text(prediction)
-        path = random_string() + ".txt"
-        with open(path, "w") as f:
-            f.write(text)
-        return path
-    elif output_type == "image":
-        import imageio.v3 as iio
-
-        img = features_to_image(prediction)
-        img_np = cupy_to_numpy(img)
-        path = random_string() + ".png"
-        iio.imwrite(path, img_np)
-        return path
-    return None
 
 
 def init_custom_model(model_type: str, path: str | list):
@@ -1176,17 +963,57 @@ def is_huggingface_repo(repo_id: str) -> bool:
     )
 
 
+def normalize_huggingface_repo_id(value: str) -> str:
+    if not isinstance(value, str):
+        return value
+
+    cleaned_value = value.strip()
+    if not cleaned_value.startswith(("http://", "https://")):
+        return cleaned_value
+
+    parsed = urlparse(cleaned_value)
+    if parsed.netloc.lower() not in {"huggingface.co", "www.huggingface.co"}:
+        return cleaned_value
+
+    parts = [part for part in parsed.path.split("/") if part]
+    if len(parts) < 2:
+        return cleaned_value
+
+    if len(parts) >= 3 and parts[2] in {"resolve", "blob", "tree"}:
+        return cleaned_value
+
+    candidate = f"{parts[0]}/{parts[1]}"
+    if is_huggingface_repo(candidate):
+        return candidate
+
+    return cleaned_value
+
+
 def init_pretrained_model(task: str, turbo: bool = True):
     repo_tasks_override = ["svc", "tts"]
-    if task in MODELS and MODELS[task]:
+
+    normalized_task = normalize_huggingface_repo_id(task)
+
+    if normalized_task in MODELS and MODELS[normalized_task]:
         return
-    if (
-        task in repo_tasks_override
-        or (task in tasks and is_huggingface_repo(tasks[task]))
-        or is_huggingface_repo(task)
-    ):
-        return init_model_repo(task, turbo)
-    return init_model_file(task, turbo)
+    if normalized_task in _FAILED_MODEL_LOADS:
+        raise RuntimeError(_FAILED_MODEL_LOADS[normalized_task])
+
+    try:
+        if (
+            normalized_task in repo_tasks_override
+            or (
+                normalized_task in tasks
+                and is_huggingface_repo(tasks[normalized_task])
+            )
+            or is_huggingface_repo(normalized_task)
+        ):
+            return init_model_repo(normalized_task, turbo)
+        return init_model_file(normalized_task, turbo)
+    except Exception as error:
+        message = f"Failed to initialize model '{normalized_task}': {error}"
+        _FAILED_MODEL_LOADS[normalized_task] = message
+        raise RuntimeError(message) from error
 
 
 def choose_random_words(word_list, num_words=10):
@@ -2268,97 +2095,732 @@ def get_model_instructions(task: str, model_type: str) -> str:
     log(f"Deep Dive Analysis for '{task}'", final_report)
 
 
-def infer(task: str, inference_file: str, model_type: str = None):
-    import imageio as iio
-    import torch
-    from scipy.io import wavfile
+class AutoTrainer:
+    def __init__(
+        self,
+        source=None,
+        target=None,
+        model=None,
+        model_path: str | None = None,
+        task: str | None = None,
+        *,
+        batch_size: int = 32,
+        source_type: str = "parquet",
+        revision: str | None = None,
+        validation_split: float = 0.0,
+        test_split: float = 0.0,
+    ):
+        self.source = source
+        self.target = target
+        self.model = model
+        self.model_path = model_path
+        self.task = task
+        self.batch_size = batch_size
+        self.source_type = source_type
+        self.revision = revision
+        self.validation_split = validation_split
+        self.test_split = test_split
+        self.vectorizer = None
+        self.label_mapping = None
 
-    vec = None
-    input_data = None
-    model_path = task
-    if task in tasks:
-        model_path = tasks[task]
-    if not model_type:
-        model_type = get_ext(model_path)
-    model_type = model_type.lower()
-    if not (task in MODELS and MODELS[task]):
-        init_model_file(task)
-    mod = MODELS[task]
-    if mod is None:
-        return None
-    file_ext = get_ext(inference_file)
-    if file_ext == "txt":
-        txt = read(inference_file)
-        if isinstance(txt, (tuple, list)):
-            txt = "".join(txt)
-        vec = create_vectorizer([txt])
-        input_data = numpy_to_cupy(extract_text_features(txt, vec))
-    elif file_ext in common_audio_formats:
-        out = predict_audio(mod, inference_file)
-        print(f"Prediction saved to {out}")
-        return out
-    else:
-        input_data = numpy_to_cupy(load_as_numpy(inference_file))
-    if input_data is None:
-        log("Could not load input data", inference_file, status=False)
-        return None
-    pred = None
-    input_numpy = cupy_to_numpy(one_dim_numpy(input_data))
-    try:
-        if model_type in ["joblib", "pkl"]:
-            pred = mod.predict(input_numpy)
-        elif model_type in ["pt", "pth", "safetensors"]:
-            input_tensor = torch.from_numpy(input_numpy).to(device())
-            with torch.no_grad():
-                output_tensor = mod(input_tensor)
-            pred = output_tensor.cpu().numpy()
-        elif model_type == "onnx":
-            input_name = mod.get_inputs()[0].name
-            onnx_output = mod.run(
-                None, {input_name: input_numpy.astype(np.float32)}
-            )
-            pred = onnx_output[0]
-    except Exception as e:
-        logging.error(f"Model prediction failed for type '{model_type}': {e}")
-        return None
-    if pred is None:
-        logging.error("Model prediction returned None.")
-        return None
-    if is_clusters_model(mod):
-        pred = one_dim_numpy(get_cluster_content(mod, int(pred[0])))
-    pred_type = guess_numpy_type(pred)
-    output_filename = (
-        f"{random_string()}.{get_prediction_file_extension(pred_type)}"
-    )
-    if vec is not None:
-        pred = features_to_text(pred)
-    elif pred_type == "text":
-        pred = features_to_text(pred)
-    elif pred_type == "audio":
-        pred = features_to_audio(pred)
-    elif pred_type == "image":
-        pred = features_to_image(pred)
-    elif pred_type == "video":
-        pred = features_to_video(pred)
-    handlers = {
-        "video": lambda: write_video(pred, 24),
-        "image": lambda: iio.imwrite(
-            output_filename, (pred * 255).astype(np.uint8)
-        ),
-        "audio": lambda: wavfile.write(output_filename, 32000, pred),
-        "text": lambda: open(output_filename, "w").write(pred),
-    }
-    if pred_type in handlers:
-        try:
-            handlers[pred_type]()
-        except Exception as e:
-            catch(e)
+    def use(self, source=None, target=None, *, task: str | None = None):
+        if source is not None:
+            self.source = source
+        if target is not None:
+            self.target = target
+        if task is not None:
+            self.task = task
+        return self
+
+    def _coerce_reference(self, value):
+        if hasattr(value, "name") and not isinstance(value, (str, bytes)):
+            return getattr(value, "name")
+        return value
+
+    def _looks_like_path(self, value) -> bool:
+        value = self._coerce_reference(value)
+        if value is None:
+            return False
+        text = str(value).strip()
+        if not text:
+            return False
+        if os.path.exists(text):
+            return True
+        known_suffixes = (
+            ".csv",
+            ".json",
+            ".xlsx",
+            ".txt",
+            ".wav",
+            ".mp3",
+            ".flac",
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".mp4",
+            ".mkv",
+            ".joblib",
+            ".pth",
+            ".pkl",
+        )
+        return text.lower().endswith(known_suffixes)
+
+    def _looks_like_remote_source(self, value) -> bool:
+        value = self._coerce_reference(value)
+        if value is None:
+            return False
+        text = str(value).strip()
+        if not text or os.path.exists(text):
+            return False
+        if text.startswith(("http://", "https://")):
+            return True
+        normalized_text = normalize_huggingface_repo_id(text)
+        return is_huggingface_repo(normalized_text)
+
+    def _looks_like_path_collection(self, value) -> bool:
+        value = self._coerce_reference(value)
+        if isinstance(value, (list, tuple)) and value:
+            return all(self._looks_like_path(item) for item in value)
+        return self._looks_like_path(value)
+
+    def _coerce_path_collection(self, value):
+        value = self._coerce_reference(value)
+        if value is None:
             return None
-    else:
-        logging.error(f"Unsupported prediction type: {pred_type}")
+        if isinstance(value, (list, tuple)):
+            return [str(self._coerce_reference(item)) for item in value]
+        return [str(value)]
+
+    def _normalize_text_list(self, value):
+        value = self._coerce_reference(value)
+        if value is None:
+            return None
+        if isinstance(value, str):
+            normalized_value = _validate_str_param("value", value)
+            parts = [
+                part.strip()
+                for part in normalized_value.replace(",", ";").split(";")
+            ]
+            return [part for part in parts if part]
+        if isinstance(value, (list, tuple)):
+            parts = []
+            for item in value:
+                item_value = self._coerce_reference(item)
+                if item_value is None:
+                    continue
+                item_text = str(item_value).strip()
+                if item_text:
+                    parts.append(item_text)
+            return parts or None
+        text = str(value).strip()
+        return [text] if text else None
+
+    def _normalize_selected_rows(self, value):
+        value = self._coerce_reference(value)
+        if not check_parameter(value):
+            return None
+        return simple_text(_validate_str_param("selected_rows", str(value)))
+
+    def _resolve_training_source(self, data=None, target=None):
+        active_source = self.source if data is None else data
+        active_target = self.target if target is None else target
+        active_source = self._coerce_reference(active_source)
+        active_target = self._coerce_reference(active_target)
+        if isinstance(active_source, dict):
+            features = active_source.get(
+                "features", active_source.get("X", active_source.get("data"))
+            )
+            labels = active_source.get(
+                "labels", active_source.get("y", active_target)
+            )
+            return features, labels
+        if (
+            active_target is None
+            and isinstance(active_source, tuple)
+            and len(active_source) == 2
+        ):
+            return active_source[0], active_source[1]
+        return active_source, active_target
+
+    def _is_file_target(self, value) -> bool:
+        return self._looks_like_path_collection(value)
+
+    def _is_remote_dataset(self, value) -> bool:
+        value = self._coerce_reference(value)
+        if isinstance(value, (list, tuple)):
+            return False
+        return self._looks_like_remote_source(value)
+
+    def _is_file_dataset(self, value) -> bool:
+        value = self._coerce_reference(value)
+        if isinstance(value, (list, tuple)):
+            return bool(value) and all(
+                self._looks_like_path(item) for item in value
+            )
+        return self._looks_like_path(value)
+
+    def _extract_features_and_labels(self, data, labels=None):
+        if isinstance(data, dict):
+            features = data.get("features", data.get("X", data.get("data")))
+            extracted_labels = data.get("labels", data.get("y", labels))
+            return features, extracted_labels
+        if labels is None and isinstance(data, tuple) and len(data) == 2:
+            return data[0], data[1]
+        return data, labels
+
+    def _encode_text_features(self, rows):
+        normalized_rows = [str(row) for row in rows]
+        if create_vectorizer is None:
+            return np.asarray(normalized_rows, dtype=object).reshape(-1, 1)
+        if self.vectorizer is None:
+            self.vectorizer = create_vectorizer(normalized_rows)
+        matrix = self.vectorizer.transform(normalized_rows)
+        return np.asarray(matrix.toarray())
+
+    def _coerce_feature_data(self, data):
+        if data is None:
+            return None
+        if isinstance(data, str):
+            return self._encode_text_features([data])
+        if (
+            isinstance(data, (list, tuple))
+            and data
+            and all(isinstance(item, str) for item in data)
+        ):
+            return self._encode_text_features(data)
+        array = np.asarray(data)
+        if array.ndim == 0:
+            return array.reshape(1, 1)
+        if array.ndim == 1:
+            return array.reshape(-1, 1)
+        return array
+
+    def _coerce_label_data(self, labels):
+        if labels is None:
+            return None
+        if isinstance(labels, str):
+            labels = [labels]
+        if (
+            isinstance(labels, (list, tuple))
+            and labels
+            and all(isinstance(item, str) for item in labels)
+        ):
+            ordered_labels = [str(item) for item in labels]
+            unique_labels = list(dict.fromkeys(ordered_labels))
+            self.label_mapping = {
+                label: index for index, label in enumerate(unique_labels)
+            }
+            return np.asarray(
+                [self.label_mapping[label] for label in ordered_labels]
+            )
+        array = np.asarray(labels)
+        if array.ndim > 1 and array.shape[-1] == 1:
+            return array.reshape(-1)
+        return array
+
+    def load(self, model_path: str | None = None):
+        import joblib
+
+        from definers.system import secure_path
+
+        resolved_model_path = self._coerce_reference(
+            model_path or self.model_path
+        )
+        if not resolved_model_path:
+            return None
+        try:
+            safe_model_path = secure_path(resolved_model_path)
+        except Exception as error:
+            catch(error)
+            return None
+        self.model = joblib.load(safe_model_path)
+        self.model_path = safe_model_path
+        return self.model
+
+    def save(self, model_path: str | None = None):
+        import joblib
+
+        resolved_model_path = self._coerce_reference(
+            model_path or self.model_path or f"model_{random_string()}.joblib"
+        )
+        joblib.dump(self.model, resolved_model_path)
+        self.model_path = resolved_model_path
+        return resolved_model_path
+
+    def feed(self, data=None, target=None, epochs: int = 1):
+        feature_data, label_data = self._extract_features_and_labels(
+            self.source if data is None else data,
+            self.target if target is None else target,
+        )
+        feature_array = self._coerce_feature_data(feature_data)
+        label_array = self._coerce_label_data(label_data)
+        self.model = _feed(
+            self.model,
+            feature_array,
+            label_array,
+            epochs=epochs,
+            logger=log,
+            concatenate=_concatenate_training_rows(),
+        )
+        return self.model
+
+    def fit(self, data=None, target=None, epochs: int = 1, model=None):
+        if model is not None:
+            self.model = model
+        if data is not None or target is not None or self.source is not None:
+            self.feed(data, target, epochs=epochs)
+        if self.model is None:
+            self.model = HybridModel()
+        self.model = _fit(
+            self.model,
+            array_adapter=_training_array_adapter(),
+            logger=log,
+            error_handler=catch,
+        )
+        return self.model
+
+    def _dataset_loaders(
+        self,
+        source,
+        target,
+        *,
+        source_type: str,
+        revision: str | None,
+        label_columns,
+        drop,
+        select,
+        order_by,
+        stratify,
+        validation_split: float,
+        test_split: float,
+        batch_size: int,
+    ):
+        from definers.application_data.loaders import (
+            drop_columns,
+            fetch_dataset,
+            files_to_dataset,
+            select_rows,
+        )
+        from definers.application_data.preparation import (
+            prepare_data,
+            to_loader,
+        )
+
+        loaders = []
+        if check_parameter(select):
+            if self._is_remote_dataset(source):
+                dataset = fetch_dataset(source, source_type, revision)
+            else:
+                dataset = files_to_dataset(
+                    self._coerce_path_collection(source),
+                    self._coerce_path_collection(target)
+                    if self._is_file_target(target)
+                    else target,
+                )
+            dataset = drop_columns(dataset, drop)
+            log("Full dataset length", len(dataset))
+            for part in select.split():
+                if "-" in part:
+                    start_end = part.split("-")
+                    loaders.append(
+                        to_loader(
+                            select_rows(
+                                dataset,
+                                int(start_end[0]) - 1,
+                                int(start_end[-1]),
+                            )
+                        )
+                    )
+                else:
+                    loaders.append(
+                        to_loader(
+                            select_rows(dataset, int(part) - 1, int(part))
+                        )
+                    )
+            return loaders
+
+        prepared_data = prepare_data(
+            remote_src=source if self._is_remote_dataset(source) else None,
+            features=self._coerce_path_collection(source)
+            if self._is_file_dataset(source)
+            else source,
+            labels=self._coerce_path_collection(target)
+            if self._is_file_target(target)
+            else target,
+            url_type=source_type,
+            revision=revision,
+            drop=drop,
+            order_by=order_by,
+            stratify=stratify,
+            val_frac=validation_split,
+            test_frac=test_split,
+            batch_size=batch_size,
+        )
+        if prepared_data is None:
+            return []
+        loaders.append(prepared_data.train)
+        if prepared_data.val is not None:
+            loaders.append(prepared_data.val)
+        if prepared_data.test is not None:
+            loaders.append(prepared_data.test)
+        try:
+            dataset_len = len(prepared_data.train.dataset)
+        except Exception:
+            dataset_len = None
+        if dataset_len is not None:
+            log("Full dataset length", dataset_len)
+        return loaders
+
+    def _train_batches(self, loaders, label_columns):
+        from definers.application_data.arrays import numpy_to_cupy
+        from definers.application_data.loaders import split_columns
+        from definers.application_data.preparation import pad_sequences
+        from definers.application_data.tokenization import (
+            init_tokenizer,
+            tokenize_and_pad,
+        )
+
+        tokenizer = init_tokenizer()
+        is_supervised = check_parameter(label_columns)
+        for loader_index, loader in enumerate(loaders):
+            logger.info(f"Loader {loader_index + 1}")
+            for batch_index, batch in enumerate(loader):
+                logger.info(f"Batch {batch_index + 1}: {batch}")
+                if is_supervised:
+                    features_batch, labels_batch = split_columns(
+                        batch,
+                        label_columns,
+                        is_batch=True,
+                    )
+                    features_batch = pad_sequences(
+                        tokenize_and_pad(features_batch, tokenizer)
+                    )
+                    labels_batch = tokenize_and_pad(labels_batch, tokenizer)
+                    self.model = _feed(
+                        self.model,
+                        numpy_to_cupy(features_batch),
+                        numpy_to_cupy(labels_batch),
+                        logger=log,
+                        concatenate=_concatenate_training_rows(),
+                    )
+                    continue
+                features_batch = pad_sequences(
+                    tokenize_and_pad(batch, tokenizer)
+                )
+                self.model = _feed(
+                    self.model,
+                    numpy_to_cupy(features_batch),
+                    logger=log,
+                    concatenate=_concatenate_training_rows(),
+                )
+        return self.model
+
+    def train_url(
+        self,
+        url: str,
+        target=None,
+        *,
+        save_as: str | None = None,
+        revision: str | None = None,
+        source_type: str | None = None,
+        **kwargs,
+    ):
+        self.use(source=url, target=target)
+        return self.train(
+            save_as=save_as,
+            revision=revision,
+            source_type=source_type,
+            **kwargs,
+        )
+
+    def train_files(
+        self, files, target=None, *, save_as: str | None = None, **kwargs
+    ):
+        self.use(source=files, target=target)
+        return self.train(save_as=save_as, **kwargs)
+
+    def _resolve_inference_model_type(
+        self, model_source, model, model_type: str | None
+    ):
+        if model_type:
+            return str(model_type).lower()
+        try:
+            return get_ext(model_source).lower()
+        except Exception:
+            pass
+        if hasattr(model, "predict"):
+            return "joblib"
+        if hasattr(model, "get_inputs") and callable(model.get_inputs):
+            return "onnx"
+        return "pt"
+
+    def train(
+        self,
+        data=None,
+        target=None,
+        *,
+        save_as: str | None = None,
+        resume_from: str | None = None,
+        revision: str | None = None,
+        source_type: str | None = None,
+        label_columns=None,
+        drop=None,
+        select=None,
+        order_by=None,
+        stratify=None,
+        validation_split: float | None = None,
+        test_split: float | None = None,
+        batch_size: int | None = None,
+    ):
+        source, target_value = self._resolve_training_source(data, target)
+        active_revision = self.revision if revision is None else revision
+        active_source_type = (
+            self.source_type if source_type is None else source_type
+        )
+        active_validation_split = (
+            self.validation_split
+            if validation_split is None
+            else validation_split
+        )
+        active_test_split = (
+            self.test_split if test_split is None else test_split
+        )
+        active_batch_size = (
+            self.batch_size if batch_size is None else batch_size
+        )
+        normalized_select = self._normalize_selected_rows(select)
+        normalized_drop = self._normalize_text_list(drop)
+        normalized_label_columns = self._normalize_text_list(label_columns)
+
+        if self._is_remote_dataset(source):
+            _validate_str_param("remote_src", str(source))
+
+        if resume_from is not None:
+            self.model_path = self._coerce_reference(resume_from)
+            self.load(self.model_path)
+
+        if self._is_remote_dataset(source) or self._is_file_dataset(source):
+            resolved_label_columns = normalized_label_columns
+            if resolved_label_columns is None and not self._is_file_target(
+                target_value
+            ):
+                resolved_label_columns = self._normalize_text_list(target_value)
+            loaders = self._dataset_loaders(
+                source,
+                target_value,
+                source_type=active_source_type,
+                revision=active_revision,
+                label_columns=resolved_label_columns,
+                drop=normalized_drop,
+                select=normalized_select,
+                order_by=order_by,
+                stratify=stratify,
+                validation_split=active_validation_split,
+                test_split=active_test_split,
+                batch_size=active_batch_size,
+            )
+            if not loaders:
+                return None
+            self._train_batches(loaders, resolved_label_columns)
+            self.fit()
+            return self.save(save_as)
+
+        self.fit(source, target_value)
+        return self.save(save_as)
+
+    def _predict_from_file(
+        self, prediction_file: str, model_path: str | None = None
+    ):
+        import imageio.v3 as iio
+        import joblib
+
+        from definers.system import secure_path
+
+        resolved_prediction_file = str(self._coerce_reference(prediction_file))
+        resolved_model_path = self._coerce_reference(
+            model_path or self.model_path
+        )
+        if not resolved_model_path:
+            return None
+        try:
+            safe_model_path = secure_path(resolved_model_path)
+        except Exception as error:
+            catch(error)
+            return None
+        model = joblib.load(safe_model_path)
+        if model is None:
+            return None
+        ext = os.path.splitext(resolved_prediction_file)[1].lstrip(".").lower()
+        if ext in common_audio_formats:
+            return predict_audio(model, resolved_prediction_file)
+        if ext == "txt":
+            text_data = read(resolved_prediction_file)
+            vectorizer = create_vectorizer([text_data])
+            features = extract_text_features(text_data, vectorizer)
+        else:
+            features = load_as_numpy(resolved_prediction_file)
+            if features is None:
+                return None
+        prediction = model.predict(one_dim_numpy(numpy_to_cupy(features)))
+        if prediction is None:
+            return None
+        if is_clusters_model(model):
+            prediction = get_cluster_content(model, int(prediction[0]))
+        output_type = guess_numpy_type(prediction)
+        if output_type == "text":
+            text_output = features_to_text(prediction)
+            path = random_string() + ".txt"
+            with open(path, "w", encoding="utf-8") as file_obj:
+                file_obj.write(text_output)
+            return path
+        if output_type == "image":
+            image_output = features_to_image(prediction)
+            path = random_string() + ".png"
+            iio.imwrite(path, cupy_to_numpy(image_output))
+            return path
         return None
-    print(f"Prediction saved to {output_filename}")
-    return output_filename
+
+    def predict(self, data, model_path: str | None = None):
+        data = self._coerce_reference(data)
+        if self._looks_like_path_collection(data):
+            if isinstance(data, (list, tuple)):
+                data = data[0]
+            return self._predict_from_file(str(data), model_path=model_path)
+
+        model = self.model or self.load(model_path)
+        if model is None or not hasattr(model, "predict"):
+            return None
+        feature_data, _ = self._extract_features_and_labels(data)
+        feature_array = self._coerce_feature_data(feature_data)
+        if feature_array is None:
+            return None
+        prediction_input = np.asarray(feature_array)
+        if prediction_input.ndim == 1:
+            prediction_input = prediction_input.reshape(1, -1)
+        prediction = model.predict(prediction_input)
+        if cupy_to_numpy is not None:
+            try:
+                return cupy_to_numpy(prediction)
+            except Exception:
+                return prediction
+        return prediction
+
+    def infer(
+        self, data, task: str | None = None, model_type: str | None = None
+    ):
+        import imageio as iio
+        import torch
+        from scipy.io import wavfile
+
+        resolved_task = self._coerce_reference(
+            task or self.task or self.model_path
+        )
+        resolved_data = self._coerce_reference(data)
+        if resolved_task is None:
+            return self.predict(resolved_data)
+        if isinstance(resolved_data, (list, tuple)):
+            resolved_data = self._coerce_reference(resolved_data[0])
+        if resolved_data is None:
+            return None
+
+        vec = None
+        input_data = None
+        model_key = str(resolved_task)
+        model_source = tasks.get(model_key, model_key)
+
+        if not (model_key in MODELS and MODELS[model_key]):
+            init_model_file(model_key)
+        model = MODELS[model_key]
+        if model is None:
+            return None
+        active_model_type = self._resolve_inference_model_type(
+            model_source,
+            model,
+            model_type,
+        )
+
+        file_ext = get_ext(str(resolved_data))
+        if file_ext == "txt":
+            text_data = read(str(resolved_data))
+            if isinstance(text_data, (tuple, list)):
+                text_data = "".join(text_data)
+            vec = create_vectorizer([text_data])
+            input_data = numpy_to_cupy(extract_text_features(text_data, vec))
+        elif file_ext in common_audio_formats:
+            return predict_audio(model, str(resolved_data))
+        else:
+            input_data = numpy_to_cupy(load_as_numpy(str(resolved_data)))
+        if input_data is None:
+            log("Could not load input data", resolved_data, status=False)
+            return None
+
+        input_numpy = cupy_to_numpy(one_dim_numpy(input_data))
+        try:
+            if active_model_type in ["joblib", "pkl"]:
+                prediction = model.predict(input_numpy)
+            elif active_model_type in ["pt", "pth", "safetensors"]:
+                input_tensor = torch.from_numpy(input_numpy).to(device())
+                with torch.no_grad():
+                    output_tensor = model(input_tensor)
+                prediction = output_tensor.cpu().numpy()
+            elif active_model_type == "onnx":
+                input_name = model.get_inputs()[0].name
+                prediction = model.run(
+                    None,
+                    {input_name: input_numpy.astype(np.float32)},
+                )[0]
+            else:
+                return None
+        except Exception as error:
+            logging.error(
+                f"Model prediction failed for type '{active_model_type}': {error}"
+            )
+            return None
+
+        if prediction is None:
+            logging.error("Model prediction returned None.")
+            return None
+        if is_clusters_model(model):
+            prediction = one_dim_numpy(
+                get_cluster_content(model, int(prediction[0]))
+            )
+        prediction_type = guess_numpy_type(prediction)
+        if vec is not None:
+            prediction = features_to_text(prediction)
+            prediction_type = "text"
+        elif prediction_type == "text":
+            prediction = features_to_text(prediction)
+        elif prediction_type == "audio":
+            prediction = features_to_audio(prediction)
+        elif prediction_type == "image":
+            prediction = features_to_image(prediction)
+        elif prediction_type == "video":
+            prediction = features_to_video(prediction)
+        output_filename = f"{random_string()}.{get_prediction_file_extension(prediction_type)}"
+        handlers = {
+            "video": lambda: write_video(prediction, 24),
+            "image": lambda: iio.imwrite(
+                output_filename,
+                (prediction * 255).astype(np.uint8),
+            ),
+            "audio": lambda: wavfile.write(output_filename, 32000, prediction),
+            "text": lambda: open(output_filename, "w", encoding="utf-8").write(
+                prediction
+            ),
+        }
+        handler = handlers.get(prediction_type)
+        if handler is None:
+            logging.error(f"Unsupported prediction type: {prediction_type}")
+            return None
+        try:
+            handler()
+        except Exception as error:
+            catch(error)
+            return None
+        print(f"Prediction saved to {output_filename}")
+        return output_filename
+
+    inference = infer
 
 
 def compile_model(model_or_pipeline):
@@ -2441,41 +2903,3 @@ def compile_model(model_or_pipeline):
             "Object is not a recognized Diffusers pipeline or Transformers model. No action taken."
         )
         return model_or_pipeline
-
-
-def keep_alive(fn, outputs: int = 1):
-    import gradio as gr
-
-    def worker(*args, **kwargs):
-        yld = None
-        if outputs >= 2:
-            yld = (gr.update(),) * outputs
-        elif outputs == 1:
-            yld = gr.update()
-
-        def thread_target(*args, **kwargs):
-            try:
-                return fn(*args, **kwargs)
-            except Exception as e:
-                return catch(e)
-
-        t = thread(thread_target, *args, **kwargs)
-        sleep(5)
-        counter = 5
-        if outputs == 0:
-            while t[1].is_alive():
-                gr.Info(f"Time passed: {str(counter)}s", duration=1.0)
-                sleep(5)
-                counter += 5
-        else:
-            while t[1].is_alive():
-                yield yld
-                gr.Info(f"Time passed: {str(counter)}s", duration=1.0)
-                sleep(5)
-                counter += 5
-        if outputs == 0:
-            wait(t)
-        elif outputs >= 1:
-            yield wait(t)[0]
-
-    return worker

@@ -1,3 +1,5 @@
+from concurrent.futures import ThreadPoolExecutor
+
 from definers.runtime.state import (
     create_runtime_state,
     delete_runtime_state,
@@ -126,3 +128,42 @@ def test_create_runtime_state_rejects_blank_scope() -> None:
         assert str(error) == "scope must not be empty"
     else:
         raise AssertionError("blank scope creation should fail")
+
+
+def test_create_runtime_state_is_stable_under_concurrent_access() -> None:
+    delete_runtime_state("parallel-scope")
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        states = list(
+            executor.map(
+                lambda _: create_runtime_state("parallel-scope"),
+                range(32),
+            )
+        )
+
+    first_state = states[0]
+    assert all(state is first_state for state in states)
+
+
+def test_runtime_state_supports_concurrent_helper_mutations() -> None:
+    scoped_state = create_runtime_state("parallel-mutations", replace=True)
+
+    def mutate(index: int) -> tuple[int, object]:
+        marker = object()
+        scoped_state.set_model(f"answer-{index}", marker)
+        scoped_state.set_tokenizer(
+            "summary",
+            marker,
+            model_name=f"summary-{index}",
+        )
+        return index, scoped_state.get_model(f"answer-{index}")
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        results = list(executor.map(mutate, range(32)))
+
+    assert len(results) == 32
+    assert all(marker is not None for _, marker in results)
+    tokenizer_entry = scoped_state.get_tokenizer_entry("summary")
+    assert tokenizer_entry is not None
+    assert tokenizer_entry["tokenizer"] is not None
+    assert str(tokenizer_entry["model_name"]).startswith("summary-")

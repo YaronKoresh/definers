@@ -4,39 +4,42 @@ from definers.presentation.gradio_shared import init_chat, launch_blocks
 def launch_audio_app():
     import gradio as gr
 
-    from definers import (
+    from definers.audio import (
         analyze_audio_features,
         audio_to_midi,
         beat_visualizer,
         change_audio_speed,
-        convert_vocal_rvc,
         create_share_links,
         create_spectrum_visualization,
-        cwd,
-        device,
         dj_mix,
-        enhance_audio,
-        exist,
         extend_audio,
         generate_music,
         generate_voice,
         get_audio_feedback,
         identify_instruments,
-        init_pretrained_model,
-        install_audio_effects,
-        install_ffmpeg,
-        language_codes,
+        master as enhance_audio,
         midi_to_audio,
         pitch_shift_vocals,
-        random_string,
-        save_temp_text as save_text_to_file,
         separate_stems,
-        set_system_message,
         stem_mixer,
-        train_model_rvc,
         transcribe_audio,
     )
     from definers.chat import init_stable_whisper, lyric_video, music_video
+    from definers.constants import language_codes
+    from definers.cuda import device
+    from definers.file_ops import save_temp_text as save_text_to_file
+    from definers.ml import (
+        convert_vocal_rvc,
+        init_pretrained_model,
+        train_model_rvc,
+    )
+    from definers.system import (
+        cwd,
+        exist,
+        install_audio_effects,
+        install_ffmpeg,
+    )
+    from definers.text import random_string, set_system_message
 
     install_audio_effects()
     install_ffmpeg()

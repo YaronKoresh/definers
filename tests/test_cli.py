@@ -133,3 +133,14 @@ def test_start_dispatch_uses_registry_resolution(monkeypatch):
 
     assert code == 0
     assert called == ["chat"]
+
+
+def test_unknown_namespace_only_gui_command_stays_invalid(monkeypatch):
+    import definers.chat as chat
+
+    monkeypatch.setitem(chat.__dict__, "_gui_namespace_only", lambda: 0)
+
+    code, out = run_cli(["namespace-only"])
+
+    assert code == 1
+    assert out == "unknown command namespace-only"
