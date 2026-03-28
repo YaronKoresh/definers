@@ -3,6 +3,9 @@ from types import SimpleNamespace
 from definers.application_ml.answer_content_path_resolver import (
     AnswerContentPathResolver,
 )
+from definers.application_ml.answer_dependency_loader import (
+    AnswerDependencyLoader,
+)
 from definers.application_ml.answer_text_service import AnswerTextService
 
 
@@ -53,3 +56,21 @@ def test_append_history_message_appends_new_role():
         {"role": "system", "content": "base"},
         {"role": "assistant", "content": "reply"},
     ]
+
+
+def test_answer_dependency_loader_returns_none_for_missing_optional_modules(
+    monkeypatch,
+):
+    original_import = __import__
+
+    def fake_import(name, *args, **kwargs):
+        if name in {"librosa", "soundfile"}:
+            raise ImportError(name)
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr("builtins.__import__", fake_import)
+
+    loader = AnswerDependencyLoader()
+
+    assert loader.load_librosa_module() is None
+    assert loader.load_soundfile_module() is None

@@ -241,3 +241,21 @@ cmd = "ruff format ."
 
 [tool.poe.tasks.dead-code]
 cmd = "vulture src/ --min-confidence 80 --sort-by-size"
+
+[tool.poe.tasks.cli-health]
+cmd = "python -m pytest tests/test_cli.py tests/test_cli_health.py tests/test_launchers.py -q"
+
+[tool.poe.tasks.cli-health.env]
+PYTEST_DISABLE_PLUGIN_AUTOLOAD = "1"
+
+[tool.poe.tasks.answer-simulations]
+cmd = "python -m pytest tests/test_application_ml_answer_services.py tests/test_application_ml_answer_history_preparer.py tests/test_answer.py -q"
+
+[tool.poe.tasks.answer-simulations.env]
+PYTEST_DISABLE_PLUGIN_AUTOLOAD = "1"
+
+[tool.poe.tasks.ml-health]
+cmd = "python -m pytest tests/test_ml_health.py tests/test_auto_trainer.py tests/test_train_handlers.py tests/test_audio_workspace.py -q"
+
+[tool.poe.tasks.ml-health.env]
+PYTEST_DISABLE_PLUGIN_AUTOLOAD = "1"

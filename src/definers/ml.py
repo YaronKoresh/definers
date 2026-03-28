@@ -13,7 +13,6 @@ import warnings
 from collections import Counter, OrderedDict
 from pathlib import Path
 from time import sleep, time
-from types import SimpleNamespace
 from urllib.parse import urlparse
 
 import numpy as _np
@@ -21,6 +20,13 @@ import numpy as np
 
 from definers import regex_utils
 from definers.application_ml import answer as _answer
+from definers.application_ml.facade_api import MlFacadeApi
+from definers.application_ml.facade_runtime import MlFacadeRuntime
+from definers.application_ml.health import (
+    collect_live_ml_health_snapshot as _collect_live_ml_health_snapshot,
+    render_ml_health_markdown as _render_ml_health_markdown,
+    run_ml_health_check as _run_ml_health_check,
+)
 from definers.application_ml.inference import (
     extract_text_features as _extract_text_features,
     features_to_text as _features_to_text,
@@ -199,116 +205,105 @@ logger = init_logger("definers.ml")
 
 
 def _answer_runtime_adapter():
-    return SimpleNamespace(MODELS=MODELS, PROCESSORS=PROCESSORS)
+    return MlFacadeRuntime.build_answer_runtime(MODELS, PROCESSORS)
 
 
 def _linear_regression_runtime_adapter():
-    return SimpleNamespace(device=device)
+    return MlFacadeRuntime.build_linear_regression_runtime(device)
 
 
 def _train_linear_regression_runtime_adapter():
-    return SimpleNamespace(
-        device=device,
-        initialize_linear_regression=initialize_linear_regression,
+    return MlFacadeRuntime.build_train_linear_regression_runtime(
+        device,
+        initialize_linear_regression,
     )
 
 
 def _training_array_adapter():
-    return SimpleNamespace(
-        catch=catch,
-        cupy_to_numpy=cupy_to_numpy,
-        get_max_shapes=get_max_shapes,
-        numpy_to_cupy=numpy_to_cupy,
-        reshape_numpy=reshape_numpy,
+    return MlFacadeRuntime.build_training_array_adapter(
+        catch,
+        cupy_to_numpy,
+        get_max_shapes,
+        numpy_to_cupy,
+        reshape_numpy,
     )
 
 
 def _concatenate_training_rows():
-    cupy_module = getattr(np, "cuda", None)
-    if cupy_module is not None:
-        concatenate = getattr(cupy_module, "cupy", None)
-        if concatenate is not None:
-            concatenate = getattr(concatenate, "concatenate", None)
-            if concatenate is not None:
-                return concatenate
-    return np.concatenate
+    return MlFacadeRuntime.resolve_training_row_concatenate(np)
 
 
 def map_reduce_summary(text, max_words):
-    from definers.application_ml.text_generation import (
-        map_reduce_summary as _map_reduce_summary,
-    )
-
-    return _map_reduce_summary(text, max_words)
+    return MlFacadeApi.map_reduce_summary(text, max_words)
 
 
 def optimize_prompt_realism(prompt):
-    from definers.application_ml.text_generation import (
-        optimize_prompt_realism as _optimize_prompt_realism,
-    )
-
-    return _optimize_prompt_realism(prompt)
+    return MlFacadeApi.optimize_prompt_realism(prompt)
 
 
 def preprocess_prompt(prompt):
-    from definers.application_ml.text_generation import (
-        preprocess_prompt as _preprocess_prompt,
-    )
-
-    return _preprocess_prompt(prompt)
+    return MlFacadeApi.preprocess_prompt(prompt)
 
 
 def summarize(text_to_summarize):
-    from definers.application_ml.text_generation import summarize as _summarize
-
-    return _summarize(text_to_summarize)
+    return MlFacadeApi.summarize(text_to_summarize)
 
 
 def summary(text, max_words=20, min_loops=1):
-    from definers.application_ml.text_generation import summary as _summary
-
-    return _summary(text, max_words=max_words, min_loops=min_loops)
+    return MlFacadeApi.summary(text, max_words=max_words, min_loops=min_loops)
 
 
 def answer(history: list):
-    return _answer(history, runtime=_answer_runtime_adapter())
+    return MlFacadeApi.answer(
+        history,
+        answer_fn=_answer,
+        models=MODELS,
+        processors=PROCESSORS,
+    )
 
 
 def linear_regression(X, y, learning_rate=0.01, epochs=50):
-    return _linear_regression(
+    return MlFacadeApi.linear_regression(
         X,
         y,
+        linear_regression_fn=_linear_regression,
         learning_rate=learning_rate,
         epochs=epochs,
     )
 
 
 def initialize_linear_regression(input_dim, model_path):
-    return _initialize_linear_regression(
+    return MlFacadeApi.initialize_linear_regression(
         input_dim,
         model_path,
-        runtime=_linear_regression_runtime_adapter(),
+        initialize_linear_regression_fn=_initialize_linear_regression,
         factory=_LinearRegressionTorch,
+        device_fn=device,
         logger=logger.info,
     )
 
 
 def train_linear_regression(X, y, model_path, learning_rate=0.01):
-    return _train_linear_regression(
+    return MlFacadeApi.train_linear_regression(
         X,
         y,
         model_path,
+        train_linear_regression_fn=_train_linear_regression,
+        initialize_linear_regression_fn=initialize_linear_regression,
+        device_fn=device,
         learning_rate=learning_rate,
-        runtime=_train_linear_regression_runtime_adapter(),
     )
 
 
 def init_model_file(task: str, turbo: bool = True, model_type: str = None):
-    from definers.application_ml.repository_sync import (
-        init_model_file as _init_model_file,
-    )
+    from definers.application_ml.repository_sync import init_model_file as _init_model_file
 
-    return _init_model_file(task, turbo=turbo, model_type=model_type)
+    return MlFacadeApi.init_model_file(
+        task,
+        init_model_file_fn=_init_model_file,
+        turbo=turbo,
+        model_type=model_type,
+    )
 
 
 def kmeans_k_suggestions(X, k_range=range(2, 20), random_state=None):
@@ -434,23 +429,41 @@ def _validate_str_param(name: str, value: str) -> str:
 
 
 def extract_text_features(text, vectorizer=None):
-    return _extract_text_features(text, vectorizer)
+    return MlFacadeApi.extract_text_features(
+        text,
+        extract_text_features_fn=_extract_text_features,
+        vectorizer=vectorizer,
+    )
 
 
 def predict_linear_regression(X_new, model_path):
-    return _predict_linear_regression(
+    return MlFacadeApi.predict_linear_regression(
         X_new,
         model_path,
+        predict_linear_regression_fn=_predict_linear_regression,
         factory=_LinearRegressionTorch,
     )
 
 
 def features_to_text(predicted_features, vectorizer=None, vocabulary=None):
-    return _features_to_text(
+    return MlFacadeApi.features_to_text(
         predicted_features,
+        features_to_text_fn=_features_to_text,
         vectorizer=vectorizer,
         vocabulary=vocabulary,
     )
+
+
+def get_ml_health_snapshot():
+    return _collect_live_ml_health_snapshot()
+
+
+def validate_ml_health():
+    return _run_ml_health_check()
+
+
+def ml_health_markdown():
+    return _render_ml_health_markdown(get_ml_health_snapshot())
 
 
 def lang_code_to_name(code):
@@ -594,6 +607,9 @@ def build_faiss():
 
 
 def init_custom_model(model_type: str, path: str | list):
+    from definers.application_ml.safe_deserialization import (
+        load_serialized_model,
+    )
 
     if not path or model_type not in ("onnx", "pkl"):
         return None
@@ -604,15 +620,13 @@ def init_custom_model(model_type: str, path: str | list):
     try:
         path = secure_path(path)
 
-        with open(path, "rb") as f:
-            if model_type == "onnx":
+        if model_type == "onnx":
+            with open(path, "rb") as f:
                 import onnx
 
                 model = onnx.load(f)
-            elif model_type == "pkl":
-                import pickle
-
-                model = pickle.load(f)
+        else:
+            model = load_serialized_model(path, model_type)
 
         return model
 
@@ -2221,6 +2235,50 @@ class AutoTrainer:
             return None
         return simple_text(_validate_str_param("selected_rows", str(value)))
 
+    def training_plan(
+        self,
+        data=None,
+        target=None,
+        *,
+        resume_from: str | None = None,
+        revision: str | None = None,
+        source_type: str | None = None,
+        label_columns=None,
+        drop=None,
+        select=None,
+        validation_split: float | None = None,
+        test_split: float | None = None,
+        batch_size: int | None = None,
+    ):
+        from definers.application_ml.trainer_plan import build_training_plan
+
+        source, target_value = self._resolve_training_source(data, target)
+        active_revision = self.revision if revision is None else revision
+        active_source_type = self.source_type if source_type is None else source_type
+        active_validation_split = (
+            self.validation_split if validation_split is None else validation_split
+        )
+        active_test_split = self.test_split if test_split is None else test_split
+        active_batch_size = self.batch_size if batch_size is None else batch_size
+        normalized_select = self._normalize_selected_rows(select)
+        normalized_drop = self._normalize_text_list(drop)
+        normalized_label_columns = self._normalize_text_list(label_columns)
+        return build_training_plan(
+            source=source,
+            target=target_value,
+            batch_size=active_batch_size,
+            source_type=active_source_type,
+            revision=active_revision,
+            validation_split=active_validation_split,
+            test_split=active_test_split,
+            label_columns=normalized_label_columns,
+            drop_columns=normalized_drop,
+            selected_rows=normalized_select,
+            resume_from=self._coerce_reference(resume_from),
+            is_remote_dataset=self._is_remote_dataset(source),
+            is_file_dataset=self._is_file_dataset(source),
+        )
+
     def _resolve_training_source(self, data=None, target=None):
         active_source = self.source if data is None else data
         active_target = self.target if target is None else target
@@ -2319,7 +2377,9 @@ class AutoTrainer:
         return array
 
     def load(self, model_path: str | None = None):
-        import joblib
+        from definers.application_ml.safe_deserialization import (
+            load_serialized_model,
+        )
 
         from definers.system import secure_path
 
@@ -2333,7 +2393,7 @@ class AutoTrainer:
         except Exception as error:
             catch(error)
             return None
-        self.model = joblib.load(safe_model_path)
+        self.model = load_serialized_model(safe_model_path, "joblib")
         self.model_path = safe_model_path
         return self.model
 
@@ -2632,7 +2692,10 @@ class AutoTrainer:
         self, prediction_file: str, model_path: str | None = None
     ):
         import imageio.v3 as iio
-        import joblib
+
+        from definers.application_ml.safe_deserialization import (
+            load_serialized_model,
+        )
 
         from definers.system import secure_path
 
@@ -2647,7 +2710,7 @@ class AutoTrainer:
         except Exception as error:
             catch(error)
             return None
-        model = joblib.load(safe_model_path)
+        model = load_serialized_model(safe_model_path, "joblib")
         if model is None:
             return None
         ext = os.path.splitext(resolved_prediction_file)[1].lstrip(".").lower()

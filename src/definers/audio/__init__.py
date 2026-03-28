@@ -1,142 +1,20 @@
 from __future__ import annotations
 
-from .analysis import (
-    analyze_audio,
-    analyze_audio_features,
-    beat_visualizer,
-    detect_silence_mask,
-    get_active_audio_timeline,
-)
-from .config import SmartMasteringConfig
-from .dsp import (
-    decoupled_envelope,
-    limiter_smooth_env,
-    process_audio_chunks,
-    remove_spectral_spikes,
-    resample,
-)
-from .effects.exciter import apply_exciter
-from .effects.mixing import dj_mix, mix_audio, pad_audio, stereo
-from .features import (
-    extract_audio_features,
-    features_to_audio,
-    predict_audio,
-)
-from .feedback import get_audio_feedback, get_color_palette
-from .filters import freq_cut
-from .io import (
-    compact_audio,
-    export_to_pkl,
-    is_audio_segment,
-    read_audio,
-    remove_silence,
-    save_audio,
-    split_audio,
-)
-from .mastering import SmartMastering, audio_eq, master
-from .preview import audio_preview, get_audio_duration
-from .production import (
-    audio_to_midi,
-    autotune_song,
-    change_audio_speed,
-    create_spectrum_visualization,
-    extend_audio,
-    generate_music,
-    generate_voice,
-    humanize_vocals,
-    identify_instruments,
-    midi_to_audio,
-    pitch_shift_vocals,
-    separate_stems,
-    stem_mixer,
-    transcribe_audio,
-    value_to_keys,
-)
-from .sharing import create_share_links
-from .utils import (
-    apply_compressor,
-    apply_lufs,
-    apply_rms,
-    calculate_active_rms,
-    compute_gain_envelope,
-    create_sample_audio,
-    generate_bands,
-    get_lufs,
-    get_rms,
-    get_scale_notes,
-    loudness_maximizer,
-    normalize_audio_to_peak,
-    riaa_filter,
-    stereo_widen,
-    stretch_audio,
-    subdivide_beats,
-)
+import importlib
+from typing import Any
 
-__all__ = [
-    "is_audio_segment",
-    "audio_eq",
-    "stereo_widen",
-    "get_rms",
-    "apply_rms",
-    "get_lufs",
-    "apply_lufs",
-    "analyze_audio",
-    "analyze_audio_features",
-    "beat_visualizer",
-    "apply_exciter",
-    "remove_spectral_spikes",
-    "decoupled_envelope",
-    "detect_silence_mask",
-    "dj_mix",
-    "mix_audio",
-    "pad_audio",
-    "stereo",
-    "limiter_smooth_env",
-    "extract_audio_features",
-    "freq_cut",
-    "extend_audio",
-    "features_to_audio",
-    "get_active_audio_timeline",
-    "audio_preview",
-    "get_audio_duration",
-    "get_scale_notes",
-    "generate_bands",
-    "generate_music",
-    "generate_voice",
-    "get_audio_feedback",
-    "get_color_palette",
-    "humanize_vocals",
-    "loudness_maximizer",
-    "identify_instruments",
-    "master",
-    "normalize_audio_to_peak",
-    "predict_audio",
-    "pitch_shift_vocals",
-    "process_audio_chunks",
-    "read_audio",
-    "remove_silence",
-    "resample",
-    "riaa_filter",
-    "save_audio",
-    "separate_stems",
-    "split_audio",
-    "stem_mixer",
-    "stretch_audio",
-    "transcribe_audio",
-    "autotune_song",
-    "change_audio_speed",
-    "compact_audio",
-    "compute_gain_envelope",
-    "calculate_active_rms",
-    "create_sample_audio",
-    "create_share_links",
-    "create_spectrum_visualization",
-    "export_to_pkl",
-    "midi_to_audio",
-    "apply_compressor",
-    "value_to_keys",
-    "subdivide_beats",
-    "SmartMasteringConfig",
-    "SmartMastering",
-    "audio_to_midi",
-]
+from ._exports import AUDIO_EXPORTS, __all__
+
+
+def __getattr__(name: str) -> Any:
+    module_name = AUDIO_EXPORTS.get(name)
+    if module_name is None:
+        raise AttributeError(name)
+    module = importlib.import_module(f"{__name__}.{module_name}")
+    value = getattr(module, name)
+    globals()[name] = value
+    return value
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()).union(__all__))

@@ -242,6 +242,10 @@ class RepositorySyncService:
         loader_kind: str = "file",
         task_key: str | None = None,
     ):
+        from definers.application_ml.safe_deserialization import (
+            load_serialized_model,
+        )
+
         if loader_kind == "hf-text-generation":
             return _load_huggingface_text_generation_model(
                 model_path,
@@ -259,18 +263,13 @@ class RepositorySyncService:
         if len(load_paths) > 1:
             logger.info(f"Detected {len(load_paths)} model shards.")
         if model_type == "joblib":
-            import joblib
-
-            return joblib.load(model_path)
+            return load_serialized_model(model_path, model_type)
         if model_type == "onnx":
             import onnxruntime
 
             return onnxruntime.InferenceSession(model_path)
         if model_type == "pkl":
-            import pickle
-
-            with open(model_path, "rb") as file_obj:
-                return pickle.load(file_obj)
+            return load_serialized_model(model_path, model_type)
         if model_type in {"bin", "pt", "pth"}:
             import torch
 
@@ -1098,6 +1097,13 @@ class RepositorySyncService:
     def validate_downloaded_model_file(
         model_path: str, model_type: str
     ) -> None:
+        from definers.application_ml.safe_deserialization import (
+            validate_serialized_model_file,
+        )
+
+        if model_type in {"joblib", "pkl"}:
+            validate_serialized_model_file(model_path, model_type)
+            return
         if model_type not in {"bin", "onnx", "pt", "pth", "safetensors"}:
             return
         with open(model_path, "rb") as file_obj:

@@ -233,6 +233,34 @@ print(file_model_path)
 print(predictions)
 ```
 
+### Preview A Training Plan
+
+```python
+from definers.application_ml.trainer_plan import render_training_plan_markdown
+from definers.ml import AutoTrainer
+
+trainer = AutoTrainer(batch_size=16, source_type="parquet")
+plan = trainer.training_plan(
+    data="owner/dataset",
+    target="label",
+    label_columns="label",
+    drop="unused_column",
+    select="1-200",
+)
+
+print(render_training_plan_markdown(plan))
+```
+
+### Inspect ML Health
+
+```python
+from definers.ml import get_ml_health_snapshot, ml_health_markdown
+
+snapshot = get_ml_health_snapshot()
+print(snapshot.available_prediction_targets)
+print(ml_health_markdown())
+```
+
 ### Extract Audio Features
 
 ```python
@@ -284,6 +312,8 @@ async def fetch_remote_resource():
 
 Definers exposes both installed-project launchers and direct CLI dispatch for the same application registry.
 
+The `definers.chat` module now acts as a thin facade: GUI launcher entry points stay there for compatibility, while heavyweight media commands are delegated to dedicated presentation services.
+
 ### CLI Examples
 
 ```bash
@@ -316,6 +346,7 @@ definers lyric-video /path/to/song.wav /path/to/background.mp4 /path/to/lyrics.t
 | `definers.presentation.cli_dispatch.run_cli(argv, version)` | Parses commands, normalizes app names, and routes to the right launcher or media command |
 | `definers.presentation.launchers.launch_installed_project(project)` | Starts an installed application by project name |
 | `definers.application_shell.commands.parse_cli_command(...)` | Normalizes incoming requests into typed command routing |
+| `definers.chat.music_video(...)` and `definers.chat.lyric_video(...)` | Compatibility facade over dedicated presentation media services |
 
 ## Docker Workflows
 
@@ -455,6 +486,16 @@ Regex behavior is centralized in `definers.regex_utils` so user-facing pattern w
 
 Some features fail lazily or degrade gracefully when optional dependencies are missing. A prominent example is `sox`, which is probed without forcing `import definers` itself to fail.
 
+The multimodal answer path now follows the same pattern for media helpers: plain text requests do not require Pillow, `soundfile`, or `librosa` to import successfully, while image and audio helpers are loaded only when matching content paths appear in chat history.
+
+The `definers.audio` facade now also resolves public exports lazily. Importing a narrow utility such as `value_to_keys` or `audio_preview` no longer pulls the full audio surface into memory up front.
+
+### Guarded Serialized Model Loading
+
+Pickle-backed model loads such as `.pkl` and `.joblib` now reject obvious HTML responses, Git LFS pointer files, and known dangerous reducer globals before deserialization starts.
+
+If a serialized model load is blocked, regenerate the artifact from a trusted source instead of bypassing the guardrail.
+
 ## Platform Requirements
 
 ### Snapshot
@@ -499,6 +540,27 @@ poe lint
 poe format
 poe build
 poe hook
+poe cli-health
+poe answer-simulations
+poe ml-health
+```
+
+When iterating on multimodal answer behavior, prefer a focused regression pass before the full suite.
+
+```bash
+pytest tests/test_application_ml_answer_services.py tests/test_application_ml_answer_history_preparer.py tests/test_answer.py -q
+```
+
+When iterating on CLI routing, registry stability, or launcher wiring, use the dedicated health check.
+
+```bash
+poe cli-health
+```
+
+When iterating on training flows, AutoTrainer behavior, or workspace bootstrap for AI developers, use the ML-focused health and DX suite.
+
+```bash
+poe ml-health
 ```
 
 ### CI Validation Story
@@ -534,6 +596,8 @@ Prefer a Hugging Face repo id, a `resolve` URL, or even a copied `blob` URL. Def
 If a model is split into numbered files such as `model-001.safetensors`, `model-002.safetensors`, or `001-model.safetensors`, Definers can discover sibling shards automatically from the shared prefix or suffix around the numeric segment. For Hugging Face repositories it also checks index manifests when they exist.
 
 If you are using a non-Hugging Face HTTP source, prefer raw artifact URLs rather than HTML pages. Definers rejects obvious HTML and Git LFS pointer downloads before deserialization.
+
+For `.pkl` and `.joblib` artifacts, Definers also blocks known code-execution reducers during deserialization. Re-export the model from a trusted environment if an older or untrusted artifact is rejected.
 
 ### A Shell Command Works Outside `run()` But Not Inside It
 

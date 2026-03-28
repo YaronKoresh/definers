@@ -58,6 +58,14 @@ class AnswerRuntimePort(Protocol):
     iio_formats: list[str]
 
 
+class AnswerDependencyLoaderPort(Protocol):
+    def load_image_module(self) -> Any: ...
+
+    def load_soundfile_module(self) -> Any: ...
+
+    def load_librosa_module(self) -> Any: ...
+
+
 class TrainableModelPort(Protocol):
     X_all: Any
 

@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 
+from definers.application_ml.trainer_plan import render_training_plan_markdown
 from definers.ml import AutoTrainer
 
 
@@ -127,6 +128,33 @@ class TestAutoTrainer(unittest.TestCase):
 
         self.assertEqual(result, "prediction.txt")
         mock_init.assert_not_called()
+
+    def test_training_plan_describes_remote_dataset_flow(self):
+        trainer = AutoTrainer(
+            batch_size=16,
+            source_type="parquet",
+            revision="main",
+            validation_split=0.1,
+            test_split=0.2,
+        )
+
+        plan = trainer.training_plan(
+            data="owner/dataset",
+            target="label",
+            label_columns="label",
+            drop="unused",
+            select="1-20",
+            resume_from="model.joblib",
+        )
+
+        self.assertEqual(plan.mode, "remote-dataset")
+        self.assertEqual(plan.batch_size, 16)
+        self.assertEqual(plan.source_type, "parquet")
+        self.assertEqual(plan.label_columns, ("label",))
+        self.assertEqual(plan.drop_columns, ("unused",))
+        self.assertEqual(plan.selected_rows, "1-20")
+        self.assertEqual(plan.resume_from, "model.joblib")
+        self.assertIn("Mode: remote-dataset", render_training_plan_markdown(plan))
 
 
 if __name__ == "__main__":

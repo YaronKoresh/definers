@@ -66,6 +66,9 @@ poe lint
 poe format
 poe build
 poe hook
+poe cli-health
+poe answer-simulations
+poe ml-health
 ```
 
 | Command | Purpose |
@@ -75,6 +78,15 @@ poe hook
 | `poe format` | Apply Ruff formatting |
 | `poe build` | Build the package |
 | `poe hook` | Install pre-commit hooks |
+| `poe cli-health` | Validate CLI registry, parser, launcher wiring, and command health |
+| `poe answer-simulations` | Run mixed-media answer regressions and dependency-fallback simulations |
+| `poe ml-health` | Validate AutoTrainer DX, ML health snapshots, and AI workspace bootstrap helpers |
+
+For changes in the multimodal answer path, run the focused regression set first.
+
+```bash
+pytest tests/test_application_ml_answer_services.py tests/test_application_ml_answer_history_preparer.py tests/test_answer.py -q
+```
 
 ## Coding Expectations
 
@@ -96,11 +108,15 @@ from definers.ml import train
 from definers.system import run
 ```
 
+When splitting large modules, prefer keeping the existing public facade stable and moving heavyweight behavior into dedicated implementation modules behind that facade.
+
 ### Runtime Safety
 
 - Use `definers.system.run()` with list-form commands where possible.
 - Treat retry and circuit-breaker behavior as public capabilities, not internal implementation details.
 - Preserve graceful behavior around optional dependencies such as `sox`.
+- Keep optional media dependencies lazy in the answer pipeline so text-only flows do not require image or audio extras.
+- Keep facade modules narrow and lazy where practical so importing one public symbol does not drag in an entire heavyweight surface.
 
 ### Tests
 
@@ -157,6 +173,8 @@ This repository uses two primary documentation entry points:
 2. `CONTRIBUTING.md` for contributor workflow and quality expectations
 
 When implementation changes affect usage, installation, launch behavior, or public contracts, update the README in the same pull request.
+
+For AI trainer workflows, document new planning helpers, health checks, and bootstrap commands when they change the recommended developer path.
 
 ## Community And Legal
 

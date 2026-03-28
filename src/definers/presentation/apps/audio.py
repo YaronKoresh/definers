@@ -24,118 +24,33 @@ def launch_audio_app():
         stem_mixer,
         transcribe_audio,
     )
-    from definers.chat import init_stable_whisper, lyric_video, music_video
+    from definers.chat import lyric_video, music_video
     from definers.constants import language_codes
     from definers.cuda import device
     from definers.file_ops import save_temp_text as save_text_to_file
     from definers.ml import (
         convert_vocal_rvc,
-        init_pretrained_model,
-        train_model_rvc,
     )
-    from definers.system import (
-        cwd,
-        exist,
-        install_audio_effects,
-        install_ffmpeg,
+    from definers.presentation.apps.audio_workspace import (
+        AUDIO_FORMAT_CHOICES,
+        AUDIO_TOOL_MAP,
+        get_audio_language_choices,
+        prepare_audio_workspace,
+        train_voice_lab_model,
     )
-    from definers.text import random_string, set_system_message
+    from definers.text import random_string
 
-    install_audio_effects()
-    install_ffmpeg()
-    init_stable_whisper()
-    init_pretrained_model("tts")
+    prepare_audio_workspace()
 
-    svc_installed = False
-    with cwd():
-        if exist("./assets"):
-            svc_installed = True
-
-    if not svc_installed:
-        init_pretrained_model("svc")
-
-    init_pretrained_model("speech-recognition")
-    init_pretrained_model("audio-classification")
-    init_pretrained_model("music")
-    init_pretrained_model("summary")
-    init_pretrained_model("answer")
-    init_pretrained_model("translate")
-
-    set_system_message(
-        name="Definers Audio Assistant",
-        role="the chat assistant for the Definers audio workspace",
-        rules=[
-            "guide users with the application usage",
-            "explain the purpose of each tool in the application",
-            "provide simple, step-by-step instructions on how to use the features based on their UI",
-        ],
-        data=[
-            "The name of the software you help with, is Definers Audio",
-            "Definers Audio provides tools for audio transformation, generation, analysis, and presentation workflows",
-            "The main AI models used by this workspace include openai/whisper-large-v3, MIT/ast-finetuned-audioset-10-10-0.4593, and facebook/musicgen-small",
-            "The supported output formats, are: MP3 (320k), FLAC (16-bit), and WAV (16-bit PCM)",
-            "The export process is by clicking on the small down-arrow download button",
-            """The complete list of the application's features with usage instructions:
-    an audio enhancement tool to auto-tune and master your track - upload your track, choose an output format, and click 'Enhance Audio';
-    audio to midi converter - upload an audio file and click 'Convert to MIDI';
-    midi to audio converter - upload a MIDI file and click 'Convert to Audio';
-    an audio extender that uses AI to seamlessly continue a piece of music - upload your audio, use the 'Extend Duration' slider to choose how many seconds to add, and click 'Extend Audio';
-    a stem mixer that mixes individual instrument tracks (stems) together - upload multiple audio files (e.g., drums.wav, bass.wav). The tool automatically beatmatches them to the first track and mixes them;
-    a track feedbacks generator that provides an analysis and advice on your mix - upload your track and click 'Get Feedback' for written analysis on its dynamics, stereo width, and frequency balance;
-    an instrument identifier from an audio file - upload an audio file and click 'Identify Instruments';
-    a video generator which creates a simple and abstract music visualizer - upload an audio file and click 'Generate Video' to create a video with a pulsing circle that reacts to the music;
-    a speed & pitch changer which changes the playback speed of a track - upload audio, use the 'Speed Factor' slider (e.g., 1.5x is faster), and check 'Preserve Pitch' for a more natural sound;
-    a stems separator which splits a song into vocals and instrumental - upload a full song and choose either 'Acapella (Vocals Only)' or 'Karaoke (Instrumental Only)';
-    a vocal pitch shifter which changes the pitch of only the vocals in a song - upload a song and use the 'Vocal Pitch Shift' slider to raise or lower the vocal pitch in semitones;
-    a voice cloning and conversion tool for voice manipulation, preserving the melody - upload your training audio files, click 'Train' to create a voice model, then use the 'Convert' tab to apply that voice to a new audio input;
-    a dj tool which automatically mixes multiple songs together - upload two or more tracks. Choose 'Beatmatched Crossfade' for a smooth, tempo-synced mix and adjust the 'Transition Duration';
-    an AI music generator which creates original music from a text description - write a description of the music you want (e.g., 'upbeat synthwave'), set the duration, and click 'Generate Music';
-    an AI voice generator which clones a voice to say anything you type - upload a clean 5-15 second 'Reference Voice' sample, type the 'Text to Speak', and click 'Generate Voice';
-    a bpm & key analysis tools which detects a track's musical key and tempo - upload your audio and click 'Analyze Audio';
-    a speech-to-text tool which transcribes speech from an audio file into text - upload an audio file with speech, select the language, and click 'Transcribe Audio'.
-    a spectrum analyzer which creates a visual graph (spectrogram) of an audio's frequencies - upload an audio file and click 'Generate Spectrum'.
-    a beat visualizer which creates a video where an image pulses to the music's beat - upload an image and an audio file. Adjust the 'Beat Intensity' slider to control how much the image reacts.
-    a lyric video creation tool which creates a simple lyric video - upload a song and a background image/video. Then, paste your lyrics into the text box, with each line representing a new phrase on screen.
-    a support chat (that's you!) which answer questions like 'What is Stem Mixing?' or 'How do I use the Vocal Pitch Shifter?' based on his knowledge-base.""",
-        ],
-        formal=True,
-        creative=False,
-    )
-
-    def handle_training(experiment, inp, lvl):
-        with cwd():
-            return train_model_rvc(experiment, inp, lvl), lvl + 1
-
-    format_choices = ["MP3", "WAV", "FLAC"]
-    language_choices = sorted(list(set(language_codes.values())))
+    format_choices = AUDIO_FORMAT_CHOICES
+    language_choices = get_audio_language_choices(language_codes)
 
     with gr.Blocks(title="Definers Audio") as app:
         gr.HTML(
             """<div id=\"header\"><h1>Definers Audio</h1><p>Audio creation, transformation, analysis, and media tools in one workspace.</p></div>"""
         )
 
-        tool_map = {
-            "Audio Enhancer": "enhancer",
-            "MIDI Tools": "midi_tools",
-            "Audio Extender": "audio_extender",
-            "Stem Mixer": "stem_mixer",
-            "Track Feedback": "feedback",
-            "Instrument ID": "instrument_id",
-            "Music Clip Generation": "video_gen",
-            "Speed & Pitch": "speed",
-            "Stem Separation": "stem",
-            "Vocal Pitch Shifter": "vps",
-            "Voice Lab": "voice_lab",
-            "DJ AutoMix": "dj",
-            "Music Gen": "music_gen",
-            "Voice Gen": "voice_gen",
-            "Analysis": "analysis",
-            "Speech-to-Text": "stt",
-            "Spectrum": "spectrum",
-            "Beat Visualizer": "beat_vis",
-            "Lyric Video": "lyric_vid",
-            "Support Chat": "chatbot",
-        }
+        tool_map = AUDIO_TOOL_MAP
 
         with gr.Row(elem_id="nav-dropdown-wrapper"):
             nav_dropdown = gr.Dropdown(
@@ -497,7 +412,7 @@ def launch_audio_app():
                     with gr.Row():
                         but1 = gr.Button("Train", variant="primary")
                         but1.click(
-                            fn=handle_training,
+                            fn=train_voice_lab_model,
                             inputs=[experiment, inp, lvl],
                             outputs=[outp, lvl],
                         )

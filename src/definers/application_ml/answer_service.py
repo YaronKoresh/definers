@@ -1,7 +1,9 @@
 class AnswerService:
     @staticmethod
-    def answer(history, runtime):
-        from PIL import Image
+    def answer(history, runtime, dependency_loader=None):
+        from definers.application_ml.answer_dependency_loader import (
+            AnswerDependencyLoader,
+        )
         from definers.application_ml.answer_generation_service import (
             AnswerGenerationService,
         )
@@ -9,25 +11,17 @@ class AnswerService:
             AnswerHistoryPreparer,
         )
 
-        try:
-            import librosa
-        except Exception:
-            librosa = None
-        try:
-            import soundfile as sf
-        except Exception:
-            sf = None
         processor = runtime.PROCESSORS.get("answer")
         model = runtime.MODELS.get("answer")
         if model is None:
             return None
+        if dependency_loader is None:
+            dependency_loader = AnswerDependencyLoader()
         prepared_history, image_items, audio_items = (
             AnswerHistoryPreparer.prepare_answer_history(
                 history,
                 runtime,
-                Image,
-                sf,
-                librosa,
+                dependency_loader,
             )
         )
         if processor is None:
