@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 from scipy import signal
-from scipy.ndimage import maximum_filter1d
+from scipy.ndimage import maximum_filter1d, uniform_filter1d
 
 from ..file_ops import log
 from .config import SmartMasteringConfig
@@ -14,7 +14,7 @@ from .dsp import (
 )
 from .effects import apply_exciter, stereo
 from .filters import freq_cut
-from .utils import apply_lufs, generate_bands, stereo_widen
+from .utils import get_lufs, apply_lufs, generate_bands, stereo_widen
 
 
 def audio_eq(
@@ -26,6 +26,10 @@ def audio_eq(
     anchors = sorted(anchors, key=lambda x: x[0])
     anchor_freqs = np.array([a[0] for a in anchors])
     anchor_gains_db = np.array([a[1] for a in anchors])
+
+    unique_freqs, indices = np.unique(anchor_freqs, return_index=True)
+    anchor_freqs = unique_freqs
+    anchor_gains_db = anchor_gains_db[indices]
 
     f, _t, Zxx = signal.stft(audio_data, fs=sample_rate, nperseg=nperseg)
 
@@ -48,12 +52,12 @@ def audio_eq(
         Zxx_modified, fs=sample_rate, nperseg=nperseg
     )
 
-    if len(output_audio) > len(audio_data):
-        output_audio = output_audio[: len(audio_data)]
-    elif len(output_audio) < len(audio_data):
-        output_audio = np.pad(
-            output_audio, (0, len(audio_data) - len(output_audio))
-        )
+    orig_len = audio_data.shape[-1]
+    if output_audio.shape[-1] > orig_len:
+        output_audio = output_audio[..., :orig_len]
+    elif output_audio.shape[-1] < orig_len:
+        pad_width = orig_len - output_audio.shape[-1]
+        output_audio = np.pad(output_audio, ((0, 0), (0, pad_width))) if output_audio.ndim > 1 else np.pad(output_audio, (0, pad_width))
 
     if np.issubdtype(audio_data.dtype, np.integer):
         info = np.iinfo(audio_data.dtype)
@@ -90,8 +94,8 @@ class SmartMastering:
 
         nyquist_hz = self.resampling_target / 2.0 - 1.0
 
-        self.low_cut = cfg.low_cut or 0.1
-        self.high_cut = cfg.high_cut or nyquist_hz
+        self.low_cut = max(cfg.low_cut or 0.1, 0.1)
+        self.high_cut = min(cfg.high_cut or nyquist_hz, nyquist_hz)
 
         self.slope_hz = float(
             np.clip(cfg.stop_bass_boost_hz, self.low_cut, self.high_cut)
@@ -99,17 +103,26 @@ class SmartMastering:
         self._slope_db = cfg.bass_boost_db_per_oct
 
         bass_octaves = float(np.log2(self.slope_hz / self.low_cut))
-        float(np.log2(self.high_cut / cfg.start_treble_boost_hz))
+        treble_octaves = float(np.log2(self.high_cut / cfg.start_treble_boost_hz))
 
-        bass_gain_db = bass_octaves * self._slope_db
-        treble_gain_db = bass_gain_db * cfg.treble_boost_ratio
+        bass_gain_db = bass_octaves * cfg.bass_boost_db_per_oct
+        treble_gain_db = treble_octaves * cfg.treble_boost_db_per_oct
+
+        min_boost = min(bass_gain_db, bass_gain_db)
+        base = 0.0
+        if min_boost < 0.0:
+            bass_gain_db -= min_boost
+            treble_gain_db -= min_boost
+            base -= min_boost
 
         self.anchors = [
             [self.low_cut, 0.0],
-            [self.low_cut + 1.0, bass_gain_db],
-            [self.slope_hz, 0.0],
-            [cfg.start_treble_boost_hz, 0.0],
-            [self.high_cut - 1.0, treble_gain_db],
+            [self.low_cut + 5.0, base],
+            [self.low_cut + 8.0, bass_gain_db],
+            [self.slope_hz, base],
+            [cfg.start_treble_boost_hz, base],
+            [self.high_cut - 500.0, treble_gain_db],
+            [self.high_cut - 200.0, base],
             [self.high_cut, 0.0],
         ]
 
@@ -120,16 +133,17 @@ class SmartMastering:
         self.smoothing_fraction = cfg.smoothing_fraction
         self.target_lufs = cfg.target_lufs
         self.correction_strength = cfg.correction_strength
+        self.mid_slope = cfg.mid_slope
 
         self.update_bands()
 
         self.analysis_nperseg = (
-            int(2 ** np.ceil(np.log2(self.resampling_target / 5)))
+            int(2 ** np.ceil(np.log2(self.resampling_target / 5))) * 8
         )
         self.fft_n = self.analysis_nperseg * 2
 
         self.target_freqs_hz = np.array(
-            generate_bands(0.1, self.resampling_target / 2.0, self.num_bands),
+            generate_bands(0.1, self.resampling_target / 2.0 - 1.0, self.num_bands),
             dtype=np.float32,
         )
 
@@ -175,120 +189,68 @@ class SmartMastering:
         self,
         y: np.ndarray,
         drive_db: float = 0.0,
-        ceil_db: float | None = -0.1,
+        ceil_db: float = -0.1,
         os_factor: int = 2,
         lookahead_ms: float = 2.5,
-        attack_ms: float = 25.0,
+        attack_ms: float = 2.0,
         release_ms_min: float = 40.0,
-        release_ms_max: float = 160.0,
-        soft_clip_ratio: float = 0.8,
-        up_beta: float = 14.0,
-        down_beta: float = 18.0,
+        release_ms_max: float = 200.0,
+        soft_clip_ratio: float = 0.2,
+        window_ms: float = 4.0
     ) -> np.ndarray:
-        input_dtype = (
-            y.dtype if np.issubdtype(y.dtype, np.floating) else np.float32
-        )
+        input_dtype = y.dtype if np.issubdtype(y.dtype, np.floating) else np.float32
         y_in = np.asarray(y, dtype=np.float32)
-
         orig_len = y_in.shape[-1]
+        
         drive_lin = 10.0 ** (drive_db / 20.0)
+        limit_lin = 10.0 ** (ceil_db / 20.0)
+        
         sr_os = self.resampling_target * os_factor
-
-        y_os = signal.resample_poly(
-            y_in, os_factor, 1, axis=-1, window=("kaiser", up_beta)
-        )
+        y_os = signal.resample_poly(y_in, os_factor, 1, axis=-1)
         y_driven = y_os * drive_lin
 
-        if ceil_db is None:
-            out = signal.resample_poly(
-                y_driven, 1, os_factor, axis=-1, window=("kaiser", down_beta)
-            )
-        else:
-            limit_lin = 10.0 ** (ceil_db / 20.0)
-            lookahead_samp = max(1, int(round(lookahead_ms * sr_os / 1000.0)))
-            y_driven_work = np.pad(
-                y_driven,
-                (*((0, 0),) * (y_driven.ndim - 1), (0, lookahead_samp)),
-                mode="edge" if y_driven.shape[-1] > 0 else "constant",
-            )
+        lookahead_samp = max(1, int(round(lookahead_ms * sr_os / 1000.0)))
+        abs_driven = np.abs(y_driven)
+        linked_env = np.max(abs_driven, axis=0) if y_driven.ndim > 1 else abs_driven
 
-            abs_driven = np.abs(y_driven_work)
-            linked_env = (
-                np.max(abs_driven, axis=0) if y_driven.ndim > 1 else abs_driven
-            )
+        peak_env = maximum_filter1d(linked_env, size=lookahead_samp, mode="constant")
+        
+        rms_win = max(1, int(round(window_ms / 1000 * sr_os)))
+        rms_env = np.sqrt(uniform_filter1d(linked_env**2, size=rms_win, mode="constant"))
 
-            peak_env = maximum_filter1d(
-                linked_env, size=lookahead_samp, mode="reflect"
-            )
+        crest = peak_env / (rms_env + 1e-12)
+        release_ms = np.clip(release_ms_max / (crest + 1e-6), release_ms_min, release_ms_max)
+        
+        atk_c = np.exp(-1.0 / (sr_os * attack_ms / 1000.0))
+        rel_c = np.exp(-1.0 / (sr_os * release_ms / 1000.0))
+        
+        control_env = 0.9 * peak_env + 0.1 * rms_env
+        
+        control_smooth = limiter_smooth_env(control_env, atk_c, rel_c)
 
-            rms_win = max(1, int(round(sr_os * 0.035)))
-            rms_env = np.sqrt(
-                maximum_filter1d(
-                    linked_env * linked_env, size=rms_win, mode="reflect"
-                )
-            )
-            crest = peak_env / (rms_env + 1e-12)
+        gain = np.ones_like(control_smooth)
+        mask = control_smooth > limit_lin
+        gain[mask] = limit_lin / control_smooth[mask]
 
-            release_ms = np.clip(
-                release_ms_max / np.sqrt(np.maximum(crest, 1.0)),
-                release_ms_min,
-                release_ms_max,
-            )
-            attack_coeff = np.exp(-1.0 / max(sr_os * attack_ms / 1000.0, 1e-9))
-            release_coeff = np.exp(
-                -1.0 / np.maximum(sr_os * release_ms / 1000.0, 1e-9)
-            )
+        y_delayed = np.zeros_like(y_driven)
+        y_delayed[..., lookahead_samp:] = y_driven[..., :-lookahead_samp]
+        
+        y_limited = y_delayed * gain
 
-            control_env = 0.88 * peak_env + 0.12 * rms_env
-            control_smooth = limiter_smooth_env(
-                control_env, attack_coeff, release_coeff
-            )
-            gain = np.minimum(
-                1.0, limit_lin / np.maximum(control_smooth, 1e-12)
-            )
+        if soft_clip_ratio > 0:
+            threshold = limit_lin * (1.0 - soft_clip_ratio)
+            mask = y_limited > threshold
+            y_limited[mask] = threshold + (limit_lin - threshold) * np.tanh((y_limited[mask] - threshold) / (limit_lin - threshold))
+            mask_neg = y_limited < -threshold
+            y_limited[mask_neg] = -threshold - (limit_lin - threshold) * np.tanh((-y_limited[mask_neg] - threshold) / (limit_lin - threshold))
 
-            y_delayed = np.empty_like(y_driven_work)
-            y_delayed[..., :lookahead_samp] = y_driven_work[..., :1]
-            y_delayed[..., lookahead_samp:] = y_driven_work[
-                ..., :-lookahead_samp
-            ]
+        y_down = signal.resample_poly(y_limited, 1, os_factor, axis=-1)
+        
+        out = y_down[..., :orig_len]
+        out -= np.mean(out, axis=-1, keepdims=True)
+        out = np.clip(out, -limit_lin, limit_lin)
 
-            y_limited = y_delayed * gain
-
-            density = np.clip((2.2 - crest) / 1.4, 0.0, 1.0)
-            clip_mix = float(
-                np.clip(soft_clip_ratio + 0.06 * np.median(density), 0.0, 0.95)
-            )
-            y_clipped = np.tanh(y_limited / max(limit_lin, 1e-12)) * limit_lin
-            y_saturated = y_limited * (1.0 - clip_mix) + y_clipped * clip_mix
-
-            y_down = signal.resample_poly(
-                y_saturated, 1, os_factor, axis=-1, window=("kaiser", down_beta)
-            )
-
-            delay_samp = max(
-                0, int(round(lookahead_ms * self.resampling_target / 1000.0))
-            )
-            start = min(delay_samp, y_down.shape[-1])
-            out = y_down[..., start : start + orig_len]
-
-        if out.shape[-1] < orig_len:
-            out = np.pad(
-                out,
-                (*((0, 0),) * (out.ndim - 1), (0, orig_len - out.shape[-1])),
-                mode="edge" if out.shape[-1] > 0 else "constant",
-            )
-
-        out = out - (
-            np.mean(out, axis=-1, keepdims=True)
-            if out.ndim > 1
-            else np.mean(out)
-        )
-
-        if ceil_db is not None:
-            out = np.clip(out, -limit_lin, limit_lin)
-
-        return out.astype(input_dtype, copy=False)
+        return out.astype(input_dtype)
 
     def smooth_curve(
         self,
@@ -321,7 +283,10 @@ class SmartMastering:
 
         input_db = self.smooth_curve(input_db, f_axis, self.smoothing_fraction)
 
-        correction_db = -input_db
+        octaves_from_low_hz = np.log2(np.maximum(f_axis, self.low_cut) / self.low_cut)
+        target_db = self.mid_slope * octaves_from_low_hz
+
+        correction_db = target_db - input_db
         correction_db = np.nan_to_num(
             correction_db, nan=0.0, posinf=0.0, neginf=0.0
         )
@@ -334,6 +299,8 @@ class SmartMastering:
         dec_eq = np.average([correction_db[0], correction_db[-1]])
         correction_db -= dec_eq
         correction_db[0], correction_db[-1] = 0.0, 0.0
+
+        correction_db *= self.correction_strength
 
         flat_anchors = np.column_stack((f_axis, correction_db))
 
@@ -473,23 +440,7 @@ class SmartMastering:
 
         y = stereo_widen(y)
 
-        log("Mastering", "Applying LUFS normalization...")
-
-        y = apply_lufs(
-            y,
-            self.resampling_target,
-            self.target_lufs,
-        )
-
-        log("Mastering", "Applying limiter...")
-
-        y = self.apply_limiter(
-            y,
-            self.drive_db,
-            self.ceil_db,
-        )
-
-        log("Mastering", "Applying final filtering...")
+        log("Mastering", "Applying filtering...")
 
         y = freq_cut(
             y,
@@ -498,11 +449,28 @@ class SmartMastering:
             high_cut=self.high_cut,
         )
 
-        if self.ceil_db is not None:
-            log("Mastering", "Applying final ceiling...")
+        log("Mastering", "Applying LUFS normalization...")
 
-            lin_amp = 10 ** (self.ceil_db / 20.0)
-            y = np.clip(y, -lin_amp, lin_amp)
+        y = apply_lufs(y, self.resampling_target, self.target_lufs)
+
+        log("Mastering", "Applying limiter...")
+
+        current_lufs = get_lufs(y, self.resampling_target)
+        lufs_diff = self.target_lufs - current_lufs
+        dynamic_drive_db = max(0.0, lufs_diff)
+
+        y = self.apply_limiter(
+            y,
+            drive_db=dynamic_drive_db,
+            ceil_db=self.ceil_db,
+        )
+
+        log("Mastering", "Applying hard clipping...")
+
+        lin_amp = 10 ** (self.ceil_db / 20.0)
+        y = np.clip(y, -lin_amp, lin_amp)
+
+        log("Mastering", "Applying post-filtering...")
 
         y = freq_cut(
             y,
