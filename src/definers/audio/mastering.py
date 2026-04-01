@@ -124,9 +124,9 @@ class SmartMastering:
         self.update_bands()
 
         self.analysis_nperseg = (
-            int(2 ** np.ceil(np.log2(self.resampling_target / 5))) * 8
+            int(2 ** np.ceil(np.log2(self.resampling_target / 5)))
         )
-        self.fft_n = self.analysis_nperseg * 8
+        self.fft_n = self.analysis_nperseg * 2
 
         self.target_freqs_hz = np.array(
             generate_bands(0.1, self.resampling_target / 2.0, self.num_bands),
@@ -496,14 +496,6 @@ class SmartMastering:
             self.resampling_target,
             low_cut=self.low_cut,
             high_cut=self.high_cut,
-        )
-
-        log("Mastering", "Applying final loudness targeting...")
-
-        y = apply_lufs(
-            y,
-            self.resampling_target,
-            self.target_lufs,
         )
 
         if self.ceil_db is not None:
