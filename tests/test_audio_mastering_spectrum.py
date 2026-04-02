@@ -58,6 +58,7 @@ def _load_mastering_module(package_name: str):
         generate_bands=lambda start, stop, count: np.geomspace(
             float(start), float(stop), int(count)
         ).tolist(),
+        get_lufs=lambda y, *_: -14.0,
         stereo_widen=lambda y, *_, **__: y,
     )
     if parent_name:

@@ -61,6 +61,7 @@ def _load_mastering_module(package_name: str):
     sys.modules[f"{package_name}.utils"] = types.SimpleNamespace(
         apply_lufs=lambda y, *_, **__: y,
         generate_bands=lambda *_, **__: [],
+        get_lufs=lambda y, *_: -14.0,
         stereo_widen=lambda y, *_, **__: y,
     )
     sys.modules[f"{root_package_name}.file_ops"] = types.SimpleNamespace(
@@ -89,7 +90,7 @@ def test_apply_eq_handles_small_spectrum_and_preserves_samples(
 ):
     mastering = _make_mastering_instance()
     source = np.array([0.1, 0.2, 0.3, 0.4], dtype=float)
-    calls: list[tuple[np.ndarray, object, int]] = []
+    calls: list[tuple[np.ndarray, object, int, int]] = []
 
     monkeypatch.setattr(
         mastering,
@@ -105,8 +106,15 @@ def test_apply_eq_handles_small_spectrum_and_preserves_samples(
         lambda curve, f_axis, smoothing_fraction=None: curve,
     )
 
-    def fake_audio_eq(audio_data, anchors, sample_rate):
-        calls.append((np.array(audio_data, copy=True), anchors, sample_rate))
+    def fake_audio_eq(audio_data, anchors, sample_rate, nperseg):
+        calls.append(
+            (
+                np.array(audio_data, copy=True),
+                anchors,
+                sample_rate,
+                nperseg,
+            )
+        )
         return np.array(audio_data, copy=True)
 
     monkeypatch.setattr(MASTERING_MODULE, "audio_eq", fake_audio_eq)
@@ -117,6 +125,7 @@ def test_apply_eq_handles_small_spectrum_and_preserves_samples(
     assert len(calls) == 2
     assert np.array_equal(calls[0][0], source)
     assert calls[0][2] == mastering.resampling_target
+    assert calls[0][3] == mastering.analysis_nperseg
 
 
 def test_apply_eq_sanitizes_non_finite_anchor_values(
@@ -139,7 +148,7 @@ def test_apply_eq_sanitizes_non_finite_anchor_values(
         lambda curve, f_axis, smoothing_fraction=None: curve,
     )
 
-    def fake_audio_eq(audio_data, anchors, sample_rate):
+    def fake_audio_eq(audio_data, anchors, sample_rate, nperseg):
         captured.append(np.array(anchors, copy=True))
         return np.array(audio_data, copy=True)
 
@@ -163,13 +172,15 @@ def test_apply_eq_uses_mono_average_and_mastering_anchors(
         [[0.1, 0.3, 0.5, 0.7], [0.3, 0.5, 0.7, 0.9]],
         dtype=float,
     )
-    calls: list[tuple[np.ndarray, object, int]] = []
+    measure_inputs: list[np.ndarray] = []
+    calls: list[tuple[np.ndarray, object, int, int]] = []
 
     monkeypatch.setattr(
         mastering,
         "measure_spectrum",
         lambda y: (
-            np.array([0.0, -1.0, -2.0, -3.0]),
+            measure_inputs.append(np.array(y, copy=True))
+            or np.array([0.0, -1.0, -2.0, -3.0]),
             np.array([50.0, 100.0, 200.0, 400.0]),
         ),
     )
@@ -179,16 +190,29 @@ def test_apply_eq_uses_mono_average_and_mastering_anchors(
         lambda curve, f_axis, smoothing_fraction=None: curve,
     )
 
-    def fake_audio_eq(audio_data, anchors, sample_rate):
-        calls.append((np.array(audio_data, copy=True), anchors, sample_rate))
+    def fake_audio_eq(audio_data, anchors, sample_rate, nperseg):
+        calls.append(
+            (
+                np.array(audio_data, copy=True),
+                anchors,
+                sample_rate,
+                nperseg,
+            )
+        )
         return np.array(audio_data, copy=True)
 
     monkeypatch.setattr(MASTERING_MODULE, "audio_eq", fake_audio_eq)
 
     corrected = mastering.apply_eq(source)
 
-    assert len(calls) == 2
-    assert np.allclose(calls[0][0], np.mean(source, axis=0))
+    assert len(measure_inputs) == 1
+    assert np.allclose(measure_inputs[0], np.mean(source, axis=0))
+    assert len(calls) == 4
+    assert np.allclose(calls[0][0], source[0])
+    assert np.allclose(calls[2][0], source[1])
     assert calls[1][1] == mastering.anchors
+    assert calls[3][1] == mastering.anchors
     assert calls[1][2] == mastering.resampling_target
-    assert np.allclose(corrected, np.mean(source, axis=0))
+    assert calls[1][3] == mastering.analysis_nperseg
+    assert calls[3][3] == mastering.analysis_nperseg
+    assert np.allclose(corrected, source)

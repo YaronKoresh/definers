@@ -9,13 +9,13 @@ from .config import SmartMasteringConfig
 from .dsp import (
     decoupled_envelope,
     limiter_smooth_env,
-    remove_spectral_spikes,
     resample,
 )
 from .effects import apply_exciter, stereo
 from .filters import freq_cut
-from .utils import get_lufs, apply_lufs, generate_bands, stereo_widen
+from .utils import generate_bands, get_lufs, stereo_widen
 
+from definers.system import get_ext
 
 def audio_eq(
     audio_data: np.ndarray,
@@ -108,7 +108,7 @@ class SmartMastering:
         bass_gain_db = bass_octaves * cfg.bass_boost_db_per_oct
         treble_gain_db = treble_octaves * cfg.treble_boost_db_per_oct
 
-        min_boost = min(bass_gain_db, bass_gain_db)
+        min_boost = min(bass_gain_db, treble_gain_db)
         base = 0.0
         if min_boost < 0.0:
             bass_gain_db -= min_boost
@@ -118,10 +118,10 @@ class SmartMastering:
         self.anchors = [
             [self.low_cut, 0.0],
             [self.low_cut + 5.0, base],
-            [self.low_cut + 8.0, bass_gain_db],
+            [self.low_cut + 10.0, bass_gain_db],
             [self.slope_hz, base],
             [cfg.start_treble_boost_hz, base],
-            [self.high_cut - 500.0, treble_gain_db],
+            [self.high_cut - 400.0, treble_gain_db],
             [self.high_cut - 200.0, base],
             [self.high_cut, 0.0],
         ]
@@ -137,9 +137,7 @@ class SmartMastering:
 
         self.update_bands()
 
-        self.analysis_nperseg = (
-            int(2 ** np.ceil(np.log2(self.resampling_target / 5))) * 8
-        )
+        self.analysis_nperseg = int(2 ** np.ceil(np.log2(self.resampling_target / 5))) * 2
         self.fft_n = self.analysis_nperseg * 2
 
         self.target_freqs_hz = np.array(
@@ -201,41 +199,49 @@ class SmartMastering:
         input_dtype = y.dtype if np.issubdtype(y.dtype, np.floating) else np.float32
         y_in = np.asarray(y, dtype=np.float32)
         orig_len = y_in.shape[-1]
-        
+
         drive_lin = 10.0 ** (drive_db / 20.0)
         limit_lin = 10.0 ** (ceil_db / 20.0)
-        
+
         sr_os = self.resampling_target * os_factor
         y_os = signal.resample_poly(y_in, os_factor, 1, axis=-1)
         y_driven = y_os * drive_lin
 
-        lookahead_samp = max(1, int(round(lookahead_ms * sr_os / 1000.0)))
+        lookahead_samp = max(0, int(round(lookahead_ms * sr_os / 1000.0)))
+        lookahead_span = lookahead_samp + 1
         abs_driven = np.abs(y_driven)
         linked_env = np.max(abs_driven, axis=0) if y_driven.ndim > 1 else abs_driven
 
-        peak_env = maximum_filter1d(linked_env, size=lookahead_samp, mode="constant")
-        
+        peak_env = maximum_filter1d(
+            linked_env[::-1],
+            size=lookahead_span,
+            mode="constant",
+        )[::-1]
+
         rms_win = max(1, int(round(window_ms / 1000 * sr_os)))
-        rms_env = np.sqrt(uniform_filter1d(linked_env**2, size=rms_win, mode="constant"))
+        rms_env = np.sqrt(
+            uniform_filter1d(
+                (linked_env**2)[::-1],
+                size=rms_win,
+                mode="constant",
+            )[::-1]
+        )
 
         crest = peak_env / (rms_env + 1e-12)
         release_ms = np.clip(release_ms_max / (crest + 1e-6), release_ms_min, release_ms_max)
-        
+
         atk_c = np.exp(-1.0 / (sr_os * attack_ms / 1000.0))
         rel_c = np.exp(-1.0 / (sr_os * release_ms / 1000.0))
-        
+
         control_env = 0.9 * peak_env + 0.1 * rms_env
-        
+
         control_smooth = limiter_smooth_env(control_env, atk_c, rel_c)
 
         gain = np.ones_like(control_smooth)
         mask = control_smooth > limit_lin
         gain[mask] = limit_lin / control_smooth[mask]
 
-        y_delayed = np.zeros_like(y_driven)
-        y_delayed[..., lookahead_samp:] = y_driven[..., :-lookahead_samp]
-        
-        y_limited = y_delayed * gain
+        y_limited = y_driven * gain
 
         if soft_clip_ratio > 0:
             threshold = limit_lin * (1.0 - soft_clip_ratio)
@@ -247,8 +253,6 @@ class SmartMastering:
         y_down = signal.resample_poly(y_limited, 1, os_factor, axis=-1)
         
         out = y_down[..., :orig_len]
-        out -= np.mean(out, axis=-1, keepdims=True)
-        out = np.clip(out, -limit_lin, limit_lin)
 
         return out.astype(input_dtype)
 
@@ -304,19 +308,24 @@ class SmartMastering:
 
         flat_anchors = np.column_stack((f_axis, correction_db))
 
-        equalized = audio_eq(
-            audio_data=y_mono,
-            anchors=flat_anchors,
-            sample_rate=self.resampling_target,
-            nperseg=self.analysis_nperseg,
-        )
+        def eq_channel(channel: np.ndarray) -> np.ndarray:
+            channel = audio_eq(
+                audio_data=channel,
+                anchors=flat_anchors,
+                sample_rate=self.resampling_target,
+                nperseg=self.analysis_nperseg,
+            )
+            return audio_eq(
+                audio_data=channel,
+                anchors=self.anchors,
+                sample_rate=self.resampling_target,
+                nperseg=self.analysis_nperseg,
+            )
+        
+        if y.ndim > 1:
+            return np.vstack([eq_channel(channel) for channel in y])
 
-        return audio_eq(
-            audio_data=equalized,
-            anchors=self.anchors,
-            sample_rate=self.resampling_target,
-            nperseg=self.analysis_nperseg,
-        )
+        return eq_channel(y)
 
     def multiband_compress(self, y: np.ndarray) -> np.ndarray:
         def lr4(x, fc):
@@ -326,8 +335,11 @@ class SmartMastering:
             sr2 = self.resampling_target / 2.0
             sos_l = signal.butter(2, fc / sr2, btype="low", output="sos")
             sos_h = signal.butter(2, fc / sr2, btype="high", output="sos")
-            lp = signal.sosfiltfilt(sos_l, x)
-            hp = signal.sosfiltfilt(sos_h, x)
+
+            lp = signal.sosfilt(sos_l, x)
+            lp = signal.sosfilt(sos_l, lp)
+            hp = signal.sosfilt(sos_h, x)
+            hp = signal.sosfilt(sos_h, hp)
 
             return lp, hp
 
@@ -407,14 +419,9 @@ class SmartMastering:
 
         y = stereo(y)
 
-        log("Mastering", "Applying pre-filtering...")
+        log("Mastering", "Applying exciter...")
 
-        y = freq_cut(
-            y,
-            self.resampling_target,
-            low_cut=self.low_cut,
-            high_cut=self.high_cut,
-        )
+        y = apply_exciter(y, self.resampling_target)
 
         log("Mastering", "Applying multiband compression...")
 
@@ -422,23 +429,11 @@ class SmartMastering:
 
         y = self.multiband_compress(y)
 
-        log("Mastering", "Applying exciter...")
-
-        y = apply_exciter(y, self.resampling_target)
-
-        log("Mastering", "Removing audio spikes...")
-
-        y = remove_spectral_spikes(y)
-
         log("Mastering", "Applying equalizer...")
 
         y = self.apply_eq(y)
 
         y = stereo(y)
-
-        log("Mastering", "Applying stereo widening...")
-
-        y = stereo_widen(y)
 
         log("Mastering", "Applying filtering...")
 
@@ -449,9 +444,9 @@ class SmartMastering:
             high_cut=self.high_cut,
         )
 
-        log("Mastering", "Applying LUFS normalization...")
+        log("Mastering", "Applying stereo widening...")
 
-        y = apply_lufs(y, self.resampling_target, self.target_lufs)
+        y = stereo_widen(y)
 
         log("Mastering", "Applying limiter...")
 
@@ -470,15 +465,6 @@ class SmartMastering:
         lin_amp = 10 ** (self.ceil_db / 20.0)
         y = np.clip(y, -lin_amp, lin_amp)
 
-        log("Mastering", "Applying post-filtering...")
-
-        y = freq_cut(
-            y,
-            self.resampling_target,
-            low_cut=self.low_cut,
-            high_cut=self.high_cut,
-        )
-
         log("Mastering", "Mastering complete.")
 
         return self.resampling_target, y
@@ -487,7 +473,6 @@ class SmartMastering:
 def master(
     input_path: str,
     output_path: str = None,
-    target_format: str = "mp3",
     **kwargs: dict,
 ) -> str | None:
 
@@ -502,13 +487,12 @@ def master(
 
         sr_mastered, y_mastered = SmartMastering(sr, **kwargs).process(y, sr)
 
-        output_path = output_path or tmp(target_format, keep=False)
+        output_path = output_path or tmp(get_ext(input_path), keep=False)
 
         save_audio(
             destination_path=output_path,
             audio_signal=y_mastered,
             sample_rate=sr_mastered,
-            output_format=target_format,
         )
 
         return output_path

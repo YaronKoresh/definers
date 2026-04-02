@@ -7,6 +7,7 @@ import numpy as np
 import definers.file_ops as file_ops
 from definers.platform.filesystem import exist
 from definers.platform.paths import full_path, tmp
+from definers.system import get_ext
 
 
 def is_audio_segment(audio_signal) -> bool:
@@ -41,7 +42,6 @@ def save_audio(
     destination_path: str,
     audio_signal: np.ndarray,
     sample_rate: int = 44100,
-    output_format: str = "mp3",
     *,
     bit_depth: int = 32,
     bitrate: int = 320,
@@ -51,7 +51,7 @@ def save_audio(
     import soundfile as sf
 
     base_path = os.path.splitext(str(destination_path))[0]
-    ext = output_format.lower()
+    ext = get_ext(destination_path)
     final_path = f"{base_path}.{ext}"
 
     lossy_params = [
