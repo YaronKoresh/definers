@@ -137,7 +137,7 @@ class SmartMastering:
 
         self.update_bands()
 
-        self.analysis_nperseg = int(2 ** np.ceil(np.log2(self.resampling_target / 5))) * 2
+        self.analysis_nperseg = int(2 ** np.ceil(np.log2(self.resampling_target / 5))) * 4
         self.fft_n = self.analysis_nperseg * 2
 
         self.target_freqs_hz = np.array(
@@ -188,11 +188,11 @@ class SmartMastering:
         y: np.ndarray,
         drive_db: float = 0.0,
         ceil_db: float = -0.1,
-        os_factor: int = 2,
-        lookahead_ms: float = 2.5,
-        attack_ms: float = 2.0,
-        release_ms_min: float = 40.0,
-        release_ms_max: float = 200.0,
+        os_factor: int = 4,
+        lookahead_ms: float = 2.0,
+        attack_ms: float = 1.0,
+        release_ms_min: float = 30.0,
+        release_ms_max: float = 130.0,
         soft_clip_ratio: float = 0.2,
         window_ms: float = 4.0
     ) -> np.ndarray:
@@ -451,7 +451,7 @@ class SmartMastering:
         log("Mastering", "Applying limiter...")
 
         current_lufs = get_lufs(y, self.resampling_target)
-        lufs_diff = self.target_lufs - current_lufs
+        lufs_diff = self.target_lufs - current_lufs + self.drive_db
         dynamic_drive_db = max(0.0, lufs_diff)
 
         y = self.apply_limiter(

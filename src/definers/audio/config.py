@@ -11,37 +11,37 @@ class SmartMasteringConfig:
     intensity: float = 1.0
 
     bass_knee_db: float = 10.0
-    treb_knee_db: float = 4.0
+    treb_knee_db: float = 2.0
 
-    bass_ratio: float = 5.0
-    bass_attack_ms: float = 20.0
-    bass_release_ms: float = 250.0
+    bass_ratio: float = 2.5
+    bass_attack_ms: float = 30.0
+    bass_release_ms: float = 130.0
     bass_threshold_db: float = -16.0
 
-    treb_ratio: float = 3.5
-    treb_attack_ms: float = 2.0
+    treb_ratio: float = 1.5
+    treb_attack_ms: float = 4.0
     treb_release_ms: float = 100.0
     treb_threshold_db: float = -26.0
 
     resampling_target: int = 44100
 
-    target_lufs: float = -5.5
+    target_lufs: float = -5.0
 
     stop_bass_boost_hz: float = 140.0
     start_treble_boost_hz: float = 4500.0
 
-    bass_boost_db_per_oct: float = 2.0
+    bass_boost_db_per_oct: float = 0.5
     mid_slope: float = -3.0
-    treble_boost_db_per_oct: float = 2.0
+    treble_boost_db_per_oct: float = 1.0
 
     smoothing_fraction: float | None = 0.2
 
     correction_strength: float = 1.0
 
-    low_cut: float | None = 30.0
+    low_cut: float | None = None
     high_cut: float | None = None
 
-    drive_db: float = 3.0
+    drive_db: float = 0.0
     ceil_db: float = -0.3
 
     @classmethod
