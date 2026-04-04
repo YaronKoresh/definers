@@ -125,7 +125,7 @@ class SmartMasteringConfig:
             contract_max_stereo_width_ratio=0.58,
             contract_min_low_end_mono_ratio=0.88,
             contract_low_end_mono_cutoff_hz=160.0,
-            target_lufs=-3.0,
+            target_lufs=-4.5,
             bass_ratio=4.0,
             bass_threshold_db=-20.5,
             treb_ratio=2.45,

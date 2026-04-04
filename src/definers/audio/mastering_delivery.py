@@ -338,9 +338,10 @@ def save_verified_audio(
     working_signal = apply_lufs(working_signal, sample_rate, target_lufs)
 
     hard_limit_linear = 10 ** (ceil_db / 20.0)
-    working_signal = np.clip(
-        working_signal, -hard_limit_linear, hard_limit_linear
-    )
+    working_signal = np.tanh(working_signal / hard_limit_linear) * hard_limit_linear
+
+    peak = np.max(np.abs(working_signal))
+    working_signal *= hard_limit_linear / peak
 
     final_path = save_audio_fn(
         destination_path=destination_path,
