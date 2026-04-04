@@ -3,7 +3,7 @@ from __future__ import annotations
 import importlib
 from typing import Any
 
-from ._exports import AUDIO_EXPORTS, __all__
+from .exports_registry import AUDIO_EXPORTS, __all__
 
 
 def __getattr__(name: str) -> Any:

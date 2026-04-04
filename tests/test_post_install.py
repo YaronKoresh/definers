@@ -1,4 +1,5 @@
 import sys
+import types
 import unittest
 from unittest.mock import patch
 
@@ -11,16 +12,31 @@ class TestPostInstall(unittest.TestCase):
         post_install()
         mock_free.assert_called_once()
 
-    @patch("torch.fx.experimental.proxy_tensor")
     @patch("definers.cuda.free")
-    def test_post_install_monkeypatches_proxy_tensor(
-        self, mock_free, mock_proxy_tensor
-    ):
-        if hasattr(mock_proxy_tensor, "get_proxy_mode"):
-            delattr(mock_proxy_tensor, "get_proxy_mode")
-        post_install()
-        self.assertTrue(hasattr(mock_proxy_tensor, "get_proxy_mode"))
-        self.assertTrue(callable(getattr(mock_proxy_tensor, "get_proxy_mode")))
+    def test_post_install_monkeypatches_proxy_tensor(self, mock_free):
+        proxy_tensor_module = types.ModuleType("proxy_tensor")
+        experimental_module = types.ModuleType("experimental")
+        fx_module = types.ModuleType("fx")
+        torch_module = types.ModuleType("torch")
+        experimental_module.proxy_tensor = proxy_tensor_module
+        fx_module.experimental = experimental_module
+        torch_module.fx = fx_module
+
+        with patch.dict(
+            sys.modules,
+            {
+                "torch": torch_module,
+                "torch.fx": fx_module,
+                "torch.fx.experimental": experimental_module,
+                "torch.fx.experimental.proxy_tensor": proxy_tensor_module,
+            },
+        ):
+            post_install()
+
+        self.assertTrue(hasattr(proxy_tensor_module, "get_proxy_mode"))
+        self.assertTrue(
+            callable(getattr(proxy_tensor_module, "get_proxy_mode"))
+        )
         mock_free.assert_called_once()
 
     @patch("definers.cuda.free")

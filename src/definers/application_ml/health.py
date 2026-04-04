@@ -3,7 +3,6 @@ from __future__ import annotations
 import importlib
 from dataclasses import dataclass
 
-
 _UNSET = object()
 
 
@@ -165,11 +164,15 @@ class MlHealthService:
 
     @classmethod
     def run_ml_health_check(cls):
-        return cls.validate_ml_health_snapshot(cls.collect_live_ml_health_snapshot())
+        return cls.validate_ml_health_snapshot(
+            cls.collect_live_ml_health_snapshot()
+        )
 
 
 collect_ml_health_snapshot = MlHealthService.collect_ml_health_snapshot
 validate_ml_health_snapshot = MlHealthService.validate_ml_health_snapshot
 render_ml_health_markdown = MlHealthService.render_ml_health_markdown
-collect_live_ml_health_snapshot = MlHealthService.collect_live_ml_health_snapshot
+collect_live_ml_health_snapshot = (
+    MlHealthService.collect_live_ml_health_snapshot
+)
 run_ml_health_check = MlHealthService.run_ml_health_check

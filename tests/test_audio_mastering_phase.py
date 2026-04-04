@@ -20,6 +20,74 @@ ROOT = Path(__file__).resolve().parents[1]
 AUDIO_ROOT = ROOT / "src" / "definers" / "audio"
 
 
+def _install_scipy_stub() -> None:
+    scipy_module = types.ModuleType("scipy")
+    signal_module = types.ModuleType("scipy.signal")
+    ndimage_module = types.ModuleType("scipy.ndimage")
+
+    def _moving_last_axis(values, size, reducer):
+        array = np.asarray(values, dtype=np.float32)
+        out = np.empty_like(array)
+        window = max(int(size), 1)
+        for index in range(array.shape[-1]):
+            start = max(0, index - window + 1)
+            out[..., index] = reducer(array[..., start : index + 1], axis=-1)
+        return out
+
+    def welch(y, fs=1.0, nperseg=256, nfft=None, **kwargs):
+        array = np.asarray(y, dtype=np.float32)
+        if array.ndim > 1:
+            array = np.mean(array, axis=0)
+        fft_size = int(nfft or nperseg or max(array.size, 1))
+        if array.size < fft_size:
+            array = np.pad(array, (0, fft_size - array.size))
+        else:
+            array = array[:fft_size]
+        spectrum = np.fft.rfft(array)
+        power = np.square(np.abs(spectrum)) / max(array.size, 1)
+        freqs = np.fft.rfftfreq(array.size, d=1.0 / float(fs))
+        return freqs.astype(np.float32), power.astype(np.float32)
+
+    def stft(audio_data, fs=44100, nperseg=8192):
+        array = np.asarray(audio_data, dtype=np.float32)
+        if array.ndim > 1:
+            array = np.mean(array, axis=0)
+        freq_count = max(int(nperseg) // 2 + 1, 2)
+        freqs = np.linspace(0.0, fs / 2.0, freq_count, dtype=np.float32)
+        return (
+            freqs,
+            np.array([0.0], dtype=np.float32),
+            np.tile(array, (freq_count, 1)),
+        )
+
+    def istft(Zxx_modified, fs=44100, nperseg=8192):
+        output = np.mean(np.asarray(Zxx_modified, dtype=np.float32), axis=0)
+        return np.array([0.0], dtype=np.float32), output
+
+    signal_module.welch = welch
+    signal_module.stft = stft
+    signal_module.istft = istft
+    signal_module.resample_poly = lambda y, up, down, axis=-1: np.array(
+        y, copy=True
+    )
+    signal_module.butter = lambda *args, **kwargs: ("b", "a")
+    signal_module.sosfilt = lambda sos, x: np.array(x, copy=True)
+    signal_module.sosfiltfilt = lambda sos, x, axis=-1: np.array(x, copy=True)
+
+    ndimage_module.maximum_filter1d = lambda values, size, mode="constant": (
+        _moving_last_axis(values, size, np.max)
+    )
+    ndimage_module.uniform_filter1d = lambda values, size, mode="constant": (
+        _moving_last_axis(values, size, np.mean)
+    )
+
+    scipy_module.signal = signal_module
+    scipy_module.ndimage = ndimage_module
+    sys.modules["scipy"] = scipy_module
+    sys.modules["scipy.signal"] = signal_module
+    sys.modules["scipy.ndimage"] = ndimage_module
+
+
 def _load_mastering_module(package_name: str):
     root_package_name, _, _ = package_name.rpartition(".")
 
@@ -58,6 +126,7 @@ def _load_mastering_module(package_name: str):
     sys.modules[f"{package_name}.filters"] = types.SimpleNamespace(
         freq_cut=lambda y, *_, **__: y,
     )
+    _install_scipy_stub()
     sys.modules[f"{package_name}.utils"] = types.SimpleNamespace(
         apply_lufs=lambda y, *_, **__: y,
         generate_bands=lambda *_, **__: [],
@@ -216,3 +285,24 @@ def test_apply_eq_uses_mono_average_and_mastering_anchors(
     assert calls[1][3] == mastering.analysis_nperseg
     assert calls[3][3] == mastering.analysis_nperseg
     assert np.allclose(corrected, source)
+
+
+def test_build_spectral_balance_profile_raises_repair_ceiling_for_edm_like_deficit():
+    mastering = MASTERING_MODULE.SmartMastering(
+        8000,
+        correction_strength=0.9,
+        max_spectrum_boost_db=5.5,
+        spectral_rescue_strength=0.18,
+        spectral_rescue_boost_db=2.0,
+        spectral_rescue_band_intensity=0.55,
+    )
+
+    correction_db = np.array([8.0, 9.0, 3.0, 8.5, 9.5], dtype=float)
+    f_axis = np.array([40.0, 80.0, 1000.0, 6000.0, 12000.0], dtype=float)
+
+    profile = mastering.build_spectral_balance_profile(correction_db, f_axis)
+
+    assert profile.rescue_factor > 0.0
+    assert profile.correction_strength > mastering.correction_strength
+    assert profile.max_boost_db > mastering.max_spectrum_boost_db
+    assert profile.band_intensity > mastering.config.intensity

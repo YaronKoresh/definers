@@ -54,4 +54,6 @@ def test_text_input_validator_rejects_excessive_consecutive_spaces():
     else:
         raise AssertionError("expected ValidationError")
 
-    assert messages == [("Validation reject", "input has excessive consecutive spaces")]
+    assert messages == [
+        ("Validation reject", "input has excessive consecutive spaces")
+    ]

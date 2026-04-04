@@ -58,7 +58,9 @@ def test_handle_training_returns_model_output_and_plan(monkeypatch):
             self.kwargs = kwargs
 
         def training_plan(self, **kwargs):
-            return SimpleNamespace(mode="file-dataset", source_summary="features.csv")
+            return SimpleNamespace(
+                mode="file-dataset", source_summary="features.csv"
+            )
 
         def train(self, **kwargs):
             assert kwargs["resume_from"] == "model.joblib"

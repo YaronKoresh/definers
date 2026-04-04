@@ -27,7 +27,12 @@ def test_application_shell_facade_exports_parser_and_dispatcher():
     exit_code = dispatch_cli_command(
         MusicVideoCommand(audio="a.mp3", width=320, height=240, fps=15),
         start=lambda project: 0,
-        music_video=lambda audio, width, height, fps: (audio, width, height, fps),
+        music_video=lambda audio, width, height, fps: (
+            audio,
+            width,
+            height,
+            fps,
+        ),
         lyric_video=lambda *args, **kwargs: None,
         output=outputs.append,
     )

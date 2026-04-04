@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-
 AUDIO_FORMAT_CHOICES = ["MP3", "WAV", "FLAC"]
 
 AUDIO_TOOL_MAP = {
@@ -78,7 +77,12 @@ def train_voice_lab_model(experiment, inp, lvl):
 def prepare_audio_workspace():
     from definers.chat import init_stable_whisper
     from definers.ml import init_pretrained_model
-    from definers.system import cwd, exist, install_audio_effects, install_ffmpeg
+    from definers.system import (
+        cwd,
+        exist,
+        install_audio_effects,
+        install_ffmpeg,
+    )
     from definers.text import set_system_message
 
     install_audio_effects()

@@ -35,9 +35,7 @@ class CliHealthService:
                 if definition.kind != "start"
             )
         )
-        known_names_with_options = tuple(
-            get_known_cli_names(command_registry)
-        )
+        known_names_with_options = tuple(get_known_cli_names(command_registry))
         return CliHealthSnapshot(
             command_names=command_names,
             gui_project_names=normalized_gui_project_names,

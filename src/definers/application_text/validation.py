@@ -43,6 +43,10 @@ class TextInputValidator:
                 f"Input too long ({len(normalized_value)} > {self._max_input_length})"
             )
         if " " * (self._max_consecutive_spaces + 1) in normalized_value:
-            self._log("Validation reject", "input has excessive consecutive spaces")
-            raise self._error_factory("Input contains too many consecutive spaces")
+            self._log(
+                "Validation reject", "input has excessive consecutive spaces"
+            )
+            raise self._error_factory(
+                "Input contains too many consecutive spaces"
+            )
         return self._normalize_text(normalized_value)

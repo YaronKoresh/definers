@@ -98,7 +98,10 @@ class TestRepositorySyncHelpers(unittest.TestCase):
             )
         )
 
-        self.assertIn("C:\\Users\\User\\.cache\\huggingface\\hub\\model-a", trusted_directories)
+        self.assertIn(
+            "C:\\Users\\User\\.cache\\huggingface\\hub\\model-a",
+            trusted_directories,
+        )
 
     def test_transformers_text_generation_repo_detection(self):
         repo_files = (
@@ -137,9 +140,6 @@ class TestRepositorySyncHuggingFaceRouting(unittest.TestCase):
         fake_module.snapshot_download = MagicMock()
 
         secure_path_calls = []
-        local_models = {}
-        local_processors = {}
-        local_tokenizers = {}
 
         def fake_secure_path(value, trust=None, **kwargs):
             secure_path_calls.append((value, trust, kwargs))
@@ -147,8 +147,12 @@ class TestRepositorySyncHuggingFaceRouting(unittest.TestCase):
 
         with (
             patch.dict(sys.modules, {"huggingface_hub": fake_module}),
-            patch.object(repository_sync, "_load_model", return_value={}) as mock_load,
-            patch.object(repository_sync, "_apply_turbo_optimizations") as mock_turbo,
+            patch.object(
+                repository_sync, "_load_model", return_value={}
+            ) as mock_load,
+            patch.object(
+                repository_sync, "_apply_turbo_optimizations"
+            ) as mock_turbo,
             patch.object(repository_sync, "download_file") as mock_download,
             patch.object(repository_sync, "free"),
             patch("definers.system.secure_path", side_effect=fake_secure_path),
@@ -205,7 +209,9 @@ class TestRepositorySyncHuggingFaceRouting(unittest.TestCase):
 
         with (
             patch.dict(sys.modules, {"huggingface_hub": fake_module}),
-            patch.object(repository_sync, "_load_model", return_value={}) as mock_load,
+            patch.object(
+                repository_sync, "_load_model", return_value={}
+            ) as mock_load,
             patch.object(repository_sync, "_apply_turbo_optimizations"),
             patch.object(repository_sync, "free"),
             patch("definers.system.secure_path", side_effect=fake_secure_path),
@@ -274,8 +280,8 @@ class TestRepositorySyncHuggingFaceRouting(unittest.TestCase):
         mock_processor = MagicMock()
         mock_processor.tokenizer = mock_tokenizer
         fake_transformers_module.AutoModelForCausalLM = MagicMock()
-        fake_transformers_module.AutoModelForCausalLM.from_pretrained = MagicMock(
-            return_value=mock_model
+        fake_transformers_module.AutoModelForCausalLM.from_pretrained = (
+            MagicMock(return_value=mock_model)
         )
         fake_transformers_module.AutoProcessor = MagicMock()
         fake_transformers_module.AutoProcessor.from_pretrained = MagicMock(

@@ -14,7 +14,7 @@ echo   5. ml        - Machine learning
 echo   6. nlp       - Natural language processing
 echo   7. web       - Web scraping and UI
 echo   8. all       - All optional groups, except "dev" and "cuda"
-echo   9. cuda     - CUDA acceleration (requires CUDA Toolkit)
+echo   9. cuda      - CUDA acceleration (requires CUDA Toolkit)
 echo.
 echo You can combine groups with commas, e.g.: dev,audio,ml
 echo.

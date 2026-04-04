@@ -12,7 +12,9 @@ class MlFacadeApi:
 
     @staticmethod
     def optimize_prompt_realism(prompt):
-        from definers.application_ml.text_generation import optimize_prompt_realism
+        from definers.application_ml.text_generation import (
+            optimize_prompt_realism,
+        )
 
         return optimize_prompt_realism(prompt)
 
@@ -42,7 +44,9 @@ class MlFacadeApi:
         )
 
     @staticmethod
-    def linear_regression(X, y, *, linear_regression_fn, learning_rate=0.01, epochs=50):
+    def linear_regression(
+        X, y, *, linear_regression_fn, learning_rate=0.01, epochs=50
+    ):
         return linear_regression_fn(
             X,
             y,
@@ -91,11 +95,15 @@ class MlFacadeApi:
         )
 
     @staticmethod
-    def init_model_file(task, *, init_model_file_fn, turbo=True, model_type=None):
+    def init_model_file(
+        task, *, init_model_file_fn, turbo=True, model_type=None
+    ):
         return init_model_file_fn(task, turbo=turbo, model_type=model_type)
 
     @staticmethod
-    def extract_text_features(text, *, extract_text_features_fn, vectorizer=None):
+    def extract_text_features(
+        text, *, extract_text_features_fn, vectorizer=None
+    ):
         return extract_text_features_fn(text, vectorizer)
 
     @staticmethod

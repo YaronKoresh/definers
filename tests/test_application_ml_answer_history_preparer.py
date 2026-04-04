@@ -1,6 +1,8 @@
 from types import SimpleNamespace
 
-from definers.application_ml.answer_history_preparer import AnswerHistoryPreparer
+from definers.application_ml.answer_history_preparer import (
+    AnswerHistoryPreparer,
+)
 from definers.application_ml.answer_service import AnswerService
 
 

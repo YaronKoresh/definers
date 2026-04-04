@@ -62,7 +62,9 @@ class CliParserService:
         if not argv:
             return None
         first = normalize_gui_project_name(argv[0])
-        if first in get_known_cli_names(command_registry) or first.startswith("-"):
+        if first in get_known_cli_names(command_registry) or first.startswith(
+            "-"
+        ):
             return None
         return first
 

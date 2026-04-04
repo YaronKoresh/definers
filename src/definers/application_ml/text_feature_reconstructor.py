@@ -16,7 +16,9 @@ class TextFeatureReconstructor:
         flattened_features = np.asarray(predicted_features).reshape(-1)
         for index, value in enumerate(flattened_features):
             if value > 0 and index < len(feature_names):
-                weighted_tokens.append((float(value), str(feature_names[index])))
+                weighted_tokens.append(
+                    (float(value), str(feature_names[index]))
+                )
         weighted_tokens.sort(key=lambda item: (-item[0], item[1]))
         return [token for _, token in weighted_tokens]
 

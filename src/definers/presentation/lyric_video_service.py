@@ -116,7 +116,9 @@ def lyric_video(
                         if op in ("=", "X"):
                             transcript_idx += 1
                             correct_idx += 1
-                            correct_to_transcript_map[correct_idx] = transcript_idx
+                            correct_to_transcript_map[correct_idx] = (
+                                transcript_idx
+                            )
                         elif op == "D":
                             transcript_idx += 1
                         elif op == "I":
@@ -132,7 +134,9 @@ def lyric_video(
                             first_transcript_idx = mapped_idx
                         last_transcript_idx = mapped_idx
                 if first_transcript_idx != -1 and last_transcript_idx != -1:
-                    start_time = processed_timestamps[first_transcript_idx]["start"]
+                    start_time = processed_timestamps[first_transcript_idx][
+                        "start"
+                    ]
                     end_time = processed_timestamps[last_transcript_idx]["end"]
                     timed_lyrics.append((start_time, end_time, original_line))
             del model, result

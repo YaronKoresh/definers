@@ -1,9 +1,13 @@
 from collections.abc import Callable, Mapping
 
-from definers.application_shell.command_registry import CliCommandRegistry
-from definers.application_shell.cli_command_definition import CliCommandDefinition
+from definers.application_shell.cli_command_definition import (
+    CliCommandDefinition,
+)
 from definers.application_shell.cli_request import CliRequest
-from definers.application_shell.command_execution_metadata import CommandExecutionMetadata
+from definers.application_shell.command_execution_metadata import (
+    CommandExecutionMetadata,
+)
+from definers.application_shell.command_registry import CliCommandRegistry
 from definers.application_shell.lyric_video_command import LyricVideoCommand
 from definers.application_shell.music_video_command import MusicVideoCommand
 from definers.application_shell.request_coercer import CliRequestCoercer
@@ -22,7 +26,9 @@ class CliCommandParser:
     ) -> StartCommand | MusicVideoCommand | LyricVideoCommand | UnknownCommand:
         request = CliRequestCoercer.coerce_cli_request(args)
         command = CliCommandRegistry.normalize_cli_name(request.command)
-        project = CliCommandRegistry.normalize_cli_name(request.project) or "chat"
+        project = (
+            CliCommandRegistry.normalize_cli_name(request.project) or "chat"
+        )
         if command in (None, "start"):
             return StartCommand(
                 project=project,

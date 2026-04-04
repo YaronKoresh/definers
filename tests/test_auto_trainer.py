@@ -15,9 +15,13 @@ class TestAutoTrainer(unittest.TestCase):
         with (
             patch("definers.ml._feed", return_value=trained_model) as mock_feed,
             patch("definers.ml._fit", return_value=trained_model) as mock_fit,
-            patch("definers.ml._training_array_adapter", return_value=MagicMock()),
+            patch(
+                "definers.ml._training_array_adapter", return_value=MagicMock()
+            ),
         ):
-            result = trainer.fit(data={"features": [[1, 2], [3, 4]], "labels": [1, 0]})
+            result = trainer.fit(
+                data={"features": [[1, 2], [3, 4]], "labels": [1, 0]}
+            )
 
         self.assertIs(result, trained_model)
         mock_feed.assert_called_once()
@@ -34,7 +38,9 @@ class TestAutoTrainer(unittest.TestCase):
         with (
             patch("definers.ml._feed", return_value=trained_model),
             patch("definers.ml._fit", return_value=trained_model),
-            patch("definers.ml._training_array_adapter", return_value=MagicMock()),
+            patch(
+                "definers.ml._training_array_adapter", return_value=MagicMock()
+            ),
             patch("joblib.dump") as mock_dump,
         ):
             model_path = trainer.train(
@@ -51,17 +57,36 @@ class TestAutoTrainer(unittest.TestCase):
     def test_train_uses_embedded_file_pipeline_for_file_inputs(self):
         trainer = AutoTrainer(batch_size=8, source_type="json")
         trained_model = MagicMock()
-        training_data = MagicMock(train=[[{"feature": "a", "label": "b"}]], val=None, test=None)
+        training_data = MagicMock(
+            train=[[{"feature": "a", "label": "b"}]], val=None, test=None
+        )
 
         with (
             patch("definers.ml._feed", return_value=trained_model) as mock_feed,
             patch("definers.ml._fit", return_value=trained_model),
-            patch("definers.ml._training_array_adapter", return_value=MagicMock()),
-            patch("definers.application_data.preparation.prepare_data", return_value=training_data) as mock_prepare,
-            patch("definers.application_data.tokenization.init_tokenizer", return_value=object()),
-            patch("definers.application_data.tokenization.tokenize_and_pad", side_effect=lambda rows, tokenizer: rows),
-            patch("definers.application_data.preparation.pad_sequences", side_effect=lambda rows: rows),
-            patch("definers.application_data.arrays.numpy_to_cupy", side_effect=lambda value: value),
+            patch(
+                "definers.ml._training_array_adapter", return_value=MagicMock()
+            ),
+            patch(
+                "definers.application_data.preparation.prepare_data",
+                return_value=training_data,
+            ) as mock_prepare,
+            patch(
+                "definers.application_data.tokenization.init_tokenizer",
+                return_value=object(),
+            ),
+            patch(
+                "definers.application_data.tokenization.tokenize_and_pad",
+                side_effect=lambda rows, tokenizer: rows,
+            ),
+            patch(
+                "definers.application_data.preparation.pad_sequences",
+                side_effect=lambda rows: rows,
+            ),
+            patch(
+                "definers.application_data.arrays.numpy_to_cupy",
+                side_effect=lambda value: value,
+            ),
             patch("joblib.dump") as mock_dump,
         ):
             model_path = trainer.train(
@@ -72,8 +97,12 @@ class TestAutoTrainer(unittest.TestCase):
 
         self.assertEqual(model_path, "pipeline.joblib")
         mock_prepare.assert_called_once()
-        self.assertEqual(mock_prepare.call_args.kwargs["features"], ["features.csv"])
-        self.assertEqual(mock_prepare.call_args.kwargs["labels"], ["labels.csv"])
+        self.assertEqual(
+            mock_prepare.call_args.kwargs["features"], ["features.csv"]
+        )
+        self.assertEqual(
+            mock_prepare.call_args.kwargs["labels"], ["labels.csv"]
+        )
         self.assertEqual(mock_prepare.call_args.kwargs["batch_size"], 8)
         self.assertEqual(mock_prepare.call_args.kwargs["url_type"], "json")
         mock_feed.assert_called_once()
@@ -82,7 +111,9 @@ class TestAutoTrainer(unittest.TestCase):
     def test_train_url_uses_beginner_friendly_online_entry_point(self):
         trainer = AutoTrainer()
 
-        with patch.object(trainer, "train", return_value="remote.joblib") as mock_train:
+        with patch.object(
+            trainer, "train", return_value="remote.joblib"
+        ) as mock_train:
             model_path = trainer.train_url(
                 "https://example.com/data.parquet",
                 target="label",
@@ -113,13 +144,30 @@ class TestAutoTrainer(unittest.TestCase):
 
         with (
             patch("definers.ml.init_model_file") as mock_init,
-            patch.dict("definers.ml.MODELS", {"answer": MagicMock(predict=MagicMock(return_value=np.array([[1.0, 0.0]])))}, clear=True),
+            patch.dict(
+                "definers.ml.MODELS",
+                {
+                    "answer": MagicMock(
+                        predict=MagicMock(return_value=np.array([[1.0, 0.0]]))
+                    )
+                },
+                clear=True,
+            ),
             patch("definers.ml.read", return_value="hello"),
             patch("definers.ml.create_vectorizer", return_value=MagicMock()),
-            patch("definers.ml.extract_text_features", return_value=np.array([1.0, 0.0], dtype=np.float32)),
+            patch(
+                "definers.ml.extract_text_features",
+                return_value=np.array([1.0, 0.0], dtype=np.float32),
+            ),
             patch("definers.ml.numpy_to_cupy", side_effect=lambda value: value),
-            patch("definers.ml.one_dim_numpy", side_effect=lambda value: np.asarray(value).reshape(1, -1)),
-            patch("definers.ml.cupy_to_numpy", side_effect=lambda value: np.asarray(value)),
+            patch(
+                "definers.ml.one_dim_numpy",
+                side_effect=lambda value: np.asarray(value).reshape(1, -1),
+            ),
+            patch(
+                "definers.ml.cupy_to_numpy",
+                side_effect=lambda value: np.asarray(value),
+            ),
             patch("definers.ml.features_to_text", return_value="prediction"),
             patch("builtins.open", unittest.mock.mock_open()),
             patch("definers.ml.random_string", return_value="prediction"),
@@ -154,7 +202,9 @@ class TestAutoTrainer(unittest.TestCase):
         self.assertEqual(plan.drop_columns, ("unused",))
         self.assertEqual(plan.selected_rows, "1-20")
         self.assertEqual(plan.resume_from, "model.joblib")
-        self.assertIn("Mode: remote-dataset", render_training_plan_markdown(plan))
+        self.assertIn(
+            "Mode: remote-dataset", render_training_plan_markdown(plan)
+        )
 
 
 if __name__ == "__main__":

@@ -22,24 +22,33 @@ from definers import regex_utils
 from definers.application_ml import answer as _answer
 from definers.application_ml.facade_api import MlFacadeApi
 from definers.application_ml.facade_runtime import MlFacadeRuntime
-from definers.application_ml.health import (
-    collect_live_ml_health_snapshot as _collect_live_ml_health_snapshot,
-    render_ml_health_markdown as _render_ml_health_markdown,
-    run_ml_health_check as _run_ml_health_check,
-)
 from definers.application_ml.inference import (
     extract_text_features as _extract_text_features,
     features_to_text as _features_to_text,
-    predict_linear_regression as _predict_linear_regression,
 )
 from definers.application_ml.training import (
     HybridModel as _HybridModel,
     LinearRegressionTorch as _LinearRegressionTorch,
     feed as _feed,
     fit as _fit,
-    initialize_linear_regression as _initialize_linear_regression,
-    linear_regression as _linear_regression,
-    train_linear_regression as _train_linear_regression,
+)
+from definers.ml_health import (
+    get_ml_health_snapshot,
+    ml_health_markdown,
+    validate_ml_health,
+)
+from definers.ml_regression import (
+    initialize_linear_regression,
+    linear_regression,
+    predict_linear_regression,
+    train_linear_regression,
+)
+from definers.ml_text import (
+    map_reduce_summary,
+    optimize_prompt_realism,
+    preprocess_prompt,
+    summarize,
+    summary,
 )
 
 try:
@@ -204,21 +213,6 @@ _FAILED_MODEL_LOADS: dict[str, str] = {}
 logger = init_logger("definers.ml")
 
 
-def _answer_runtime_adapter():
-    return MlFacadeRuntime.build_answer_runtime(MODELS, PROCESSORS)
-
-
-def _linear_regression_runtime_adapter():
-    return MlFacadeRuntime.build_linear_regression_runtime(device)
-
-
-def _train_linear_regression_runtime_adapter():
-    return MlFacadeRuntime.build_train_linear_regression_runtime(
-        device,
-        initialize_linear_regression,
-    )
-
-
 def _training_array_adapter():
     return MlFacadeRuntime.build_training_array_adapter(
         catch,
@@ -233,26 +227,6 @@ def _concatenate_training_rows():
     return MlFacadeRuntime.resolve_training_row_concatenate(np)
 
 
-def map_reduce_summary(text, max_words):
-    return MlFacadeApi.map_reduce_summary(text, max_words)
-
-
-def optimize_prompt_realism(prompt):
-    return MlFacadeApi.optimize_prompt_realism(prompt)
-
-
-def preprocess_prompt(prompt):
-    return MlFacadeApi.preprocess_prompt(prompt)
-
-
-def summarize(text_to_summarize):
-    return MlFacadeApi.summarize(text_to_summarize)
-
-
-def summary(text, max_words=20, min_loops=1):
-    return MlFacadeApi.summary(text, max_words=max_words, min_loops=min_loops)
-
-
 def answer(history: list):
     return MlFacadeApi.answer(
         history,
@@ -262,41 +236,10 @@ def answer(history: list):
     )
 
 
-def linear_regression(X, y, learning_rate=0.01, epochs=50):
-    return MlFacadeApi.linear_regression(
-        X,
-        y,
-        linear_regression_fn=_linear_regression,
-        learning_rate=learning_rate,
-        epochs=epochs,
-    )
-
-
-def initialize_linear_regression(input_dim, model_path):
-    return MlFacadeApi.initialize_linear_regression(
-        input_dim,
-        model_path,
-        initialize_linear_regression_fn=_initialize_linear_regression,
-        factory=_LinearRegressionTorch,
-        device_fn=device,
-        logger=logger.info,
-    )
-
-
-def train_linear_regression(X, y, model_path, learning_rate=0.01):
-    return MlFacadeApi.train_linear_regression(
-        X,
-        y,
-        model_path,
-        train_linear_regression_fn=_train_linear_regression,
-        initialize_linear_regression_fn=initialize_linear_regression,
-        device_fn=device,
-        learning_rate=learning_rate,
-    )
-
-
 def init_model_file(task: str, turbo: bool = True, model_type: str = None):
-    from definers.application_ml.repository_sync import init_model_file as _init_model_file
+    from definers.application_ml.repository_sync import (
+        init_model_file as _init_model_file,
+    )
 
     return MlFacadeApi.init_model_file(
         task,
@@ -436,15 +379,6 @@ def extract_text_features(text, vectorizer=None):
     )
 
 
-def predict_linear_regression(X_new, model_path):
-    return MlFacadeApi.predict_linear_regression(
-        X_new,
-        model_path,
-        predict_linear_regression_fn=_predict_linear_regression,
-        factory=_LinearRegressionTorch,
-    )
-
-
 def features_to_text(predicted_features, vectorizer=None, vocabulary=None):
     return MlFacadeApi.features_to_text(
         predicted_features,
@@ -452,18 +386,6 @@ def features_to_text(predicted_features, vectorizer=None, vocabulary=None):
         vectorizer=vectorizer,
         vocabulary=vocabulary,
     )
-
-
-def get_ml_health_snapshot():
-    return _collect_live_ml_health_snapshot()
-
-
-def validate_ml_health():
-    return _run_ml_health_check()
-
-
-def ml_health_markdown():
-    return _render_ml_health_markdown(get_ml_health_snapshot())
 
 
 def lang_code_to_name(code):
@@ -2254,12 +2176,20 @@ class AutoTrainer:
 
         source, target_value = self._resolve_training_source(data, target)
         active_revision = self.revision if revision is None else revision
-        active_source_type = self.source_type if source_type is None else source_type
-        active_validation_split = (
-            self.validation_split if validation_split is None else validation_split
+        active_source_type = (
+            self.source_type if source_type is None else source_type
         )
-        active_test_split = self.test_split if test_split is None else test_split
-        active_batch_size = self.batch_size if batch_size is None else batch_size
+        active_validation_split = (
+            self.validation_split
+            if validation_split is None
+            else validation_split
+        )
+        active_test_split = (
+            self.test_split if test_split is None else test_split
+        )
+        active_batch_size = (
+            self.batch_size if batch_size is None else batch_size
+        )
         normalized_select = self._normalize_selected_rows(select)
         normalized_drop = self._normalize_text_list(drop)
         normalized_label_columns = self._normalize_text_list(label_columns)
@@ -2380,7 +2310,6 @@ class AutoTrainer:
         from definers.application_ml.safe_deserialization import (
             load_serialized_model,
         )
-
         from definers.system import secure_path
 
         resolved_model_path = self._coerce_reference(
@@ -2696,7 +2625,6 @@ class AutoTrainer:
         from definers.application_ml.safe_deserialization import (
             load_serialized_model,
         )
-
         from definers.system import secure_path
 
         resolved_prediction_file = str(self._coerce_reference(prediction_file))

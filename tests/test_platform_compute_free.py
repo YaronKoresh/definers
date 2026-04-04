@@ -9,12 +9,16 @@ from definers.platform import compute
 
 class TestPlatformComputeFree(unittest.TestCase):
     def test_preserves_default_huggingface_cache(self):
-        fake_torch = SimpleNamespace(cuda=SimpleNamespace(empty_cache=lambda: None))
+        fake_torch = SimpleNamespace(
+            cuda=SimpleNamespace(empty_cache=lambda: None)
+        )
         run_calls = []
         catch_calls = []
 
         with tempfile.TemporaryDirectory() as temp_root:
-            cache_file = Path(temp_root) / ".cache" / "huggingface" / "marker.txt"
+            cache_file = (
+                Path(temp_root) / ".cache" / "huggingface" / "marker.txt"
+            )
             cache_file.parent.mkdir(parents=True)
             cache_file.write_text("keep")
 
@@ -28,7 +32,9 @@ class TestPlatformComputeFree(unittest.TestCase):
             ):
                 compute.free(
                     catch_func=catch_calls.append,
-                    run_func=lambda *args, **kwargs: run_calls.append((args, kwargs)),
+                    run_func=lambda *args, **kwargs: run_calls.append(
+                        (args, kwargs)
+                    ),
                     environ={},
                 )
 
@@ -36,7 +42,9 @@ class TestPlatformComputeFree(unittest.TestCase):
             self.assertEqual(catch_calls, [])
 
     def test_deletes_ephemeral_huggingface_cache(self):
-        fake_torch = SimpleNamespace(cuda=SimpleNamespace(empty_cache=lambda: None))
+        fake_torch = SimpleNamespace(
+            cuda=SimpleNamespace(empty_cache=lambda: None)
+        )
         run_calls = []
         catch_calls = []
 
@@ -48,7 +56,9 @@ class TestPlatformComputeFree(unittest.TestCase):
             with patch.dict("sys.modules", {"torch": fake_torch}):
                 compute.free(
                     catch_func=catch_calls.append,
-                    run_func=lambda *args, **kwargs: run_calls.append((args, kwargs)),
+                    run_func=lambda *args, **kwargs: run_calls.append(
+                        (args, kwargs)
+                    ),
                     environ={"HF_HOME": str(cache_dir)},
                 )
 

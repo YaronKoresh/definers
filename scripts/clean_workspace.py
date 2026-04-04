@@ -1,6 +1,14 @@
 import shutil
 from pathlib import Path
 
+PROTECTED_DIRECTORY_NAMES = (
+    ".git",
+    ".venv",
+    "venv",
+    "env",
+    ".env",
+)
+
 DIRECTORY_PATTERNS = (
     "__pycache__",
     ".pytest_cache",
@@ -37,6 +45,11 @@ def matches_any(path: Path, patterns: tuple[str, ...]) -> bool:
     )
 
 
+def is_protected_path(path: Path, workspace_root: Path) -> bool:
+    relative_parts = path.relative_to(workspace_root).parts
+    return any(part in PROTECTED_DIRECTORY_NAMES for part in relative_parts)
+
+
 def remove_path(path: Path) -> None:
     if path.is_symlink():
         path.unlink(missing_ok=True)
@@ -49,7 +62,10 @@ def remove_path(path: Path) -> None:
 
 
 def main() -> None:
-    for path in Path(".").rglob("*"):
+    workspace_root = Path(".").resolve()
+    for path in workspace_root.rglob("*"):
+        if is_protected_path(path, workspace_root):
+            continue
         if matches_any(path, DIRECTORY_PATTERNS):
             remove_path(path)
             continue

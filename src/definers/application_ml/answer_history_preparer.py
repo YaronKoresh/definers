@@ -6,12 +6,18 @@ class AnswerHistoryPreparer:
         runtime,
         dependency_loader,
     ):
-        from definers.application_ml.answer_audio_loader import AnswerAudioLoader
+        from definers.application_ml.answer_audio_loader import (
+            AnswerAudioLoader,
+        )
         from definers.application_ml.answer_content_path_resolver import (
             AnswerContentPathResolver,
         )
-        from definers.application_ml.answer_image_loader import AnswerImageLoader
-        from definers.application_ml.answer_text_service import AnswerTextService
+        from definers.application_ml.answer_image_loader import (
+            AnswerImageLoader,
+        )
+        from definers.application_ml.answer_text_service import (
+            AnswerTextService,
+        )
         from definers.system import get_ext, read
 
         required_lang = "en"
@@ -28,7 +34,9 @@ class AnswerHistoryPreparer:
             content = message["content"]
             role = message["role"]
             add_content = ""
-            is_text = not isinstance(content, dict) and not isinstance(content, tuple)
+            is_text = not isinstance(content, dict) and not isinstance(
+                content, tuple
+            )
             if is_text:
                 add_content = AnswerTextService.normalize_answer_text(
                     content,
@@ -70,17 +78,18 @@ class AnswerHistoryPreparer:
                             )
                             if image is not None:
                                 image_items.append(image)
-                                add_content += (
-                                    f" <|image_{len(image_items)}|>"
-                                )
+                                add_content += f" <|image_{len(image_items)}|>"
                     else:
                         try:
                             file_content = read(path)
                         except Exception:
                             continue
-                        add_content += "\n\n" + AnswerTextService.normalize_answer_text(
-                            str(file_content),
-                            required_lang,
+                        add_content += (
+                            "\n\n"
+                            + AnswerTextService.normalize_answer_text(
+                                str(file_content),
+                                required_lang,
+                            )
                         )
             if add_content.strip():
                 AnswerTextService.append_history_message(

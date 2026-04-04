@@ -23,7 +23,9 @@ class DatasetShapeService:
         ]
 
     @classmethod
-    def dataset_slice(cls, dataset, start_index: int, end_index: int) -> dict[str, object]:
+    def dataset_slice(
+        cls, dataset, start_index: int, end_index: int
+    ) -> dict[str, object]:
         return {
             column_name: dataset[column_name][start_index:end_index]
             for column_name in cls.column_names(dataset)
@@ -86,7 +88,9 @@ class DatasetShapeService:
     def select_rows(cls, dataset, start_index: int, end_index: int):
         from datasets import Dataset
 
-        return Dataset.from_dict(cls.dataset_slice(dataset, start_index, end_index))
+        return Dataset.from_dict(
+            cls.dataset_slice(dataset, start_index, end_index)
+        )
 
     @staticmethod
     def split_columns(data, labels, is_batch: bool = False):

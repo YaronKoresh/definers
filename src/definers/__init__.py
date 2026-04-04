@@ -65,8 +65,29 @@ def has_sox() -> bool:
     return not isinstance(sox, MissingSoxModule)
 
 
+def _install_optional_module_alias(
+    module_name: str, fallback_module_name: str
+) -> None:
+    if module_name in sys.modules:
+        return
+    try:
+        importlib.import_module(module_name)
+        return
+    except Exception:
+        pass
+    sys.modules[module_name] = importlib.import_module(
+        f"{__name__}.{fallback_module_name}"
+    )
+
+
+def install_optional_module_aliases() -> None:
+    _install_optional_module_alias("cv2", "opencv_compat")
+    _install_optional_module_alias("datasets", "datasets_compat")
+
+
 __version__ = _resolve_version()
 sox = load_sox_module()
+install_optional_module_aliases()
 
 _LAZY_SUBMODULES = {
     "audio",
@@ -93,6 +114,7 @@ def __getattr__(name: str) -> Any:
 __all__ = (
     "__version__",
     "has_sox",
+    "install_optional_module_aliases",
     "load_sox_module",
     "sox",
 )

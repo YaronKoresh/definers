@@ -20,7 +20,9 @@ def build_train_app():
             with gr.TabItem("Train"):
                 with gr.Row():
                     with gr.Column():
-                        model_train = gr.File(label="Upload Model (for re-training)")
+                        model_train = gr.File(
+                            label="Upload Model (for re-training)"
+                        )
                         remote = gr.Textbox(
                             placeholder="Remote Dataset",
                             label="HuggingFace name or URL",
@@ -66,7 +68,9 @@ def build_train_app():
                         )
                         with gr.Row():
                             preview_plan_button = gr.Button("Preview Plan")
-                            train_button = gr.Button("Train", elem_classes="btn")
+                            train_button = gr.Button(
+                                "Train", elem_classes="btn"
+                            )
                         train_output = gr.File(label="Trained Model Output")
                         training_plan = gr.Markdown(label="Training Plan")
                 preview_plan_button.click(
@@ -102,10 +106,14 @@ def build_train_app():
             with gr.TabItem("Predict"):
                 with gr.Row():
                     with gr.Column():
-                        model_predict = gr.File(label="Upload Model (for prediction)")
+                        model_predict = gr.File(
+                            label="Upload Model (for prediction)"
+                        )
                         prediction_data = gr.File(label="Prediction Data")
                     with gr.Column():
-                        predict_button = gr.Button("Predict", elem_classes="btn")
+                        predict_button = gr.Button(
+                            "Predict", elem_classes="btn"
+                        )
                         predict_output = gr.File(label="Prediction Output")
                 predict_button.click(
                     fn=handle_prediction,

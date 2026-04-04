@@ -9,7 +9,9 @@ from definers.presentation.apps.audio_workspace import (
 
 
 def test_get_audio_language_choices_sorts_and_deduplicates():
-    result = get_audio_language_choices({"en": "English", "en-US": "English", "he": "Hebrew"})
+    result = get_audio_language_choices(
+        {"en": "English", "en-US": "English", "he": "Hebrew"}
+    )
 
     assert result == ["English", "Hebrew"]
 
@@ -21,7 +23,10 @@ def test_train_voice_lab_model_returns_incremented_level(monkeypatch):
         lambda experiment, inp, lvl: f"{experiment}:{inp}:{lvl}",
     )
 
-    assert train_voice_lab_model("exp", "input.wav", 3) == ("exp:input.wav:3", 4)
+    assert train_voice_lab_model("exp", "input.wav", 3) == (
+        "exp:input.wav:3",
+        4,
+    )
 
 
 def test_prepare_audio_workspace_initializes_required_models(monkeypatch):

@@ -8,7 +8,9 @@ class DatasetSourceLoader:
         return load_dataset(src, split="train")
 
     @staticmethod
-    def load_remote_dataset_fallback(src: str, url_type: str, revision: str | None):
+    def load_remote_dataset_fallback(
+        src: str, url_type: str, revision: str | None
+    ):
         from datasets import load_dataset
 
         if revision:
@@ -32,7 +34,9 @@ class DatasetSourceLoader:
         except ConnectionError:
             import logging
 
-            logging.error(f"Connection error while loading dataset {source_name}.")
+            logging.error(
+                f"Connection error while loading dataset {source_name}."
+            )
             return None, False
         except Exception as error:
             import logging
@@ -41,7 +45,9 @@ class DatasetSourceLoader:
             return None, True
 
     @staticmethod
-    def fetch_dataset(src: str, url_type: str | None = None, revision: str | None = None):
+    def fetch_dataset(
+        src: str, url_type: str | None = None, revision: str | None = None
+    ):
         import definers.application_data.loaders as loaders_module
 
         dataset, allow_fallback = loaders_module._load_dataset_attempt(
@@ -71,7 +77,9 @@ class DatasetSourceLoader:
 
         runtime = loaders_module._runtime()
         if remote_src:
-            fetch = getattr(runtime, "fetch_dataset", loaders_module.fetch_dataset)
+            fetch = getattr(
+                runtime, "fetch_dataset", loaders_module.fetch_dataset
+            )
             return fetch(remote_src, url_type, revision)
         if features:
             build_dataset = getattr(

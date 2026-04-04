@@ -17,7 +17,9 @@ class ChatRequestContextAssembler:
             ChatTextContextBuilder,
         )
 
-        base_history = ChatRequestFactory.copy_history(normalized_request.history)
+        base_history = ChatRequestFactory.copy_history(
+            normalized_request.history
+        )
         media = ChatRequestFactory.normalize_media(normalized_request.message)
         text_context = ChatTextContextBuilder.normalize_text(
             normalized_request.message,

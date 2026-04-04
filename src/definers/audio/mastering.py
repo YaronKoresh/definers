@@ -4,6 +4,8 @@ import numpy as np
 from scipy import signal
 from scipy.ndimage import maximum_filter1d, uniform_filter1d
 
+from definers.system import get_ext
+
 from ..file_ops import log
 from .config import SmartMasteringConfig
 from .dsp import (
@@ -13,59 +15,66 @@ from .dsp import (
 )
 from .effects import apply_exciter, stereo
 from .filters import freq_cut
-from .utils import generate_bands, get_lufs, stereo_widen
-
-from definers.system import get_ext
-
-def audio_eq(
-    audio_data: np.ndarray,
-    anchors: list[list[float]],
-    sample_rate: int = 44100,
-    nperseg: int = 8192,
-) -> np.ndarray:
-    anchors = sorted(anchors, key=lambda x: x[0])
-    anchor_freqs = np.array([a[0] for a in anchors])
-    anchor_gains_db = np.array([a[1] for a in anchors])
-
-    unique_freqs, indices = np.unique(anchor_freqs, return_index=True)
-    anchor_freqs = unique_freqs
-    anchor_gains_db = anchor_gains_db[indices]
-
-    f, _t, Zxx = signal.stft(audio_data, fs=sample_rate, nperseg=nperseg)
-
-    log_f = np.log10(f + 1e-5)
-    log_anchor_freqs = np.log10(anchor_freqs)
-
-    interp_gains_db = np.interp(
-        log_f,
-        log_anchor_freqs,
-        anchor_gains_db,
-        left=anchor_gains_db[0],
-        right=anchor_gains_db[-1],
-    )
-
-    gain_multipliers = 10 ** (interp_gains_db / 20)
-
-    Zxx_modified = Zxx * gain_multipliers[:, None]
-
-    _, output_audio = signal.istft(
-        Zxx_modified, fs=sample_rate, nperseg=nperseg
-    )
-
-    orig_len = audio_data.shape[-1]
-    if output_audio.shape[-1] > orig_len:
-        output_audio = output_audio[..., :orig_len]
-    elif output_audio.shape[-1] < orig_len:
-        pad_width = orig_len - output_audio.shape[-1]
-        output_audio = np.pad(output_audio, ((0, 0), (0, pad_width))) if output_audio.ndim > 1 else np.pad(output_audio, (0, pad_width))
-
-    if np.issubdtype(audio_data.dtype, np.integer):
-        info = np.iinfo(audio_data.dtype)
-        return np.clip(output_audio, info.min, info.max).astype(
-            audio_data.dtype
-        )
-
-    return output_audio.astype(np.float32)
+from .mastering_analysis import measure_spectrum as _measure_spectrum
+from .mastering_character import (
+    LimiterRecoverySettings,
+    apply_low_end_mono_tightening as _apply_low_end_mono_tightening,
+    apply_micro_dynamics_finish as _apply_micro_dynamics_finish,
+    resolve_limiter_recovery_settings as _resolve_limiter_recovery_settings,
+)
+from .mastering_contract import (
+    MasteringContract,
+    assess_mastering_contract as _assess_mastering_contract,
+    resolve_mastering_contract as _resolve_mastering_contract,
+)
+from .mastering_delivery import save_verified_audio
+from .mastering_dynamics import (
+    apply_limiter as _apply_limiter,
+    apply_pre_limiter_saturation as _apply_pre_limiter_saturation,
+    apply_safety_clamp as _apply_safety_clamp,
+    apply_spatial_enhancement as _apply_spatial_enhancement,
+    multiband_compress as _multiband_compress,
+)
+from .mastering_eq import (
+    apply_eq as _apply_eq,
+    audio_eq,
+    smooth_curve as _smooth_curve,
+)
+from .mastering_finalization import (
+    apply_delivery_trim as _apply_delivery_trim,
+    apply_final_headroom_recovery as _apply_final_headroom_recovery,
+    apply_stereo_width_restraint as _apply_stereo_width_restraint,
+    compute_dynamic_drive as _compute_dynamic_drive,
+    compute_primary_soft_clip_ratio as _compute_primary_soft_clip_ratio,
+    plan_follow_up_action as _plan_follow_up_action,
+    resolve_final_true_peak_target as _resolve_final_true_peak_target,
+)
+from .mastering_loudness import (
+    measure_mastering_loudness as _measure_mastering_loudness,
+    measure_true_peak as _measure_true_peak,
+)
+from .mastering_metrics import (
+    MasteringReport,
+    write_mastering_report as _write_mastering_report,
+)
+from .mastering_pipeline import process as _process
+from .mastering_profile import (
+    SpectralBalanceProfile,
+    build_spectral_balance_profile as _build_spectral_balance_profile,
+    build_target_curve as _build_target_curve,
+    fit_frequency as _fit_frequency,
+    plan_follow_up_drives as _plan_follow_up_drives,
+    update_bands as _update_bands,
+    update_profile as _update_profile,
+)
+from .mastering_reference import (
+    ReferenceAnalysis,
+    ReferenceMatchAssist,
+    analyze_reference as _analyze_reference,
+    reference_match_assist as _reference_match_assist,
+)
+from .mastering_state import configure_runtime_state
+from .utils import get_lufs
 
 
 class SmartMastering:
@@ -75,113 +84,48 @@ class SmartMastering:
 
     @slope_db.setter
     def slope_db(self, value: float) -> None:
-        self._slope_db = value
+        self._slope_db = float(value)
+        self.config.bass_boost_db_per_oct = self._slope_db
+        self.update_profile()
         self.update_bands()
+
+    _fit_frequency = _fit_frequency
+    build_target_curve = _build_target_curve
+    update_profile = _update_profile
+    update_bands = _update_bands
+    build_spectral_balance_profile = _build_spectral_balance_profile
+    plan_follow_up_drives = _plan_follow_up_drives
+    smooth_curve = _smooth_curve
+    compute_dynamic_drive = _compute_dynamic_drive
+    compute_primary_soft_clip_ratio = _compute_primary_soft_clip_ratio
+    plan_follow_up_action = _plan_follow_up_action
+    resolve_final_true_peak_target = _resolve_final_true_peak_target
+    assess_mastering_contract = _assess_mastering_contract
+    resolve_limiter_recovery_settings = _resolve_limiter_recovery_settings
 
     def __init__(
         self,
         sr: int,
-        **config: dict,
+        **config: object,
     ) -> None:
-        cfg = SmartMasteringConfig()
+        preset_name = config.pop("preset", None)
+        if preset_name is None:
+            preset_name = config.get("preset_name")
 
-        if isinstance(config, dict):
-            for key, val in config.items():
-                if hasattr(cfg, key):
-                    setattr(cfg, key, val)
+        cfg = SmartMasteringConfig.from_preset(preset_name)
 
-        self.resampling_target = cfg.resampling_target
+        for key, val in config.items():
+            if hasattr(cfg, key):
+                setattr(cfg, key, val)
 
-        nyquist_hz = self.resampling_target / 2.0 - 1.0
+        self.config = cfg
+        configure_runtime_state(self, sr, cfg)
 
-        self.low_cut = max(cfg.low_cut or 0.1, 0.1)
-        self.high_cut = min(cfg.high_cut or nyquist_hz, nyquist_hz)
-
-        self.slope_hz = float(
-            np.clip(cfg.stop_bass_boost_hz, self.low_cut, self.high_cut)
-        )
-        self._slope_db = cfg.bass_boost_db_per_oct
-
-        bass_octaves = float(np.log2(self.slope_hz / self.low_cut))
-        treble_octaves = float(np.log2(self.high_cut / cfg.start_treble_boost_hz))
-
-        bass_gain_db = bass_octaves * cfg.bass_boost_db_per_oct
-        treble_gain_db = treble_octaves * cfg.treble_boost_db_per_oct
-
-        min_boost = min(bass_gain_db, treble_gain_db)
-        base = 0.0
-        if min_boost < 0.0:
-            bass_gain_db -= min_boost
-            treble_gain_db -= min_boost
-            base -= min_boost
-
-        self.anchors = [
-            [self.low_cut, 0.0],
-            [self.low_cut + 5.0, base],
-            [self.low_cut + 10.0, bass_gain_db],
-            [self.slope_hz, base],
-            [cfg.start_treble_boost_hz, base],
-            [self.high_cut - 400.0, treble_gain_db],
-            [self.high_cut - 200.0, base],
-            [self.high_cut, 0.0],
-        ]
-
-        self.sr = sr
-        self.drive_db = cfg.drive_db
-        self.ceil_db = cfg.ceil_db
-        self.num_bands = cfg.num_bands
-        self.smoothing_fraction = cfg.smoothing_fraction
-        self.target_lufs = cfg.target_lufs
-        self.correction_strength = cfg.correction_strength
-        self.mid_slope = cfg.mid_slope
-
-        self.update_bands()
-
-        self.analysis_nperseg = int(2 ** np.ceil(np.log2(self.resampling_target / 5))) * 4
-        self.fft_n = self.analysis_nperseg * 2
-
-        self.target_freqs_hz = np.array(
-            generate_bands(0.1, self.resampling_target / 2.0 - 1.0, self.num_bands),
-            dtype=np.float32,
-        )
-
-    def update_bands(self) -> None:
-        count = self.num_bands
-        fcs = generate_bands(self.low_cut, self.high_cut, count)
-        self.bands = SmartMasteringConfig.make_bands_from_fcs(
-            fcs, self.low_cut, self.high_cut
-        )
-
-    def measure_spectrum(self, y_mono: np.ndarray) -> np.ndarray:
-        FLOOR_DB = -120.0
-        CEILING_DB = 20.0
-
-        if len(y_mono) < self.analysis_nperseg:
-            y_mono_padded = np.pad(
-                y_mono,
-                (0, self.analysis_nperseg - len(y_mono)),
-            )
-        else:
-            y_mono_padded = y_mono
-
-        f_axis, psd = signal.welch(
-            y_mono_padded,
-            fs=self.resampling_target,
-            nperseg=self.analysis_nperseg,
-            nfft=self.fft_n,
-            noverlap=int(self.analysis_nperseg * 0.875),
-            window=("kaiser", 18.0),
-            scaling="density",
-            average="median",
-            detrend="constant",
-        )
-
-        psd_db = 10.0 * np.log10(np.maximum(psd, 1e-24))
-        psd_db = np.clip(psd_db, FLOOR_DB, CEILING_DB)
-
-        f_axis = np.clip(f_axis, self.low_cut, self.high_cut)
-
-        return psd_db, f_axis
+    def measure_spectrum(
+        self,
+        y_mono: np.ndarray,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        return _measure_spectrum(self, y_mono, signal_module=signal)
 
     def apply_limiter(
         self,
@@ -194,311 +138,359 @@ class SmartMastering:
         release_ms_min: float = 30.0,
         release_ms_max: float = 130.0,
         soft_clip_ratio: float = 0.2,
-        window_ms: float = 4.0
+        window_ms: float = 4.0,
     ) -> np.ndarray:
-        input_dtype = y.dtype if np.issubdtype(y.dtype, np.floating) else np.float32
-        y_in = np.asarray(y, dtype=np.float32)
-        orig_len = y_in.shape[-1]
-
-        drive_lin = 10.0 ** (drive_db / 20.0)
-        limit_lin = 10.0 ** (ceil_db / 20.0)
-
-        sr_os = self.resampling_target * os_factor
-        y_os = signal.resample_poly(y_in, os_factor, 1, axis=-1)
-        y_driven = y_os * drive_lin
-
-        lookahead_samp = max(0, int(round(lookahead_ms * sr_os / 1000.0)))
-        lookahead_span = lookahead_samp + 1
-        abs_driven = np.abs(y_driven)
-        linked_env = np.max(abs_driven, axis=0) if y_driven.ndim > 1 else abs_driven
-
-        peak_env = maximum_filter1d(
-            linked_env[::-1],
-            size=lookahead_span,
-            mode="constant",
-        )[::-1]
-
-        rms_win = max(1, int(round(window_ms / 1000 * sr_os)))
-        rms_env = np.sqrt(
-            uniform_filter1d(
-                (linked_env**2)[::-1],
-                size=rms_win,
-                mode="constant",
-            )[::-1]
+        recovery_settings = _resolve_limiter_recovery_settings(
+            self,
+            attack_ms=attack_ms,
+            release_ms_min=release_ms_min,
+            release_ms_max=release_ms_max,
+            window_ms=window_ms,
         )
-
-        crest = peak_env / (rms_env + 1e-12)
-        release_ms = np.clip(release_ms_max / (crest + 1e-6), release_ms_min, release_ms_max)
-
-        atk_c = np.exp(-1.0 / (sr_os * attack_ms / 1000.0))
-        rel_c = np.exp(-1.0 / (sr_os * release_ms / 1000.0))
-
-        control_env = 0.9 * peak_env + 0.1 * rms_env
-
-        control_smooth = limiter_smooth_env(control_env, atk_c, rel_c)
-
-        gain = np.ones_like(control_smooth)
-        mask = control_smooth > limit_lin
-        gain[mask] = limit_lin / control_smooth[mask]
-
-        y_limited = y_driven * gain
-
-        if soft_clip_ratio > 0:
-            threshold = limit_lin * (1.0 - soft_clip_ratio)
-            mask = y_limited > threshold
-            y_limited[mask] = threshold + (limit_lin - threshold) * np.tanh((y_limited[mask] - threshold) / (limit_lin - threshold))
-            mask_neg = y_limited < -threshold
-            y_limited[mask_neg] = -threshold - (limit_lin - threshold) * np.tanh((-y_limited[mask_neg] - threshold) / (limit_lin - threshold))
-
-        y_down = signal.resample_poly(y_limited, 1, os_factor, axis=-1)
-        
-        out = y_down[..., :orig_len]
-
-        return out.astype(input_dtype)
-
-    def smooth_curve(
-        self,
-        curve: np.ndarray,
-        f_axis: np.ndarray,
-        smoothing_fraction: float | None = None,
-    ) -> np.ndarray:
-        if smoothing_fraction is None:
-            return curve
-
-        smoothed = np.copy(curve)
-
-        for i, f in enumerate(f_axis):
-            bandwidth = f * (2**smoothing_fraction - 2 ** (-smoothing_fraction))
-
-            low_f = f - bandwidth / 2
-            high_f = f + bandwidth / 2
-
-            mask = (f_axis >= low_f) & (f_axis <= high_f)
-
-            if np.any(mask):
-                smoothed[i] = np.mean(curve[mask])
-
-        return smoothed
+        return _apply_limiter(
+            self,
+            y,
+            drive_db=drive_db,
+            ceil_db=ceil_db,
+            os_factor=os_factor,
+            lookahead_ms=lookahead_ms,
+            attack_ms=recovery_settings.attack_ms,
+            release_ms_min=recovery_settings.release_ms_min,
+            release_ms_max=recovery_settings.release_ms_max,
+            soft_clip_ratio=soft_clip_ratio,
+            window_ms=recovery_settings.window_ms,
+            signal_module=signal,
+            maximum_filter1d_fn=maximum_filter1d,
+            uniform_filter1d_fn=uniform_filter1d,
+            limiter_smooth_env_fn=limiter_smooth_env,
+        )
 
     def apply_eq(self, y: np.ndarray) -> np.ndarray:
-        y_mono = np.mean(y, axis=0) if y.ndim > 1 else y
+        return _apply_eq(self, y, audio_eq_fn=audio_eq)
 
-        input_db, f_axis = self.measure_spectrum(y_mono)
+    def apply_spatial_enhancement(self, y: np.ndarray) -> np.ndarray:
+        return _apply_spatial_enhancement(self, y, signal_module=signal)
 
-        input_db = self.smooth_curve(input_db, f_axis, self.smoothing_fraction)
+    def apply_safety_clamp(
+        self, y: np.ndarray, *, ceil_db: float = -0.1
+    ) -> np.ndarray:
+        return _apply_safety_clamp(y, ceil_db=ceil_db)
 
-        octaves_from_low_hz = np.log2(np.maximum(f_axis, self.low_cut) / self.low_cut)
-        target_db = self.mid_slope * octaves_from_low_hz
-
-        correction_db = target_db - input_db
-        correction_db = np.nan_to_num(
-            correction_db, nan=0.0, posinf=0.0, neginf=0.0
+    def apply_pre_limiter_saturation(
+        self,
+        y: np.ndarray,
+        *,
+        dynamic_drive_db: float = 0.0,
+    ) -> np.ndarray:
+        return _apply_pre_limiter_saturation(
+            self,
+            y,
+            dynamic_drive_db=dynamic_drive_db,
         )
 
-        eq_flat = max(1, len(correction_db) // self.analysis_nperseg)
+    def apply_stereo_width_restraint(
+        self,
+        y: np.ndarray,
+        *,
+        stereo_width_scale: float = 1.0,
+    ) -> np.ndarray:
+        return _apply_stereo_width_restraint(
+            y,
+            stereo_width_scale=stereo_width_scale,
+        )
 
-        correction_db = np.append(correction_db[:-1:eq_flat], correction_db[-1])
-        f_axis = np.append(f_axis[:-1:eq_flat], f_axis[-1])
+    def apply_low_end_mono_tightening(self, y: np.ndarray) -> np.ndarray:
+        return _apply_low_end_mono_tightening(
+            self,
+            y,
+            sample_rate=self.resampling_target,
+            cutoff_hz=self.contract_low_end_mono_cutoff_hz,
+        )
 
-        dec_eq = np.average([correction_db[0], correction_db[-1]])
-        correction_db -= dec_eq
-        correction_db[0], correction_db[-1] = 0.0, 0.0
+    def apply_micro_dynamics_finish(self, y: np.ndarray) -> np.ndarray:
+        return _apply_micro_dynamics_finish(
+            self,
+            y,
+            sample_rate=self.resampling_target,
+        )
 
-        correction_db *= self.correction_strength
+    def resolve_mastering_contract(self) -> MasteringContract:
+        return _resolve_mastering_contract(
+            self.preset_name,
+            target_lufs=self.target_lufs,
+            ceil_db=self.ceil_db,
+            target_lufs_tolerance_db=self.contract_target_lufs_tolerance_db,
+            max_short_term_lufs=self.contract_max_short_term_lufs,
+            max_momentary_lufs=self.contract_max_momentary_lufs,
+            min_crest_factor_db=self.contract_min_crest_factor_db,
+            max_crest_factor_db=self.contract_max_crest_factor_db,
+            max_stereo_width_ratio=self.contract_max_stereo_width_ratio,
+            min_low_end_mono_ratio=self.contract_min_low_end_mono_ratio,
+            low_end_mono_cutoff_hz=self.contract_low_end_mono_cutoff_hz,
+        )
 
-        flat_anchors = np.column_stack((f_axis, correction_db))
+    def analyze_reference(
+        self,
+        reference_signal: np.ndarray,
+        candidate_signal: np.ndarray,
+    ) -> ReferenceAnalysis:
+        analysis = _analyze_reference(
+            reference_signal,
+            candidate_signal,
+            self.resampling_target,
+            low_end_mono_cutoff_hz=self.contract_low_end_mono_cutoff_hz,
+            true_peak_oversample_factor=self.true_peak_oversample_factor,
+        )
+        self.last_reference_analysis = analysis
+        return analysis
 
-        def eq_channel(channel: np.ndarray) -> np.ndarray:
-            channel = audio_eq(
-                audio_data=channel,
-                anchors=flat_anchors,
-                sample_rate=self.resampling_target,
-                nperseg=self.analysis_nperseg,
-            )
-            return audio_eq(
-                audio_data=channel,
-                anchors=self.anchors,
-                sample_rate=self.resampling_target,
-                nperseg=self.analysis_nperseg,
-            )
-        
-        if y.ndim > 1:
-            return np.vstack([eq_channel(channel) for channel in y])
+    def reference_match_assist(
+        self,
+        reference_signal: np.ndarray,
+        candidate_signal: np.ndarray,
+        *,
+        match_amount: float | None = None,
+    ) -> ReferenceMatchAssist:
+        assist = _reference_match_assist(
+            reference_signal,
+            candidate_signal,
+            self.resampling_target,
+            current_config=self.config,
+            match_amount=match_amount,
+            low_end_mono_cutoff_hz=self.contract_low_end_mono_cutoff_hz,
+            true_peak_oversample_factor=self.true_peak_oversample_factor,
+        )
+        self.last_reference_match_assist = assist
+        return assist
 
-        return eq_channel(y)
+    def apply_delivery_trim(self, y: np.ndarray) -> np.ndarray:
+        return _apply_delivery_trim(
+            self,
+            y,
+            sample_rate=self.resampling_target,
+            measure_true_peak_fn=_measure_true_peak,
+        )
+
+    def apply_final_headroom_recovery(self, y: np.ndarray) -> np.ndarray:
+        return _apply_final_headroom_recovery(
+            self,
+            y,
+            sample_rate=self.resampling_target,
+            measure_true_peak_fn=_measure_true_peak,
+        )
 
     def multiband_compress(self, y: np.ndarray) -> np.ndarray:
-        def lr4(x, fc):
-            if x.shape[-1] <= 9:
-                return x, x
-
-            sr2 = self.resampling_target / 2.0
-            sos_l = signal.butter(2, fc / sr2, btype="low", output="sos")
-            sos_h = signal.butter(2, fc / sr2, btype="high", output="sos")
-
-            lp = signal.sosfilt(sos_l, x)
-            lp = signal.sosfilt(sos_l, lp)
-            hp = signal.sosfilt(sos_h, x)
-            hp = signal.sosfilt(sos_h, hp)
-
-            return lp, hp
-
-        def compress(
-            x,
-            threshold_db,
-            ratio,
-            attack_ms,
-            release_ms,
-            makeup_db,
-            knee_db=3.0,
-        ):
-            ac = np.exp(
-                -1.0 / (self.resampling_target * attack_ms / 1000.0 + 1e-9)
-            )
-            rc = np.exp(
-                -1.0 / (self.resampling_target * release_ms / 1000.0 + 1e-9)
-            )
-            mk = 10.0 ** (makeup_db / 20.0)
-            env = decoupled_envelope(20.0 * np.log10(np.abs(x) + 1e-12), ac, rc)
-            hk = knee_db / 2.0
-            gain = np.zeros_like(env)
-            above = env > threshold_db + hk
-            in_kn = (env > threshold_db - hk) & ~above
-            gain[above] = -(env[above] - threshold_db) * (1.0 - 1.0 / ratio)
-            ki = env[in_kn] - threshold_db + hk
-            gain[in_kn] = -(ki**2) / (2.0 * knee_db) * (1.0 - 1.0 / ratio)
-
-            return x * 10.0 ** (gain / 20.0) * mk
-
-        def split_bands(ch, fcs):
-            bands = []
-            current = ch
-            for fc in fcs[:-1]:
-                lo, current = lr4(current, fc)
-                bands.append(lo)
-            bands.append(current)
-            return bands
-
-        def process_ch(ch):
-            fcs = [b["fc"] for b in self.bands if b["fc"] > 0]
-            if not fcs:
-                return ch
-
-            sorted_bands = sorted(self.bands, key=lambda b: b["fc"])
-            fcs_sorted = [b["fc"] for b in sorted_bands if b["fc"] > 0]
-            signal_parts = split_bands(ch, fcs_sorted)
-
-            comps: list[np.ndarray] = []
-            for band_cfg, sig in zip(sorted_bands, signal_parts, strict=False):
-                thr = band_cfg["base_threshold"] + band_cfg["makeup_db"]
-                comps.append(
-                    compress(
-                        sig,
-                        thr,
-                        band_cfg["ratio"],
-                        band_cfg["attack_ms"],
-                        band_cfg["release_ms"],
-                        band_cfg["makeup_db"],
-                        knee_db=band_cfg["knee_db"],
-                    )
-                )
-
-            return np.sum(comps, axis=0)
-
-        if y.ndim > 1:
-            return np.vstack([process_ch(y_ch) for y_ch in y])
-        else:
-            return process_ch(y)
-
-    def process(self, y: np.ndarray, sr: int | None = None) -> np.ndarray:
-        if sr is not None:
-            self.sr = sr
-
-        if self.sr != self.resampling_target:
-            y = resample(y, self.sr, self.resampling_target)
-
-        y = stereo(y)
-
-        log("Mastering", "Applying exciter...")
-
-        y = apply_exciter(y, self.resampling_target)
-
-        log("Mastering", "Applying multiband compression...")
-
-        self.update_bands()
-
-        y = self.multiband_compress(y)
-
-        log("Mastering", "Applying equalizer...")
-
-        y = self.apply_eq(y)
-
-        y = stereo(y)
-
-        log("Mastering", "Applying filtering...")
-
-        y = freq_cut(
+        return _multiband_compress(
+            self,
             y,
-            self.resampling_target,
-            low_cut=self.low_cut,
-            high_cut=self.high_cut,
+            signal_module=signal,
+            decoupled_envelope_fn=decoupled_envelope,
         )
 
-        log("Mastering", "Applying stereo widening...")
-
-        y = stereo_widen(y)
-
-        log("Mastering", "Applying limiter...")
-
-        current_lufs = get_lufs(y, self.resampling_target)
-        lufs_diff = self.target_lufs - current_lufs + self.drive_db
-        dynamic_drive_db = max(0.0, lufs_diff)
-
-        y = self.apply_limiter(
+    def process(
+        self,
+        y: np.ndarray,
+        sr: int | None = None,
+    ) -> tuple[int, np.ndarray]:
+        return _process(
+            self,
             y,
-            drive_db=dynamic_drive_db,
-            ceil_db=self.ceil_db,
+            sr=sr,
+            resample_fn=resample,
+            stereo_fn=stereo,
+            freq_cut_fn=freq_cut,
+            apply_exciter_fn=apply_exciter,
+            get_lufs_fn=get_lufs,
+            measure_mastering_loudness_fn=_measure_mastering_loudness,
+            log_fn=log,
         )
-
-        log("Mastering", "Applying hard clipping...")
-
-        lin_amp = 10 ** (self.ceil_db / 20.0)
-        y = np.clip(y, -lin_amp, lin_amp)
-
-        log("Mastering", "Mastering complete.")
-
-        return self.resampling_target, y
 
 
 def master(
     input_path: str,
-    output_path: str = None,
-    **kwargs: dict,
-) -> str | None:
+    output_path: str | None = None,
+    **kwargs: object,
+) -> tuple[str | None, MasteringReport | None]:
 
     from definers.system import tmp
 
-    from .io import save_audio
-
     try:
-        from .io import read_audio
+        from .io import read_audio, save_audio
+
+        report_path = kwargs.pop("report_path", None)
+        report_indent = int(kwargs.pop("report_indent", 2))
+        bit_depth = int(kwargs.pop("bit_depth", 32))
+        bitrate = int(kwargs.pop("bitrate", 320))
+        compression_level = int(kwargs.pop("compression_level", 9))
 
         sr, y = read_audio(input_path)
 
-        sr_mastered, y_mastered = SmartMastering(sr, **kwargs).process(y, sr)
+        mastering = SmartMastering(sr, **kwargs)
+        sr_mastered, y_mastered = mastering.process(y, sr)
+        resolved_true_peak_target_dbfs = getattr(
+            mastering,
+            "last_resolved_final_true_peak_target_dbfs",
+            None,
+        )
+        if resolved_true_peak_target_dbfs is None:
+            resolve_final_true_peak_target = getattr(
+                mastering,
+                "resolve_final_true_peak_target",
+                None,
+            )
+            if callable(resolve_final_true_peak_target):
+                resolved_true_peak_target_dbfs = float(
+                    resolve_final_true_peak_target()
+                )
+            else:
+                resolved_true_peak_target_dbfs = float(mastering.ceil_db)
 
         output_path = output_path or tmp(get_ext(input_path), keep=False)
 
-        save_audio(
+        final_output_path, _final_signal, verification = save_verified_audio(
             destination_path=output_path,
             audio_signal=y_mastered,
             sample_rate=sr_mastered,
+            input_signal=y,
+            post_eq_signal=getattr(mastering, "last_stage_signals", {}).get(
+                "post_eq"
+            ),
+            post_spatial_signal=getattr(
+                mastering, "last_stage_signals", {}
+            ).get("post_spatial"),
+            post_limiter_signal=getattr(
+                mastering, "last_stage_signals", {}
+            ).get("post_limiter"),
+            post_character_signal=getattr(
+                mastering, "last_stage_signals", {}
+            ).get("post_character"),
+            post_peak_catch_signal=getattr(
+                mastering, "last_stage_signals", {}
+            ).get("post_peak_catch"),
+            post_delivery_trim_signal=getattr(
+                mastering, "last_stage_signals", {}
+            ).get("post_delivery_trim"),
+            post_clamp_signal=getattr(mastering, "last_stage_signals", {}).get(
+                "post_clamp"
+            ),
+            save_audio_fn=save_audio,
+            read_audio_fn=read_audio,
+            target_lufs=mastering.target_lufs,
+            ceil_db=mastering.ceil_db,
+            preset_name=mastering.preset_name,
+            contract=getattr(mastering, "last_mastering_contract", None)
+            or mastering.resolve_mastering_contract(),
+            delivery_profile_name=mastering.delivery_profile,
+            character_stage_decision=getattr(
+                mastering, "last_character_stage_decision", None
+            ),
+            peak_catch_events=getattr(mastering, "last_peak_catch_events", ()),
+            resolved_true_peak_target_dbfs=resolved_true_peak_target_dbfs,
+            stereo_motion_activity=getattr(
+                mastering, "last_stereo_motion_activity", None
+            ),
+            stereo_motion_correlation_guard=getattr(
+                mastering,
+                "last_stereo_motion_correlation_guard",
+                None,
+            ),
+            delivery_trim_attenuation_db=float(
+                getattr(mastering, "last_delivery_trim_attenuation_db", 0.0)
+            ),
+            delivery_trim_input_true_peak_dbfs=getattr(
+                mastering,
+                "last_delivery_trim_input_true_peak_dbfs",
+                None,
+            ),
+            delivery_trim_target_dbfs=getattr(
+                mastering,
+                "last_delivery_trim_target_dbfs",
+                None,
+            ),
+            delivery_trim_output_true_peak_dbfs=getattr(
+                mastering,
+                "last_delivery_trim_output_true_peak_dbfs",
+                None,
+            ),
+            post_clamp_true_peak_dbfs=getattr(
+                mastering,
+                "last_post_clamp_true_peak_dbfs",
+                None,
+            ),
+            post_clamp_true_peak_delta_db=getattr(
+                mastering,
+                "last_post_clamp_true_peak_delta_db",
+                None,
+            ),
+            headroom_recovery_gain_db=float(
+                getattr(mastering, "last_headroom_recovery_gain_db", 0.0)
+            ),
+            headroom_recovery_input_true_peak_dbfs=getattr(
+                mastering,
+                "last_headroom_recovery_input_true_peak_dbfs",
+                None,
+            ),
+            headroom_recovery_output_true_peak_dbfs=getattr(
+                mastering,
+                "last_headroom_recovery_output_true_peak_dbfs",
+                None,
+            ),
+            headroom_recovery_failure_reasons=getattr(
+                mastering,
+                "last_headroom_recovery_failure_reasons",
+                (),
+            ),
+            headroom_recovery_mode=getattr(
+                mastering,
+                "last_headroom_recovery_mode",
+                None,
+            ),
+            headroom_recovery_integrated_gap_db=getattr(
+                mastering,
+                "last_headroom_recovery_integrated_gap_db",
+                None,
+            ),
+            headroom_recovery_transient_density=getattr(
+                mastering,
+                "last_headroom_recovery_transient_density",
+                None,
+            ),
+            headroom_recovery_closed_margin_db=getattr(
+                mastering,
+                "last_headroom_recovery_closed_margin_db",
+                None,
+            ),
+            headroom_recovery_unused_margin_db=getattr(
+                mastering,
+                "last_headroom_recovery_unused_margin_db",
+                None,
+            ),
+            decoded_true_peak_dbfs=(
+                None
+                if mastering.delivery_decoded_true_peak_dbfs is None
+                else mastering.delivery_decoded_true_peak_dbfs
+                - mastering.codec_headroom_margin_db
+            ),
+            decoded_lufs_tolerance_db=mastering.delivery_lufs_tolerance_db,
+            true_peak_oversample_factor=mastering.true_peak_oversample_factor,
+            bit_depth=bit_depth,
+            bitrate=bitrate
+            if mastering.delivery_bitrate is None
+            else mastering.delivery_bitrate,
+            compression_level=compression_level,
         )
 
-        return output_path
+        if report_path is not None:
+            _write_mastering_report(
+                verification.report,
+                str(report_path),
+                indent=report_indent,
+            )
+
+        return final_output_path, verification.report
 
     except Exception as e:
         from definers.system import catch
 
         catch(e)
-        return None
+        return None, None

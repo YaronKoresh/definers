@@ -1,6 +1,8 @@
 from collections.abc import Iterable, Mapping
 
-from definers.application_shell.cli_command_definition import CliCommandDefinition
+from definers.application_shell.cli_command_definition import (
+    CliCommandDefinition,
+)
 
 
 class CliCommandRegistry:

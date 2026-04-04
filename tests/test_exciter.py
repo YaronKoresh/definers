@@ -48,6 +48,9 @@ def _load_exciter_module(package_name: str):
         log=lambda *_, **__: None,
     )
     sys.modules[f"{audio_package}.dsp"] = types.SimpleNamespace(
+        remove_spectral_spikes=lambda values: np.asarray(
+            values, dtype=np.float32
+        ),
         resample=lambda values, *_args, **_kwargs: np.asarray(
             values, dtype=np.float32
         ),
@@ -160,6 +163,65 @@ def test_analyze_exciter_caps_drive(monkeypatch: pytest.MonkeyPatch):
     analysis = exciter.analyze_exciter(signal, 44100)
 
     assert analysis.drive == pytest.approx(exciter._DEFAULT_CONFIG.max_drive)
+
+
+def test_analyze_exciter_reduces_mix_for_bright_transient_rich_material(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    exciter = _load_exciter_module("_test_exciter_retreat")
+
+    monkeypatch.setattr(
+        exciter, "calculate_dynamic_cutoff", lambda *_args, **_kwargs: 4000.0
+    )
+    monkeypatch.setattr(
+        exciter,
+        "butter",
+        lambda *args, **kwargs: np.array([1.0], dtype=np.float32),
+    )
+    monkeypatch.setattr(
+        exciter, "sosfiltfilt", lambda _sos, values, axis=-1: values
+    )
+    monkeypatch.setattr(
+        exciter, "_apply_adaptive_gate", lambda values, *_args: values
+    )
+    monkeypatch.setattr(exciter, "get_rms", lambda _values: 0.02)
+
+    signal = np.zeros(512, dtype=np.float32)
+    signal[256] = 1.0
+
+    def analyze_with_profile(
+        high_frequency_ratio: float, spectral_flatness: float
+    ):
+        monkeypatch.setattr(
+            exciter,
+            "_spectral_summary",
+            lambda *_args, **_kwargs: (
+                np.empty(0, dtype=np.float32),
+                np.empty(0, dtype=np.float32),
+                spectral_flatness,
+                high_frequency_ratio,
+            ),
+        )
+        return exciter.analyze_exciter(signal, 44100, mix=0.8)
+
+    dark = analyze_with_profile(0.05, 0.0)
+    bright = analyze_with_profile(0.42, 0.2)
+
+    assert bright.adaptive_mix < dark.adaptive_mix
+    assert bright.drive <= dark.drive
+    assert bright.transient_ducking_depth > dark.transient_ducking_depth
+
+
+def test_build_transient_ducking_curve_reduces_wet_gain_around_impulse():
+    exciter = _load_exciter_module("_test_exciter_ducking")
+    signal = np.zeros(256, dtype=np.float32)
+    signal[128] = 1.0
+
+    curve = exciter._build_transient_ducking_curve(signal, 44100, 0.6)
+
+    assert curve.shape == signal.shape
+    assert float(np.min(curve)) < 1.0
+    assert curve[128] < curve[0]
 
 
 def test_calculate_dynamic_cutoff_enforces_safe_floor(

@@ -29,7 +29,9 @@ def build_training_plan_markdown(
     drop_list,
     selected_rows,
 ):
-    from definers.application_ml.trainer_plan import render_training_plan_markdown
+    from definers.application_ml.trainer_plan import (
+        render_training_plan_markdown,
+    )
     from definers.ml import AutoTrainer
 
     trainer = AutoTrainer(revision=revision, source_type=url_type or "parquet")

@@ -1,6 +1,10 @@
 import asyncio
 import importlib
+import sys
+import tempfile
+import types
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import definers.os_utils as os_utils
@@ -164,6 +168,218 @@ class TestDownloadAndUnzip(unittest.TestCase):
             mock_download.call_args.kwargs["orchestrator_factory"],
             mock_factory,
         )
+
+
+class _SyncResponseStub:
+    def __init__(self, chunks):
+        self._chunks = list(chunks)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def read(self, size):
+        if not self._chunks:
+            return b""
+        next_chunk = self._chunks.pop(0)
+        if isinstance(next_chunk, BaseException):
+            raise next_chunk
+        return next_chunk
+
+
+class _AsyncChunkStreamStub:
+    def __init__(self, chunks):
+        self._chunks = list(chunks)
+
+    async def iter_chunked(self, chunk_size):
+        for next_chunk in self._chunks:
+            if isinstance(next_chunk, BaseException):
+                raise next_chunk
+            yield next_chunk
+
+
+class _AsyncResponseStub:
+    def __init__(self, chunks):
+        self.content = _AsyncChunkStreamStub(chunks)
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+    def raise_for_status(self):
+        return None
+
+
+class _AsyncSessionStub:
+    def __init__(self, response):
+        self._response = response
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+    def get(self, source_uri, timeout=None):
+        return self._response
+
+
+class _AsyncFileStub:
+    def __init__(self, path, mode):
+        self._path = path
+        self._mode = mode
+        self._file_obj = None
+
+    async def __aenter__(self):
+        self._file_obj = open(self._path, self._mode)
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        self._file_obj.close()
+        return False
+
+    async def write(self, data):
+        self._file_obj.write(data)
+
+
+class TestHttpChunkedTransferStrategy(unittest.TestCase):
+    def test_sync_transfer_replaces_target_after_complete_download(
+        self,
+    ) -> None:
+        transport_module = get_transport_module()
+        strategy = transport_module.HttpChunkedTransferStrategy(
+            chunk_size_bytes=4
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            target_path = Path(temp_dir) / "payload.bin"
+            target_path.write_bytes(b"old-data")
+            response = _SyncResponseStub([b"new-", b"data", b""])
+
+            with patch.object(
+                transport_module.urllib.request,
+                "urlopen",
+                return_value=response,
+            ):
+                strategy._execute_transfer_sync(
+                    "https://example.com/file.bin", target_path
+                )
+
+            self.assertEqual(target_path.read_bytes(), b"new-data")
+            self.assertEqual(
+                list(Path(temp_dir).glob("payload.bin.*.part")), []
+            )
+
+    def test_sync_transfer_removes_partial_file_and_preserves_target_on_failure(
+        self,
+    ) -> None:
+        transport_module = get_transport_module()
+        strategy = transport_module.HttpChunkedTransferStrategy(
+            chunk_size_bytes=4
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            target_path = Path(temp_dir) / "payload.bin"
+            target_path.write_bytes(b"stable-data")
+            response = _SyncResponseStub(
+                [b"new-", OSError("stream interrupted")]
+            )
+
+            with patch.object(
+                transport_module.urllib.request,
+                "urlopen",
+                return_value=response,
+            ):
+                with self.assertRaisesRegex(OSError, "stream interrupted"):
+                    strategy._execute_transfer_sync(
+                        "https://example.com/file.bin", target_path
+                    )
+
+            self.assertEqual(target_path.read_bytes(), b"stable-data")
+            self.assertEqual(
+                list(Path(temp_dir).glob("payload.bin.*.part")), []
+            )
+
+    def test_async_transfer_replaces_target_after_complete_download(
+        self,
+    ) -> None:
+        transport_module = get_transport_module()
+        strategy = transport_module.HttpChunkedTransferStrategy(
+            chunk_size_bytes=4
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            target_path = Path(temp_dir) / "payload.bin"
+            target_path.write_bytes(b"old-data")
+            fake_aiohttp = types.SimpleNamespace(
+                ClientTimeout=lambda total: object(),
+                ClientSession=lambda: _AsyncSessionStub(
+                    _AsyncResponseStub([b"new-", b"data"])
+                ),
+            )
+            fake_aiofiles = types.SimpleNamespace(
+                open=lambda path, mode: _AsyncFileStub(path, mode)
+            )
+
+            with patch.dict(
+                sys.modules,
+                {"aiohttp": fake_aiohttp, "aiofiles": fake_aiofiles},
+            ):
+                asyncio.run(
+                    strategy.execute_transfer(
+                        "https://example.com/file.bin", target_path
+                    )
+                )
+
+            self.assertEqual(target_path.read_bytes(), b"new-data")
+            self.assertEqual(
+                list(Path(temp_dir).glob("payload.bin.*.part")), []
+            )
+
+    def test_async_transfer_removes_partial_file_and_preserves_target_on_failure(
+        self,
+    ) -> None:
+        transport_module = get_transport_module()
+        strategy = transport_module.HttpChunkedTransferStrategy(
+            chunk_size_bytes=4
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            target_path = Path(temp_dir) / "payload.bin"
+            target_path.write_bytes(b"stable-data")
+            fake_aiohttp = types.SimpleNamespace(
+                ClientTimeout=lambda total: object(),
+                ClientSession=lambda: _AsyncSessionStub(
+                    _AsyncResponseStub(
+                        [b"new-", ConnectionError("stream interrupted")]
+                    )
+                ),
+            )
+            fake_aiofiles = types.SimpleNamespace(
+                open=lambda path, mode: _AsyncFileStub(path, mode)
+            )
+
+            with patch.dict(
+                sys.modules,
+                {"aiohttp": fake_aiohttp, "aiofiles": fake_aiofiles},
+            ):
+                with self.assertRaisesRegex(
+                    ConnectionError, "stream interrupted"
+                ):
+                    asyncio.run(
+                        strategy.execute_transfer(
+                            "https://example.com/file.bin", target_path
+                        )
+                    )
+
+            self.assertEqual(target_path.read_bytes(), b"stable-data")
+            self.assertEqual(
+                list(Path(temp_dir).glob("payload.bin.*.part")), []
+            )
 
 
 class TestDownloadFileOrchestrator(unittest.TestCase):

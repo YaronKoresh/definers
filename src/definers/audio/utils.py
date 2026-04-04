@@ -70,79 +70,9 @@ def apply_rms(y: np.ndarray, rms: float):
 
 
 def get_lufs(y: np.ndarray, sr: int) -> float:
-    from scipy import signal
+    from .mastering_loudness import get_lufs as _get_lufs
 
-    y_array = np.asarray(y, dtype=np.float32)
-    if y_array.ndim == 0:
-        y_array = y_array.reshape(1)
-    if y_array.size == 0 or not np.isfinite(sr) or sr <= 0:
-        return -70.0
-
-    y_array = np.nan_to_num(y_array, nan=0.0, posinf=0.0, neginf=0.0)
-
-    b1, a1 = (
-        [1.5309096471, -2.6511690392, 1.1691662955],
-        [1.0, -1.6906592931, 0.7324805897],
-    )
-    b2, a2 = [1.0, -2.0, 1.0], [1.0, -1.9900474541, 0.9900722501]
-
-    y_filt = signal.lfilter(b1, a1, y_array, axis=-1)
-    y_filt = signal.lfilter(b2, a2, y_filt, axis=-1)
-
-    win_size = max(int(sr * 0.4), 1)
-    hop_size = max(int(sr * 0.1), 1)
-
-    if y_filt.ndim > 1:
-        sum_axes = tuple(range(y_filt.ndim - 1))
-        y_sq = np.sum(np.square(y_filt, dtype=np.float32), axis=sum_axes)
-        n_samples = y_filt.shape[-1]
-    else:
-        y_sq = np.square(y_filt, dtype=np.float32)
-        n_samples = len(y_sq)
-
-    if n_samples == 0:
-        return -70.0
-
-    if n_samples < win_size:
-        ms = np.array(
-            [float(np.mean(y_sq, dtype=np.float32))], dtype=np.float32
-        )
-    else:
-        y_windows = np.lib.stride_tricks.sliding_window_view(y_sq, win_size)[
-            ::hop_size
-        ]
-        if y_windows.size == 0:
-            ms = np.array(
-                [float(np.mean(y_sq, dtype=np.float32))], dtype=np.float32
-            )
-        else:
-            ms = np.mean(y_windows, axis=-1, dtype=np.float32)
-
-    ms = np.nan_to_num(ms, nan=0.0, posinf=0.0, neginf=0.0)
-
-    abs_threshold = 10.0 ** ((-70.0 + 0.691) / 10.0)
-    ms_gated = ms[ms > abs_threshold]
-
-    if len(ms_gated) == 0:
-        return -70.0
-
-    gamma_rel = max(
-        0.1 * float(np.mean(ms_gated, dtype=np.float32)), abs_threshold
-    )
-    ms_final = ms_gated[ms_gated > gamma_rel]
-
-    loudness_ms = float(
-        np.mean(ms_final, dtype=np.float32)
-        if len(ms_final) > 0
-        else np.mean(ms_gated, dtype=np.float32)
-    )
-
-    if not np.isfinite(loudness_ms) or loudness_ms <= 0.0:
-        return -70.0
-
-    current_lufs = -0.691 + 10.0 * np.log10(np.maximum(loudness_ms, 1e-12))
-
-    return float(current_lufs)
+    return _get_lufs(y, sr)
 
 
 def adjust_final_output_lufs(
@@ -154,18 +84,26 @@ def adjust_final_output_lufs(
 
     finite_y = np.nan_to_num(y_array, nan=0.0, posinf=0.0, neginf=0.0)
     if finite_y.size == 0 or not np.isfinite(sr) or sr <= 0:
-        return finite_y
+        raise ValueError(
+            "Invalid audio data or sample rate, cannot adjust LUFS."
+        )
+
     if not np.isfinite(target_lufs):
-        return finite_y
+        raise ValueError("Target LUFS is not finite, cannot adjust.")
 
     current_lufs = get_lufs(finite_y, sr)
     if not np.isfinite(current_lufs):
-        return finite_y
+        raise ValueError("Current LUFS is not finite, cannot adjust.")
 
     gain_db = float(np.clip(target_lufs - current_lufs, -60.0, 60.0))
     gain_lin = float(10.0 ** (gain_db / 20.0))
     if not np.isfinite(gain_lin):
-        return finite_y
+        raise ValueError("Calculated gain is not finite, cannot adjust.")
+
+    log(
+        "LUFS Normalization",
+        f"Current LUFS: {current_lufs:.2f} dB, Target LUFS: {target_lufs:.2f} dB, Gain: {gain_db:.2f} dB",
+    )
 
     out = finite_y * gain_lin
 

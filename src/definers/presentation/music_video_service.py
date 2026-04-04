@@ -165,7 +165,9 @@ def music_video(audio_path, width=1920, height=1080, fps=30):
             points.append([end_x, end_y])
             hue = int(i / num_bars * 180)
             color_hsv = np.uint8([[[hue, 255, 255]]])
-            color_bgr = cv2.cvtColor(color_hsv, cv2.COLOR_HSV2BGR)[0][0].tolist()
+            color_bgr = cv2.cvtColor(color_hsv, cv2.COLOR_HSV2BGR)[0][
+                0
+            ].tolist()
             thickness = 12 if is_beat else 4
             cv2.line(
                 frame,

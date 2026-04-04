@@ -6,7 +6,9 @@ from definers.application_chat.contracts import (
 
 
 class ChatHistoryBuilder:
-    media_instruction = "and please read the media from my new message carefully"
+    media_instruction = (
+        "and please read the media from my new message carefully"
+    )
 
     @classmethod
     def build_history(

@@ -101,3 +101,49 @@ def test_zip_extract_transfer_strategy_raises_on_invalid_archive_sync(
         strategy._execute_transfer_sync(
             "https://example.com/archive.zip", tmp_path / "invalid"
         )
+
+
+def test_zip_extract_transfer_strategy_rejects_path_traversal_sync(
+    monkeypatch, tmp_path: Path
+) -> None:
+    payload = build_zip_payload("../outside.txt", "blocked")
+    strategy = ZipExtractTransferStrategy()
+    target_node = tmp_path / "extract"
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda source_uri, timeout: FakeZipUrlResponse(payload),
+    )
+
+    with pytest.raises(
+        ValueError, match="Archive member escapes target directory"
+    ):
+        strategy._execute_transfer_sync(
+            "https://example.com/archive.zip", target_node
+        )
+
+    assert not (tmp_path / "outside.txt").exists()
+    assert list(target_node.rglob("*")) == []
+
+
+def test_zip_extract_transfer_strategy_rejects_path_traversal_async(
+    monkeypatch, tmp_path: Path
+) -> None:
+    payload = build_zip_payload("..\\outside.txt", "blocked")
+    fake_aiohttp = ModuleType("aiohttp")
+    fake_aiohttp.ClientTimeout = lambda total: SimpleNamespace(total=total)
+    fake_aiohttp.ClientSession = lambda: FakeZipClientSession(payload)
+    monkeypatch.setitem(sys.modules, "aiohttp", fake_aiohttp)
+    strategy = ZipExtractTransferStrategy(request_timeout_seconds=20)
+    target_node = tmp_path / "extract"
+
+    with pytest.raises(
+        ValueError, match="Archive member escapes target directory"
+    ):
+        asyncio.run(
+            strategy.execute_transfer(
+                "https://example.com/archive.zip", target_node
+            )
+        )
+
+    assert not (tmp_path / "outside.txt").exists()
+    assert list(target_node.rglob("*")) == []

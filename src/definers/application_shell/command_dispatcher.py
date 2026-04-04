@@ -11,7 +11,10 @@ from definers.application_shell.unknown_command import UnknownCommand
 class CliCommandDispatcher:
     @staticmethod
     def dispatch_cli_command(
-        command: StartCommand | MusicVideoCommand | LyricVideoCommand | UnknownCommand,
+        command: StartCommand
+        | MusicVideoCommand
+        | LyricVideoCommand
+        | UnknownCommand,
         *,
         start: StartProjectPort,
         music_video: MusicVideoPort,

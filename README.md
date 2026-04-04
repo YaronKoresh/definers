@@ -273,6 +273,26 @@ print(summary)
 print(None if vector is None else vector.shape)
 ```
 
+### Master Audio With Diagnostics
+
+```python
+from definers.audio import master
+
+output_path, report = master(
+    "./mix.wav",
+    output_path="./mix-mastered.wav",
+    preset="edm",
+    report_path="./mix-mastered-report.json",
+)
+
+print(output_path)
+print(report.headroom_recovery_mode)
+print(report.post_spatial_stereo_motion)
+print(report.post_clamp_true_peak_dbfs)
+```
+
+The returned mastering report now exposes stage-aware diagnostics for post-spatial imaging, post-clamp true peak behavior, adaptive headroom recovery, and delivery verification so finishing changes can be inspected instead of guessed.
+
 ### Extract Image Features
 
 ```python
@@ -467,7 +487,7 @@ Operational guardrails are a first-class part of the design.
 | --- | --- | --- |
 | Unstable integrations | `with_retry`, `ExponentialBackoffDelay` | Reduces transient failure noise |
 | Repeated downstream faults | `CircuitBreaker` | Prevents failure amplification and exposes state snapshots |
-| Transfer orchestration | `definers.web` facades | Centralizes integration-heavy behavior |
+| Transfer orchestration | `definers.web` facades | Centralizes integration-heavy behavior and rejects archive path traversal during unzip |
 | Platform differences | `run_linux`, `run_windows`, `run` | Makes runtime execution explicit |
 
 ### Safer Command Execution

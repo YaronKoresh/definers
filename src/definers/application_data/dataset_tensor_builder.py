@@ -21,7 +21,9 @@ class DatasetTensorBuilder:
     @staticmethod
     def append_loaded_values(target, loaded, convert_value) -> None:
         if isinstance(loaded, list):
-            target.extend(convert_value(item) for item in loaded if item is not None)
+            target.extend(
+                convert_value(item) for item in loaded if item is not None
+            )
             return
         target.append(convert_value(loaded))
 
@@ -36,9 +38,13 @@ class DatasetTensorBuilder:
             loaded = loaders_module.load_as_numpy(path, training=True)
             if loaded is None:
                 if role == "feature":
-                    runtime.logger.exception(f"Error loading feature file: {path}")
+                    runtime.logger.exception(
+                        f"Error loading feature file: {path}"
+                    )
                 else:
-                    loaders_module._catch(Exception(f"Error loading label file: {path}"))
+                    loaders_module._catch(
+                        Exception(f"Error loading label file: {path}")
+                    )
                 return None
             has_strings = has_strings or cls.loaded_values_have_strings(
                 loaded, numpy_module
@@ -74,7 +80,9 @@ class DatasetTensorBuilder:
         return runtime.convert_tensor_dtype(
             torch.stack(
                 [
-                    torch.tensor(runtime.reshape_numpy(value, lengths=max_lengths))
+                    torch.tensor(
+                        runtime.reshape_numpy(value, lengths=max_lengths)
+                    )
                     for value in values
                 ]
             )
@@ -101,6 +109,7 @@ class DatasetTensorBuilder:
     @classmethod
     def files_to_dataset(cls, features_paths, labels_paths=None):
         import numpy as np
+
         import definers.application_data.loaders as loaders_module
 
         runtime = loaders_module._runtime()
@@ -131,10 +140,14 @@ class DatasetTensorBuilder:
         if labels_paths and labels_have_strings:
             labels = loaders_module._tokenize_loaded_values(labels, np)
         try:
-            return loaders_module._build_tensor_dataset(features, labels, runtime)
+            return loaders_module._build_tensor_dataset(
+                features, labels, runtime
+            )
         except Exception as tensor_error:
             loaders_module._catch(
-                Exception(f"Error creating tensor dataset: {type(tensor_error)}")
+                Exception(
+                    f"Error creating tensor dataset: {type(tensor_error)}"
+                )
             )
             loaders_module._catch(tensor_error)
             return None

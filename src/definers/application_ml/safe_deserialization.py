@@ -2,7 +2,6 @@ import pickle
 
 import joblib.numpy_pickle
 
-
 _BLOCKED_GLOBALS = frozenset(
     {
         ("builtins", "__import__"),
@@ -36,9 +35,7 @@ _SUPPORTED_TYPES = frozenset({"joblib", "pkl"})
 def _normalize_model_type(model_type: str) -> str:
     normalized_model_type = str(model_type).strip().lower().lstrip(".")
     if normalized_model_type not in _SUPPORTED_TYPES:
-        raise ValueError(
-            f"Unsupported serialized model type: '{model_type}'."
-        )
+        raise ValueError(f"Unsupported serialized model type: '{model_type}'.")
     return normalized_model_type
 
 
@@ -77,9 +74,7 @@ def validate_serialized_model_file(path: str, model_type: str) -> None:
             "Downloaded a Git LFS pointer instead of serialized model bytes."
         )
     if lowered_header.startswith(_HTML_PREFIXES):
-        raise ValueError(
-            "Downloaded HTML instead of serialized model bytes."
-        )
+        raise ValueError("Downloaded HTML instead of serialized model bytes.")
 
 
 def load_serialized_model(path: str, model_type: str):

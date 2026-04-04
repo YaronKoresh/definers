@@ -14,7 +14,9 @@ class DatasetValueLoader:
             directory_path, _ = definers.split_mp3(temp_mp3_path, 5)
             files = loaders_module._read(directory_path) or [temp_mp3_path]
             values = [
-                definers.numpy_to_cupy(definers.extract_audio_features(file_path))
+                definers.numpy_to_cupy(
+                    definers.extract_audio_features(file_path)
+                )
                 for file_path in files
             ]
             loaders_module._delete(temp_wav_path)
@@ -57,7 +59,9 @@ class DatasetValueLoader:
 
         resized = definers.resize_image(path, 1024, 1024)
         resized_path = resized[0] if isinstance(resized, tuple) else resized
-        return definers.numpy_to_cupy(definers.extract_image_features(resized_path))
+        return definers.numpy_to_cupy(
+            definers.extract_image_features(resized_path)
+        )
 
     @staticmethod
     def load_video_values(path: str):
@@ -73,6 +77,7 @@ class DatasetValueLoader:
     def load_as_numpy(cls, path: str, training: bool = False):
         try:
             import logging
+
             from definers.constants import iio_formats
 
             extension = cls.path_extension(path)

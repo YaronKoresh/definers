@@ -37,7 +37,9 @@ def test_lazy_audio_export_imports_once_and_caches_value():
 
     assert first_value is preview_module.audio_preview
     assert second_value is preview_module.audio_preview
-    assert audio_module.__dict__["audio_preview"] is preview_module.audio_preview
+    assert (
+        audio_module.__dict__["audio_preview"] is preview_module.audio_preview
+    )
     assert imported_names.count("definers.audio.preview") == 1
     unload_audio_package()
 
@@ -47,26 +49,28 @@ def test_lazy_audio_export_handles_multiple_modules_independently():
     original_import_module = importlib.import_module
     preview_module = types.ModuleType("definers.audio.preview")
     preview_module.get_audio_duration = object()
-    production_module = types.ModuleType("definers.audio.production")
-    production_module.value_to_keys = object()
+    voice_module = types.ModuleType("definers.audio.voice")
+    voice_module.value_to_keys = object()
     imported_names: list[str] = []
 
     def fake_import_module(name: str, package: str | None = None):
         imported_names.append(name)
         if name == "definers.audio.preview":
             return preview_module
-        if name == "definers.audio.production":
-            return production_module
+        if name == "definers.audio.voice":
+            return voice_module
         return original_import_module(name, package)
 
     with mock.patch("importlib.import_module", side_effect=fake_import_module):
         audio_module = original_import_module("definers.audio")
 
-        assert audio_module.get_audio_duration is preview_module.get_audio_duration
-        assert audio_module.value_to_keys is production_module.value_to_keys
+        assert (
+            audio_module.get_audio_duration is preview_module.get_audio_duration
+        )
+        assert audio_module.value_to_keys is voice_module.value_to_keys
 
     assert imported_names.count("definers.audio.preview") == 1
-    assert imported_names.count("definers.audio.production") == 1
+    assert imported_names.count("definers.audio.voice") == 1
     unload_audio_package()
 
 

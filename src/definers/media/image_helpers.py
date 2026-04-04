@@ -10,6 +10,30 @@ except Exception:
 import numpy as _np
 
 
+def _fallback_local_binary_pattern(gray_image, radius: int):
+    image = _np.asarray(gray_image, dtype=_np.float32)
+    padded = _np.pad(image, radius, mode="edge")
+    center = padded[radius:-radius, radius:-radius]
+    offsets = (
+        (-radius, -radius),
+        (-radius, 0),
+        (-radius, radius),
+        (0, radius),
+        (radius, radius),
+        (radius, 0),
+        (radius, -radius),
+        (0, -radius),
+    )
+    pattern = _np.zeros_like(center, dtype=_np.float32)
+    for bit, (dy, dx) in enumerate(offsets):
+        neighbor = padded[
+            radius + dy : radius + dy + center.shape[0],
+            radius + dx : radius + dx + center.shape[1],
+        ]
+        pattern += (neighbor >= center).astype(_np.float32) * (1 << bit)
+    return pattern
+
+
 def _log_media_exception(message, exception):
     import definers.logger as logger_module
 
@@ -24,7 +48,6 @@ def _log_media_exception(message, exception):
 
 def _extract_visual_features(image, gray_image):
     import cv2
-    import skimage.feature as skf
 
     histograms = [
         cv2.calcHist([image], [channel], None, [256], [0, 256]).flatten()
@@ -33,11 +56,21 @@ def _extract_visual_features(image, gray_image):
     color_histogram = _np.concatenate(histograms).astype(_np.float32)
     radius = 1
     n_points = 8 * radius
-    local_binary_pattern = (
-        skf.local_binary_pattern(gray_image, n_points, radius, method="uniform")
-        .flatten()
-        .astype(_np.float32)
-    )
+    try:
+        import skimage.feature as skf
+
+        local_binary_pattern = skf.local_binary_pattern(
+            gray_image,
+            n_points,
+            radius,
+            method="uniform",
+        )
+    except Exception:
+        local_binary_pattern = _fallback_local_binary_pattern(
+            gray_image,
+            radius,
+        )
+    local_binary_pattern = local_binary_pattern.flatten().astype(_np.float32)
     edges = cv2.Canny(gray_image, 100, 200).flatten().astype(_np.float32)
     return _np.concatenate((color_histogram, local_binary_pattern, edges))
 

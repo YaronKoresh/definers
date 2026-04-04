@@ -1,7 +1,11 @@
 class AnswerImageLoader:
     @staticmethod
     def read_answer_image(path: str, image_module):
-        from definers.image import get_max_resolution, image_resolution, resize_image
+        from definers.image import (
+            get_max_resolution,
+            image_resolution,
+            resize_image,
+        )
 
         try:
             return image_module.open(path)

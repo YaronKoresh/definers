@@ -13,7 +13,9 @@ from definers.application_chat.contracts import (
     Translator,
     Validator,
 )
-from definers.application_chat.request_normalizer import ChatRequestNormalizerService
+from definers.application_chat.request_normalizer import (
+    ChatRequestNormalizerService,
+)
 
 
 class ChatRequestHandlerFactory:
@@ -31,16 +33,20 @@ class ChatRequestHandlerFactory:
         from definers.application_chat.handlers import ChatRequestHandler
 
         return ChatRequestHandler(
-            normalize_request=lambda request: ChatRequestNormalizerService.normalize_chat_request(
-                request,
-                detect_language=detect_language,
-                translate_text=translate_text,
-                validate_text=validate_text,
+            normalize_request=lambda request: (
+                ChatRequestNormalizerService.normalize_chat_request(
+                    request,
+                    detect_language=detect_language,
+                    translate_text=translate_text,
+                    validate_text=validate_text,
+                )
             ),
-            build_audit_message=lambda context: ChatAuditMessageBuilderService.build_chat_audit_message(
-                context.included_types,
-                context.original_language,
-                language_names,
+            build_audit_message=lambda context: (
+                ChatAuditMessageBuilderService.build_chat_audit_message(
+                    context.included_types,
+                    context.original_language,
+                    language_names,
+                )
             ),
             answer=answer,
             log=log,

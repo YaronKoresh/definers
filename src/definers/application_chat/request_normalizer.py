@@ -24,7 +24,9 @@ class ChatRequestNormalizerService:
         translate_text: Translator,
         validate_text: Validator,
     ) -> ChatRequestContext:
-        normalized_request = ChatRequestFactory.coerce_chat_request(request, history)
+        normalized_request = ChatRequestFactory.coerce_chat_request(
+            request, history
+        )
         return ChatRequestContextAssembler.assemble_request_context(
             normalized_request,
             detect_language=detect_language,

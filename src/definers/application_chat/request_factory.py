@@ -28,7 +28,9 @@ class ChatRequestFactory:
         history: ChatHistory | None = None,
     ) -> ChatRequest:
         copied_message = {str(key): value for key, value in message.items()}
-        copied_history = () if history is None else tuple(dict(item) for item in history)
+        copied_history = (
+            () if history is None else tuple(dict(item) for item in history)
+        )
         return ChatRequest(
             message=copied_message,
             history=copied_history,
