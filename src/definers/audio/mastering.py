@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 from scipy import signal
 from scipy.ndimage import maximum_filter1d, uniform_filter1d
@@ -38,6 +40,7 @@ from .mastering_dynamics import (
 )
 from .mastering_eq import (
     apply_eq as _apply_eq,
+    apply_stem_cleanup as _apply_stem_cleanup,
     audio_eq,
     smooth_curve as _smooth_curve,
 )
@@ -58,7 +61,7 @@ from .mastering_metrics import (
     MasteringReport,
     write_mastering_report as _write_mastering_report,
 )
-from .mastering_pipeline import process as _process
+from .mastering_pipeline import process as _process, process_stem as _process_stem
 from .mastering_profile import (
     SpectralBalanceProfile,
     build_spectral_balance_profile as _build_spectral_balance_profile,
@@ -72,10 +75,200 @@ from .mastering_reference import (
     ReferenceAnalysis,
     ReferenceMatchAssist,
     analyze_reference as _analyze_reference,
+    measure_spectral_tilt as _measure_spectral_tilt,
+    measure_stereo_motion as _measure_stereo_motion,
+    measure_transient_density as _measure_transient_density,
     reference_match_assist as _reference_match_assist,
 )
 from .mastering_state import configure_runtime_state
 from .utils import get_lufs
+
+
+def _sanitize_audio_for_preset_selection(
+    signal_to_analyze: np.ndarray,
+) -> np.ndarray:
+    signal_array = np.nan_to_num(
+        np.asarray(signal_to_analyze, dtype=np.float32),
+        nan=0.0,
+        posinf=0.0,
+        neginf=0.0,
+    )
+    if signal_array.ndim == 0:
+        return signal_array.reshape(1)
+    return signal_array
+
+
+def _measure_preset_band_profile(
+    signal_to_analyze: np.ndarray,
+    sample_rate: int,
+) -> dict[str, float]:
+    signal_array = _sanitize_audio_for_preset_selection(signal_to_analyze)
+    mono = (
+        np.mean(signal_array, axis=0, dtype=np.float32)
+        if signal_array.ndim > 1
+        else signal_array
+    )
+    if mono.size < 32 or sample_rate <= 0:
+        return {
+            "bass_share": 0.0,
+            "low_mid_share": 0.0,
+            "presence_share": 0.0,
+            "air_share": 0.0,
+        }
+
+    analysis_size = int(
+        min(
+            max(1024, 2 ** int(np.ceil(np.log2(max(mono.size, 64))))),
+            65536,
+        )
+    )
+    if mono.size < analysis_size:
+        analyzed = np.pad(mono, (0, analysis_size - mono.size))
+    else:
+        analyzed = mono[:analysis_size]
+
+    window = np.hanning(analyzed.size).astype(np.float32)
+    spectrum = np.fft.rfft(analyzed * window)
+    power = np.square(np.abs(spectrum), dtype=np.float64)
+    freqs = np.fft.rfftfreq(analyzed.size, d=1.0 / float(sample_rate))
+    high_limit_hz = float(min(sample_rate / 2.0 - 1.0, 16000.0))
+    valid_mask = (freqs >= 35.0) & (freqs <= high_limit_hz)
+    total_energy = float(np.sum(power[valid_mask], dtype=np.float64))
+    if total_energy <= 1e-12:
+        return {
+            "bass_share": 0.0,
+            "low_mid_share": 0.0,
+            "presence_share": 0.0,
+            "air_share": 0.0,
+        }
+
+    def band_share(low_hz: float, high_hz: float) -> float:
+        mask = (freqs >= low_hz) & (freqs < min(high_hz, high_limit_hz))
+        if not np.any(mask):
+            return 0.0
+        return float(np.sum(power[mask], dtype=np.float64) / total_energy)
+
+    return {
+        "bass_share": band_share(35.0, 180.0),
+        "low_mid_share": band_share(180.0, 900.0),
+        "presence_share": band_share(1000.0, 4200.0),
+        "air_share": band_share(6000.0, 14000.0),
+    }
+
+
+def _select_mastering_preset(
+    signal_to_analyze: np.ndarray,
+    sample_rate: int,
+) -> str:
+    signal_array = _sanitize_audio_for_preset_selection(signal_to_analyze)
+    if signal_array.size == 0 or sample_rate <= 0:
+        return "balanced"
+
+    try:
+        loudness_metrics = _measure_mastering_loudness(
+            signal_array,
+            int(sample_rate),
+        )
+        spectral_tilt = _measure_spectral_tilt(signal_array, int(sample_rate))
+        transient_density = _measure_transient_density(
+            signal_array,
+            int(sample_rate),
+        )
+        stereo_motion = _measure_stereo_motion(signal_array, int(sample_rate))
+        band_profile = _measure_preset_band_profile(signal_array, int(sample_rate))
+    except Exception:
+        return "balanced"
+
+    integrated_lufs = float(loudness_metrics.integrated_lufs)
+    crest_factor_db = float(loudness_metrics.crest_factor_db)
+    stereo_width_ratio = float(loudness_metrics.stereo_width_ratio)
+    low_end_mono_ratio = float(loudness_metrics.low_end_mono_ratio)
+    bass_share = float(band_profile["bass_share"])
+    low_mid_share = float(band_profile["low_mid_share"])
+    presence_share = float(band_profile["presence_share"])
+    air_share = float(band_profile["air_share"])
+
+    edm_score = float(
+        0.3 * np.clip((bass_share - 0.22) / 0.18, 0.0, 1.0)
+        + 0.22 * np.clip((10.0 - crest_factor_db) / 5.0, 0.0, 1.0)
+        + 0.18 * np.clip((integrated_lufs + 16.0) / 9.0, 0.0, 1.0)
+        + 0.15 * np.clip((transient_density - 0.055) / 0.12, 0.0, 1.0)
+        + 0.08 * np.clip((low_end_mono_ratio - 0.7) / 0.25, 0.0, 1.0)
+        + 0.07 * np.clip((0.33 - stereo_width_ratio) / 0.23, 0.0, 1.0)
+    )
+    vocal_score = float(
+        0.34 * np.clip((presence_share - bass_share * 0.72 - 0.06) / 0.22, 0.0, 1.0)
+        + 0.18 * np.clip((air_share - bass_share * 0.35 - 0.02) / 0.16, 0.0, 1.0)
+        + 0.18 * np.clip((crest_factor_db - 11.5) / 6.0, 0.0, 1.0)
+        + 0.12 * np.clip((stereo_width_ratio - 0.22) / 0.35, 0.0, 1.0)
+        + 0.1 * np.clip((stereo_motion - 0.02) / 0.16, 0.0, 1.0)
+        + 0.08 * np.clip((0.095 - transient_density) / 0.08, 0.0, 1.0)
+        + 0.0 * np.clip((spectral_tilt + 8.0) / 8.0, 0.0, 1.0)
+    )
+    legacy_vocal_score = float(
+        0.24
+        * np.clip(
+            (
+                low_mid_share
+                + bass_share * 0.45
+                - presence_share
+                - air_share * 0.6
+                - 0.12
+            )
+            / 0.26,
+            0.0,
+            1.0,
+        )
+        + 0.2 * np.clip(((-spectral_tilt) - 5.8) / 4.6, 0.0, 1.0)
+        + 0.14 * np.clip((0.075 - air_share) / 0.065, 0.0, 1.0)
+        + 0.12 * np.clip((0.24 - stereo_width_ratio) / 0.18, 0.0, 1.0)
+        + 0.1 * np.clip((0.055 - stereo_motion) / 0.055, 0.0, 1.0)
+        + 0.08 * np.clip((crest_factor_db - 10.5) / 4.5, 0.0, 1.0)
+        + 0.06 * np.clip((0.08 - transient_density) / 0.065, 0.0, 1.0)
+        + 0.06 * np.clip((low_end_mono_ratio - 0.84) / 0.12, 0.0, 1.0)
+    )
+
+    if edm_score >= 0.56 and edm_score >= vocal_score + 0.08:
+        return "edm"
+    if vocal_score >= 0.56 and vocal_score >= edm_score + 0.08:
+        return "vocal"
+    if legacy_vocal_score >= 0.54:
+        return "vocal"
+    return "balanced"
+
+
+def _resolve_explicit_preset_name(mastering_kwargs: dict[str, object]) -> str | None:
+    for key in ("preset", "preset_name"):
+        value = mastering_kwargs.get(key)
+        if value is None:
+            continue
+        normalized = str(value).strip().lower()
+        if normalized and normalized != "auto":
+            return normalized
+    return None
+
+
+def _resolve_mastering_kwargs_for_input(
+    input_signal: np.ndarray,
+    input_sample_rate: int,
+    mastering_kwargs: dict[str, object],
+) -> dict[str, object]:
+    resolved_kwargs = dict(mastering_kwargs)
+    explicit_preset_name = _resolve_explicit_preset_name(resolved_kwargs)
+    if explicit_preset_name is not None:
+        return resolved_kwargs
+
+    selected_preset = _select_mastering_preset(input_signal, input_sample_rate)
+    resolved_kwargs["preset"] = selected_preset
+    preset_name_value = resolved_kwargs.get("preset_name")
+    if preset_name_value is None or str(preset_name_value).strip().lower() == "auto":
+        resolved_kwargs.pop("preset_name", None)
+    return resolved_kwargs
+
+
+def _resolve_mastered_stems_output_dir(output_path: str) -> str:
+    resolved_output_path = Path(str(output_path))
+    return str(resolved_output_path.parent / f"{resolved_output_path.stem}_stems")
 
 
 class SmartMastering:
@@ -168,6 +361,19 @@ class SmartMastering:
 
     def apply_eq(self, y: np.ndarray) -> np.ndarray:
         return _apply_eq(self, y, audio_eq_fn=audio_eq)
+
+    def apply_stem_cleanup(
+        self,
+        y: np.ndarray,
+        *,
+        stem_role: str | None = None,
+    ) -> np.ndarray:
+        return _apply_stem_cleanup(
+            self,
+            y,
+            stem_role=stem_role,
+            audio_eq_fn=audio_eq,
+        )
 
     def apply_spatial_enhancement(self, y: np.ndarray) -> np.ndarray:
         return _apply_spatial_enhancement(self, y, signal_module=signal)
@@ -306,6 +512,25 @@ class SmartMastering:
             log_fn=log,
         )
 
+    def process_stem(
+        self,
+        y: np.ndarray,
+        sr: int | None = None,
+        *,
+        stem_role: str | None = None,
+    ) -> tuple[int, np.ndarray]:
+        return _process_stem(
+            self,
+            y,
+            sr=sr,
+            stem_role=stem_role,
+            resample_fn=resample,
+            stereo_fn=stereo,
+            freq_cut_fn=freq_cut,
+            apply_exciter_fn=apply_exciter,
+            log_fn=log,
+        )
+
 
 def master(
     input_path: str,
@@ -313,8 +538,34 @@ def master(
     **kwargs: object,
 ) -> tuple[str | None, MasteringReport | None]:
 
-    from definers.system import tmp
+    stem_mastering = bool(kwargs.pop("stem_mastering", True))
+    return _master_internal(
+        input_path,
+        output_path=output_path,
+        stem_mastering=stem_mastering,
+        **kwargs,
+    )
 
+
+def master_stems(
+    input_path: str,
+    output_path: str | None = None,
+    **kwargs: object,
+) -> tuple[str | None, MasteringReport | None]:
+    return _master_internal(
+        input_path,
+        output_path=output_path,
+        stem_mastering=True,
+        **kwargs,
+    )
+
+def _master_internal(
+    input_path: str,
+    *,
+    output_path: str | None,
+    stem_mastering: bool,
+    **kwargs: object,
+) -> tuple[str | None, MasteringReport | None]:
     try:
         from .io import read_audio, save_audio
 
@@ -323,175 +574,293 @@ def master(
         bit_depth = int(kwargs.pop("bit_depth", 32))
         bitrate = int(kwargs.pop("bitrate", 320))
         compression_level = int(kwargs.pop("compression_level", 9))
-
-        sr, y = read_audio(input_path)
-
-        mastering = SmartMastering(sr, **kwargs)
-        sr_mastered, y_mastered = mastering.process(y, sr)
-        resolved_true_peak_target_dbfs = getattr(
-            mastering,
-            "last_resolved_final_true_peak_target_dbfs",
-            None,
+        stem_model_name = str(kwargs.pop("stem_model_name", "htdemucs_6s"))
+        stem_shifts = int(kwargs.pop("stem_shifts", 2))
+        stem_mix_headroom_db = float(
+            kwargs.pop("stem_mix_headroom_db", 6.0)
         )
-        if resolved_true_peak_target_dbfs is None:
-            resolve_final_true_peak_target = getattr(
-                mastering,
-                "resolve_final_true_peak_target",
-                None,
+        save_mastered_stems = bool(
+            kwargs.pop("save_mastered_stems", stem_mastering)
+        )
+        mastered_stems_format = (
+            str(kwargs.pop("mastered_stems_format", "wav"))
+            .strip()
+            .lower()
+            .lstrip(".")
+            or "wav"
+        )
+
+        input_sample_rate, input_signal = read_audio(input_path)
+        resolved_output_path = output_path or tmp(get_ext(input_path), keep=False)
+        processing_sample_rate = input_sample_rate
+        processing_signal = np.array(input_signal, dtype=np.float32, copy=True)
+        resolved_mastering_kwargs = _resolve_mastering_kwargs_for_input(
+            processing_signal,
+            input_sample_rate,
+            dict(kwargs),
+        )
+        if _resolve_explicit_preset_name(dict(kwargs)) is None:
+            log(
+                "Auto-selected mastering preset",
+                resolved_mastering_kwargs['preset']
             )
-            if callable(resolve_final_true_peak_target):
-                resolved_true_peak_target_dbfs = float(
-                    resolve_final_true_peak_target()
-                )
-            else:
-                resolved_true_peak_target_dbfs = float(mastering.ceil_db)
 
-        output_path = output_path or tmp(get_ext(input_path), keep=False)
+        if stem_mastering:
+            from definers.system import delete
 
-        final_output_path, _final_signal, verification = save_verified_audio(
-            destination_path=output_path,
-            audio_signal=y_mastered,
-            sample_rate=sr_mastered,
-            input_signal=y,
-            post_eq_signal=getattr(mastering, "last_stage_signals", {}).get(
-                "post_eq"
-            ),
-            post_spatial_signal=getattr(
-                mastering, "last_stage_signals", {}
-            ).get("post_spatial"),
-            post_limiter_signal=getattr(
-                mastering, "last_stage_signals", {}
-            ).get("post_limiter"),
-            post_character_signal=getattr(
-                mastering, "last_stage_signals", {}
-            ).get("post_character"),
-            post_peak_catch_signal=getattr(
-                mastering, "last_stage_signals", {}
-            ).get("post_peak_catch"),
-            post_delivery_trim_signal=getattr(
-                mastering, "last_stage_signals", {}
-            ).get("post_delivery_trim"),
-            post_clamp_signal=getattr(mastering, "last_stage_signals", {}).get(
-                "post_clamp"
-            ),
-            save_audio_fn=save_audio,
-            read_audio_fn=read_audio,
-            target_lufs=mastering.target_lufs,
-            ceil_db=mastering.ceil_db,
-            preset_name=mastering.preset_name,
-            contract=getattr(mastering, "last_mastering_contract", None)
-            or mastering.resolve_mastering_contract(),
-            delivery_profile_name=mastering.delivery_profile,
-            character_stage_decision=getattr(
-                mastering, "last_character_stage_decision", None
-            ),
-            peak_catch_events=getattr(mastering, "last_peak_catch_events", ()),
-            resolved_true_peak_target_dbfs=resolved_true_peak_target_dbfs,
-            stereo_motion_activity=getattr(
-                mastering, "last_stereo_motion_activity", None
-            ),
-            stereo_motion_correlation_guard=getattr(
-                mastering,
-                "last_stereo_motion_correlation_guard",
-                None,
-            ),
-            delivery_trim_attenuation_db=float(
-                getattr(mastering, "last_delivery_trim_attenuation_db", 0.0)
-            ),
-            delivery_trim_input_true_peak_dbfs=getattr(
-                mastering,
-                "last_delivery_trim_input_true_peak_dbfs",
-                None,
-            ),
-            delivery_trim_target_dbfs=getattr(
-                mastering,
-                "last_delivery_trim_target_dbfs",
-                None,
-            ),
-            delivery_trim_output_true_peak_dbfs=getattr(
-                mastering,
-                "last_delivery_trim_output_true_peak_dbfs",
-                None,
-            ),
-            post_clamp_true_peak_dbfs=getattr(
-                mastering,
-                "last_post_clamp_true_peak_dbfs",
-                None,
-            ),
-            post_clamp_true_peak_delta_db=getattr(
-                mastering,
-                "last_post_clamp_true_peak_delta_db",
-                None,
-            ),
-            headroom_recovery_gain_db=float(
-                getattr(mastering, "last_headroom_recovery_gain_db", 0.0)
-            ),
-            headroom_recovery_input_true_peak_dbfs=getattr(
-                mastering,
-                "last_headroom_recovery_input_true_peak_dbfs",
-                None,
-            ),
-            headroom_recovery_output_true_peak_dbfs=getattr(
-                mastering,
-                "last_headroom_recovery_output_true_peak_dbfs",
-                None,
-            ),
-            headroom_recovery_failure_reasons=getattr(
-                mastering,
-                "last_headroom_recovery_failure_reasons",
-                (),
-            ),
-            headroom_recovery_mode=getattr(
-                mastering,
-                "last_headroom_recovery_mode",
-                None,
-            ),
-            headroom_recovery_integrated_gap_db=getattr(
-                mastering,
-                "last_headroom_recovery_integrated_gap_db",
-                None,
-            ),
-            headroom_recovery_transient_density=getattr(
-                mastering,
-                "last_headroom_recovery_transient_density",
-                None,
-            ),
-            headroom_recovery_closed_margin_db=getattr(
-                mastering,
-                "last_headroom_recovery_closed_margin_db",
-                None,
-            ),
-            headroom_recovery_unused_margin_db=getattr(
-                mastering,
-                "last_headroom_recovery_unused_margin_db",
-                None,
-            ),
-            decoded_true_peak_dbfs=(
-                None
-                if mastering.delivery_decoded_true_peak_dbfs is None
-                else mastering.delivery_decoded_true_peak_dbfs
-                - mastering.codec_headroom_margin_db
-            ),
-            decoded_lufs_tolerance_db=mastering.delivery_lufs_tolerance_db,
-            true_peak_oversample_factor=mastering.true_peak_oversample_factor,
+            from .mastering_stems import process_stem_layers
+            from .stems import separate_stem_layers
+
+            base_mastering = SmartMastering(
+                input_sample_rate,
+                **resolved_mastering_kwargs,
+            )
+            processing_sample_rate, processing_signal = process_stem_layers(
+                input_path,
+                base_config=base_mastering.config,
+                base_mastering_kwargs=resolved_mastering_kwargs,
+                process_stem_fn=_process_stem_signal,
+                separate_stems_fn=separate_stem_layers,
+                read_audio_fn=read_audio,
+                delete_fn=delete,
+                model_name=stem_model_name,
+                shifts=stem_shifts,
+                mix_headroom_db=stem_mix_headroom_db,
+                save_mastered_stems=save_mastered_stems,
+                mastered_stems_output_dir=(
+                    _resolve_mastered_stems_output_dir(resolved_output_path)
+                    if save_mastered_stems
+                    else None
+                ),
+                save_audio_fn=save_audio,
+                mastered_stems_format=mastered_stems_format,
+                mastered_stems_bit_depth=bit_depth,
+                mastered_stems_bitrate=bitrate,
+                mastered_stems_compression_level=compression_level,
+            )
+
+        return _render_master_output(
+            input_path,
+            input_signal=input_signal,
+            processing_signal=processing_signal,
+            processing_sample_rate=processing_sample_rate,
+            output_path=resolved_output_path,
+            report_path=report_path,
+            report_indent=report_indent,
             bit_depth=bit_depth,
-            bitrate=bitrate
-            if mastering.delivery_bitrate is None
-            else mastering.delivery_bitrate,
+            bitrate=bitrate,
             compression_level=compression_level,
+            read_audio_fn=read_audio,
+            save_audio_fn=save_audio,
+            **resolved_mastering_kwargs,
         )
-
-        if report_path is not None:
-            _write_mastering_report(
-                verification.report,
-                str(report_path),
-                indent=report_indent,
-            )
-
-        return final_output_path, verification.report
-
-    except Exception as e:
+    except Exception as error:
         from definers.system import catch
 
-        catch(e)
+        catch(error)
         return None, None
+
+
+def _process_stem_signal(
+    signal_to_process: np.ndarray,
+    sample_rate: int,
+    mastering_kwargs: dict[str, object],
+) -> tuple[int, np.ndarray]:
+    resolved_mastering_kwargs = dict(mastering_kwargs)
+    stem_role = resolved_mastering_kwargs.pop("stem_role", None)
+    mastering = SmartMastering(sample_rate, **resolved_mastering_kwargs)
+    process_stem = getattr(mastering, "process_stem", None)
+    if callable(process_stem):
+        return process_stem(
+            signal_to_process,
+            sample_rate,
+            stem_role=None if stem_role is None else str(stem_role),
+        )
+    return mastering.process(signal_to_process, sample_rate)
+
+
+def _render_master_output(
+    input_path: str,
+    *,
+    input_signal: np.ndarray,
+    processing_signal: np.ndarray,
+    processing_sample_rate: int,
+    output_path: str | None,
+    report_path: str | None,
+    report_indent: int,
+    bit_depth: int,
+    bitrate: int,
+    compression_level: int,
+    read_audio_fn,
+    save_audio_fn,
+    **kwargs: object,
+) -> tuple[str | None, MasteringReport | None]:
+
+    from definers.system import tmp
+
+    mastering = SmartMastering(processing_sample_rate, **kwargs)
+    sr_mastered, y_mastered = mastering.process(
+        processing_signal,
+        processing_sample_rate,
+    )
+    resolved_true_peak_target_dbfs = getattr(
+        mastering,
+        "last_resolved_final_true_peak_target_dbfs",
+        None,
+    )
+    if resolved_true_peak_target_dbfs is None:
+        resolve_final_true_peak_target = getattr(
+            mastering,
+            "resolve_final_true_peak_target",
+            None,
+        )
+        if callable(resolve_final_true_peak_target):
+            resolved_true_peak_target_dbfs = float(
+                resolve_final_true_peak_target()
+            )
+        else:
+            resolved_true_peak_target_dbfs = float(mastering.ceil_db)
+
+    resolved_output_path = output_path or tmp(get_ext(input_path), keep=False)
+
+    final_output_path, _final_signal, verification = save_verified_audio(
+        destination_path=resolved_output_path,
+        audio_signal=y_mastered,
+        sample_rate=sr_mastered,
+        input_signal=input_signal,
+        post_eq_signal=getattr(mastering, "last_stage_signals", {}).get(
+            "post_eq"
+        ),
+        post_spatial_signal=getattr(
+            mastering, "last_stage_signals", {}
+        ).get("post_spatial"),
+        post_limiter_signal=getattr(
+            mastering, "last_stage_signals", {}
+        ).get("post_limiter"),
+        post_character_signal=getattr(
+            mastering, "last_stage_signals", {}
+        ).get("post_character"),
+        post_peak_catch_signal=getattr(
+            mastering, "last_stage_signals", {}
+        ).get("post_peak_catch"),
+        post_delivery_trim_signal=getattr(
+            mastering, "last_stage_signals", {}
+        ).get("post_delivery_trim"),
+        post_clamp_signal=getattr(mastering, "last_stage_signals", {}).get(
+            "post_clamp"
+        ),
+        save_audio_fn=save_audio_fn,
+        read_audio_fn=read_audio_fn,
+        target_lufs=mastering.target_lufs,
+        ceil_db=mastering.ceil_db,
+        preset_name=mastering.preset_name,
+        contract=getattr(mastering, "last_mastering_contract", None)
+        or mastering.resolve_mastering_contract(),
+        delivery_profile_name=mastering.delivery_profile,
+        character_stage_decision=getattr(
+            mastering, "last_character_stage_decision", None
+        ),
+        peak_catch_events=getattr(mastering, "last_peak_catch_events", ()),
+        resolved_true_peak_target_dbfs=resolved_true_peak_target_dbfs,
+        stereo_motion_activity=getattr(
+            mastering, "last_stereo_motion_activity", None
+        ),
+        stereo_motion_correlation_guard=getattr(
+            mastering,
+            "last_stereo_motion_correlation_guard",
+            None,
+        ),
+        delivery_trim_attenuation_db=float(
+            getattr(mastering, "last_delivery_trim_attenuation_db", 0.0)
+        ),
+        delivery_trim_input_true_peak_dbfs=getattr(
+            mastering,
+            "last_delivery_trim_input_true_peak_dbfs",
+            None,
+        ),
+        delivery_trim_target_dbfs=getattr(
+            mastering,
+            "last_delivery_trim_target_dbfs",
+            None,
+        ),
+        delivery_trim_output_true_peak_dbfs=getattr(
+            mastering,
+            "last_delivery_trim_output_true_peak_dbfs",
+            None,
+        ),
+        post_clamp_true_peak_dbfs=getattr(
+            mastering,
+            "last_post_clamp_true_peak_dbfs",
+            None,
+        ),
+        post_clamp_true_peak_delta_db=getattr(
+            mastering,
+            "last_post_clamp_true_peak_delta_db",
+            None,
+        ),
+        headroom_recovery_gain_db=float(
+            getattr(mastering, "last_headroom_recovery_gain_db", 0.0)
+        ),
+        headroom_recovery_input_true_peak_dbfs=getattr(
+            mastering,
+            "last_headroom_recovery_input_true_peak_dbfs",
+            None,
+        ),
+        headroom_recovery_output_true_peak_dbfs=getattr(
+            mastering,
+            "last_headroom_recovery_output_true_peak_dbfs",
+            None,
+        ),
+        headroom_recovery_failure_reasons=getattr(
+            mastering,
+            "last_headroom_recovery_failure_reasons",
+            (),
+        ),
+        headroom_recovery_mode=getattr(
+            mastering,
+            "last_headroom_recovery_mode",
+            None,
+        ),
+        headroom_recovery_integrated_gap_db=getattr(
+            mastering,
+            "last_headroom_recovery_integrated_gap_db",
+            None,
+        ),
+        headroom_recovery_transient_density=getattr(
+            mastering,
+            "last_headroom_recovery_transient_density",
+            None,
+        ),
+        headroom_recovery_closed_margin_db=getattr(
+            mastering,
+            "last_headroom_recovery_closed_margin_db",
+            None,
+        ),
+        headroom_recovery_unused_margin_db=getattr(
+            mastering,
+            "last_headroom_recovery_unused_margin_db",
+            None,
+        ),
+        decoded_true_peak_dbfs=(
+            None
+            if mastering.delivery_decoded_true_peak_dbfs is None
+            else mastering.delivery_decoded_true_peak_dbfs
+            - mastering.codec_headroom_margin_db
+        ),
+        decoded_lufs_tolerance_db=mastering.delivery_lufs_tolerance_db,
+        true_peak_oversample_factor=mastering.true_peak_oversample_factor,
+        bit_depth=bit_depth,
+        bitrate=bitrate
+        if mastering.delivery_bitrate is None
+        else mastering.delivery_bitrate,
+        compression_level=compression_level,
+    )
+
+    if report_path is not None:
+        _write_mastering_report(
+            verification.report,
+            str(report_path),
+            indent=report_indent,
+        )
+
+    return final_output_path, verification.report

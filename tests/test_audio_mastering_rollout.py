@@ -21,6 +21,7 @@ AUDIO_ROOT = ROOT / "src" / "definers" / "audio"
 
 def _install_scipy_stub() -> None:
     scipy_module = types.ModuleType("scipy")
+    scipy_module.__version__ = "1.11.0"
     scipy_module.__path__ = []
     signal_module = types.ModuleType("scipy.signal")
 

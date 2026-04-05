@@ -6,7 +6,319 @@ import numpy as np
 
 from .mastering_contract import MasteringContract
 from .mastering_finalization import CharacterStageDecision, PeakCatchEvent
-from .utils import apply_lufs
+
+
+def _prepare_processing_signal(
+    self,
+    y: np.ndarray,
+    sr: int | None,
+    *,
+    resample_fn: Callable[..., np.ndarray],
+    stereo_fn: Callable[[np.ndarray], np.ndarray],
+) -> np.ndarray:
+    if sr is not None:
+        self.sr = sr
+
+    if self.sr != self.resampling_target:
+        y = resample_fn(y, self.sr, self.resampling_target)
+
+    y = stereo_fn(y)
+    return np.nan_to_num(
+        np.asarray(y, dtype=np.float32),
+        nan=0.0,
+        posinf=0.0,
+        neginf=0.0,
+    )
+
+
+def _apply_exciter_stage(
+    self,
+    y: np.ndarray,
+    *,
+    stereo_fn: Callable[[np.ndarray], np.ndarray],
+    apply_exciter_fn: Callable[..., np.ndarray],
+) -> np.ndarray:
+    restoration_factor = float(
+        np.clip(
+            getattr(self.spectral_balance_profile, "restoration_factor", 0.0),
+            0.0,
+            1.0,
+        )
+    )
+    air_restoration_factor = float(
+        np.clip(
+            getattr(
+                self.spectral_balance_profile,
+                "air_restoration_factor",
+                0.0,
+            ),
+            0.0,
+            1.0,
+        )
+    )
+    closure_repair_factor = float(
+        np.clip(
+            getattr(
+                self.spectral_balance_profile,
+                "closure_repair_factor",
+                max(
+                    air_restoration_factor * 0.85,
+                    restoration_factor * 0.55,
+                ),
+            ),
+            0.0,
+            1.0,
+        )
+    )
+    harshness_restraint_factor = float(
+        np.clip(
+            getattr(
+                self.spectral_balance_profile,
+                "harshness_restraint_factor",
+                0.0,
+            ),
+            0.0,
+            1.0,
+        )
+    )
+    legacy_tonal_rebalance_factor = float(
+        np.clip(
+            getattr(
+                self.spectral_balance_profile,
+                "legacy_tonal_rebalance_factor",
+                0.0,
+            ),
+            0.0,
+            1.0,
+        )
+    )
+    closed_top_end_repair_factor = float(
+        np.clip(
+            getattr(
+                self.spectral_balance_profile,
+                "closed_top_end_repair_factor",
+                0.0,
+            ),
+            0.0,
+            1.0,
+        )
+    )
+    effective_exciter_mix = float(
+        np.clip(
+            self.exciter_mix
+            + restoration_factor * 0.08
+            + air_restoration_factor * 0.16,
+            0.0,
+            1.0,
+        )
+    )
+    effective_exciter_mix = float(
+        np.clip(
+            max(
+                effective_exciter_mix + closure_repair_factor * 0.18,
+                self.exciter_mix * (0.74 + closure_repair_factor * 0.26),
+            ),
+            0.0,
+            1.0,
+        )
+    )
+    effective_exciter_mix = float(
+        np.clip(
+            effective_exciter_mix * (1.0 - harshness_restraint_factor * 0.26),
+            0.0,
+            1.0,
+        )
+    )
+    effective_exciter_mix = float(
+        np.clip(
+            effective_exciter_mix + closed_top_end_repair_factor * 0.12,
+            0.0,
+            1.0,
+        )
+    )
+    effective_exciter_max_drive = float(
+        max(
+            self.exciter_max_drive
+            + restoration_factor * 0.35
+            + air_restoration_factor * 0.85,
+            self.exciter_max_drive + closure_repair_factor * 0.45,
+            0.5,
+        )
+    )
+    effective_exciter_max_drive = float(
+        max(
+            effective_exciter_max_drive * (1.0 - harshness_restraint_factor * 0.18),
+            0.5,
+        )
+    )
+    effective_exciter_cutoff_hz = self.exciter_cutoff_hz
+    if (
+        effective_exciter_cutoff_hz is None
+        and (
+            restoration_factor > 0.0
+            or air_restoration_factor > 0.0
+            or closure_repair_factor > 0.0
+        )
+    ):
+        upper_cutoff_hz = float(max(min(self.high_cut * 0.82, 4200.0), 1650.0))
+        adaptive_cutoff_hz = float(
+            self.treble_transition_hz
+            * (
+                0.72
+                - closure_repair_factor * 0.16
+                - air_restoration_factor * 0.08
+            )
+        )
+        effective_exciter_cutoff_hz = float(
+            np.clip(adaptive_cutoff_hz, 1650.0, upper_cutoff_hz)
+        )
+    if effective_exciter_cutoff_hz is not None and harshness_restraint_factor > 0.0:
+        effective_exciter_cutoff_hz = float(
+            min(
+                max(self.high_cut * 0.82, 1650.0),
+                effective_exciter_cutoff_hz + harshness_restraint_factor * 650.0,
+            )
+        )
+    effective_exciter_high_frequency_cutoff_hz = self.exciter_high_frequency_cutoff_hz
+    if (
+        effective_exciter_high_frequency_cutoff_hz is not None
+        and (restoration_factor > 0.0 or air_restoration_factor > 0.0)
+    ):
+        effective_exciter_high_frequency_cutoff_hz = float(
+            min(
+                self.high_cut,
+                effective_exciter_high_frequency_cutoff_hz
+                - air_restoration_factor * 950.0
+                - restoration_factor * 350.0,
+            )
+        )
+        effective_exciter_high_frequency_cutoff_hz = float(
+            min(
+                effective_exciter_high_frequency_cutoff_hz,
+                self.high_cut - closure_repair_factor * 1100.0,
+            )
+        )
+        effective_exciter_high_frequency_cutoff_hz = float(
+            max(effective_exciter_high_frequency_cutoff_hz, 3500.0)
+        )
+    if (
+        effective_exciter_high_frequency_cutoff_hz is not None
+        and legacy_tonal_rebalance_factor > 0.0
+    ):
+        retained_air_cutoff_hz = (
+            effective_exciter_high_frequency_cutoff_hz
+            + legacy_tonal_rebalance_factor * 2200.0
+        )
+        if self.exciter_high_frequency_cutoff_hz is not None:
+            retained_air_cutoff_hz = max(
+                retained_air_cutoff_hz,
+                self.exciter_high_frequency_cutoff_hz
+                + legacy_tonal_rebalance_factor * 1600.0,
+            )
+        effective_exciter_high_frequency_cutoff_hz = float(
+            min(self.high_cut, retained_air_cutoff_hz)
+        )
+    if (
+        effective_exciter_high_frequency_cutoff_hz is not None
+        and harshness_restraint_factor > 0.0
+    ):
+        effective_exciter_high_frequency_cutoff_hz = float(
+            max(
+                3500.0,
+                effective_exciter_high_frequency_cutoff_hz
+                - harshness_restraint_factor * 700.0,
+            )
+        )
+
+    y = apply_exciter_fn(
+        y,
+        self.resampling_target,
+        effective_exciter_cutoff_hz,
+        effective_exciter_mix,
+        effective_exciter_max_drive,
+        effective_exciter_high_frequency_cutoff_hz,
+    )
+    return stereo_fn(y)
+
+
+def process_stem(
+    self,
+    y: np.ndarray,
+    sr: int | None = None,
+    *,
+    stem_role: str | None = None,
+    resample_fn: Callable[..., np.ndarray],
+    stereo_fn: Callable[[np.ndarray], np.ndarray],
+    freq_cut_fn: Callable[..., np.ndarray],
+    apply_exciter_fn: Callable[..., np.ndarray],
+    log_fn: Callable[..., object],
+) -> tuple[int, np.ndarray]:
+    stage_signals: dict[str, np.ndarray] = {}
+    y = _prepare_processing_signal(
+        self,
+        y,
+        sr,
+        resample_fn=resample_fn,
+        stereo_fn=stereo_fn,
+    )
+
+    log_fn("Mastering", "Applying filtering...")
+    y = freq_cut_fn(
+        y,
+        self.resampling_target,
+        low_cut=self.filter_low_cut,
+        high_cut=self.filter_high_cut,
+    )
+
+    log_fn("Mastering", "Applying equalizer...")
+    y = self.apply_eq(y)
+    stage_signals["post_eq"] = np.array(y, dtype=np.float32, copy=True)
+
+    log_fn("Mastering", "Applying stem cleanup...")
+    y = self.apply_stem_cleanup(y, stem_role=stem_role)
+
+    log_fn("Mastering", "Applying exciter...")
+    y = _apply_exciter_stage(
+        self,
+        y,
+        stereo_fn=stereo_fn,
+        apply_exciter_fn=apply_exciter_fn,
+    )
+
+    log_fn("Mastering", "Applying filtering...")
+    y = freq_cut_fn(
+        y,
+        self.resampling_target,
+        low_cut=self.filter_low_cut,
+        high_cut=self.filter_high_cut,
+    )
+    y = np.nan_to_num(y, nan=0.0, posinf=0.0, neginf=0.0)
+
+    stage_signals["final_in_memory"] = np.array(y, dtype=np.float32, copy=True)
+    self.last_stage_signals = stage_signals
+    self.last_finalization_actions = ()
+    self.last_mastering_contract = None
+    self.last_character_stage_decision = None
+    self.last_peak_catch_events = ()
+    self.last_delivery_trim_attenuation_db = 0.0
+    self.last_delivery_trim_input_true_peak_dbfs = None
+    self.last_delivery_trim_target_dbfs = None
+    self.last_delivery_trim_output_true_peak_dbfs = None
+    self.last_post_clamp_true_peak_dbfs = None
+    self.last_post_clamp_true_peak_delta_db = None
+    self.last_post_clamp_metrics = None
+    self.last_headroom_recovery_gain_db = 0.0
+    self.last_headroom_recovery_input_true_peak_dbfs = None
+    self.last_headroom_recovery_output_true_peak_dbfs = None
+    self.last_headroom_recovery_failure_reasons = ()
+    self.last_headroom_recovery_mode = None
+    self.last_headroom_recovery_integrated_gap_db = None
+    self.last_headroom_recovery_transient_density = None
+    self.last_headroom_recovery_closed_margin_db = None
+    self.last_headroom_recovery_unused_margin_db = None
+    self.last_resolved_final_true_peak_target_dbfs = None
+
+    return self.resampling_target, y
 
 
 def process(
@@ -23,18 +335,12 @@ def process(
     log_fn: Callable[..., object],
 ) -> tuple[int, np.ndarray]:
     stage_signals: dict[str, np.ndarray] = {}
-    if sr is not None:
-        self.sr = sr
-
-    if self.sr != self.resampling_target:
-        y = resample_fn(y, self.sr, self.resampling_target)
-
-    y = stereo_fn(y)
-    y = np.nan_to_num(
-        np.asarray(y, dtype=np.float32),
-        nan=0.0,
-        posinf=0.0,
-        neginf=0.0,
+    y = _prepare_processing_signal(
+        self,
+        y,
+        sr,
+        resample_fn=resample_fn,
+        stereo_fn=stereo_fn,
     )
 
     log_fn("Mastering", "Applying filtering...")
@@ -54,15 +360,12 @@ def process(
     y = self.multiband_compress(y)
 
     log_fn("Mastering", "Applying exciter...")
-    y = apply_exciter_fn(
+    y = _apply_exciter_stage(
+        self,
         y,
-        self.resampling_target,
-        self.exciter_cutoff_hz,
-        self.exciter_mix,
-        self.exciter_max_drive,
-        self.exciter_high_frequency_cutoff_hz,
+        stereo_fn=stereo_fn,
+        apply_exciter_fn=apply_exciter_fn,
     )
-    y = stereo_fn(y)
 
     log_fn("Mastering", "Applying filtering...")
     y = freq_cut_fn(
@@ -287,18 +590,18 @@ def process(
         peak_catch_ceil_db = float(
             final_ceiling_db
             - np.clip(
-                peak_over_db * 0.9 + peak_catch_index * 0.02,
-                0.08,
-                0.8,
+                peak_over_db * 0.5 + peak_catch_index * 0.015,
+                0.05,
+                0.3,
             )
         )
         soft_clip_ratio = float(
             np.clip(
-                max(self.limiter_soft_clip_ratio * 0.8, 0.16)
-                + peak_over_db * 0.22
-                + peak_catch_index * 0.05,
-                0.16,
-                0.6,
+                max(self.limiter_soft_clip_ratio * 0.65, 0.1)
+                + peak_over_db * 0.14
+                + peak_catch_index * 0.03,
+                0.1,
+                0.35,
             )
         )
         log_fn("Mastering", "Applying final peak catch...")

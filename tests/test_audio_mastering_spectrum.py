@@ -22,6 +22,7 @@ AUDIO_ROOT = ROOT / "src" / "definers" / "audio"
 
 def _install_scipy_stub() -> None:
     scipy_module = types.ModuleType("scipy")
+    scipy_module.__version__ = "1.11.0"
     signal_module = types.ModuleType("scipy.signal")
     ndimage_module = types.ModuleType("scipy.ndimage")
 
@@ -76,6 +77,9 @@ def _install_scipy_stub() -> None:
 
     ndimage_module.maximum_filter1d = lambda values, size, mode="constant": (
         _moving_last_axis(values, size, np.max)
+    )
+    ndimage_module.median_filter = lambda values, size, mode="nearest": np.array(
+        values, dtype=np.float32, copy=True
     )
     ndimage_module.uniform_filter1d = lambda values, size, mode="constant": (
         _moving_last_axis(values, size, np.mean)

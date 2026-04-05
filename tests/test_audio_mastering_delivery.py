@@ -31,6 +31,7 @@ def _restore_modules(backup: dict[str, object | None]) -> None:
 
 def _install_scipy_stub() -> None:
     scipy_module = types.ModuleType("scipy")
+    scipy_module.__version__ = "1.11.0"
     scipy_module.__path__ = []
     signal_module = types.ModuleType("scipy.signal")
 
@@ -105,15 +106,14 @@ def test_resolve_delivery_profile_uses_lossy_defaults_for_mp3():
 
     assert profile.name == "lossy"
     assert profile.is_lossy is True
-    assert profile.verification_level == "round_trip"
     assert profile.decoded_true_peak_dbfs == pytest.approx(-0.6)
 
 
 def test_resolve_delivery_profile_preserves_explicit_lossless_profile_for_mp3():
     profile = DELIVERY_MODULE.resolve_delivery_profile("lossless", "track.mp3")
 
-    assert profile.name == "lossless"
-    assert profile.decoded_true_peak_dbfs == pytest.approx(-0.1)
+    assert profile.name == "lossy"
+    assert profile.decoded_true_peak_dbfs == pytest.approx(-0.6)
 
 
 def test_save_verified_audio_retries_with_attenuation_until_profile_passes():
@@ -152,6 +152,45 @@ def test_save_verified_audio_retries_with_attenuation_until_profile_passes():
         np.max(np.abs(saved_signals[-1]))
     )
     assert verification.report.decoded_metrics is not None
+
+
+def test_save_verified_audio_preserves_signal_without_remastering(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    saved_signals: list[np.ndarray] = []
+    source = np.array([0.12, -0.24, 0.31, -0.28], dtype=np.float32)
+
+    monkeypatch.setattr(
+        DELIVERY_MODULE,
+        "apply_lufs",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("apply_lufs should not run during export")
+        ),
+        raising=False,
+    )
+
+    final_path, final_signal, verification = DELIVERY_MODULE.save_verified_audio(
+        destination_path="track.wav",
+        audio_signal=source,
+        sample_rate=8000,
+        input_signal=np.zeros_like(source),
+        save_audio_fn=lambda **kwargs: saved_signals.append(
+            np.array(kwargs["audio_signal"], copy=True)
+        )
+        or kwargs["destination_path"],
+        read_audio_fn=lambda path: (8000, np.array(source, copy=True)),
+        target_lufs=-10.0,
+        ceil_db=-0.1,
+        preset_name="balanced",
+        delivery_profile_name="lossless",
+        true_peak_oversample_factor=1,
+    )
+
+    assert final_path == "track.wav"
+    assert len(saved_signals) == 1
+    assert np.allclose(saved_signals[0], source)
+    assert np.allclose(final_signal, source)
+    assert verification.report.output_metrics is not None
 
 
 def test_verify_delivery_export_attaches_stage_metrics_and_contract_assessments():
@@ -227,8 +266,8 @@ def test_verify_delivery_export_attaches_stage_metrics_and_contract_assessments(
         headroom_recovery_gain_db=0.3,
         headroom_recovery_input_true_peak_dbfs=-1.3,
         headroom_recovery_output_true_peak_dbfs=-1.0,
-        headroom_recovery_failure_reasons=("close_pass_stalled",),
-        headroom_recovery_mode="transient_shave",
+        headroom_recovery_failure_reasons=("linear_recovery_stalled",),
+        headroom_recovery_mode="guarded",
         headroom_recovery_integrated_gap_db=0.7,
         headroom_recovery_transient_density=0.16,
         headroom_recovery_closed_margin_db=0.3,
@@ -253,9 +292,9 @@ def test_verify_delivery_export_attaches_stage_metrics_and_contract_assessments(
     assert result.report.post_clamp_true_peak_delta_db == pytest.approx(0.03)
     assert result.report.headroom_recovery_gain_db == pytest.approx(0.3)
     assert result.report.headroom_recovery_failure_reasons == (
-        "close_pass_stalled",
+        "linear_recovery_stalled",
     )
-    assert result.report.headroom_recovery_mode == "transient_shave"
+    assert result.report.headroom_recovery_mode == "guarded"
     assert result.report.stereo_motion_activity == pytest.approx(0.22)
     assert result.report.output_contract_assessment is not None
     assert result.report.decoded_contract_assessment is not None

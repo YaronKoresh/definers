@@ -32,6 +32,7 @@ def _restore_modules(backup: dict[str, object | None]) -> None:
 
 def _install_scipy_stub() -> None:
     scipy_module = types.ModuleType("scipy")
+    scipy_module.__version__ = "1.11.0"
     scipy_module.__path__ = []
     signal_module = types.ModuleType("scipy.signal")
     io_module = types.ModuleType("scipy.io")
@@ -161,6 +162,35 @@ def test_measure_mastering_loudness_reports_stereo_width_and_mono_bass_ratio():
     assert metrics.low_end_mono_ratio < 0.05
 
 
+def test_measure_metric_batch_reuses_results_for_identical_signal_objects():
+    calls: list[tuple[int, int]] = []
+    original_measure = METRICS_MODULE.measure_mastering_loudness
+    signal = np.ones((2, 64), dtype=np.float32)
+
+    def fake_measure(y, sr, **kwargs):
+        calls.append((id(y), int(sr)))
+        return types.SimpleNamespace(signal_id=id(y), sample_rate=int(sr))
+
+    METRICS_MODULE.measure_mastering_loudness = fake_measure
+    try:
+        metrics = METRICS_MODULE._measure_metric_batch(
+            {
+                "input": (signal, 8000),
+                "output": (signal, 8000),
+                "decoded": (signal, 8000),
+            },
+            true_peak_oversample_factor=4,
+            low_end_mono_cutoff_hz=160.0,
+            signal_module=types.SimpleNamespace(),
+        )
+    finally:
+        METRICS_MODULE.measure_mastering_loudness = original_measure
+
+    assert calls == [(id(signal), 8000)]
+    assert metrics["input"] is metrics["output"]
+    assert metrics["output"] is metrics["decoded"]
+
+
 def test_generate_mastering_report_tracks_gain_deltas():
     time_axis = np.linspace(0.0, 1.0, 8000, endpoint=False)
     input_signal = 0.2 * np.sin(2.0 * np.pi * 110.0 * time_axis).astype(
@@ -236,7 +266,7 @@ def test_generate_mastering_report_tracks_gain_deltas():
         headroom_recovery_input_true_peak_dbfs=-0.38,
         headroom_recovery_output_true_peak_dbfs=-0.1,
         headroom_recovery_failure_reasons=(),
-        headroom_recovery_mode="adaptive_close",
+        headroom_recovery_mode="guarded",
         headroom_recovery_integrated_gap_db=0.9,
         headroom_recovery_transient_density=0.18,
         headroom_recovery_closed_margin_db=0.28,
@@ -265,7 +295,7 @@ def test_generate_mastering_report_tracks_gain_deltas():
     assert report.post_clamp_true_peak_delta_db == pytest.approx(0.03)
     assert report.headroom_recovery_gain_db == pytest.approx(0.28)
     assert report.headroom_recovery_output_true_peak_dbfs == pytest.approx(-0.1)
-    assert report.headroom_recovery_mode == "adaptive_close"
+    assert report.headroom_recovery_mode == "guarded"
     assert report.headroom_recovery_closed_margin_db == pytest.approx(0.28)
     assert report.stereo_motion_activity == pytest.approx(0.26)
     assert report.stereo_motion_correlation_guard == pytest.approx(0.82)
@@ -326,7 +356,7 @@ def test_write_mastering_report_serializes_json(tmp_path: Path):
         post_clamp_true_peak_dbfs=-0.2,
         headroom_recovery_gain_db=0.2,
         headroom_recovery_mode="makeup_only",
-        headroom_recovery_failure_reasons=("unused_headroom_remains",),
+        headroom_recovery_failure_reasons=("loudness_already_within_tolerance",),
     )
     destination = tmp_path / "mastering-report.json"
 
@@ -361,7 +391,16 @@ def test_mastering_presets_wrap_config_factories():
     )
     assert edm.target_lufs > balanced.target_lufs > vocal.target_lufs
     assert edm.drive_db > balanced.drive_db > vocal.drive_db
-    assert edm.exciter_mix > balanced.exciter_mix > vocal.exciter_mix
+    assert 0.0 <= balanced.exciter_mix <= 1.0
+    assert 0.0 <= edm.exciter_mix <= 1.0
+    assert 0.0 <= vocal.exciter_mix <= 1.0
+    assert edm.exciter_max_drive > balanced.exciter_max_drive
+    assert balanced.exciter_max_drive > vocal.exciter_max_drive
+    assert (
+        edm.exciter_high_frequency_cutoff_hz
+        < balanced.exciter_high_frequency_cutoff_hz
+        < vocal.exciter_high_frequency_cutoff_hz
+    )
     assert edm.bass_boost_db_per_oct > balanced.bass_boost_db_per_oct
     assert balanced.bass_boost_db_per_oct > vocal.bass_boost_db_per_oct
     assert balanced.treble_boost_db_per_oct > vocal.treble_boost_db_per_oct

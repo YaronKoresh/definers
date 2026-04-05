@@ -83,3 +83,22 @@ def test_apply_micro_dynamics_finish_changes_sustain_more_than_transient():
     assert finished.shape == source.shape
     assert not np.allclose(finished, source)
     assert abs(finished[1] - source[1]) < abs(finished[3] - source[3])
+
+
+def test_apply_micro_dynamics_finish_restrains_hot_dense_signal():
+    mastering = SimpleNamespace(
+        micro_dynamics_strength=0.4,
+        micro_dynamics_fast_window_ms=5.0,
+        micro_dynamics_slow_window_ms=25.0,
+        micro_dynamics_transient_bias=0.8,
+    )
+    source = np.full(64, 0.92, dtype=np.float32)
+
+    finished = CHARACTER_MODULE.apply_micro_dynamics_finish(
+        mastering,
+        source,
+        sample_rate=1000,
+    )
+
+    assert np.max(np.abs(finished - source)) < 0.03
+    assert np.max(np.abs(finished)) <= np.max(np.abs(source)) + 1e-6

@@ -291,9 +291,13 @@ print(report.post_spatial_stereo_motion)
 print(report.post_clamp_true_peak_dbfs)
 ```
 
-Available mastering presets are `balanced`, `edm`, and `vocal`. `balanced` is the default when `preset` is omitted.
+Available mastering presets are `balanced`, `edm`, and `vocal`. When `preset` is omitted, `master()` auto-selects the default preset from the input audio; if you want to override that decision, pass `preset` explicitly.
 
 `balanced` leans brighter and denser with drum weight, cymbal and snare presence, and wide upper-band motion. `edm` pushes the loudest and most saturated finish with the heaviest low-end impact, while `vocal` stays the most open and dynamic while still adding thicker presence and more top-end shine.
+
+The mastering path also adapts its repair intensity automatically for weak or legacy material: when a source is unusually dull, air-starved, almost mono, or closed and bass-loaded, it now rebalances more selectively by opening the upper bands, calming low-end compression pressure, and preserving more perceived air without requiring a separate preset.
+
+For more aggressive production-style mastering, `master` first runs DEMUCS six-stem separation by default, applies role-specific mastering to drums, bass, vocals, guitar, piano, and the remaining music bed, rebalances those stems with drums intentionally forward and vocals slightly more restrained, saves the mastered stems into a sibling `*_stems` folder next to the final mix, remixes the processed stems, and then applies a final full-mix mastering pass.
 
 The returned mastering report now exposes stage-aware diagnostics for post-spatial imaging, post-clamp true peak behavior, adaptive headroom recovery, and delivery verification so finishing changes can be inspected instead of guessed.
 

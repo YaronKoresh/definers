@@ -205,3 +205,47 @@ def test_apply_spatial_enhancement_restrains_motion_when_band_is_already_anti_ph
 
     assert after_side_rms <= before_side_rms * 1.1
     assert mastering.last_stereo_motion_correlation_guard < 1.0
+
+
+def test_apply_spatial_enhancement_synthesizes_side_for_nearly_mono_legacy_material():
+    mastering = SimpleNamespace(
+        stereo_width=1.0,
+        mono_bass_hz=140.0,
+        low_cut=20.0,
+        high_cut=3900.0,
+        resampling_target=8000,
+        stereo_tone_variation_db=0.0,
+        stereo_tone_variation_cutoff_hz=1200.0,
+        stereo_tone_variation_smoothing_ms=20.0,
+        stereo_motion_mid_amount=0.7,
+        stereo_motion_high_amount=1.1,
+        stereo_motion_correlation_guard=1.0,
+        stereo_motion_max_side_boost=0.18,
+        spectral_balance_profile=SimpleNamespace(
+            restoration_factor=1.0,
+            air_restoration_factor=1.0,
+            body_restoration_factor=0.8,
+        ),
+    )
+    time_axis = np.linspace(0.0, 1.0, 8000, endpoint=False)
+    mono_program = (
+        0.4 * np.sin(2.0 * np.pi * 220.0 * time_axis)
+        + 0.18 * np.sin(2.0 * np.pi * 1850.0 * time_axis)
+    ).astype(np.float32)
+    source = np.stack([mono_program, mono_program], axis=0)
+
+    enhanced = DYNAMICS_MODULE.apply_spatial_enhancement(
+        mastering,
+        source,
+        signal_module=scipy_signal,
+    )
+
+    before_side_rms = float(
+        np.sqrt(np.mean(np.square(source[0] - source[1]), dtype=np.float32))
+    )
+    after_side_rms = float(
+        np.sqrt(np.mean(np.square(enhanced[0] - enhanced[1]), dtype=np.float32))
+    )
+
+    assert enhanced.shape == source.shape
+    assert after_side_rms > before_side_rms + 1e-4

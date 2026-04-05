@@ -346,6 +346,8 @@ class ExciterAnalysis:
     high_frequency_ratio: float
     transient_density: float = 0.0
     transient_ducking_depth: float = 0.0
+    closed_top_end_factor: float = 0.0
+    spectral_rolloff_hz: float = 0.0
 
 
 def _measure_transient_density(
@@ -416,6 +418,8 @@ def analyze_exciter(
             band_rms=0.0,
             spectral_flatness=0.0,
             high_frequency_ratio=0.0,
+            closed_top_end_factor=0.0,
+            spectral_rolloff_hz=0.0,
         )
 
     oversample_factor = (
@@ -476,15 +480,39 @@ def analyze_exciter(
     )
 
     mono_signal = _collapse_to_mono(oversampled_signal)
-    _, _, spectral_flatness, high_frequency_ratio = _spectral_summary(
+    freqs, power, spectral_flatness, high_frequency_ratio = _spectral_summary(
         mono_signal,
         oversampled_rate,
         config,
+    )
+    spectral_rolloff, _spectral_centroid, _spectral_bandwidth = (
+        _calculate_spectral_features(freqs, power, config)
     )
     transient_density = _measure_transient_density(
         _collapse_to_mono(gated_band),
         oversampled_rate,
         config,
+    )
+    air_deficit_factor = float(
+        np.clip((0.08 - high_frequency_ratio) / 0.08, 0.0, 1.0)
+    )
+    rolloff_deficit_factor = float(
+        np.clip((5200.0 - spectral_rolloff) / 3200.0, 0.0, 1.0)
+    )
+    cutoff_deficit_factor = float(
+        np.clip((2600.0 - resolved_cutoff) / 1200.0, 0.0, 1.0)
+    )
+    closed_top_end_factor = float(
+        np.clip(
+            max(
+                air_deficit_factor,
+                rolloff_deficit_factor * 0.9,
+                cutoff_deficit_factor * 0.78,
+            )
+            * (0.64 + (1.0 - np.clip(spectral_flatness, 0.0, 1.0)) * 0.12),
+            0.0,
+            1.0,
+        )
     )
     brightness_restraint = float(
         np.clip(1.0 - max(high_frequency_ratio - 0.12, 0.0) * 1.6, 0.6, 1.0)
@@ -515,12 +543,29 @@ def analyze_exciter(
     density_guard = float(
         np.clip(1.04 - max(transient_density - 0.1, 0.0) * 1.15, 0.55, 1.0)
     )
+    requested_mix = float(np.clip(mix, 0.0, 1.0))
     adaptive_mix = float(
-        np.clip(mix, 0.0, 1.0)
+        requested_mix
         * brightness_guard
         * transient_guard
         * density_guard
     )
+    restoration_mix_floor = float(
+        requested_mix
+        * np.clip(
+            closed_top_end_factor
+            * (
+                0.52
+                + air_deficit_factor * 0.22
+                + rolloff_deficit_factor * 0.12
+                + cutoff_deficit_factor * 0.08
+            )
+            - max(transient_density - 0.14, 0.0) * 0.18,
+            0.0,
+            0.72,
+        )
+    )
+    adaptive_mix = float(max(adaptive_mix, restoration_mix_floor))
     transient_ducking_depth = float(
         np.clip(
             np.clip((crest_factor - 2.5) / 6.0, 0.0, 1.0) * 0.28
@@ -542,6 +587,8 @@ def analyze_exciter(
         high_frequency_ratio=high_frequency_ratio,
         transient_density=transient_density,
         transient_ducking_depth=transient_ducking_depth,
+        closed_top_end_factor=closed_top_end_factor,
+        spectral_rolloff_hz=spectral_rolloff,
     )
 
 
@@ -772,7 +819,7 @@ def apply_exciter(
         )
         log(
             "Exciter",
-            f"Adaptive cutoff={analysis.cutoff_hz:.2f}Hz drive={analysis.drive:.2f}dB mix={analysis.adaptive_mix:.2f} oversample=x{analysis.oversample_factor}",
+            f"Adaptive cutoff={analysis.cutoff_hz:.2f}Hz drive={analysis.drive:.2f}dB requested_mix={float(np.clip(mix, 0.0, 1.0)):.2f} adaptive_mix={analysis.adaptive_mix:.2f} top_repair={analysis.closed_top_end_factor:.2f} rolloff={analysis.spectral_rolloff_hz:.2f}Hz oversample=x{analysis.oversample_factor}",
         )
         processed = _apply_exciter_core(
             samples_last, sample_rate, analysis, config

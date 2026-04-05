@@ -92,7 +92,7 @@ For changes in the mastering path, run the focused mastering regression set firs
 
 ```bash
 pytest tests/test_audio_mastering_generation.py tests/test_audio_mastering_phase.py tests/test_audio_mastering_spectrum.py tests/test_audio_mastering_finalization.py tests/test_audio_mastering_contract.py tests/test_audio_mastering_dynamics.py tests/test_audio_mastering_character.py -q
-pytest tests/test_audio_mastering_reporting.py tests/test_audio_mastering_delivery.py tests/test_audio_mastering_reference.py tests/test_audio_mastering_rollout.py -q
+pytest tests/test_audio_mastering_reporting.py tests/test_audio_mastering_delivery.py tests/test_audio_mastering_reference.py tests/test_audio_mastering_rollout.py tests/test_audio_mastering_loudness_accuracy.py tests/test_audio_mastering_stems.py -q
 pytest tests/test_public_module_splits.py tests/test_audio_lazy_exports.py -q
 ```
 
@@ -122,7 +122,7 @@ from definers.system import run
 
 When splitting large modules, prefer keeping the existing public facade stable and moving heavyweight behavior into dedicated focused public modules behind that facade.
 
-In the audio path, keep `audio/mastering.py` as the public facade and move dense spectral, EQ, dynamics, pipeline, contract, finalization, delivery-verification, character, and reference helpers into narrower public modules such as `audio.mastering_profile`, `audio.mastering_eq`, `audio.mastering_contract`, `audio.mastering_loudness`, `audio.mastering_metrics`, `audio.mastering_presets`, `audio.mastering_finalization`, `audio.mastering_delivery`, `audio.mastering_character`, and `audio.mastering_reference` instead of growing the facade into another monolith. Apply the same pattern in other dense areas such as `ml.py`, where dedicated public modules like `ml_text`, `ml_regression`, and `ml_health` now carry narrower concerns while the original facade stays stable.
+In the audio path, keep `audio/mastering.py` as the public facade and move dense spectral, EQ, dynamics, pipeline, contract, finalization, delivery-verification, character, reference, and stem-aware orchestration helpers into narrower public modules such as `audio.mastering_profile`, `audio.mastering_eq`, `audio.mastering_contract`, `audio.mastering_loudness`, `audio.mastering_metrics`, `audio.mastering_presets`, `audio.mastering_finalization`, `audio.mastering_delivery`, `audio.mastering_character`, `audio.mastering_reference`, and `audio.mastering_stems` instead of growing the facade into another monolith. Apply the same pattern in other dense areas such as `ml.py`, where dedicated public modules like `ml_text`, `ml_regression`, and `ml_health` now carry narrower concerns while the original facade stays stable.
 
 For mastering work specifically, keep the contract, report, character, and reference layers in sync: profile changes should update the contract bounds, pipeline changes should preserve the staged report surfaces for post-EQ, post-spatial, post-limiter, post-clamp, final in-memory, and decoded-delivery metrics, and finishing or preset changes should keep the adaptive headroom telemetry, stereo-motion telemetry, reference-assist suggestions, and rollout coverage aligned.
 

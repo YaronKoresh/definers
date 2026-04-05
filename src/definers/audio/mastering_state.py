@@ -188,6 +188,10 @@ def configure_runtime_state(
         max_boost_db=self.max_spectrum_boost_db,
         max_cut_db=self.max_spectrum_cut_db,
         band_intensity=float(np.clip(cfg.intensity, 0.25, 2.5)),
+        closure_repair_factor=0.0,
+        mud_cleanup_factor=0.0,
+        harshness_restraint_factor=0.0,
+        low_end_restraint_factor=0.0,
     )
     self.stereo_tone_variation_db = float(
         np.clip(cfg.stereo_tone_variation_db, 0.0, 1.5)

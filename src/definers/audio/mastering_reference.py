@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass
 
 import numpy as np
@@ -160,18 +161,39 @@ def analyze_reference(
     low_end_mono_cutoff_hz: float = 160.0,
     true_peak_oversample_factor: int = 4,
 ) -> ReferenceAnalysis:
-    reference_metrics = measure_mastering_loudness(
-        reference_signal,
-        sample_rate,
-        true_peak_oversample_factor=true_peak_oversample_factor,
-        low_end_mono_cutoff_hz=low_end_mono_cutoff_hz,
-    )
-    candidate_metrics = measure_mastering_loudness(
-        candidate_signal,
-        sample_rate,
-        true_peak_oversample_factor=true_peak_oversample_factor,
-        low_end_mono_cutoff_hz=low_end_mono_cutoff_hz,
-    )
+    reference_length = int(np.asarray(reference_signal).shape[-1])
+    candidate_length = int(np.asarray(candidate_signal).shape[-1])
+    if max(reference_length, candidate_length) >= 32768:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            reference_future = executor.submit(
+                measure_mastering_loudness,
+                reference_signal,
+                sample_rate,
+                true_peak_oversample_factor=true_peak_oversample_factor,
+                low_end_mono_cutoff_hz=low_end_mono_cutoff_hz,
+            )
+            candidate_future = executor.submit(
+                measure_mastering_loudness,
+                candidate_signal,
+                sample_rate,
+                true_peak_oversample_factor=true_peak_oversample_factor,
+                low_end_mono_cutoff_hz=low_end_mono_cutoff_hz,
+            )
+            reference_metrics = reference_future.result()
+            candidate_metrics = candidate_future.result()
+    else:
+        reference_metrics = measure_mastering_loudness(
+            reference_signal,
+            sample_rate,
+            true_peak_oversample_factor=true_peak_oversample_factor,
+            low_end_mono_cutoff_hz=low_end_mono_cutoff_hz,
+        )
+        candidate_metrics = measure_mastering_loudness(
+            candidate_signal,
+            sample_rate,
+            true_peak_oversample_factor=true_peak_oversample_factor,
+            low_end_mono_cutoff_hz=low_end_mono_cutoff_hz,
+        )
     reference_tilt = measure_spectral_tilt(reference_signal, sample_rate)
     candidate_tilt = measure_spectral_tilt(candidate_signal, sample_rate)
     reference_transients = measure_transient_density(

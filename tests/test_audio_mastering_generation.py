@@ -23,6 +23,7 @@ AUDIO_ROOT = ROOT / "src" / "definers" / "audio"
 
 def _install_scipy_stub() -> None:
     scipy_module = types.ModuleType("scipy")
+    scipy_module.__version__ = "1.11.0"
     signal_module = types.ModuleType("scipy.signal")
     ndimage_module = types.ModuleType("scipy.ndimage")
 
@@ -77,6 +78,9 @@ def _install_scipy_stub() -> None:
 
     ndimage_module.maximum_filter1d = lambda values, size, mode="constant": (
         _moving_last_axis(values, size, np.max)
+    )
+    ndimage_module.median_filter = lambda values, size, mode="nearest": np.array(
+        values, dtype=np.float32, copy=True
     )
     ndimage_module.uniform_filter1d = lambda values, size, mode="constant": (
         _moving_last_axis(values, size, np.mean)
@@ -196,7 +200,16 @@ def test_config_presets_span_density_and_stereo_motion_profiles():
         > vocal.pre_limiter_saturation_ratio
     )
     assert edm.spectral_drive_bias_db > balanced.spectral_drive_bias_db
-    assert edm.exciter_mix > balanced.exciter_mix > vocal.exciter_mix
+    assert 0.0 <= balanced.exciter_mix <= 1.0
+    assert 0.0 <= edm.exciter_mix <= 1.0
+    assert 0.0 <= vocal.exciter_mix <= 1.0
+    assert edm.exciter_max_drive > balanced.exciter_max_drive
+    assert balanced.exciter_max_drive > vocal.exciter_max_drive
+    assert (
+        edm.exciter_high_frequency_cutoff_hz
+        < balanced.exciter_high_frequency_cutoff_hz
+        < vocal.exciter_high_frequency_cutoff_hz
+    )
     assert edm.bass_boost_db_per_oct > balanced.bass_boost_db_per_oct
     assert balanced.bass_boost_db_per_oct > vocal.bass_boost_db_per_oct
     assert balanced.treble_boost_db_per_oct > vocal.treble_boost_db_per_oct
@@ -243,6 +256,225 @@ def test_smart_mastering_accepts_preset_name():
     assert (
         mastering.true_peak_oversample_factor == edm.true_peak_oversample_factor
     )
+
+
+def test_select_mastering_preset_prefers_edm_for_dense_bass_heavy_material(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(
+        MASTERING_MODULE,
+        "_measure_mastering_loudness",
+        lambda signal, sample_rate: types.SimpleNamespace(
+            integrated_lufs=-8.0,
+            crest_factor_db=7.2,
+            stereo_width_ratio=0.16,
+            low_end_mono_ratio=0.91,
+        ),
+    )
+    monkeypatch.setattr(
+        MASTERING_MODULE,
+        "_measure_spectral_tilt",
+        lambda signal, sample_rate: -6.2,
+    )
+    monkeypatch.setattr(
+        MASTERING_MODULE,
+        "_measure_transient_density",
+        lambda signal, sample_rate: 0.19,
+    )
+    monkeypatch.setattr(
+        MASTERING_MODULE,
+        "_measure_stereo_motion",
+        lambda signal, sample_rate: 0.03,
+    )
+    monkeypatch.setattr(
+        MASTERING_MODULE,
+        "_measure_preset_band_profile",
+        lambda signal, sample_rate: {
+            "bass_share": 0.41,
+            "low_mid_share": 0.26,
+            "presence_share": 0.12,
+            "air_share": 0.06,
+        },
+    )
+
+    assert (
+        MASTERING_MODULE._select_mastering_preset(
+            np.zeros((2, 1024), dtype=np.float32),
+            8000,
+        )
+        == "edm"
+    )
+
+
+def test_select_mastering_preset_prefers_vocal_for_wide_dynamic_material(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(
+        MASTERING_MODULE,
+        "_measure_mastering_loudness",
+        lambda signal, sample_rate: types.SimpleNamespace(
+            integrated_lufs=-17.5,
+            crest_factor_db=15.2,
+            stereo_width_ratio=0.56,
+            low_end_mono_ratio=0.62,
+        ),
+    )
+    monkeypatch.setattr(
+        MASTERING_MODULE,
+        "_measure_spectral_tilt",
+        lambda signal, sample_rate: -3.4,
+    )
+    monkeypatch.setattr(
+        MASTERING_MODULE,
+        "_measure_transient_density",
+        lambda signal, sample_rate: 0.03,
+    )
+    monkeypatch.setattr(
+        MASTERING_MODULE,
+        "_measure_stereo_motion",
+        lambda signal, sample_rate: 0.16,
+    )
+    monkeypatch.setattr(
+        MASTERING_MODULE,
+        "_measure_preset_band_profile",
+        lambda signal, sample_rate: {
+            "bass_share": 0.08,
+            "low_mid_share": 0.22,
+            "presence_share": 0.34,
+            "air_share": 0.18,
+        },
+    )
+
+    assert (
+        MASTERING_MODULE._select_mastering_preset(
+            np.zeros((2, 1024), dtype=np.float32),
+            8000,
+        )
+        == "vocal"
+    )
+
+
+def test_select_mastering_preset_prefers_vocal_for_closed_bassy_legacy_ensemble(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(
+        MASTERING_MODULE,
+        "_measure_mastering_loudness",
+        lambda signal, sample_rate: types.SimpleNamespace(
+            integrated_lufs=-17.2,
+            crest_factor_db=12.8,
+            stereo_width_ratio=0.11,
+            low_end_mono_ratio=0.96,
+        ),
+    )
+    monkeypatch.setattr(
+        MASTERING_MODULE,
+        "_measure_spectral_tilt",
+        lambda signal, sample_rate: -10.4,
+    )
+    monkeypatch.setattr(
+        MASTERING_MODULE,
+        "_measure_transient_density",
+        lambda signal, sample_rate: 0.025,
+    )
+    monkeypatch.setattr(
+        MASTERING_MODULE,
+        "_measure_stereo_motion",
+        lambda signal, sample_rate: 0.015,
+    )
+    monkeypatch.setattr(
+        MASTERING_MODULE,
+        "_measure_preset_band_profile",
+        lambda signal, sample_rate: {
+            "bass_share": 0.27,
+            "low_mid_share": 0.42,
+            "presence_share": 0.08,
+            "air_share": 0.025,
+        },
+    )
+
+    assert (
+        MASTERING_MODULE._select_mastering_preset(
+            np.zeros((2, 1024), dtype=np.float32),
+            8000,
+        )
+        == "vocal"
+    )
+
+
+def test_select_mastering_preset_keeps_balanced_for_general_midweight_material(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(
+        MASTERING_MODULE,
+        "_measure_mastering_loudness",
+        lambda signal, sample_rate: types.SimpleNamespace(
+            integrated_lufs=-13.0,
+            crest_factor_db=10.2,
+            stereo_width_ratio=0.24,
+            low_end_mono_ratio=0.86,
+        ),
+    )
+    monkeypatch.setattr(
+        MASTERING_MODULE,
+        "_measure_spectral_tilt",
+        lambda signal, sample_rate: -5.6,
+    )
+    monkeypatch.setattr(
+        MASTERING_MODULE,
+        "_measure_transient_density",
+        lambda signal, sample_rate: 0.08,
+    )
+    monkeypatch.setattr(
+        MASTERING_MODULE,
+        "_measure_stereo_motion",
+        lambda signal, sample_rate: 0.05,
+    )
+    monkeypatch.setattr(
+        MASTERING_MODULE,
+        "_measure_preset_band_profile",
+        lambda signal, sample_rate: {
+            "bass_share": 0.19,
+            "low_mid_share": 0.24,
+            "presence_share": 0.18,
+            "air_share": 0.09,
+        },
+    )
+
+    assert (
+        MASTERING_MODULE._select_mastering_preset(
+            np.zeros((2, 1024), dtype=np.float32),
+            8000,
+        )
+        == "balanced"
+    )
+
+
+def test_resolve_mastering_kwargs_for_input_preserves_explicit_preset_override(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    called = []
+
+    monkeypatch.setattr(
+        MASTERING_MODULE,
+        "_select_mastering_preset",
+        lambda signal, sample_rate: called.append("auto") or "vocal",
+    )
+
+    explicit = MASTERING_MODULE._resolve_mastering_kwargs_for_input(
+        np.zeros(64, dtype=np.float32),
+        8000,
+        {"preset": "edm"},
+    )
+    automatic = MASTERING_MODULE._resolve_mastering_kwargs_for_input(
+        np.zeros(64, dtype=np.float32),
+        8000,
+        {"preset": "auto"},
+    )
+
+    assert explicit == {"preset": "edm"}
+    assert automatic == {"preset": "vocal"}
+    assert called == ["auto"]
 
 
 def test_mastering_facade_keeps_public_exports_stable():
@@ -677,6 +909,117 @@ def test_process_increases_primary_soft_clip_when_rescue_profile_is_hot(
     assert limiter_calls[0][3] > mastering.limiter_soft_clip_ratio
 
 
+def test_process_stem_skips_master_bus_stages(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    mastering = MASTERING_MODULE.SmartMastering(8000, resampling_target=8000)
+    source = np.array([0.1, -0.1, 0.2, -0.2], dtype=np.float32)
+    stage_calls: list[str] = []
+
+    monkeypatch.setattr(
+        MASTERING_MODULE,
+        "apply_exciter",
+        lambda y, *_: stage_calls.append("exciter") or y,
+    )
+    monkeypatch.setattr(
+        MASTERING_MODULE,
+        "freq_cut",
+        lambda y, *_, **__: stage_calls.append("filter") or y,
+    )
+    monkeypatch.setattr(
+        mastering,
+        "apply_eq",
+        lambda y: stage_calls.append("eq") or y,
+    )
+    monkeypatch.setattr(
+        mastering,
+        "apply_stem_cleanup",
+        lambda y, stem_role=None: stage_calls.append("stem_cleanup") or y,
+    )
+    monkeypatch.setattr(
+        mastering,
+        "multiband_compress",
+        lambda y: stage_calls.append("multiband") or y,
+    )
+    monkeypatch.setattr(
+        mastering,
+        "apply_spatial_enhancement",
+        lambda y: stage_calls.append("spatial") or y,
+    )
+    monkeypatch.setattr(
+        mastering,
+        "apply_low_end_mono_tightening",
+        lambda y: stage_calls.append("mono") or y,
+    )
+    monkeypatch.setattr(
+        mastering,
+        "apply_pre_limiter_saturation",
+        lambda y, dynamic_drive_db=0.0: stage_calls.append("saturation") or y,
+    )
+    monkeypatch.setattr(
+        mastering,
+        "apply_limiter",
+        lambda y, drive_db, ceil_db, **kwargs: stage_calls.append("limiter") or y,
+    )
+    monkeypatch.setattr(
+        mastering,
+        "apply_micro_dynamics_finish",
+        lambda y: stage_calls.append("micro") or y,
+    )
+    monkeypatch.setattr(
+        mastering,
+        "apply_delivery_trim",
+        lambda y: stage_calls.append("delivery") or y,
+    )
+    monkeypatch.setattr(
+        mastering,
+        "apply_safety_clamp",
+        lambda y, ceil_db=-0.1: stage_calls.append("clamp") or y,
+    )
+    monkeypatch.setattr(
+        mastering,
+        "apply_final_headroom_recovery",
+        lambda y: stage_calls.append("headroom") or y,
+    )
+    monkeypatch.setattr(
+        MASTERING_MODULE,
+        "get_lufs",
+        lambda y, sr: (_ for _ in ()).throw(AssertionError("stem path should not read LUFS")),
+    )
+    monkeypatch.setattr(
+        MASTERING_MODULE,
+        "_measure_mastering_loudness",
+        lambda y, sr, **kwargs: (_ for _ in ()).throw(
+            AssertionError("stem path should not measure mastering loudness")
+        ),
+    )
+    monkeypatch.setattr(
+        mastering,
+        "plan_follow_up_action",
+        lambda metrics, contract: (_ for _ in ()).throw(
+            AssertionError("stem path should not plan follow-up actions")
+        ),
+    )
+
+    sr_out, y_out = mastering.process_stem(source, 8000)
+
+    assert sr_out == 8000
+    assert y_out.shape == (2, 4)
+    assert stage_calls == [
+        "filter",
+        "eq",
+        "stem_cleanup",
+        "exciter",
+        "filter",
+    ]
+    assert set(mastering.last_stage_signals) == {"post_eq", "final_in_memory"}
+    assert mastering.last_finalization_actions == ()
+    assert mastering.last_mastering_contract is None
+    assert mastering.last_peak_catch_events == ()
+    assert mastering.last_character_stage_decision is None
+    assert mastering.last_resolved_final_true_peak_target_dbfs is None
+
+
 def test_process_passes_exciter_controls_into_exciter(
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -763,6 +1106,431 @@ def test_process_passes_exciter_controls_into_exciter(
     mastering.process(source, 8000)
 
     assert exciter_calls == [(8000, 2400.0, 0.6, 4.0, 6800.0)]
+
+
+def test_process_scales_exciter_controls_for_legacy_repair(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    mastering = MASTERING_MODULE.SmartMastering(
+        8000,
+        resampling_target=8000,
+        exciter_mix=0.3,
+        exciter_cutoff_hz=2400.0,
+        exciter_max_drive=2.6,
+        exciter_high_frequency_cutoff_hz=7200.0,
+    )
+    source = np.array([0.1, -0.1, 0.2, -0.2], dtype=np.float32)
+    exciter_calls: list[
+        tuple[int, float | None, float, float, float | None]
+    ] = []
+    loudness_values = iter([-10.0])
+
+    monkeypatch.setattr(
+        MASTERING_MODULE,
+        "apply_exciter",
+        lambda y, sample_rate, cutoff_hz=None, mix=1.0, max_drive=None, high_frequency_cutoff_hz=None: (
+            exciter_calls.append(
+                (
+                    int(sample_rate),
+                    None if cutoff_hz is None else float(cutoff_hz),
+                    float(mix),
+                    None if max_drive is None else float(max_drive),
+                    None
+                    if high_frequency_cutoff_hz is None
+                    else float(high_frequency_cutoff_hz),
+                )
+            )
+            or y
+        ),
+    )
+    monkeypatch.setattr(MASTERING_MODULE, "freq_cut", lambda y, *_, **__: y)
+    monkeypatch.setattr(mastering, "multiband_compress", lambda y: y)
+    monkeypatch.setattr(mastering, "apply_spatial_enhancement", lambda y: y)
+    monkeypatch.setattr(mastering, "apply_low_end_mono_tightening", lambda y: y)
+    monkeypatch.setattr(
+        mastering,
+        "apply_pre_limiter_saturation",
+        lambda y, dynamic_drive_db=0.0: y,
+    )
+    monkeypatch.setattr(mastering, "apply_micro_dynamics_finish", lambda y: y)
+    monkeypatch.setattr(mastering, "apply_delivery_trim", lambda y: y)
+    monkeypatch.setattr(
+        mastering, "apply_safety_clamp", lambda y, ceil_db=-0.1: y
+    )
+    monkeypatch.setattr(mastering, "apply_final_headroom_recovery", lambda y: y)
+    monkeypatch.setattr(
+        MASTERING_MODULE, "get_lufs", lambda y, sr: next(loudness_values)
+    )
+    monkeypatch.setattr(
+        MASTERING_MODULE,
+        "_measure_mastering_loudness",
+        lambda y, sr, **kwargs: types.SimpleNamespace(
+            integrated_lufs=-10.0,
+            max_short_term_lufs=-10.0,
+            max_momentary_lufs=-10.0,
+            crest_factor_db=6.0,
+            stereo_width_ratio=0.02,
+            low_end_mono_ratio=0.99,
+            true_peak_dbfs=-0.4,
+        ),
+    )
+    monkeypatch.setattr(
+        mastering,
+        "plan_follow_up_action",
+        lambda metrics, contract: types.SimpleNamespace(
+            should_apply=False,
+            gain_db=0.0,
+            soft_clip_ratio=mastering.limiter_soft_clip_ratio,
+            stereo_width_scale=1.0,
+            reasons=(),
+            integrated_gap_db=0.0,
+        ),
+    )
+    monkeypatch.setattr(
+        mastering, "apply_limiter", lambda y, drive_db, ceil_db, **kwargs: y
+    )
+
+    def fake_apply_eq(y):
+        mastering.spectral_balance_profile = MASTERING_MODULE.SpectralBalanceProfile(
+            rescue_factor=1.0,
+            correction_strength=mastering.correction_strength,
+            max_boost_db=mastering.max_spectrum_boost_db,
+            max_cut_db=mastering.max_spectrum_cut_db,
+            band_intensity=mastering.config.intensity,
+            restoration_factor=1.0,
+            air_restoration_factor=1.0,
+            body_restoration_factor=0.8,
+            closure_repair_factor=1.0,
+        )
+        return y
+
+    monkeypatch.setattr(mastering, "apply_eq", fake_apply_eq)
+
+    mastering.process(source, 8000)
+
+    assert exciter_calls[0][2] > mastering.exciter_mix
+    assert exciter_calls[0][3] > mastering.exciter_max_drive
+    assert exciter_calls[0][4] < mastering.exciter_high_frequency_cutoff_hz
+
+
+def test_process_lowers_exciter_cutoff_for_closed_legacy_repair(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    mastering = MASTERING_MODULE.SmartMastering(
+        8000,
+        resampling_target=8000,
+        exciter_mix=1.0,
+        exciter_cutoff_hz=None,
+        exciter_max_drive=3.0,
+        exciter_high_frequency_cutoff_hz=7200.0,
+    )
+    source = np.array([0.1, -0.1, 0.2, -0.2], dtype=np.float32)
+    exciter_calls: list[
+        tuple[float | None, float, float, float | None]
+    ] = []
+    loudness_values = iter([-10.0])
+
+    monkeypatch.setattr(
+        MASTERING_MODULE,
+        "apply_exciter",
+        lambda y, sample_rate, cutoff_hz=None, mix=1.0, max_drive=None, high_frequency_cutoff_hz=None: (
+            exciter_calls.append(
+                (
+                    None if cutoff_hz is None else float(cutoff_hz),
+                    float(mix),
+                    None if max_drive is None else float(max_drive),
+                    None
+                    if high_frequency_cutoff_hz is None
+                    else float(high_frequency_cutoff_hz),
+                )
+            )
+            or y
+        ),
+    )
+    monkeypatch.setattr(MASTERING_MODULE, "freq_cut", lambda y, *_, **__: y)
+    monkeypatch.setattr(mastering, "multiband_compress", lambda y: y)
+    monkeypatch.setattr(mastering, "apply_spatial_enhancement", lambda y: y)
+    monkeypatch.setattr(mastering, "apply_low_end_mono_tightening", lambda y: y)
+    monkeypatch.setattr(
+        mastering,
+        "apply_pre_limiter_saturation",
+        lambda y, dynamic_drive_db=0.0: y,
+    )
+    monkeypatch.setattr(mastering, "apply_micro_dynamics_finish", lambda y: y)
+    monkeypatch.setattr(mastering, "apply_delivery_trim", lambda y: y)
+    monkeypatch.setattr(
+        mastering, "apply_safety_clamp", lambda y, ceil_db=-0.1: y
+    )
+    monkeypatch.setattr(mastering, "apply_final_headroom_recovery", lambda y: y)
+    monkeypatch.setattr(
+        MASTERING_MODULE, "get_lufs", lambda y, sr: next(loudness_values)
+    )
+    monkeypatch.setattr(
+        MASTERING_MODULE,
+        "_measure_mastering_loudness",
+        lambda y, sr, **kwargs: types.SimpleNamespace(
+            integrated_lufs=-10.0,
+            max_short_term_lufs=-10.0,
+            max_momentary_lufs=-10.0,
+            crest_factor_db=6.0,
+            stereo_width_ratio=0.02,
+            low_end_mono_ratio=0.99,
+            true_peak_dbfs=-0.4,
+        ),
+    )
+    monkeypatch.setattr(
+        mastering,
+        "plan_follow_up_action",
+        lambda metrics, contract: types.SimpleNamespace(
+            should_apply=False,
+            gain_db=0.0,
+            soft_clip_ratio=mastering.limiter_soft_clip_ratio,
+            stereo_width_scale=1.0,
+            reasons=(),
+            integrated_gap_db=0.0,
+        ),
+    )
+    monkeypatch.setattr(
+        mastering, "apply_limiter", lambda y, drive_db, ceil_db, **kwargs: y
+    )
+
+    def fake_apply_eq(y):
+        mastering.spectral_balance_profile = MASTERING_MODULE.SpectralBalanceProfile(
+            rescue_factor=1.0,
+            correction_strength=mastering.correction_strength,
+            max_boost_db=mastering.max_spectrum_boost_db,
+            max_cut_db=mastering.max_spectrum_cut_db,
+            band_intensity=mastering.config.intensity,
+            restoration_factor=1.0,
+            air_restoration_factor=1.0,
+            body_restoration_factor=0.75,
+            closure_repair_factor=1.0,
+        )
+        return y
+
+    monkeypatch.setattr(mastering, "apply_eq", fake_apply_eq)
+
+    mastering.process(source, 8000)
+
+    assert exciter_calls[0][0] is not None
+    assert exciter_calls[0][0] < 2500.0
+    assert exciter_calls[0][1] == pytest.approx(1.0)
+
+
+def test_process_retains_more_exciter_air_for_low_end_loaded_legacy_rebalance(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    mastering = MASTERING_MODULE.SmartMastering(
+        8000,
+        resampling_target=8000,
+        exciter_mix=1.0,
+        exciter_cutoff_hz=None,
+        exciter_max_drive=3.0,
+        exciter_high_frequency_cutoff_hz=7200.0,
+    )
+    source = np.array([0.1, -0.1, 0.2, -0.2], dtype=np.float32)
+    exciter_calls: list[
+        tuple[float | None, float, float, float | None]
+    ] = []
+    loudness_values = iter([-10.0, -10.0])
+    rebalance_levels = iter([0.0, 1.0])
+
+    monkeypatch.setattr(
+        MASTERING_MODULE,
+        "apply_exciter",
+        lambda y, sample_rate, cutoff_hz=None, mix=1.0, max_drive=None, high_frequency_cutoff_hz=None: (
+            exciter_calls.append(
+                (
+                    None if cutoff_hz is None else float(cutoff_hz),
+                    float(mix),
+                    None if max_drive is None else float(max_drive),
+                    None
+                    if high_frequency_cutoff_hz is None
+                    else float(high_frequency_cutoff_hz),
+                )
+            )
+            or y
+        ),
+    )
+    monkeypatch.setattr(MASTERING_MODULE, "freq_cut", lambda y, *_, **__: y)
+    monkeypatch.setattr(mastering, "multiband_compress", lambda y: y)
+    monkeypatch.setattr(mastering, "apply_spatial_enhancement", lambda y: y)
+    monkeypatch.setattr(mastering, "apply_low_end_mono_tightening", lambda y: y)
+    monkeypatch.setattr(
+        mastering,
+        "apply_pre_limiter_saturation",
+        lambda y, dynamic_drive_db=0.0: y,
+    )
+    monkeypatch.setattr(mastering, "apply_micro_dynamics_finish", lambda y: y)
+    monkeypatch.setattr(mastering, "apply_delivery_trim", lambda y: y)
+    monkeypatch.setattr(
+        mastering, "apply_safety_clamp", lambda y, ceil_db=-0.1: y
+    )
+    monkeypatch.setattr(mastering, "apply_final_headroom_recovery", lambda y: y)
+    monkeypatch.setattr(
+        MASTERING_MODULE, "get_lufs", lambda y, sr: next(loudness_values)
+    )
+    monkeypatch.setattr(
+        MASTERING_MODULE,
+        "_measure_mastering_loudness",
+        lambda y, sr, **kwargs: types.SimpleNamespace(
+            integrated_lufs=-10.0,
+            max_short_term_lufs=-10.0,
+            max_momentary_lufs=-10.0,
+            crest_factor_db=6.0,
+            stereo_width_ratio=0.02,
+            low_end_mono_ratio=0.99,
+            true_peak_dbfs=-0.4,
+        ),
+    )
+    monkeypatch.setattr(
+        mastering,
+        "plan_follow_up_action",
+        lambda metrics, contract: types.SimpleNamespace(
+            should_apply=False,
+            gain_db=0.0,
+            soft_clip_ratio=mastering.limiter_soft_clip_ratio,
+            stereo_width_scale=1.0,
+            reasons=(),
+            integrated_gap_db=0.0,
+        ),
+    )
+    monkeypatch.setattr(
+        mastering, "apply_limiter", lambda y, drive_db, ceil_db, **kwargs: y
+    )
+
+    def fake_apply_eq(y):
+        mastering.spectral_balance_profile = MASTERING_MODULE.SpectralBalanceProfile(
+            rescue_factor=1.0,
+            correction_strength=mastering.correction_strength,
+            max_boost_db=mastering.max_spectrum_boost_db,
+            max_cut_db=mastering.max_spectrum_cut_db,
+            band_intensity=mastering.config.intensity,
+            restoration_factor=1.0,
+            air_restoration_factor=1.0,
+            body_restoration_factor=0.75,
+            closure_repair_factor=1.0,
+            legacy_tonal_rebalance_factor=next(rebalance_levels),
+        )
+        return y
+
+    monkeypatch.setattr(mastering, "apply_eq", fake_apply_eq)
+
+    mastering.process(source, 8000)
+    mastering.process(source, 8000)
+
+    assert exciter_calls[0][3] is not None
+    assert exciter_calls[1][3] is not None
+    assert exciter_calls[1][3] > exciter_calls[0][3]
+    assert exciter_calls[1][3] <= mastering.high_cut
+
+
+def test_process_deharshes_exciter_controls_when_harshness_risk_is_high(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    mastering = MASTERING_MODULE.SmartMastering(
+        44100,
+        resampling_target=44100,
+        exciter_mix=0.65,
+        exciter_cutoff_hz=2400.0,
+        exciter_max_drive=3.1,
+        exciter_high_frequency_cutoff_hz=7200.0,
+    )
+    source = np.array([0.1, -0.1, 0.2, -0.2], dtype=np.float32)
+    exciter_calls: list[
+        tuple[float | None, float, float, float | None]
+    ] = []
+    loudness_values = iter([-10.0, -10.0])
+    harshness_levels = iter([0.0, 1.0])
+
+    monkeypatch.setattr(
+        MASTERING_MODULE,
+        "apply_exciter",
+        lambda y, sample_rate, cutoff_hz=None, mix=1.0, max_drive=None, high_frequency_cutoff_hz=None: (
+            exciter_calls.append(
+                (
+                    None if cutoff_hz is None else float(cutoff_hz),
+                    float(mix),
+                    None if max_drive is None else float(max_drive),
+                    None
+                    if high_frequency_cutoff_hz is None
+                    else float(high_frequency_cutoff_hz),
+                )
+            )
+            or y
+        ),
+    )
+    monkeypatch.setattr(MASTERING_MODULE, "freq_cut", lambda y, *_, **__: y)
+    monkeypatch.setattr(mastering, "multiband_compress", lambda y: y)
+    monkeypatch.setattr(mastering, "apply_spatial_enhancement", lambda y: y)
+    monkeypatch.setattr(mastering, "apply_low_end_mono_tightening", lambda y: y)
+    monkeypatch.setattr(
+        mastering,
+        "apply_pre_limiter_saturation",
+        lambda y, dynamic_drive_db=0.0: y,
+    )
+    monkeypatch.setattr(mastering, "apply_micro_dynamics_finish", lambda y: y)
+    monkeypatch.setattr(mastering, "apply_delivery_trim", lambda y: y)
+    monkeypatch.setattr(
+        mastering, "apply_safety_clamp", lambda y, ceil_db=-0.1: y
+    )
+    monkeypatch.setattr(mastering, "apply_final_headroom_recovery", lambda y: y)
+    monkeypatch.setattr(
+        MASTERING_MODULE, "get_lufs", lambda y, sr: next(loudness_values)
+    )
+    monkeypatch.setattr(
+        MASTERING_MODULE,
+        "_measure_mastering_loudness",
+        lambda y, sr, **kwargs: types.SimpleNamespace(
+            integrated_lufs=-10.0,
+            max_short_term_lufs=-10.0,
+            max_momentary_lufs=-10.0,
+            crest_factor_db=6.0,
+            stereo_width_ratio=0.02,
+            low_end_mono_ratio=0.99,
+            true_peak_dbfs=-0.4,
+        ),
+    )
+    monkeypatch.setattr(
+        mastering,
+        "plan_follow_up_action",
+        lambda metrics, contract: types.SimpleNamespace(
+            should_apply=False,
+            gain_db=0.0,
+            soft_clip_ratio=mastering.limiter_soft_clip_ratio,
+            stereo_width_scale=1.0,
+            reasons=(),
+            integrated_gap_db=0.0,
+        ),
+    )
+    monkeypatch.setattr(
+        mastering, "apply_limiter", lambda y, drive_db, ceil_db, **kwargs: y
+    )
+
+    def fake_apply_eq(y):
+        mastering.spectral_balance_profile = MASTERING_MODULE.SpectralBalanceProfile(
+            rescue_factor=1.0,
+            correction_strength=mastering.correction_strength,
+            max_boost_db=mastering.max_spectrum_boost_db,
+            max_cut_db=mastering.max_spectrum_cut_db,
+            band_intensity=mastering.config.intensity,
+            restoration_factor=1.0,
+            air_restoration_factor=1.0,
+            body_restoration_factor=0.8,
+            closure_repair_factor=1.0,
+            harshness_restraint_factor=next(harshness_levels),
+        )
+        return y
+
+    monkeypatch.setattr(mastering, "apply_eq", fake_apply_eq)
+
+    mastering.process(source, 44100)
+    mastering.process(source, 44100)
+
+    assert exciter_calls[1][0] > exciter_calls[0][0]
+    assert exciter_calls[1][1] < exciter_calls[0][1]
+    assert exciter_calls[1][2] < exciter_calls[0][2]
+    assert exciter_calls[1][3] < exciter_calls[0][3]
 
 
 def test_process_adds_rescue_drive_bias_when_profile_is_hot(
@@ -1011,6 +1779,97 @@ def test_process_calls_finalization_stages(monkeypatch: pytest.MonkeyPatch):
         name == "limiter"
         for name in stage_names[micro_dynamics_index + 1 : trim_index]
     )
+
+
+def test_process_keeps_post_clamp_to_final_output_linear_when_recovery_runs(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    mastering = MASTERING_MODULE.SmartMastering(
+        8000,
+        resampling_target=8000,
+        preset="balanced",
+        target_lufs=-8.0,
+        drive_db=0.0,
+        spectral_drive_bias_db=0.0,
+        final_lufs_tolerance=0.2,
+        max_final_boost_db=1.0,
+        max_follow_up_passes=1,
+        limiter_soft_clip_ratio=0.0,
+        pre_limiter_saturation_ratio=0.0,
+        micro_dynamics_strength=0.0,
+        ceil_db=-0.1,
+        contract_min_crest_factor_db=0.0,
+    )
+    source = np.array([0.03, -0.03, 0.05, -0.05, 0.04, -0.04], dtype=np.float32)
+    loudness_values = iter([-8.0])
+    metrics_values = iter(
+        [
+            types.SimpleNamespace(
+                integrated_lufs=-9.2,
+                max_short_term_lufs=-10.0,
+                max_momentary_lufs=-9.8,
+                crest_factor_db=7.0,
+                stereo_width_ratio=0.2,
+                low_end_mono_ratio=0.95,
+                true_peak_dbfs=-18.0,
+            ),
+            types.SimpleNamespace(
+                integrated_lufs=-8.7,
+                max_short_term_lufs=-9.5,
+                max_momentary_lufs=-9.2,
+                crest_factor_db=7.0,
+                stereo_width_ratio=0.2,
+                low_end_mono_ratio=0.95,
+                true_peak_dbfs=-17.0,
+            ),
+            types.SimpleNamespace(
+                integrated_lufs=-8.7,
+                max_short_term_lufs=-9.5,
+                max_momentary_lufs=-9.2,
+                crest_factor_db=7.0,
+                stereo_width_ratio=0.2,
+                low_end_mono_ratio=0.95,
+                true_peak_dbfs=-17.0,
+            ),
+        ]
+    )
+
+    monkeypatch.setattr(MASTERING_MODULE, "apply_exciter", lambda y, *_: y)
+    monkeypatch.setattr(MASTERING_MODULE, "freq_cut", lambda y, *_, **__: y)
+    monkeypatch.setattr(mastering, "apply_eq", lambda y: y)
+    monkeypatch.setattr(mastering, "multiband_compress", lambda y: y)
+    monkeypatch.setattr(mastering, "apply_spatial_enhancement", lambda y: y)
+    monkeypatch.setattr(mastering, "apply_low_end_mono_tightening", lambda y: y)
+    monkeypatch.setattr(
+        MASTERING_MODULE,
+        "get_lufs",
+        lambda y, sr: next(loudness_values),
+    )
+    monkeypatch.setattr(
+        MASTERING_MODULE,
+        "_measure_mastering_loudness",
+        lambda y, sr, **kwargs: next(metrics_values),
+    )
+    monkeypatch.setattr(
+        MASTERING_MODULE,
+        "_measure_true_peak",
+        lambda y, sr, oversample_factor=4: float(
+            20.0 * np.log10(max(np.max(np.abs(y)), 1e-12))
+        ),
+    )
+
+    sr_out, y_out = mastering.process(source, 8000)
+
+    post_clamp = mastering.last_stage_signals["post_clamp"]
+    final_in_memory = mastering.last_stage_signals["final_in_memory"]
+    mask = np.abs(post_clamp) > 1e-6
+    ratios = final_in_memory[mask] / post_clamp[mask]
+
+    assert sr_out == 8000
+    assert np.max(np.abs(final_in_memory)) > np.max(np.abs(post_clamp))
+    assert np.max(ratios) - np.min(ratios) < 1e-5
+    assert mastering.last_headroom_recovery_gain_db > 0.0
+    assert np.allclose(y_out, final_in_memory)
 
 
 def test_process_applies_final_peak_catch_after_character_stage_when_true_peak_is_hot(
@@ -1586,6 +2445,7 @@ def test_master_with_report_writes_report_file(
         mastered_path, report = MASTERING_MODULE.master(
             "input.wav",
             output_path=str(output_path),
+            stem_mastering=False,
             preset="edm",
             report_path=str(report_path),
         )
@@ -1600,3 +2460,381 @@ def test_master_with_report_writes_report_file(
     payload = json.loads(report_path.read_text(encoding="utf-8"))
     assert payload["preset_name"] == "edm"
     assert payload["delivery_profile_name"] == "lossless"
+
+
+def test_master_stems_forces_stem_mastering(monkeypatch: pytest.MonkeyPatch):
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        MASTERING_MODULE,
+        "_master_internal",
+        lambda input_path, *, output_path, stem_mastering, **kwargs: captured.update(
+            {
+                "input_path": input_path,
+                "output_path": output_path,
+                "stem_mastering": stem_mastering,
+                "kwargs": dict(kwargs),
+            }
+        )
+        or ("out.wav", None),
+    )
+
+    mastered_path, report = MASTERING_MODULE.master_stems(
+        "input.wav",
+        output_path="out.wav",
+        preset="vocal",
+    )
+
+    assert mastered_path == "out.wav"
+    assert report is None
+    assert captured == {
+        "input_path": "input.wav",
+        "output_path": "out.wav",
+        "stem_mastering": True,
+        "kwargs": {"preset": "vocal"},
+    }
+
+
+def test_master_routes_stem_mastering_through_demucs_pipeline(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    report_path = tmp_path / "stem-mastering-report.json"
+    output_path = tmp_path / "stem-mastered.wav"
+    io_module_name = f"{MASTERING_MODULE.__package__}.io"
+    stems_module_name = f"{MASTERING_MODULE.__package__}.stems"
+    mastering_stems_module_name = (
+        f"{MASTERING_MODULE.__package__}.mastering_stems"
+    )
+    original_io_module = sys.modules.get(io_module_name)
+    original_stems_module = sys.modules.get(stems_module_name)
+    original_mastering_stems_module = sys.modules.get(
+        mastering_stems_module_name
+    )
+    processed_inputs: list[np.ndarray] = []
+    helper_calls: list[tuple[str, str, int, float, dict[str, object]]] = []
+    mixed_signal = np.full((2, 8), 0.25, dtype=np.float32)
+
+    fake_report = types.SimpleNamespace(
+        preset_name="balanced",
+        to_dict=lambda: {
+            "preset_name": "balanced",
+            "delivery_profile_name": "lossless",
+        },
+    )
+
+    class FakeMastering:
+        def __init__(self, sr, **kwargs):
+            self.target_lufs = -6.0
+            self.ceil_db = -0.1
+            self.preset_name = kwargs.get("preset", "balanced")
+            self.delivery_profile = "lossless"
+            self.delivery_decoded_true_peak_dbfs = -0.1
+            self.codec_headroom_margin_db = 0.0
+            self.delivery_lufs_tolerance_db = 0.6
+            self.true_peak_oversample_factor = 1
+            self.delivery_bitrate = None
+            self.last_stage_signals = {}
+            self.config = CONFIG_MODULE.SmartMasteringConfig.from_preset(
+                kwargs.get("preset")
+            )
+
+        def process(self, y, sr):
+            processed_inputs.append(np.array(y, copy=True))
+            return sr, np.array(y, copy=True)
+
+        def resolve_mastering_contract(self):
+            return types.SimpleNamespace(
+                max_true_peak_dbfs=self.ceil_db,
+                low_end_mono_cutoff_hz=140.0,
+            )
+
+    def fake_process_stem_layers(
+        audio_path,
+        *,
+        base_config,
+        base_mastering_kwargs,
+        process_stem_fn,
+        separate_stems_fn,
+        read_audio_fn,
+        delete_fn,
+        model_name,
+        shifts,
+        mix_headroom_db,
+        resample_fn=None,
+        save_mastered_stems=True,
+        mastered_stems_output_dir=None,
+        save_audio_fn=None,
+        mastered_stems_format="wav",
+        mastered_stems_bit_depth=32,
+        mastered_stems_bitrate=320,
+        mastered_stems_compression_level=9,
+    ):
+        helper_calls.append(
+            (
+                audio_path,
+                model_name,
+                shifts,
+                mix_headroom_db,
+                dict(base_mastering_kwargs),
+                save_mastered_stems,
+                mastered_stems_output_dir,
+                mastered_stems_format,
+            )
+        )
+        return 8000, np.array(mixed_signal, copy=True)
+
+    try:
+        sys.modules[io_module_name] = types.SimpleNamespace(
+            read_audio=lambda path: (8000, np.zeros((2, 8), dtype=np.float32)),
+            save_audio=lambda **kwargs: kwargs["destination_path"],
+        )
+        sys.modules[stems_module_name] = types.SimpleNamespace(
+            separate_stem_layers=lambda *args, **kwargs: ({}, "unused"),
+        )
+        sys.modules[mastering_stems_module_name] = types.SimpleNamespace(
+            process_stem_layers=fake_process_stem_layers,
+        )
+        monkeypatch.setitem(
+            sys.modules,
+            "definers.system",
+            types.SimpleNamespace(
+                tmp=lambda suffix, keep=False: str(output_path),
+                delete=lambda path: None,
+            ),
+        )
+        monkeypatch.setattr(MASTERING_MODULE, "SmartMastering", FakeMastering)
+        monkeypatch.setattr(
+            MASTERING_MODULE,
+            "save_verified_audio",
+            lambda **kwargs: (
+                kwargs["destination_path"],
+                kwargs["audio_signal"],
+                types.SimpleNamespace(report=fake_report),
+            ),
+        )
+
+        mastered_path, report = MASTERING_MODULE.master(
+            "input.wav",
+            output_path=str(output_path),
+            stem_mastering=True,
+            stem_model_name="htdemucs_6s",
+            stem_shifts=4,
+            stem_mix_headroom_db=7.0,
+            preset="balanced",
+            report_path=str(report_path),
+        )
+    finally:
+        if original_io_module is None:
+            sys.modules.pop(io_module_name, None)
+        else:
+            sys.modules[io_module_name] = original_io_module
+        if original_stems_module is None:
+            sys.modules.pop(stems_module_name, None)
+        else:
+            sys.modules[stems_module_name] = original_stems_module
+        if original_mastering_stems_module is None:
+            sys.modules.pop(mastering_stems_module_name, None)
+        else:
+            sys.modules[mastering_stems_module_name] = (
+                original_mastering_stems_module
+            )
+
+    assert mastered_path == str(output_path)
+    assert report is fake_report
+    assert helper_calls == [
+        (
+            "input.wav",
+            "htdemucs_6s",
+            4,
+            7.0,
+            {"preset": "balanced"},
+            True,
+            str(output_path.with_suffix("")) + "_stems",
+            "wav",
+        )
+    ]
+    assert len(processed_inputs) == 1
+    assert np.allclose(processed_inputs[0], mixed_signal)
+
+
+def test_master_auto_selects_preset_before_stem_mastering_helper(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    output_path = tmp_path / "stem-auto-mastered.wav"
+    io_module_name = f"{MASTERING_MODULE.__package__}.io"
+    stems_module_name = f"{MASTERING_MODULE.__package__}.stems"
+    mastering_stems_module_name = (
+        f"{MASTERING_MODULE.__package__}.mastering_stems"
+    )
+    original_io_module = sys.modules.get(io_module_name)
+    original_stems_module = sys.modules.get(stems_module_name)
+    original_mastering_stems_module = sys.modules.get(
+        mastering_stems_module_name
+    )
+    helper_calls: list[dict[str, object]] = []
+
+    class FakeMastering:
+        def __init__(self, sr, **kwargs):
+            self.target_lufs = -8.9
+            self.ceil_db = -0.1
+            self.preset_name = kwargs.get("preset", "balanced")
+            self.delivery_profile = "lossless"
+            self.delivery_decoded_true_peak_dbfs = -0.1
+            self.codec_headroom_margin_db = 0.0
+            self.delivery_lufs_tolerance_db = 0.6
+            self.true_peak_oversample_factor = 1
+            self.delivery_bitrate = None
+            self.last_stage_signals = {}
+            self.config = CONFIG_MODULE.SmartMasteringConfig.from_preset(
+                kwargs.get("preset")
+            )
+
+        def process(self, y, sr):
+            return sr, np.array(y, copy=True)
+
+        def resolve_mastering_contract(self):
+            return types.SimpleNamespace(
+                max_true_peak_dbfs=self.ceil_db,
+                low_end_mono_cutoff_hz=140.0,
+            )
+
+    def fake_process_stem_layers(
+        audio_path,
+        *,
+        base_config,
+        base_mastering_kwargs,
+        process_stem_fn,
+        separate_stems_fn,
+        read_audio_fn,
+        delete_fn,
+        model_name,
+        shifts,
+        mix_headroom_db,
+        resample_fn=None,
+        save_mastered_stems=True,
+        mastered_stems_output_dir=None,
+        save_audio_fn=None,
+        mastered_stems_format="wav",
+        mastered_stems_bit_depth=32,
+        mastered_stems_bitrate=320,
+        mastered_stems_compression_level=9,
+    ):
+        helper_calls.append(
+            {
+                **dict(base_mastering_kwargs),
+                "save_mastered_stems": save_mastered_stems,
+                "mastered_stems_output_dir": mastered_stems_output_dir,
+                "mastered_stems_format": mastered_stems_format,
+            }
+        )
+        return 8000, np.zeros((2, 8), dtype=np.float32)
+
+    try:
+        sys.modules[io_module_name] = types.SimpleNamespace(
+            read_audio=lambda path: (8000, np.zeros((2, 8), dtype=np.float32)),
+            save_audio=lambda **kwargs: kwargs["destination_path"],
+        )
+        sys.modules[stems_module_name] = types.SimpleNamespace(
+            separate_stem_layers=lambda *args, **kwargs: ({}, "unused"),
+        )
+        sys.modules[mastering_stems_module_name] = types.SimpleNamespace(
+            process_stem_layers=fake_process_stem_layers,
+        )
+        monkeypatch.setitem(
+            sys.modules,
+            "definers.system",
+            types.SimpleNamespace(
+                tmp=lambda suffix, keep=False: str(output_path),
+                delete=lambda path: None,
+            ),
+        )
+        monkeypatch.setattr(MASTERING_MODULE, "SmartMastering", FakeMastering)
+        monkeypatch.setattr(
+            MASTERING_MODULE,
+            "_select_mastering_preset",
+            lambda signal, sample_rate: "vocal",
+        )
+        monkeypatch.setattr(
+            MASTERING_MODULE,
+            "save_verified_audio",
+            lambda **kwargs: (
+                kwargs["destination_path"],
+                kwargs["audio_signal"],
+                types.SimpleNamespace(
+                    report=types.SimpleNamespace(
+                        preset_name=kwargs["preset_name"],
+                        to_dict=lambda: {
+                            "preset_name": kwargs["preset_name"],
+                            "delivery_profile_name": "lossless",
+                        },
+                    )
+                ),
+            ),
+        )
+
+        mastered_path, report = MASTERING_MODULE.master(
+            "input.wav",
+            output_path=str(output_path),
+            stem_mastering=True,
+        )
+    finally:
+        if original_io_module is None:
+            sys.modules.pop(io_module_name, None)
+        else:
+            sys.modules[io_module_name] = original_io_module
+        if original_stems_module is None:
+            sys.modules.pop(stems_module_name, None)
+        else:
+            sys.modules[stems_module_name] = original_stems_module
+        if original_mastering_stems_module is None:
+            sys.modules.pop(mastering_stems_module_name, None)
+        else:
+            sys.modules[mastering_stems_module_name] = (
+                original_mastering_stems_module
+            )
+
+    assert mastered_path == str(output_path)
+    assert report.preset_name == "vocal"
+    assert helper_calls == [
+        {
+            "preset": "vocal",
+            "save_mastered_stems": True,
+            "mastered_stems_output_dir": str(output_path.with_suffix(""))
+            + "_stems",
+            "mastered_stems_format": "wav",
+        }
+    ]
+
+
+def test_process_stem_signal_uses_dedicated_stem_path(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    calls: list[str] = []
+    stem_roles: list[str | None] = []
+
+    class FakeMastering:
+        def __init__(self, sr, **kwargs):
+            self.sample_rate = sr
+            self.kwargs = kwargs
+
+        def process(self, y, sr):
+            calls.append("process")
+            return sr, np.array(y, copy=True) * 2.0
+
+        def process_stem(self, y, sr, stem_role=None):
+            calls.append("process_stem")
+            stem_roles.append(stem_role)
+            return sr, np.array(y, copy=True) * 0.5
+
+    monkeypatch.setattr(MASTERING_MODULE, "SmartMastering", FakeMastering)
+
+    sample_rate, processed = MASTERING_MODULE._process_stem_signal(
+        np.array([0.2, -0.2], dtype=np.float32),
+        8000,
+        {"preset": "balanced", "stem_role": "vocals"},
+    )
+
+    assert sample_rate == 8000
+    assert calls == ["process_stem"]
+    assert stem_roles == ["vocals"]
+    assert np.allclose(processed, np.array([0.1, -0.1], dtype=np.float32))

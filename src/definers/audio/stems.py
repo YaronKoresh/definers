@@ -17,19 +17,90 @@ from .utils import normalize_audio_to_peak
 _logger = init_logger()
 
 
+def _normalize_demucs_option(value: str, *, option_name: str) -> str:
+    normalized = str(value).strip()
+    if not normalized:
+        raise ValueError(f"Missing {option_name}")
+    if any(
+        not (character.isalnum() or character in {"_", "-"})
+        for character in normalized
+    ):
+        raise ValueError(f"Invalid {option_name}: {value}")
+    return normalized
+
+
+def separate_stem_layers(
+    audio_path: str,
+    *,
+    model_name: str = "htdemucs_6s",
+    shifts: int = 2,
+    two_stems: str | None = None,
+    output_dir: str | None = None,
+) -> tuple[dict[str, str], str]:
+    resolved_model_name = _normalize_demucs_option(
+        model_name,
+        option_name="DEMUCS model name",
+    )
+    resolved_two_stems = (
+        None
+        if two_stems is None
+        else _normalize_demucs_option(
+            two_stems,
+            option_name="DEMUCS two-stems value",
+        )
+    )
+    resolved_shifts = max(int(shifts), 1)
+    resolved_output_dir = output_dir or tmp(dir=True)
+    owns_output_dir = output_dir is None
+    command = (
+        f'"{sys.executable}" -m demucs.separate -n {resolved_model_name} '
+        f"--shifts={resolved_shifts}"
+    )
+    if resolved_two_stems is not None:
+        command += f" --two-stems={resolved_two_stems}"
+    command += f' -o "{resolved_output_dir}" "{audio_path}"'
+
+    try:
+        run(command)
+        separated_dir = (
+            Path(resolved_output_dir)
+            / resolved_model_name
+            / Path(audio_path).stem
+        )
+        stem_paths = {
+            stem_path.stem.lower(): str(stem_path)
+            for stem_path in sorted(separated_dir.glob("*.wav"))
+        }
+        if not stem_paths:
+            raise FileNotFoundError("Stem separation failed")
+        return stem_paths, str(resolved_output_dir)
+    except Exception:
+        if owns_output_dir:
+            delete(resolved_output_dir)
+        raise
+
+
 def separate_stems(
     audio_path: str,
     separation_type=None,
     format_choice: str = "wav",
 ):
     output_dir = tmp(dir=True)
-    run(
-        f'"{sys.executable}" -m demucs.separate -n hdemucs_mmi --shifts=2 --two-stems=vocals -o "{output_dir}" "{audio_path}"'
-    )
-    separated_dir = Path(output_dir) / "hdemucs_mmi" / Path(audio_path).stem
-    vocals_path = separated_dir / "vocals.wav"
-    accompaniment_path = separated_dir / "no_vocals.wav"
-    if not vocals_path.exists() or not accompaniment_path.exists():
+    try:
+        stem_paths, _resolved_output_dir = separate_stem_layers(
+            audio_path,
+            model_name="hdemucs_mmi",
+            shifts=2,
+            two_stems="vocals",
+            output_dir=output_dir,
+        )
+    except Exception:
+        delete(output_dir)
+        catch("Stem separation failed.")
+        return None
+    vocals_path = stem_paths.get("vocals")
+    accompaniment_path = stem_paths.get("no_vocals")
+    if vocals_path is None or accompaniment_path is None:
         delete(output_dir)
         catch("Stem separation failed.")
         return None

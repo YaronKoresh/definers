@@ -8,7 +8,6 @@ from .mastering_contract import MasteringContract
 from .mastering_dynamics import (
     apply_pre_limiter_saturation,
     apply_safety_clamp,
-    apply_soft_clip_stage,
 )
 from .mastering_loudness import MasteringLoudnessMetrics
 from .mastering_reference import measure_transient_density
@@ -139,6 +138,13 @@ def _resolve_headroom_recovery_profile(
             1.0,
         )
     )
+    loudness_deficit_db = float(
+        max(
+            integrated_gap_db
+            - float(getattr(self, "final_lufs_tolerance", 0.0)),
+            0.0,
+        )
+    )
     crest_pressure = float(np.clip((crest_factor_db - 5.0) / 4.0, 0.0, 1.0))
     transient_pressure = float(
         np.clip((transient_density - 0.08) / 0.18, 0.0, 1.0)
@@ -156,39 +162,29 @@ def _resolve_headroom_recovery_profile(
         )
     )
 
-    if clip_pressure < 0.18:
+    if loudness_deficit_db <= 0.05:
+        mode = "disabled"
+    elif clip_pressure < 0.18:
         mode = "makeup_only"
     elif transient_pressure >= 0.45 or crest_pressure >= 0.55:
-        mode = "transient_shave"
+        mode = "guarded"
     else:
-        mode = "adaptive_close"
+        mode = "guarded"
 
-    if mode == "makeup_only":
-        max_step_db = min(1.6 + loudness_need * 0.5, 2.0)
-    elif mode == "transient_shave":
-        max_step_db = min(
-            3.0, 1.8 + loudness_need * 0.8 + transient_pressure * 0.8
-        )
+    if mode == "disabled":
+        max_step_db = 0.0
+    elif mode == "makeup_only":
+        max_step_db = min(1.35, 0.75 + loudness_need * 0.6 + crest_safety * 0.2)
     else:
-        max_step_db = min(2.6, 1.6 + loudness_need * 0.9 + clip_pressure * 0.75)
-
-    soft_clip_base = float(
-        np.clip(
-            0.1 + clip_pressure * 0.22 + max(loudness_need - 0.4, 0.0) * 0.08,
-            0.08,
-            0.5,
-        )
-    )
-    if mode == "makeup_only":
-        soft_clip_base = min(soft_clip_base, 0.16)
+        max_step_db = min(1.0, 0.45 + loudness_need * 0.4 + crest_safety * 0.15)
 
     return {
         "mode": mode,
         "integrated_gap_db": float(integrated_gap_db),
+        "loudness_deficit_db": loudness_deficit_db,
         "transient_density": transient_density,
         "clip_pressure": clip_pressure,
         "max_step_db": float(max_step_db),
-        "soft_clip_base": soft_clip_base,
     }
 
 
@@ -196,13 +192,29 @@ def compute_dynamic_drive(self, current_lufs: float) -> float:
     if not np.isfinite(current_lufs):
         current_lufs = self.target_lufs - self.drive_db
 
+    profile = getattr(self, "spectral_balance_profile", None)
+    rescue_factor = float(
+        np.clip(getattr(profile, "rescue_factor", 0.0), 0.0, 1.0)
+    )
+    restoration_factor = float(
+        np.clip(getattr(profile, "restoration_factor", 0.0), 0.0, 1.0)
+    )
+    body_restoration_factor = float(
+        np.clip(
+            getattr(profile, "body_restoration_factor", 0.0),
+            0.0,
+            1.0,
+        )
+    )
+
     return float(
         np.clip(
             self.target_lufs
             - current_lufs
             + self.drive_db
-            + self.spectral_balance_profile.rescue_factor
-            * self.spectral_drive_bias_db,
+            + rescue_factor * self.spectral_drive_bias_db
+            + restoration_factor * 0.9
+            + body_restoration_factor * 0.35,
             -12.0,
             18.0,
         )
@@ -210,14 +222,30 @@ def compute_dynamic_drive(self, current_lufs: float) -> float:
 
 
 def compute_primary_soft_clip_ratio(self, dynamic_drive_db: float) -> float:
+    profile = getattr(self, "spectral_balance_profile", None)
+    rescue_factor = float(
+        np.clip(getattr(profile, "rescue_factor", 0.0), 0.0, 1.0)
+    )
+    restoration_factor = float(
+        np.clip(getattr(profile, "restoration_factor", 0.0), 0.0, 1.0)
+    )
+    body_restoration_factor = float(
+        np.clip(
+            getattr(profile, "body_restoration_factor", 0.0),
+            0.0,
+            1.0,
+        )
+    )
     drive_soft_clip_push = max(float(dynamic_drive_db), 0.0) * 0.006
     return float(
         np.clip(
             self.limiter_soft_clip_ratio
-            + self.spectral_balance_profile.rescue_factor * 0.08
-            + drive_soft_clip_push,
+            + rescue_factor * 0.04
+            + restoration_factor * 0.03
+            + body_restoration_factor * 0.02
+            + max(float(dynamic_drive_db), 0.0) * 0.004,
             0.0,
-            0.7,
+            0.45,
         )
     )
 
@@ -319,12 +347,12 @@ def plan_follow_up_action(
 
     clipping_push = 0.0
     if gain_db > 0.0 and integrated_gap_db > gain_db:
-        clipping_push += min(0.12, (integrated_gap_db - gain_db) * 0.03)
+        clipping_push += min(0.06, (integrated_gap_db - gain_db) * 0.02)
     if gain_db > 0.0 and crest_over_db > 0.0:
-        clipping_push += min(0.08, crest_over_db * 0.02)
+        clipping_push += min(0.04, crest_over_db * 0.01)
     if crest_under_db > 0.0:
         clipping_push = max(
-            clipping_push - min(0.08, crest_under_db * 0.025), 0.0
+            clipping_push - min(0.05, crest_under_db * 0.02), 0.0
         )
 
     stereo_width_scale = 1.0
@@ -479,160 +507,58 @@ def apply_final_headroom_recovery(
     initial_available_headroom_db = float(
         max(target_dbfs - measured_true_peak_dbfs, 0.0)
     )
-    for iteration_index in range(14):
-        available_headroom_db = float(target_dbfs - output_true_peak_dbfs)
-        if available_headroom_db <= 0.01:
-            if iteration_index == 0:
-                failure_reasons.append("no_margin")
-            break
-
-        gain_step_db = float(
+    loudness_deficit_db = float(recovery_profile["loudness_deficit_db"])
+    if loudness_deficit_db <= 0.05:
+        failure_reasons.append("loudness_already_within_tolerance")
+    elif initial_available_headroom_db <= 0.01:
+        failure_reasons.append("no_margin")
+    else:
+        gain_budget_db = float(
             min(
-                max(available_headroom_db, 0.0),
+                loudness_deficit_db,
+                initial_available_headroom_db,
                 float(recovery_profile["max_step_db"]),
             )
         )
-        boosted = output * float(10.0 ** (gain_step_db / 20.0))
-        boosted_true_peak_dbfs = float(
-            measure_true_peak_fn(
-                boosted,
-                sample_rate,
-                oversample_factor=self.true_peak_oversample_factor,
-            )
-        )
-        if not np.isfinite(boosted_true_peak_dbfs):
-            failure_reasons.append("invalid_post_gain_peak")
-            break
-
-        if (
-            boosted_true_peak_dbfs <= target_dbfs + 0.01
-            and _candidate_respects_contract(
-                boosted,
-                contract,
-            )
-        ):
-            output = boosted
-            output_true_peak_dbfs = boosted_true_peak_dbfs
-            continue
-
-        best_candidate = output
-        best_true_peak_dbfs = output_true_peak_dbfs
-        overshoot_db = float(boosted_true_peak_dbfs - target_dbfs)
-        softened_true_peak_dbfs = np.nan
-        if recovery_profile["mode"] != "makeup_only":
-            softened = apply_soft_clip_stage(
-                boosted,
-                ceil_db=target_dbfs,
-                soft_clip_ratio=float(
-                    np.clip(
-                        float(recovery_profile["soft_clip_base"])
-                        + max(overshoot_db, 0.0) * 0.24
-                        + iteration_index * 0.025,
-                        0.08,
-                        0.55,
+        if gain_budget_db <= 0.01:
+            failure_reasons.append("no_recovery_budget")
+        else:
+            best_candidate = output
+            best_true_peak_dbfs = output_true_peak_dbfs
+            search_low_db = 0.0
+            search_high_db = gain_budget_db
+            for _ in range(10):
+                if search_high_db - search_low_db <= 0.002:
+                    break
+                trial_gain_db = 0.5 * (search_low_db + search_high_db)
+                trial = output * float(10.0 ** (trial_gain_db / 20.0))
+                trial_true_peak_dbfs = float(
+                    measure_true_peak_fn(
+                        trial,
+                        sample_rate,
+                        oversample_factor=self.true_peak_oversample_factor,
                     )
-                ),
-            )
-            if (
-                float(getattr(self, "pre_limiter_saturation_ratio", 0.0)) > 0.0
-                and recovery_profile["mode"] == "transient_shave"
-            ):
-                softened = apply_pre_limiter_saturation(
-                    self,
-                    softened,
-                    dynamic_drive_db=gain_step_db
-                    * (0.6 + float(recovery_profile["clip_pressure"]) * 0.6),
                 )
-            softened = apply_safety_clamp(softened, ceil_db=target_dbfs)
-            softened_true_peak_dbfs = float(
-                measure_true_peak_fn(
-                    softened,
-                    sample_rate,
-                    oversample_factor=self.true_peak_oversample_factor,
-                )
-            )
-            if (
-                np.isfinite(softened_true_peak_dbfs)
-                and softened_true_peak_dbfs <= target_dbfs + 0.01
-                and softened_true_peak_dbfs > best_true_peak_dbfs + 0.002
-                and _candidate_respects_contract(softened, contract)
-            ):
-                best_candidate = softened
-                best_true_peak_dbfs = softened_true_peak_dbfs
-
-        corrected_gain_db = float(
-            max(gain_step_db - max(overshoot_db, 0.0) - 0.01, 0.0)
-        )
-        if corrected_gain_db > 0.01:
-            corrected = output * float(10.0 ** (corrected_gain_db / 20.0))
-            corrected_true_peak_dbfs = float(
-                measure_true_peak_fn(
-                    corrected,
-                    sample_rate,
-                    oversample_factor=self.true_peak_oversample_factor,
-                )
-            )
-            if (
-                np.isfinite(corrected_true_peak_dbfs)
-                and corrected_true_peak_dbfs <= target_dbfs + 0.01
-                and corrected_true_peak_dbfs > best_true_peak_dbfs + 0.002
-                and _candidate_respects_contract(corrected, contract)
-            ):
-                best_candidate = corrected
-                best_true_peak_dbfs = corrected_true_peak_dbfs
-
-        search_low_db = 0.0
-        search_high_db = gain_step_db
-        for _ in range(6):
-            if search_high_db - search_low_db <= 0.005:
-                break
-            trial_gain_db = 0.5 * (search_low_db + search_high_db)
-            trial = output * float(10.0 ** (trial_gain_db / 20.0))
-            trial_true_peak_dbfs = float(
-                measure_true_peak_fn(
-                    trial,
-                    sample_rate,
-                    oversample_factor=self.true_peak_oversample_factor,
-                )
-            )
-            if not np.isfinite(trial_true_peak_dbfs):
-                search_high_db = trial_gain_db
-                continue
-            if (
-                trial_true_peak_dbfs <= target_dbfs + 0.01
-                and _candidate_respects_contract(
-                    trial,
-                    contract,
-                )
-            ):
-                if trial_true_peak_dbfs > best_true_peak_dbfs + 0.001:
+                if not np.isfinite(trial_true_peak_dbfs):
+                    search_high_db = trial_gain_db
+                    continue
+                if (
+                    trial_true_peak_dbfs <= target_dbfs + 0.01
+                    and _candidate_respects_contract(trial, contract)
+                ):
                     best_candidate = trial
                     best_true_peak_dbfs = trial_true_peak_dbfs
-                search_low_db = trial_gain_db
+                    search_low_db = trial_gain_db
+                else:
+                    search_high_db = trial_gain_db
+
+            if best_true_peak_dbfs > output_true_peak_dbfs + 0.001:
+                output = best_candidate
+                output_true_peak_dbfs = best_true_peak_dbfs
             else:
-                search_high_db = trial_gain_db
-
-        if best_true_peak_dbfs > output_true_peak_dbfs + 0.001:
-            output = best_candidate
-            output_true_peak_dbfs = best_true_peak_dbfs
-            continue
-
-        if (
-            np.isfinite(softened_true_peak_dbfs)
-            and softened_true_peak_dbfs > target_dbfs + 0.01
-        ):
-            failure_reasons.append("overshoot_after_boost")
-        else:
-            failure_reasons.append(
-                "makeup_only_stalled"
-                if recovery_profile["mode"] == "makeup_only"
-                else "close_pass_stalled"
-            )
-        break
+                failure_reasons.append("linear_recovery_stalled")
 
     remaining_margin_db = float(max(target_dbfs - output_true_peak_dbfs, 0.0))
-    if remaining_margin_db > 0.03:
-        failure_reasons.append("unused_headroom_remains")
 
     self.last_headroom_recovery_gain_db = float(
         max(output_true_peak_dbfs - measured_true_peak_dbfs, 0.0)

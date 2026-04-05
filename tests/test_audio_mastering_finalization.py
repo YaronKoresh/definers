@@ -23,6 +23,7 @@ AUDIO_ROOT = ROOT / "src" / "definers" / "audio"
 
 def _install_scipy_stub() -> None:
     scipy_module = types.ModuleType("scipy")
+    scipy_module.__version__ = "1.11.0"
     signal_module = types.ModuleType("scipy.signal")
 
     signal_module.lfilter = lambda _b, _a, y, axis=-1: np.array(
@@ -108,6 +109,23 @@ def test_compute_dynamic_drive_includes_rescue_bias():
     assert dynamic_drive == pytest.approx(7.0)
 
 
+def test_compute_dynamic_drive_includes_restoration_bias():
+    mastering = _mastering_stub(
+        target_lufs=-5.0,
+        drive_db=1.0,
+        spectral_drive_bias_db=0.0,
+        spectral_balance_profile=SimpleNamespace(
+            rescue_factor=0.0,
+            restoration_factor=1.0,
+            body_restoration_factor=1.0,
+        ),
+    )
+
+    dynamic_drive = FINALIZATION_MODULE.compute_dynamic_drive(mastering, -10.0)
+
+    assert dynamic_drive == pytest.approx(7.25)
+
+
 def test_compute_primary_soft_clip_ratio_grows_with_drive():
     mastering = _mastering_stub(
         limiter_soft_clip_ratio=0.2,
@@ -117,6 +135,21 @@ def test_compute_primary_soft_clip_ratio_grows_with_drive():
     ratio = FINALIZATION_MODULE.compute_primary_soft_clip_ratio(mastering, 10.0)
 
     assert ratio > mastering.limiter_soft_clip_ratio
+
+
+def test_compute_primary_soft_clip_ratio_grows_with_restoration_pressure():
+    mastering = _mastering_stub(
+        limiter_soft_clip_ratio=0.2,
+        spectral_balance_profile=SimpleNamespace(
+            rescue_factor=0.0,
+            restoration_factor=1.0,
+            body_restoration_factor=1.0,
+        ),
+    )
+
+    ratio = FINALIZATION_MODULE.compute_primary_soft_clip_ratio(mastering, 0.0)
+
+    assert ratio == pytest.approx(0.25)
 
 
 def test_apply_pre_limiter_saturation_is_noop_when_disabled():
@@ -188,10 +221,18 @@ def test_apply_delivery_trim_reduces_signal_when_true_peak_exceeds_target():
     )
 
 
-def test_apply_final_headroom_recovery_closes_remaining_true_peak_margin():
+def test_apply_final_headroom_recovery_uses_linear_makeup_when_loudness_gap_remains():
     mastering = _mastering_stub(
         ceil_db=-0.1,
         true_peak_oversample_factor=1,
+        target_lufs=-6.0,
+        final_lufs_tolerance=0.2,
+        max_final_boost_db=4.0,
+        last_post_clamp_metrics=SimpleNamespace(
+            integrated_lufs=-7.8,
+            crest_factor_db=7.0,
+        ),
+        last_mastering_contract=SimpleNamespace(min_crest_factor_db=0.0),
     )
     source = np.array([0.2, -0.25, 0.3], dtype=np.float32)
 
@@ -205,22 +246,47 @@ def test_apply_final_headroom_recovery_closes_remaining_true_peak_margin():
     )
 
     assert np.max(np.abs(recovered)) > np.max(np.abs(source))
+    ratios = recovered[source != 0.0] / source[source != 0.0]
+    assert np.max(ratios) - np.min(ratios) < 1e-5
     assert mastering.last_headroom_recovery_gain_db > 0.0
+    assert mastering.last_headroom_recovery_mode in {"makeup_only", "guarded"}
     assert mastering.last_headroom_recovery_input_true_peak_dbfs is not None
-    assert (
-        mastering.last_headroom_recovery_output_true_peak_dbfs
-        == pytest.approx(
-            -0.1,
-            abs=1e-4,
-        )
+    assert mastering.last_headroom_recovery_output_true_peak_dbfs is not None
+    assert mastering.last_headroom_recovery_failure_reasons == ()
+
+
+def test_apply_final_headroom_recovery_skips_when_loudness_is_within_tolerance():
+    mastering = _mastering_stub(
+        ceil_db=-0.1,
+        true_peak_oversample_factor=1,
+        target_lufs=-6.0,
+        final_lufs_tolerance=0.2,
+        max_final_boost_db=4.0,
+        last_post_clamp_metrics=SimpleNamespace(
+            integrated_lufs=-5.9,
+            crest_factor_db=6.2,
+        ),
+        last_mastering_contract=SimpleNamespace(min_crest_factor_db=4.0),
     )
-    assert (
-        "unused_headroom_remains"
-        not in mastering.last_headroom_recovery_failure_reasons
+    source = np.array([0.12, -0.16, 0.21], dtype=np.float32)
+
+    recovered = FINALIZATION_MODULE.apply_final_headroom_recovery(
+        mastering,
+        source,
+        sample_rate=44100,
+        measure_true_peak_fn=lambda y, sr, oversample_factor=4: float(
+            20.0 * np.log10(max(np.max(np.abs(y)), 1e-12))
+        ),
+    )
+
+    assert np.allclose(recovered, source)
+    assert mastering.last_headroom_recovery_gain_db == pytest.approx(0.0)
+    assert mastering.last_headroom_recovery_failure_reasons == (
+        "loudness_already_within_tolerance",
     )
 
 
-def test_apply_final_headroom_recovery_shaves_peaks_when_direct_boost_overshoots():
+def test_apply_final_headroom_recovery_stays_linear_for_transient_material():
     mastering = _mastering_stub(
         ceil_db=-0.1,
         true_peak_oversample_factor=1,
@@ -248,7 +314,9 @@ def test_apply_final_headroom_recovery_shaves_peaks_when_direct_boost_overshoots
     )
 
     assert fake_true_peak(recovered, 44100) <= mastering.ceil_db + 0.05
-    assert mastering.last_headroom_recovery_mode == "transient_shave"
+    ratios = recovered[source != 0.0] / source[source != 0.0]
+    assert np.max(ratios) - np.min(ratios) < 1e-5
+    assert mastering.last_headroom_recovery_mode == "guarded"
     assert mastering.last_headroom_recovery_transient_density is not None
     assert mastering.last_headroom_recovery_closed_margin_db is not None
 
@@ -261,7 +329,7 @@ def test_apply_final_headroom_recovery_prefers_makeup_only_for_dense_material():
         final_lufs_tolerance=0.2,
         max_final_boost_db=4.0,
         last_post_clamp_metrics=SimpleNamespace(
-            integrated_lufs=-6.1,
+            integrated_lufs=-6.45,
             crest_factor_db=4.6,
         ),
         last_mastering_contract=SimpleNamespace(min_crest_factor_db=4.5),

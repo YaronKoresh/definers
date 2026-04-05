@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -19,6 +20,66 @@ from .mastering_loudness import (
     measure_mastering_loudness,
 )
 from .mastering_reference import measure_stereo_motion
+
+
+def _measure_metric_batch(
+    jobs: dict[str, tuple[np.ndarray, int]],
+    *,
+    true_peak_oversample_factor: int,
+    low_end_mono_cutoff_hz: float,
+    signal_module: Any,
+) -> dict[str, MasteringLoudnessMetrics]:
+    if not jobs:
+        return {}
+
+    results_by_key: dict[tuple[int, int], MasteringLoudnessMetrics] = {}
+    aliases: dict[str, tuple[int, int]] = {}
+    unique_jobs: list[tuple[tuple[int, int], np.ndarray, int]] = []
+    max_length = 0
+
+    for name, (signal_value, sample_rate_value) in jobs.items():
+        array = np.asarray(signal_value)
+        key = (id(signal_value), int(sample_rate_value))
+        aliases[name] = key
+        if key in results_by_key or any(existing_key == key for existing_key, *_ in unique_jobs):
+            continue
+        max_length = max(
+            max_length,
+            int(array.shape[-1]) if array.ndim > 0 else 0,
+        )
+        unique_jobs.append((key, signal_value, int(sample_rate_value)))
+
+    use_parallel = len(unique_jobs) > 2 and max_length >= 32768
+    if use_parallel:
+        worker_count = min(len(unique_jobs), 4)
+        with ThreadPoolExecutor(max_workers=worker_count) as executor:
+            future_map = {
+                executor.submit(
+                    measure_mastering_loudness,
+                    signal_value,
+                    sample_rate_value,
+                    true_peak_oversample_factor=true_peak_oversample_factor,
+                    low_end_mono_cutoff_hz=low_end_mono_cutoff_hz,
+                    signal_module=signal_module,
+                ): key
+                for key, signal_value, sample_rate_value in unique_jobs
+            }
+            for future, key in future_map.items():
+                results_by_key[key] = future.result()
+    else:
+        for key, signal_value, sample_rate_value in unique_jobs:
+            results_by_key[key] = measure_mastering_loudness(
+                signal_value,
+                sample_rate_value,
+                true_peak_oversample_factor=true_peak_oversample_factor,
+                low_end_mono_cutoff_hz=low_end_mono_cutoff_hz,
+                signal_module=signal_module,
+            )
+
+    return {
+        name: results_by_key[key]
+        for name, key in aliases.items()
+    }
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,52 +186,49 @@ def generate_mastering_report(
         160.0 if contract is None else contract.low_end_mono_cutoff_hz
     )
 
-    def measure_optional_metrics(
-        y: np.ndarray | None, sr_value: int
-    ) -> MasteringLoudnessMetrics | None:
-        if y is None:
-            return None
-        return measure_mastering_loudness(
-            y,
-            sr_value,
-            true_peak_oversample_factor=true_peak_oversample_factor,
-            low_end_mono_cutoff_hz=low_end_mono_cutoff_hz,
-            signal_module=signal_module,
+    metric_jobs: dict[str, tuple[np.ndarray, int]] = {
+        "input": (input_signal, sample_rate),
+        "output": (output_signal, sample_rate),
+    }
+    if post_eq_signal is not None:
+        metric_jobs["post_eq"] = (post_eq_signal, sample_rate)
+    if post_spatial_signal is not None:
+        metric_jobs["post_spatial"] = (post_spatial_signal, sample_rate)
+    if post_limiter_signal is not None:
+        metric_jobs["post_limiter"] = (post_limiter_signal, sample_rate)
+    if post_character_signal is not None:
+        metric_jobs["post_character"] = (post_character_signal, sample_rate)
+    if post_peak_catch_signal is not None:
+        metric_jobs["post_peak_catch"] = (post_peak_catch_signal, sample_rate)
+    if post_delivery_trim_signal is not None:
+        metric_jobs["post_delivery_trim"] = (
+            post_delivery_trim_signal,
+            sample_rate,
+        )
+    if post_clamp_signal is not None:
+        metric_jobs["post_clamp"] = (post_clamp_signal, sample_rate)
+    if decoded_signal is not None:
+        metric_jobs["decoded"] = (
+            decoded_signal,
+            sample_rate if decoded_sample_rate is None else decoded_sample_rate,
         )
 
-    input_metrics = measure_mastering_loudness(
-        input_signal,
-        sample_rate,
+    measured_metrics = _measure_metric_batch(
+        metric_jobs,
         true_peak_oversample_factor=true_peak_oversample_factor,
         low_end_mono_cutoff_hz=low_end_mono_cutoff_hz,
         signal_module=signal_module,
     )
-    output_metrics = measure_mastering_loudness(
-        output_signal,
-        sample_rate,
-        true_peak_oversample_factor=true_peak_oversample_factor,
-        low_end_mono_cutoff_hz=low_end_mono_cutoff_hz,
-        signal_module=signal_module,
-    )
-    post_eq_metrics = measure_optional_metrics(post_eq_signal, sample_rate)
-    post_spatial_metrics = measure_optional_metrics(
-        post_spatial_signal, sample_rate
-    )
-    post_limiter_metrics = measure_optional_metrics(
-        post_limiter_signal, sample_rate
-    )
-    post_character_metrics = measure_optional_metrics(
-        post_character_signal, sample_rate
-    )
-    post_peak_catch_metrics = measure_optional_metrics(
-        post_peak_catch_signal, sample_rate
-    )
-    post_delivery_trim_metrics = measure_optional_metrics(
-        post_delivery_trim_signal, sample_rate
-    )
-    post_clamp_metrics = measure_optional_metrics(
-        post_clamp_signal, sample_rate
-    )
+
+    input_metrics = measured_metrics["input"]
+    output_metrics = measured_metrics["output"]
+    post_eq_metrics = measured_metrics.get("post_eq")
+    post_spatial_metrics = measured_metrics.get("post_spatial")
+    post_limiter_metrics = measured_metrics.get("post_limiter")
+    post_character_metrics = measured_metrics.get("post_character")
+    post_peak_catch_metrics = measured_metrics.get("post_peak_catch")
+    post_delivery_trim_metrics = measured_metrics.get("post_delivery_trim")
+    post_clamp_metrics = measured_metrics.get("post_clamp")
     final_in_memory_metrics = output_metrics
     post_spatial_stereo_motion = (
         None
@@ -178,10 +236,7 @@ def generate_mastering_report(
         else measure_stereo_motion(post_spatial_signal, sample_rate)
     )
     output_stereo_motion = measure_stereo_motion(output_signal, sample_rate)
-    decoded_metrics = measure_optional_metrics(
-        decoded_signal,
-        sample_rate if decoded_sample_rate is None else decoded_sample_rate,
-    )
+    decoded_metrics = measured_metrics.get("decoded")
 
     target_lufs_error_db = (
         None

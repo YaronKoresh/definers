@@ -212,6 +212,56 @@ def test_analyze_exciter_reduces_mix_for_bright_transient_rich_material(
     assert bright.transient_ducking_depth > dark.transient_ducking_depth
 
 
+def test_analyze_exciter_raises_mix_floor_for_closed_top_end_material(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    exciter = _load_exciter_module("_test_exciter_closed_top_mix_floor")
+
+    monkeypatch.setattr(
+        exciter, "calculate_dynamic_cutoff", lambda *_args, **_kwargs: 1650.0
+    )
+    monkeypatch.setattr(
+        exciter,
+        "butter",
+        lambda *args, **kwargs: np.array([1.0], dtype=np.float32),
+    )
+    monkeypatch.setattr(
+        exciter, "sosfiltfilt", lambda _sos, values, axis=-1: values
+    )
+    monkeypatch.setattr(
+        exciter, "_apply_adaptive_gate", lambda values, *_args: values
+    )
+    monkeypatch.setattr(exciter, "get_rms", lambda _values: 0.08)
+    monkeypatch.setattr(
+        exciter,
+        "_spectral_summary",
+        lambda *_args, **_kwargs: (
+            np.linspace(200.0, 14000.0, 64, dtype=np.float32),
+            np.geomspace(1.0, 1e-4, 64, dtype=np.float32),
+            0.02,
+            0.015,
+        ),
+    )
+    monkeypatch.setattr(
+        exciter,
+        "_calculate_spectral_features",
+        lambda *_args, **_kwargs: (3200.0, 900.0, 1200.0),
+    )
+    monkeypatch.setattr(
+        exciter,
+        "_measure_transient_density",
+        lambda *_args, **_kwargs: 0.02,
+    )
+
+    signal = np.zeros(512, dtype=np.float32)
+    signal[256] = 1.0
+    analysis = exciter.analyze_exciter(signal, 44100, mix=1.0)
+
+    assert analysis.closed_top_end_factor > 0.0
+    assert analysis.spectral_rolloff_hz == pytest.approx(3200.0)
+    assert analysis.adaptive_mix > 0.45
+
+
 def test_build_transient_ducking_curve_reduces_wet_gain_around_impulse():
     exciter = _load_exciter_module("_test_exciter_ducking")
     signal = np.zeros(256, dtype=np.float32)

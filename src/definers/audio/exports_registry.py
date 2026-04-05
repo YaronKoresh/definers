@@ -66,6 +66,14 @@ AUDIO_EXPORTS = {
         "SmartMastering",
         "audio_eq",
         "master",
+        "master_stems",
+    ),
+    **_module_exports(
+        "mastering_stems",
+        "StemMasteringPlan",
+        "mix_stem_layers",
+        "process_stem_layers",
+        "resolve_stem_mastering_plan",
     ),
     **_module_exports(
         "mastering_contract",
@@ -151,6 +159,7 @@ AUDIO_EXPORTS = {
     **_module_exports(
         "stems",
         "identify_instruments",
+        "separate_stem_layers",
         "separate_stems",
         "stem_mixer",
     ),

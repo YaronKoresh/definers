@@ -8,7 +8,6 @@ import numpy as np
 
 from .mastering_contract import MasteringContract
 from .mastering_metrics import MasteringReport, generate_mastering_report
-from .utils import apply_lufs
 
 _LOSSY_EXTENSIONS = {"aac", "m4a", "mp3", "ogg", "opus", "wma"}
 
@@ -271,6 +270,39 @@ def verify_delivery_export(
     )
 
 
+def _apply_linear_export_ceiling(
+    signal: np.ndarray,
+    ceil_db: float | None,
+) -> np.ndarray:
+    working_signal = np.nan_to_num(
+        np.asarray(signal, dtype=np.float32),
+        nan=0.0,
+        posinf=0.0,
+        neginf=0.0,
+    )
+    if ceil_db is None or not np.isfinite(ceil_db):
+        return working_signal
+
+    limit_linear = float(10.0 ** (float(ceil_db) / 20.0))
+    peak = float(np.max(np.abs(working_signal)))
+    return working_signal * (limit_linear / peak)
+
+
+def _decoded_peak_excess_db(
+    verification_result: DeliveryVerificationResult,
+) -> float | None:
+    decoded_metrics = getattr(verification_result.report, "decoded_metrics", None)
+    decoded_limit_dbfs = verification_result.profile.decoded_true_peak_dbfs
+    if decoded_metrics is None or decoded_limit_dbfs is None:
+        return None
+
+    decoded_true_peak_dbfs = getattr(decoded_metrics, "true_peak_dbfs", None)
+    if decoded_true_peak_dbfs is None or not np.isfinite(decoded_true_peak_dbfs):
+        return None
+
+    return float(decoded_true_peak_dbfs - float(decoded_limit_dbfs))
+
+
 def save_verified_audio(
     destination_path: str,
     audio_signal: np.ndarray,
@@ -332,66 +364,73 @@ def save_verified_audio(
         posinf=0.0,
         neginf=0.0,
     )
+    working_signal = _apply_linear_export_ceiling(working_signal, ceil_db)
     final_path = destination_path
     verification_result: DeliveryVerificationResult | None = None
 
-    working_signal = apply_lufs(working_signal, sample_rate, target_lufs)
+    max_attempts = 3 if profile.is_lossy else 1
+    for _attempt_index in range(max_attempts):
+        final_path = save_audio_fn(
+            destination_path=destination_path,
+            audio_signal=working_signal,
+            sample_rate=sample_rate,
+            bit_depth=bit_depth,
+            bitrate=profile.bitrate,
+            compression_level=compression_level,
+        )
 
-    hard_limit_linear = 10 ** (ceil_db / 20.0)
-    working_signal = np.tanh(working_signal / hard_limit_linear) * hard_limit_linear
+        verification_result = verify_delivery_export(
+            input_signal,
+            working_signal,
+            sample_rate,
+            post_eq_signal=post_eq_signal,
+            post_spatial_signal=post_spatial_signal,
+            post_limiter_signal=post_limiter_signal,
+            post_character_signal=post_character_signal,
+            post_peak_catch_signal=post_peak_catch_signal,
+            post_delivery_trim_signal=post_delivery_trim_signal,
+            post_clamp_signal=post_clamp_signal,
+            output_path=final_path,
+            profile=profile,
+            read_audio_fn=read_audio_fn,
+            target_lufs=target_lufs,
+            ceil_db=ceil_db,
+            preset_name=preset_name,
+            contract=contract,
+            character_stage_decision=character_stage_decision,
+            peak_catch_events=peak_catch_events,
+            resolved_true_peak_target_dbfs=resolved_true_peak_target_dbfs,
+            stereo_motion_activity=stereo_motion_activity,
+            stereo_motion_correlation_guard=stereo_motion_correlation_guard,
+            delivery_trim_attenuation_db=delivery_trim_attenuation_db,
+            delivery_trim_input_true_peak_dbfs=delivery_trim_input_true_peak_dbfs,
+            delivery_trim_target_dbfs=delivery_trim_target_dbfs,
+            delivery_trim_output_true_peak_dbfs=delivery_trim_output_true_peak_dbfs,
+            post_clamp_true_peak_dbfs=post_clamp_true_peak_dbfs,
+            post_clamp_true_peak_delta_db=post_clamp_true_peak_delta_db,
+            headroom_recovery_gain_db=headroom_recovery_gain_db,
+            headroom_recovery_input_true_peak_dbfs=headroom_recovery_input_true_peak_dbfs,
+            headroom_recovery_output_true_peak_dbfs=headroom_recovery_output_true_peak_dbfs,
+            headroom_recovery_failure_reasons=headroom_recovery_failure_reasons,
+            headroom_recovery_mode=headroom_recovery_mode,
+            headroom_recovery_integrated_gap_db=headroom_recovery_integrated_gap_db,
+            headroom_recovery_transient_density=headroom_recovery_transient_density,
+            headroom_recovery_closed_margin_db=headroom_recovery_closed_margin_db,
+            headroom_recovery_unused_margin_db=headroom_recovery_unused_margin_db,
+            true_peak_oversample_factor=true_peak_oversample_factor,
+        )
 
-    peak = np.max(np.abs(working_signal))
-    working_signal *= hard_limit_linear / peak
+        decoded_peak_excess_db = _decoded_peak_excess_db(verification_result)
+        if decoded_peak_excess_db is None or decoded_peak_excess_db <= 1e-6:
+            break
 
-    final_path = save_audio_fn(
-        destination_path=destination_path,
-        audio_signal=working_signal,
-        sample_rate=sample_rate,
-        bit_depth=bit_depth,
-        bitrate=profile.bitrate,
-        compression_level=compression_level,
-    )
-
-    verification_result = verify_delivery_export(
-        input_signal,
-        working_signal,
-        sample_rate,
-        post_eq_signal=post_eq_signal,
-        post_spatial_signal=post_spatial_signal,
-        post_limiter_signal=post_limiter_signal,
-        post_character_signal=post_character_signal,
-        post_peak_catch_signal=post_peak_catch_signal,
-        post_delivery_trim_signal=post_delivery_trim_signal,
-        post_clamp_signal=post_clamp_signal,
-        output_path=final_path,
-        profile=profile,
-        read_audio_fn=read_audio_fn,
-        target_lufs=target_lufs,
-        ceil_db=ceil_db,
-        preset_name=preset_name,
-        contract=contract,
-        character_stage_decision=character_stage_decision,
-        peak_catch_events=peak_catch_events,
-        resolved_true_peak_target_dbfs=resolved_true_peak_target_dbfs,
-        stereo_motion_activity=stereo_motion_activity,
-        stereo_motion_correlation_guard=stereo_motion_correlation_guard,
-        delivery_trim_attenuation_db=delivery_trim_attenuation_db,
-        delivery_trim_input_true_peak_dbfs=delivery_trim_input_true_peak_dbfs,
-        delivery_trim_target_dbfs=delivery_trim_target_dbfs,
-        delivery_trim_output_true_peak_dbfs=delivery_trim_output_true_peak_dbfs,
-        post_clamp_true_peak_dbfs=post_clamp_true_peak_dbfs,
-        post_clamp_true_peak_delta_db=post_clamp_true_peak_delta_db,
-        headroom_recovery_gain_db=headroom_recovery_gain_db,
-        headroom_recovery_input_true_peak_dbfs=headroom_recovery_input_true_peak_dbfs,
-        headroom_recovery_output_true_peak_dbfs=headroom_recovery_output_true_peak_dbfs,
-        headroom_recovery_failure_reasons=headroom_recovery_failure_reasons,
-        headroom_recovery_mode=headroom_recovery_mode,
-        headroom_recovery_integrated_gap_db=headroom_recovery_integrated_gap_db,
-        headroom_recovery_transient_density=headroom_recovery_transient_density,
-        headroom_recovery_closed_margin_db=headroom_recovery_closed_margin_db,
-        headroom_recovery_unused_margin_db=headroom_recovery_unused_margin_db,
-        true_peak_oversample_factor=true_peak_oversample_factor,
-    )
+        attenuation_db = float(decoded_peak_excess_db + 0.1)
+        attenuation_linear = float(10.0 ** (-attenuation_db / 20.0))
+        attenuated_signal = working_signal * attenuation_linear
+        attenuated_signal = _apply_linear_export_ceiling(attenuated_signal, ceil_db)
+        if np.allclose(attenuated_signal, working_signal, atol=1e-8, rtol=0.0):
+            break
+        working_signal = attenuated_signal
 
     if verification_result is None:
         raise RuntimeError("Delivery verification did not run")

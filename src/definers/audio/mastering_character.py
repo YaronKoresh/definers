@@ -143,10 +143,44 @@ def apply_micro_dynamics_finish(
         posinf=0.0,
         neginf=0.0,
     )
+    profile = getattr(self, "spectral_balance_profile", None)
+    restoration_factor = float(
+        np.clip(getattr(profile, "restoration_factor", 0.0), 0.0, 1.0)
+    )
+    body_restoration_factor = float(
+        np.clip(
+            getattr(profile, "body_restoration_factor", 0.0),
+            0.0,
+            1.0,
+        )
+    )
     strength = float(
-        np.clip(getattr(self, "micro_dynamics_strength", 0.0), 0.0, 1.0)
+        np.clip(
+            getattr(self, "micro_dynamics_strength", 0.0)
+            + restoration_factor * 0.05
+            + body_restoration_factor * 0.08,
+            0.0,
+            1.0,
+        )
     )
     if strength <= 0.0 or signal.size == 0 or sample_rate <= 0:
+        return signal
+
+    peak = float(np.max(np.abs(signal))) if signal.size else 0.0
+    rms = float(np.sqrt(np.mean(np.square(signal), dtype=np.float32)))
+    crest_factor_db = (
+        0.0
+        if peak <= 0.0 or rms <= 0.0
+        else float(max(20.0 * np.log10(peak / max(rms, 1e-12)), 0.0))
+    )
+    density_restraint = float(
+        max(
+            np.clip((peak - 0.72) / 0.26, 0.0, 1.0),
+            np.clip((5.5 - crest_factor_db) / 2.5, 0.0, 1.0),
+        )
+    )
+    strength *= float(np.clip(1.0 - density_restraint * 0.75, 0.15, 1.0))
+    if strength <= 0.0:
         return signal
 
     fast_window_ms = float(
@@ -177,17 +211,20 @@ def apply_micro_dynamics_finish(
         1.0,
     )
     sustain_mask = 1.0 - transient_mask * transient_bias
-    drive = 1.0 + sustain_mask * strength * 2.0
-    normalized = np.tanh(signal * drive) / np.tanh(1.0 + strength * 2.0)
-    blend = np.clip(strength * sustain_mask, 0.0, 0.6)
+    drive = 1.0 + sustain_mask * strength * 1.3
+    normalized = np.tanh(signal * drive) / np.tanh(1.0 + strength * 1.3)
+    blend = np.clip(strength * sustain_mask, 0.0, 0.35)
 
     if signal.ndim > 1:
         blend = blend[np.newaxis, :]
         transient_mask = transient_mask[np.newaxis, :]
 
     output = signal * (1.0 - blend) + normalized * blend
-    transient_preserve = np.clip(transient_mask * strength * 0.18, 0.0, 0.2)
+    transient_preserve = np.clip(transient_mask * strength * 0.24, 0.0, 0.26)
     output = output * (1.0 - transient_preserve) + signal * transient_preserve
+    output_peak = float(np.max(np.abs(output))) if output.size else 0.0
+    if peak > 0.0 and output_peak > peak:
+        output *= peak / output_peak
 
     return np.nan_to_num(output, nan=0.0, posinf=0.0, neginf=0.0)
 

@@ -27,6 +27,13 @@ def _moving_average_last_axis(
     )
 
 
+def _signal_rms(values: np.ndarray) -> float:
+    array = np.asarray(values, dtype=np.float32)
+    if array.size == 0:
+        return 0.0
+    return float(np.sqrt(np.mean(np.square(array), dtype=np.float32)))
+
+
 def _band_correlation(
     left_band: np.ndarray,
     right_band: np.ndarray,
@@ -39,6 +46,118 @@ def _band_correlation(
     )
     denominator = np.maximum(np.sqrt(left_energy * right_energy), 1e-6)
     return np.clip(cross_energy / denominator, -1.0, 1.0)
+
+
+def _repair_narrow_stereo_image(
+    self,
+    mid: np.ndarray,
+    side: np.ndarray,
+    *,
+    signal_module: Any,
+) -> np.ndarray:
+    profile = getattr(self, "spectral_balance_profile", None)
+    restoration_factor = float(
+        np.clip(getattr(profile, "restoration_factor", 0.0), 0.0, 1.0)
+    )
+    air_restoration_factor = float(
+        np.clip(
+            getattr(profile, "air_restoration_factor", 0.0),
+            0.0,
+            1.0,
+        )
+    )
+    if restoration_factor <= 0.0 or mid.shape[-1] < 64:
+        return side
+
+    mid_signal = np.asarray(mid, dtype=np.float32)
+    side_signal = np.asarray(side, dtype=np.float32)
+    mid_rms = _signal_rms(mid_signal)
+    side_rms = _signal_rms(side_signal)
+    current_width_ratio = 0.0
+    if mid_rms + side_rms > 1e-6:
+        current_width_ratio = float(
+            np.clip(side_rms / (mid_rms + side_rms), 0.0, 1.0)
+        )
+    width_deficit = float(
+        np.clip((0.14 - current_width_ratio) / 0.14, 0.0, 1.0)
+    )
+    if width_deficit <= 0.0:
+        return side_signal
+
+    nyquist = self.resampling_target / 2.0 - 1.0
+    cutoff_hz = float(
+        np.clip(
+            max(
+                getattr(self, "mono_bass_hz", 140.0) * 2.4,
+                getattr(self, "stereo_tone_variation_cutoff_hz", 1400.0)
+                * 0.9,
+                700.0,
+            ),
+            350.0,
+            max(nyquist, 351.0),
+        )
+    )
+    if cutoff_hz >= nyquist:
+        return side_signal
+
+    high_sos = signal_module.butter(
+        2,
+        cutoff_hz / (self.resampling_target / 2.0),
+        btype="high",
+        output="sos",
+    )
+    upper_band = signal_module.sosfiltfilt(high_sos, mid_signal)
+    shift_samples = max(
+        int(
+            round(
+                self.resampling_target
+                * (
+                    0.00045
+                    + 0.00115 * restoration_factor * width_deficit
+                )
+            )
+        ),
+        1,
+    )
+    delayed = np.roll(upper_band, shift_samples)
+    delayed[:shift_samples] = 0.0
+    advanced = np.roll(upper_band, -shift_samples)
+    advanced[-shift_samples:] = 0.0
+    transient = np.diff(upper_band, prepend=upper_band[:1])
+    synthesized_side = (delayed - advanced) * 0.5 + transient * (
+        0.22 + air_restoration_factor * 0.18
+    )
+
+    synthesized_rms = _signal_rms(synthesized_side)
+    upper_band_rms = _signal_rms(upper_band)
+    target_width_ratio = float(
+        np.clip(
+            current_width_ratio
+            + width_deficit
+            * (
+                0.05
+                + restoration_factor * 0.12
+                + air_restoration_factor * 0.05
+            ),
+            0.0,
+            0.22,
+        )
+    )
+    target_side_rms = upper_band_rms * target_width_ratio / max(
+        1.0 - target_width_ratio,
+        1e-6,
+    )
+    added_side_rms = max(target_side_rms - side_rms, 0.0)
+    if synthesized_rms <= 1e-6 or added_side_rms <= 1e-6:
+        return side_signal
+
+    synthesized_side = synthesized_side * (added_side_rms / synthesized_rms)
+    return np.nan_to_num(
+        side_signal + synthesized_side.astype(np.float32),
+        nan=0.0,
+        posinf=0.0,
+        neginf=0.0,
+    )
 
 
 def _apply_stereo_tonal_variation(
@@ -222,8 +341,25 @@ def apply_pre_limiter_saturation(
     *,
     dynamic_drive_db: float = 0.0,
 ) -> np.ndarray:
+    profile = getattr(self, "spectral_balance_profile", None)
+    restoration_factor = float(
+        np.clip(getattr(profile, "restoration_factor", 0.0), 0.0, 1.0)
+    )
+    body_restoration_factor = float(
+        np.clip(
+            getattr(profile, "body_restoration_factor", 0.0),
+            0.0,
+            1.0,
+        )
+    )
     saturation_ratio = float(
-        np.clip(getattr(self, "pre_limiter_saturation_ratio", 0.0), 0.0, 1.0)
+        np.clip(
+            getattr(self, "pre_limiter_saturation_ratio", 0.0)
+            + restoration_factor * 0.04
+            + body_restoration_factor * 0.03,
+            0.0,
+            0.45,
+        )
     )
     signal = np.nan_to_num(
         np.asarray(y, dtype=np.float32),
@@ -431,6 +567,13 @@ def apply_spatial_enhancement(
             output="sos",
         )
         side = signal_module.sosfiltfilt(sos, side)
+
+    side = _repair_narrow_stereo_image(
+        self,
+        mid,
+        side,
+        signal_module=signal_module,
+    )
 
     side *= width
     coef = np.sqrt(2.0 / (1.0 + width**2))

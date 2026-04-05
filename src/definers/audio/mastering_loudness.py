@@ -198,6 +198,23 @@ def _block_powers(
 
     y_square = _weighted_power_series(y, sr, signal_module=signal_module)
 
+    return _block_powers_from_series(
+        y_square,
+        sr,
+        window_seconds,
+        hop_seconds,
+    )
+
+
+def _block_powers_from_series(
+    y_square: np.ndarray,
+    sr: int,
+    window_seconds: float,
+    hop_seconds: float,
+) -> np.ndarray:
+    if y_square.size == 0 or not np.isfinite(sr) or sr <= 0:
+        return np.zeros(1, dtype=np.float64)
+
     window_size = max(int(round(sr * window_seconds)), 1)
     hop_size = max(int(round(sr * hop_seconds)), 1)
 
@@ -391,18 +408,26 @@ def measure_mastering_loudness(
             low_end_mono_ratio=1.0,
         )
 
-    momentary_powers = _block_powers(
+    weighted_power = _weighted_power_series(
         y_array,
+        sr,
+        signal_module=signal_module,
+    )
+    momentary_powers = _block_powers_from_series(
+        weighted_power,
         sr,
         _MOMENTARY_WINDOW_SECONDS,
         _HOP_SECONDS,
-        signal_module=signal_module,
     )
-    short_term_powers = _block_powers(
-        y_array,
+    short_term_powers = _block_powers_from_series(
+        weighted_power,
         sr,
         _SHORT_TERM_WINDOW_SECONDS,
         _HOP_SECONDS,
+    )
+    padded_weighted_power = _weighted_power_series(
+        _append_silence(y_array, sr, _LRA_SILENCE_PADDING_SECONDS),
+        sr,
         signal_module=signal_module,
     )
 
@@ -410,12 +435,11 @@ def measure_mastering_loudness(
     momentary_lufs = _loudness_series(momentary_powers)
     short_term_lufs = _loudness_series(short_term_powers)
     padded_short_term_lufs = _loudness_series(
-        _block_powers(
-            _append_silence(y_array, sr, _LRA_SILENCE_PADDING_SECONDS),
+        _block_powers_from_series(
+            padded_weighted_power,
             sr,
             _SHORT_TERM_WINDOW_SECONDS,
             _LRA_SHORT_TERM_HOP_SECONDS,
-            signal_module=signal_module,
         )
     )
 

@@ -14,6 +14,15 @@ class SpectralBalanceProfile:
     max_boost_db: float
     max_cut_db: float
     band_intensity: float
+    restoration_factor: float = 0.0
+    air_restoration_factor: float = 0.0
+    body_restoration_factor: float = 0.0
+    closure_repair_factor: float = 0.0
+    mud_cleanup_factor: float = 0.0
+    harshness_restraint_factor: float = 0.0
+    low_end_restraint_factor: float = 0.0
+    legacy_tonal_rebalance_factor: float = 0.0
+    closed_top_end_repair_factor: float = 0.0
 
 
 def fit_frequency(self, frequency_hz: float) -> float:
@@ -131,6 +140,15 @@ def build_spectral_balance_profile(
             max_boost_db=self.max_spectrum_boost_db,
             max_cut_db=self.max_spectrum_cut_db,
             band_intensity=float(np.clip(self.config.intensity, 0.25, 2.5)),
+            restoration_factor=0.0,
+            air_restoration_factor=0.0,
+            body_restoration_factor=0.0,
+            closure_repair_factor=0.0,
+            mud_cleanup_factor=0.0,
+            harshness_restraint_factor=0.0,
+            low_end_restraint_factor=0.0,
+            legacy_tonal_rebalance_factor=0.0,
+            closed_top_end_repair_factor=0.0,
         )
 
     safe_correction = np.nan_to_num(
@@ -149,14 +167,88 @@ def build_spectral_balance_profile(
     overall_mismatch_db = float(
         np.mean(np.abs(safe_correction), dtype=np.float32)
     )
+    positive_correction_db = np.maximum(safe_correction, 0.0)
+    negative_correction_db = np.maximum(-safe_correction, 0.0)
 
     bass_mask = safe_freqs <= self.bass_transition_hz
     treble_mask = safe_freqs >= self.treble_transition_hz
+    mud_low_hz = float(min(self.high_cut, max(self.bass_transition_hz * 1.15, 160.0)))
+    mud_high_hz = float(
+        min(
+            self.high_cut,
+            max(
+                mud_low_hz + 1.0,
+                min(self.treble_transition_hz * 0.38, 550.0),
+            ),
+        )
+    )
+    mud_mask = (safe_freqs >= mud_low_hz) & (safe_freqs <= mud_high_hz)
+    low_end_focus_low_hz = float(
+        min(
+            self.high_cut,
+            max(self.low_cut * 3.2, self.bass_transition_hz * 0.72, 75.0),
+        )
+    )
+    low_end_focus_high_hz = float(
+        min(
+            self.high_cut,
+            max(
+                low_end_focus_low_hz + 1.0,
+                min(self.bass_transition_hz * 1.9, 280.0),
+            ),
+        )
+    )
+    low_end_focus_mask = (safe_freqs >= low_end_focus_low_hz) & (
+        safe_freqs <= low_end_focus_high_hz
+    )
+    air_focus_hz = float(
+        min(
+            self.high_cut,
+            max(self.treble_transition_hz * 1.65, 6500.0),
+        )
+    )
+    presence_low_hz = float(
+        min(
+            air_focus_hz,
+            max(self.treble_transition_hz * 0.55, 1800.0),
+        )
+    )
+    presence_mask = (safe_freqs >= presence_low_hz) & (safe_freqs < air_focus_hz)
+    harsh_low_hz = float(min(self.high_cut, max(presence_low_hz * 1.08, 2600.0)))
+    harsh_high_hz = float(
+        min(
+            self.high_cut,
+            max(
+                harsh_low_hz + 1.0,
+                min(air_focus_hz * 0.9, 6200.0),
+            ),
+        )
+    )
+    harsh_mask = (safe_freqs >= harsh_low_hz) & (safe_freqs < harsh_high_hz)
+    sibilance_low_hz = float(min(self.high_cut, max(harsh_high_hz, 5600.0)))
+    sibilance_high_hz = float(
+        min(
+            self.high_cut,
+            max(sibilance_low_hz + 1.0, min(self.high_cut, 9200.0)),
+        )
+    )
+    sibilance_mask = (safe_freqs >= sibilance_low_hz) & (safe_freqs <= sibilance_high_hz)
+    air_mask = safe_freqs >= air_focus_hz
+    closed_top_low_hz = float(
+        min(
+            self.high_cut,
+            max(self.treble_transition_hz * 1.14, 4000.0),
+        )
+    )
+    closed_top_mask = safe_freqs >= closed_top_low_hz
 
     bass_deficit_db = 0.0
     if np.any(bass_mask):
         bass_deficit_db = float(
-            max(0.0, np.mean(safe_correction[bass_mask], dtype=np.float32))
+            max(
+                0.0,
+                np.mean(positive_correction_db[bass_mask], dtype=np.float32),
+            )
         )
 
     treble_deficit_db = 0.0
@@ -164,8 +256,116 @@ def build_spectral_balance_profile(
         treble_deficit_db = float(
             max(
                 0.0,
-                np.mean(safe_correction[treble_mask], dtype=np.float32),
+                np.mean(positive_correction_db[treble_mask], dtype=np.float32),
             )
+        )
+
+    air_deficit_db = 0.0
+    if np.any(air_mask):
+        air_deficit_db = float(
+            max(
+                0.0,
+                np.mean(positive_correction_db[air_mask], dtype=np.float32),
+            )
+        )
+
+    presence_deficit_db = 0.0
+    if np.any(presence_mask):
+        presence_deficit_db = float(
+            max(
+                0.0,
+                np.mean(
+                    positive_correction_db[presence_mask],
+                    dtype=np.float32,
+                ),
+            )
+        )
+
+    treble_peak_deficit_db = 0.0
+    if np.any(treble_mask):
+        treble_peak_deficit_db = float(
+            np.percentile(positive_correction_db[treble_mask], 78.0)
+        )
+
+    air_peak_deficit_db = 0.0
+    if np.any(air_mask):
+        air_peak_deficit_db = float(
+            np.percentile(positive_correction_db[air_mask], 82.0)
+        )
+
+    closed_top_deficit_db = 0.0
+    if np.any(closed_top_mask):
+        closed_top_deficit_db = float(
+            max(
+                0.0,
+                np.mean(positive_correction_db[closed_top_mask], dtype=np.float32),
+            )
+        )
+
+    closed_top_peak_deficit_db = 0.0
+    if np.any(closed_top_mask):
+        closed_top_peak_deficit_db = float(
+            np.percentile(positive_correction_db[closed_top_mask], 80.0)
+        )
+
+    presence_peak_deficit_db = 0.0
+    if np.any(presence_mask):
+        presence_peak_deficit_db = float(
+            np.percentile(positive_correction_db[presence_mask], 76.0)
+        )
+
+    mud_excess_db = 0.0
+    if np.any(mud_mask):
+        mud_excess_db = float(
+            np.mean(negative_correction_db[mud_mask], dtype=np.float32)
+        )
+
+    mud_peak_excess_db = 0.0
+    if np.any(mud_mask):
+        mud_peak_excess_db = float(
+            np.percentile(negative_correction_db[mud_mask], 76.0)
+        )
+
+    bass_excess_db = 0.0
+    if np.any(bass_mask):
+        bass_excess_db = float(
+            np.mean(negative_correction_db[bass_mask], dtype=np.float32)
+        )
+
+    bass_peak_excess_db = 0.0
+    if np.any(bass_mask):
+        bass_peak_excess_db = float(
+            np.percentile(negative_correction_db[bass_mask], 78.0)
+        )
+
+    low_end_focus_excess_db = 0.0
+    if np.any(low_end_focus_mask):
+        low_end_focus_excess_db = float(
+            np.mean(negative_correction_db[low_end_focus_mask], dtype=np.float32)
+        )
+
+    low_end_focus_peak_excess_db = 0.0
+    if np.any(low_end_focus_mask):
+        low_end_focus_peak_excess_db = float(
+            np.percentile(negative_correction_db[low_end_focus_mask], 80.0)
+        )
+
+    harsh_excess_db = 0.0
+    if np.any(harsh_mask):
+        harsh_excess_db = float(
+            np.mean(negative_correction_db[harsh_mask], dtype=np.float32)
+        )
+
+    harsh_peak_excess_db = 0.0
+    if np.any(harsh_mask):
+        harsh_peak_excess_db = float(
+            np.percentile(negative_correction_db[harsh_mask], 82.0)
+        )
+
+    sibilance_peak_excess_db = 0.0
+    if np.any(sibilance_mask):
+        sibilance_peak_excess_db = float(
+            np.percentile(negative_correction_db[sibilance_mask], 78.0)
         )
 
     club_voicing_factor = float(
@@ -174,8 +374,204 @@ def build_spectral_balance_profile(
     mismatch_factor = float(
         np.clip((overall_mismatch_db - 2.5) / 6.5, 0.0, 1.0)
     )
+    dual_end_repair_factor = float(
+        np.clip((min(bass_deficit_db, treble_deficit_db) - 2.0) / 5.5, 0.0, 1.0)
+    )
+    high_restore_pressure_db = float(
+        max(
+            presence_deficit_db * 0.9,
+            treble_deficit_db,
+            air_deficit_db,
+            presence_peak_deficit_db * 0.94,
+            treble_peak_deficit_db * 0.9,
+            air_peak_deficit_db,
+        )
+    )
+    closure_repair_factor = float(
+        np.clip(
+            (high_restore_pressure_db - 2.3) / 5.8,
+            0.0,
+            1.0,
+        )
+    )
+    air_restoration_factor = float(
+        np.clip(
+            max(
+                treble_deficit_db * 0.75,
+                air_deficit_db,
+                presence_deficit_db * 0.85,
+                treble_peak_deficit_db * 0.82,
+                air_peak_deficit_db,
+                presence_peak_deficit_db * 0.88,
+            )
+            / 8.4,
+            0.0,
+            1.0,
+        )
+    )
+    closed_top_end_repair_pressure = float(
+        np.clip(
+            (
+                max(
+                    closed_top_deficit_db * 0.9,
+                    closed_top_peak_deficit_db,
+                    high_restore_pressure_db * 0.78,
+                )
+                - 2.1
+            )
+            / 6.2,
+            0.0,
+            1.0,
+        )
+    )
+    body_restoration_factor = float(
+        np.clip((bass_deficit_db + dual_end_repair_factor * 3.0) / 10.0, 0.0, 1.0)
+    )
     rescue_factor = float(
         np.clip(max(mismatch_factor, club_voicing_factor * 0.9), 0.0, 1.0)
+    )
+    mud_cleanup_factor = float(
+        np.clip(
+            (max(mud_excess_db, mud_peak_excess_db * 0.9) - 1.15) / 4.35,
+            0.0,
+            1.0,
+        )
+    )
+    mud_cleanup_factor = float(
+        np.clip(
+            mud_cleanup_factor
+            * (
+                0.45
+                + mismatch_factor * 0.32
+                + rescue_factor * 0.16
+                + closure_repair_factor * 0.26
+                + air_restoration_factor * 0.18
+            ),
+            0.0,
+            1.0,
+        )
+    )
+    low_end_restraint_factor = float(
+        np.clip(
+            (
+                max(
+                    bass_excess_db * 0.82,
+                    bass_peak_excess_db * 0.88,
+                    low_end_focus_excess_db,
+                    low_end_focus_peak_excess_db * 0.92,
+                    mud_excess_db * 0.78,
+                )
+                - 0.95
+            )
+            / 3.8,
+            0.0,
+            1.0,
+        )
+    )
+    low_end_restraint_factor = float(
+        np.clip(
+            low_end_restraint_factor
+            * (
+                0.16
+                + closure_repair_factor * 0.58
+                + mud_cleanup_factor * 0.34
+                + air_restoration_factor * 0.12
+            ),
+            0.0,
+            1.0,
+        )
+    )
+    body_restoration_factor = float(
+        np.clip(
+            body_restoration_factor * (1.0 - low_end_restraint_factor * 0.92),
+            0.0,
+            1.0,
+        )
+    )
+    high_restore_blend_factor = float(
+        max(
+            closure_repair_factor,
+            air_restoration_factor * 0.85,
+            rescue_factor * 0.35,
+        )
+    )
+    harshness_restraint_factor = float(
+        np.clip(
+            (
+                max(
+                    harsh_excess_db,
+                    harsh_peak_excess_db * 0.95,
+                    sibilance_peak_excess_db * 0.86,
+                )
+                - 0.7
+            )
+            / 3.6,
+            0.0,
+            1.0,
+        )
+    )
+    harshness_restraint_factor = float(
+        np.clip(
+            harshness_restraint_factor
+            * (
+                0.12
+                + closure_repair_factor * 0.55
+                + air_restoration_factor * 0.35
+                + high_restore_blend_factor * 0.18
+            ),
+            0.0,
+            1.0,
+        )
+    )
+    closed_top_end_repair_factor = float(
+        np.clip(
+            closed_top_end_repair_pressure
+            * (
+                0.18
+                + closure_repair_factor * 0.58
+                + air_restoration_factor * 0.42
+                + low_end_restraint_factor * 0.16
+            )
+            * (1.0 - harshness_restraint_factor * 0.35),
+            0.0,
+            1.0,
+        )
+    )
+    restoration_factor = float(
+        np.clip(
+            max(
+                rescue_factor,
+                dual_end_repair_factor * 0.95,
+                air_restoration_factor * 0.9,
+                body_restoration_factor * 0.75,
+                closure_repair_factor * 0.92,
+                mud_cleanup_factor * 0.42,
+                harshness_restraint_factor * 0.22,
+                low_end_restraint_factor * 0.16,
+            ),
+            0.0,
+            1.0,
+        )
+    )
+    legacy_tonal_rebalance_factor = float(
+        np.clip(
+            min(
+                low_end_restraint_factor,
+                max(
+                    closure_repair_factor,
+                    air_restoration_factor * 0.92,
+                    restoration_factor * 0.74,
+                ),
+            )
+            * (
+                0.56
+                + mud_cleanup_factor * 0.22
+                + restoration_factor * 0.12
+            )
+            * (1.0 - harshness_restraint_factor * 0.45),
+            0.0,
+            1.0,
+        )
     )
 
     correction_strength = float(
@@ -184,22 +580,79 @@ def build_spectral_balance_profile(
             + rescue_factor * self.spectral_rescue_strength
             + club_voicing_factor * 0.05,
             0.25,
-            1.2,
+            1.35,
+        )
+    )
+    correction_strength = float(
+        np.clip(
+            correction_strength
+            + restoration_factor * 0.16
+            + air_restoration_factor * 0.07
+            + body_restoration_factor * 0.05,
+            0.25,
+            1.35,
+        )
+    )
+    correction_strength = float(
+        np.clip(
+            correction_strength
+            + closure_repair_factor * 0.12
+            + mud_cleanup_factor * 0.08,
+            0.25,
+            1.45,
+        )
+    )
+    correction_strength = float(
+        np.clip(
+            correction_strength + closed_top_end_repair_factor * 0.08,
+            0.25,
+            1.45,
         )
     )
     max_boost_db = float(
         self.max_spectrum_boost_db
         + rescue_factor * self.spectral_rescue_boost_db
         + club_voicing_factor * 0.5
+        + restoration_factor * 2.2
+        + air_restoration_factor * 1.4
+        + body_restoration_factor * 0.85
+        + closure_repair_factor * 1.75
+        + mud_cleanup_factor * 0.35
+        + closed_top_end_repair_factor * 0.95
     )
     max_cut_db = float(
-        self.max_spectrum_cut_db + rescue_factor * self.spectral_rescue_cut_db
+        self.max_spectrum_cut_db
+        + rescue_factor * self.spectral_rescue_cut_db
+        + restoration_factor * 0.35
+        + mud_cleanup_factor * 1.55
+        + harshness_restraint_factor * 0.9
+        + low_end_restraint_factor * 1.1
     )
     band_intensity = float(
         np.clip(
             self.config.intensity
             + rescue_factor * self.spectral_rescue_band_intensity
             + club_voicing_factor * 0.15,
+            0.25,
+            2.5,
+        )
+    )
+    band_intensity = float(
+        np.clip(
+            band_intensity
+            + restoration_factor * 0.28
+            + body_restoration_factor * 0.1
+            + closure_repair_factor * 0.1,
+            0.25,
+            2.5,
+        )
+    )
+    band_intensity = float(
+        np.clip(
+            band_intensity
+            - low_end_restraint_factor * 0.2
+            - harshness_restraint_factor * 0.05
+            - legacy_tonal_rebalance_factor * 0.38,
             0.25,
             2.5,
         )
@@ -211,6 +664,15 @@ def build_spectral_balance_profile(
         max_boost_db=max_boost_db,
         max_cut_db=max_cut_db,
         band_intensity=band_intensity,
+        restoration_factor=restoration_factor,
+        air_restoration_factor=air_restoration_factor,
+        body_restoration_factor=body_restoration_factor,
+        closure_repair_factor=closure_repair_factor,
+        mud_cleanup_factor=mud_cleanup_factor,
+        harshness_restraint_factor=harshness_restraint_factor,
+        low_end_restraint_factor=low_end_restraint_factor,
+        legacy_tonal_rebalance_factor=legacy_tonal_rebalance_factor,
+        closed_top_end_repair_factor=closed_top_end_repair_factor,
     )
 
 

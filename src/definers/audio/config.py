@@ -38,7 +38,7 @@ class SmartMasteringConfig:
 
     resampling_target: int = 44100
 
-    target_lufs: float = -6.8
+    target_lufs: float = -9.0
 
     stop_bass_boost_hz: float = 145.0
     start_treble_boost_hz: float = 3650.0
@@ -61,12 +61,12 @@ class SmartMasteringConfig:
 
     max_spectrum_boost_db: float = 6.0
     max_spectrum_cut_db: float = 6.0
-    spectral_rescue_strength: float = 0.24
+    spectral_rescue_strength: float = 1.0
     spectral_rescue_boost_db: float = 2.3
     spectral_rescue_cut_db: float = 1.0
-    spectral_rescue_band_intensity: float = 0.68
+    spectral_rescue_band_intensity: float = 1.0
     spectral_drive_bias_db: float = 1.05
-    exciter_mix: float = 0.52
+    exciter_mix: float = 1.0
     exciter_cutoff_hz: float | None = None
     exciter_max_drive: float = 3.4
     exciter_high_frequency_cutoff_hz: float | None = 6800.0
@@ -82,20 +82,24 @@ class SmartMasteringConfig:
     stereo_motion_max_side_boost: float = 0.28
 
     final_lufs_tolerance: float = 0.25
-    max_final_boost_db: float = 5.0
-    max_follow_up_passes: int = 4
-    follow_up_soft_clip_ratio_step: float = 0.05
+    max_final_boost_db: float = 3.5
+    max_follow_up_passes: int = 2
+    follow_up_soft_clip_ratio_step: float = 0.015
 
     limiter_oversample_factor: int = 8
-    limiter_soft_clip_ratio: float = 0.32
+    limiter_soft_clip_ratio: float = 0.18
     limiter_recovery_style: str = "balanced"
     true_peak_oversample_factor: int = 8
-    pre_limiter_saturation_ratio: float = 0.14
+    pre_limiter_saturation_ratio: float = 0.06
     low_end_mono_tightening: str = "balanced"
     low_end_mono_tightening_amount: float = 0.76
     codec_headroom_margin_db: float = 0.1
+    stem_noise_gate_enabled: bool = True
+    stem_noise_gate_strength: float = 1.0
+    stem_tone_enrichment_enabled: bool = True
+    stem_tone_enrichment_mix: float = 0.14
     reference_match_amount: float = 0.44
-    micro_dynamics_strength: float = 0.14
+    micro_dynamics_strength: float = 0.1
     micro_dynamics_fast_window_ms: float = 8.0
     micro_dynamics_slow_window_ms: float = 58.0
     micro_dynamics_transient_bias: float = 0.73
@@ -129,7 +133,7 @@ class SmartMasteringConfig:
             contract_max_stereo_width_ratio=0.62,
             contract_min_low_end_mono_ratio=0.86,
             contract_low_end_mono_cutoff_hz=150.0,
-            target_lufs=-4.7,
+            target_lufs=-6.0,
             bass_ratio=3.6,
             bass_attack_ms=32.0,
             bass_release_ms=135.0,
@@ -154,7 +158,7 @@ class SmartMasteringConfig:
             spectral_rescue_cut_db=1.1,
             spectral_rescue_band_intensity=0.76,
             spectral_drive_bias_db=1.45,
-            exciter_mix=0.58,
+            exciter_mix=1.0,
             exciter_max_drive=3.9,
             exciter_high_frequency_cutoff_hz=6400.0,
             stereo_width=1.33,
@@ -166,15 +170,17 @@ class SmartMasteringConfig:
             stereo_motion_high_amount=1.24,
             stereo_motion_correlation_guard=0.94,
             stereo_motion_max_side_boost=0.24,
-            max_final_boost_db=6.1,
-            limiter_soft_clip_ratio=0.42,
+            max_final_boost_db=4.8,
+            max_follow_up_passes=2,
+            follow_up_soft_clip_ratio_step=0.02,
+            limiter_soft_clip_ratio=0.28,
             limiter_recovery_style="tight",
-            pre_limiter_saturation_ratio=0.24,
+            pre_limiter_saturation_ratio=0.12,
             low_end_mono_tightening="balanced",
             low_end_mono_tightening_amount=0.92,
             codec_headroom_margin_db=0.05,
             reference_match_amount=0.36,
-            micro_dynamics_strength=0.07,
+            micro_dynamics_strength=0.05,
             micro_dynamics_fast_window_ms=7.5,
             micro_dynamics_slow_window_ms=40.0,
             micro_dynamics_transient_bias=0.7,
@@ -198,7 +204,7 @@ class SmartMasteringConfig:
             contract_max_stereo_width_ratio=0.72,
             contract_min_low_end_mono_ratio=0.82,
             contract_low_end_mono_cutoff_hz=140.0,
-            target_lufs=-8.9,
+            target_lufs=-11.0,
             bass_ratio=2.3,
             bass_attack_ms=42.0,
             bass_release_ms=175.0,
@@ -223,7 +229,7 @@ class SmartMasteringConfig:
             spectral_rescue_cut_db=0.8,
             spectral_rescue_band_intensity=0.58,
             spectral_drive_bias_db=0.65,
-            exciter_mix=0.38,
+            exciter_mix=1.0,
             exciter_max_drive=2.6,
             exciter_high_frequency_cutoff_hz=7600.0,
             stereo_width=1.42,
@@ -236,16 +242,17 @@ class SmartMasteringConfig:
             stereo_motion_correlation_guard=0.78,
             stereo_motion_max_side_boost=0.29,
             final_lufs_tolerance=0.3,
-            max_final_boost_db=3.8,
-            follow_up_soft_clip_ratio_step=0.04,
-            limiter_soft_clip_ratio=0.21,
+            max_final_boost_db=3.0,
+            max_follow_up_passes=2,
+            follow_up_soft_clip_ratio_step=0.015,
+            limiter_soft_clip_ratio=0.16,
             limiter_recovery_style="glue",
-            pre_limiter_saturation_ratio=0.08,
+            pre_limiter_saturation_ratio=0.04,
             low_end_mono_tightening="gentle",
             low_end_mono_tightening_amount=0.86,
             codec_headroom_margin_db=0.15,
             reference_match_amount=0.52,
-            micro_dynamics_strength=0.2,
+            micro_dynamics_strength=0.14,
             micro_dynamics_fast_window_ms=10.0,
             micro_dynamics_slow_window_ms=64.0,
             micro_dynamics_transient_bias=0.79,
