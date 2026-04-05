@@ -47,22 +47,22 @@ class MlHealthService:
             )
         if create_vectorizer_fn is _UNSET:
             create_vectorizer_fn = cls._import_symbol(
-                "definers.data",
+                "definers.application_data.vectorizers",
                 "create_vectorizer",
             )
         if numpy_to_cupy_fn is _UNSET:
             numpy_to_cupy_fn = cls._import_symbol(
-                "definers.data",
+                "definers.application_data.arrays",
                 "numpy_to_cupy",
             )
         if cupy_to_numpy_fn is _UNSET:
             cupy_to_numpy_fn = cls._import_symbol(
-                "definers.data",
+                "definers.application_data.arrays",
                 "cupy_to_numpy",
             )
         if reshape_numpy_fn is _UNSET:
             reshape_numpy_fn = cls._import_symbol(
-                "definers.data",
+                "definers.application_data.arrays",
                 "reshape_numpy",
             )
         if features_to_audio_fn is _UNSET:
@@ -77,7 +77,7 @@ class MlHealthService:
             )
         if features_to_video_fn is _UNSET:
             features_to_video_fn = cls._import_symbol(
-                "definers.video",
+                "definers.media.video_helpers",
                 "features_to_video",
             )
         if models is _UNSET:

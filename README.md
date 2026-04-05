@@ -33,7 +33,7 @@ Definers is built for multimodal AI systems that need to move from experimentati
 - resilient integrations and downloads
 - safer command execution and platform-aware runtime handling
 
-The project favors modular adoption. Teams can start with a narrow slice such as `definers.data`, `definers.system`, or one media domain, then expand into broader multimodal workflows when they are ready.
+The project favors modular adoption. Teams can start with a narrow slice such as `definers.application_data.preparation`, `definers.system`, or one media domain, then expand into broader multimodal workflows when they are ready.
 
 ## Why Definers
 
@@ -51,11 +51,11 @@ Definers is built around a practical view of AI infrastructure: model work, medi
 
 | Outcome | Primary Surface | Typical Work |
 | --- | --- | --- |
-| Launch multimodal apps | `definers.chat`, `definers.presentation.launchers`, CLI commands | Start chat, audio, image, video, translate, train, animation, and FAISS interfaces |
+| Launch multimodal apps | `definers.presentation.gui_entrypoints`, `definers.presentation.launchers`, CLI commands | Start chat, audio, image, video, translate, train, animation, and FAISS interfaces |
 | Process and analyze audio | `definers.audio` | Feature extraction, mastering, stem separation, transcription, DSP, preview, synthesis |
-| Transform images and video | `definers.image`, `definers.video` | Upscaling, feature extraction, reconstruction, composition, rendering |
-| Prepare datasets and train models | `definers.data`, `definers.ml` | Loading, splitting, vectorization, tokenization, training, inference, export |
-| Orchestrate resilient integrations | `definers.capabilities`, `definers.web` | Retry, circuit breakers, transfer orchestration, downloads |
+| Transform images and video | `definers.image`, `definers.media.video_helpers` | Upscaling, feature extraction, reconstruction, composition, rendering |
+| Prepare datasets and train models | `definers.application_data.preparation`, `definers.ml` | Loading, splitting, vectorization, tokenization, training, inference, export |
+| Orchestrate resilient integrations | `definers.capabilities`, `definers.media.web_transfer` | Retry, circuit breakers, transfer orchestration, downloads |
 | Run tools safely across environments | `definers.system` | Path handling, process execution, filesystem operations, runtime checks |
 
 ### Capability Coverage By Domain
@@ -109,7 +109,7 @@ sequenceDiagram
     participant CLI as CLI or Docker App
     participant Dispatch as cli_dispatch
     participant Registry as gui_registry
-    participant Chat as definers.chat.start
+    participant Chat as definers.presentation.gui_entrypoints.start
     participant App as Target App
 
     User->>CLI: definers start chat
@@ -180,7 +180,7 @@ Definers is intentionally segmented so that narrow adoption does not require the
 ### Prepare Data And Train A Model
 
 ```python
-from definers.data import prepare_data
+from definers.application_data.preparation import prepare_data
 from definers.ml import train
 
 dataset = prepare_data(
@@ -281,7 +281,7 @@ from definers.audio import master
 output_path, report = master(
     "./mix.wav",
     output_path="./mix-mastered.wav",
-    preset="edm",
+    preset="balanced",
     report_path="./mix-mastered-report.json",
 )
 
@@ -290,6 +290,10 @@ print(report.headroom_recovery_mode)
 print(report.post_spatial_stereo_motion)
 print(report.post_clamp_true_peak_dbfs)
 ```
+
+Available mastering presets are `balanced`, `edm`, and `vocal`. `balanced` is the default when `preset` is omitted.
+
+`balanced` leans brighter and denser with drum weight, cymbal and snare presence, and wide upper-band motion. `edm` pushes the loudest and most saturated finish with the heaviest low-end impact, while `vocal` stays the most open and dynamic while still adding thicker presence and more top-end shine.
 
 The returned mastering report now exposes stage-aware diagnostics for post-spatial imaging, post-clamp true peak behavior, adaptive headroom recovery, and delivery verification so finishing changes can be inspected instead of guessed.
 
@@ -332,7 +336,7 @@ async def fetch_remote_resource():
 
 Definers exposes both installed-project launchers and direct CLI dispatch for the same application registry.
 
-The `definers.chat` module now acts as a thin facade: GUI launcher entry points stay there for compatibility, while heavyweight media commands are delegated to dedicated presentation services.
+GUI launch entry points live directly in `definers.presentation.gui_entrypoints`, while heavyweight media commands are imported from their dedicated presentation services.
 
 ### CLI Examples
 
@@ -365,8 +369,8 @@ definers lyric-video /path/to/song.wav /path/to/background.mp4 /path/to/lyrics.t
 | --- | --- |
 | `definers.presentation.cli_dispatch.run_cli(argv, version)` | Parses commands, normalizes app names, and routes to the right launcher or media command |
 | `definers.presentation.launchers.launch_installed_project(project)` | Starts an installed application by project name |
-| `definers.application_shell.commands.parse_cli_command(...)` | Normalizes incoming requests into typed command routing |
-| `definers.chat.music_video(...)` and `definers.chat.lyric_video(...)` | Compatibility facade over dedicated presentation media services |
+| `definers.application_shell.command_parser.CliCommandParser.parse_cli_command(...)` | Normalizes incoming requests into typed command routing |
+| `definers.presentation.music_video_service.music_video(...)` and `definers.presentation.lyric_video_service.lyric_video(...)` | Dedicated presentation media services for CLI and app flows |
 
 ## Docker Workflows
 
@@ -400,7 +404,7 @@ Definers provides a modular utility toolkit with extension-oriented boundaries f
 | `definers.capabilities.CircuitBreaker` | Sync and async operation gate with `CLOSED`, `OPEN`, and `HALF_OPEN` state transitions and runtime snapshots |
 | `definers.capabilities.ExponentialBackoffDelay` | Configurable backoff strategy with base delay, multiplier, max delay, and jitter |
 | `definers.capabilities.with_retry` | Async retry decorator with selective exception boundaries and deterministic re-raise behavior |
-| `definers.web.ResourceRetrievalOrchestrator` | Strategy-driven transfer orchestration for integration-heavy workflows |
+| `definers.media.web_transfer.ResourceRetrievalOrchestrator` | Strategy-driven transfer orchestration for integration-heavy workflows |
 
 ### Execution Patterns
 
@@ -451,7 +455,7 @@ flowchart TD
 Import concrete APIs from the implementation module you are using.
 
 ```python
-from definers.data import prepare_data
+from definers.application_data.preparation import prepare_data
 from definers.ml import train
 from definers.system import run
 ```
@@ -468,14 +472,14 @@ The package root is intentionally narrow. It mainly exposes version metadata plu
 | `definers.catalogs.references.USER_AGENTS` | Immutable user-agent registry |
 | `definers.catalogs.references.STYLE_CATALOG` | Immutable style registry |
 
-`definers.catalogs` and `definers.catalogs.access` expose these registries directly without a getter-function compatibility layer.
+Import catalog registries from their concrete modules, such as `definers.catalogs.languages`, `definers.catalogs.references`, and `definers.catalogs.tasks`, instead of routing through a package-level gateway.
 
 ### Web Transfer Facades
 
 | API | Contract |
 | --- | --- |
-| `definers.web.download_file(url, destination)` | Thin wrapper over the transfer subsystem for file download execution |
-| `definers.web.download_and_unzip(url, extract_to)` | Thin wrapper over the transfer subsystem for download-and-extract workflows |
+| `definers.media.web_transfer.download_file(url, destination)` | Transfer orchestration for file download execution |
+| `definers.media.web_transfer.download_and_unzip(url, extract_to)` | Transfer orchestration for download-and-extract workflows |
 
 ## Reliability And Safety
 
@@ -487,7 +491,7 @@ Operational guardrails are a first-class part of the design.
 | --- | --- | --- |
 | Unstable integrations | `with_retry`, `ExponentialBackoffDelay` | Reduces transient failure noise |
 | Repeated downstream faults | `CircuitBreaker` | Prevents failure amplification and exposes state snapshots |
-| Transfer orchestration | `definers.web` facades | Centralizes integration-heavy behavior and rejects archive path traversal during unzip |
+| Transfer orchestration | `definers.media.web_transfer` | Centralizes integration-heavy behavior and rejects archive path traversal during unzip |
 | Platform differences | `run_linux`, `run_windows`, `run` | Makes runtime execution explicit |
 
 ### Safer Command Execution
@@ -627,7 +631,7 @@ Prefer list-form execution. If you need shell syntax, explicitly invoke the shel
 
 Definers is easiest to adopt incrementally.
 
-1. Start with one slice such as `definers.data`, `definers.system`, or a single media domain.
+1. Start with one slice such as `definers.application_data.preparation`, `definers.system`, or a single media domain.
 2. Add extras when the team is ready to absorb the relevant runtime and model dependencies.
 3. Standardize on the shared launcher and resilience surfaces as workflows expand.
 

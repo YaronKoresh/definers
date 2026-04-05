@@ -1,4 +1,4 @@
-from definers.persistence import database as database_module
+import definers.persistence.database as database_module
 from definers.persistence.database import Database
 
 

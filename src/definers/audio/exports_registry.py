@@ -122,11 +122,10 @@ AUDIO_EXPORTS = {
     **_module_exports(
         "mastering_presets",
         "MasteringPresets",
+        "balanced",
         "edm",
         "mastering_preset",
-        "pop",
-        "flat",
-        "safe",
+        "vocal",
     ),
     **_module_exports("preview", "audio_preview", "get_audio_duration"),
     **_module_exports(

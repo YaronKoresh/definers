@@ -13,7 +13,8 @@ from .dsp import (
     limiter_smooth_env,
     resample,
 )
-from .effects import apply_exciter, stereo
+from .effects.exciter import apply_exciter
+from .effects.mixing import stereo
 from .filters import freq_cut
 from .mastering_analysis import measure_spectrum as _measure_spectrum
 from .mastering_character import (

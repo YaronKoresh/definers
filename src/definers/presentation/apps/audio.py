@@ -24,7 +24,6 @@ def launch_audio_app():
         stem_mixer,
         transcribe_audio,
     )
-    from definers.chat import lyric_video, music_video
     from definers.constants import language_codes
     from definers.cuda import device
     from definers.file_ops import save_temp_text as save_text_to_file
@@ -38,6 +37,8 @@ def launch_audio_app():
         prepare_audio_workspace,
         train_voice_lab_model,
     )
+    from definers.presentation.lyric_video_service import lyric_video
+    from definers.presentation.music_video_service import music_video
     from definers.text import random_string
 
     prepare_audio_workspace()

@@ -114,12 +114,19 @@ def _load_mastering_module(package_name: str):
         remove_spectral_spikes=lambda y, *_: y,
         resample=lambda y, *_: y,
     )
-    sys.modules[f"{package_name}.effects"] = types.SimpleNamespace(
-        apply_exciter=lambda y, *_: y,
-        mix_audio=lambda *_, **__: None,
-        pad_audio=lambda *_, **__: None,
-        stereo=lambda y: y if getattr(y, "ndim", 1) > 1 else np.vstack([y, y]),
+    effects_package = types.ModuleType(f"{package_name}.effects")
+    effects_package.__path__ = []
+    exciter_module = types.ModuleType(f"{package_name}.effects.exciter")
+    exciter_module.apply_exciter = lambda y, *_: y
+    mixing_module = types.ModuleType(f"{package_name}.effects.mixing")
+    mixing_module.stereo = (
+        lambda y: y if getattr(y, "ndim", 1) > 1 else np.vstack([y, y])
     )
+    effects_package.exciter = exciter_module
+    effects_package.mixing = mixing_module
+    sys.modules[f"{package_name}.effects"] = effects_package
+    sys.modules[f"{package_name}.effects.exciter"] = exciter_module
+    sys.modules[f"{package_name}.effects.mixing"] = mixing_module
     sys.modules[f"{package_name}.filters"] = types.SimpleNamespace(
         freq_cut=lambda y, *_, **__: y,
     )
@@ -148,7 +155,15 @@ CONFIG_MODULE, MASTERING_MODULE = _load_mastering_module(
 
 
 def test_default_intensity_remains_neutral_one():
-    assert CONFIG_MODULE.SmartMasteringConfig().intensity == pytest.approx(1.0)
+    config = CONFIG_MODULE.SmartMasteringConfig()
+
+    assert config.intensity == pytest.approx(1.0)
+    assert config.preset_name == "balanced"
+    assert CONFIG_MODULE.SmartMasteringConfig.preset_names() == (
+        "balanced",
+        "edm",
+        "vocal",
+    )
 
 
 def test_default_mastering_disables_frequency_cuts():
@@ -156,23 +171,62 @@ def test_default_mastering_disables_frequency_cuts():
 
     assert config.low_cut is None
     assert config.high_cut is None
+    assert CONFIG_MODULE.SmartMasteringConfig.from_preset(None).preset_name == (
+        "balanced"
+    )
 
 
-def test_config_preset_factory_returns_hotter_edm_profile_than_safe():
+def test_config_presets_span_density_and_stereo_motion_profiles():
     edm = CONFIG_MODULE.SmartMasteringConfig.edm()
-    streaming = CONFIG_MODULE.SmartMasteringConfig.safe()
+    balanced = CONFIG_MODULE.SmartMasteringConfig.balanced()
+    vocal = CONFIG_MODULE.SmartMasteringConfig.vocal()
 
     assert edm.preset_name == "edm"
-    assert streaming.preset_name == "safe"
-    assert edm.target_lufs > streaming.target_lufs
-    assert edm.limiter_soft_clip_ratio > streaming.limiter_soft_clip_ratio
+    assert balanced.preset_name == "balanced"
+    assert vocal.preset_name == "vocal"
+    assert edm.target_lufs > balanced.target_lufs > vocal.target_lufs
+    assert (
+        edm.limiter_soft_clip_ratio
+        > balanced.limiter_soft_clip_ratio
+        > vocal.limiter_soft_clip_ratio
+    )
     assert (
         edm.pre_limiter_saturation_ratio
-        > streaming.pre_limiter_saturation_ratio
+        > balanced.pre_limiter_saturation_ratio
+        > vocal.pre_limiter_saturation_ratio
     )
-    assert edm.spectral_drive_bias_db > streaming.spectral_drive_bias_db
+    assert edm.spectral_drive_bias_db > balanced.spectral_drive_bias_db
+    assert edm.exciter_mix > balanced.exciter_mix > vocal.exciter_mix
+    assert edm.bass_boost_db_per_oct > balanced.bass_boost_db_per_oct
+    assert balanced.bass_boost_db_per_oct > vocal.bass_boost_db_per_oct
+    assert balanced.treble_boost_db_per_oct > vocal.treble_boost_db_per_oct
+    assert vocal.treble_boost_db_per_oct > edm.treble_boost_db_per_oct
+    assert vocal.micro_dynamics_strength > balanced.micro_dynamics_strength
+    assert balanced.micro_dynamics_strength > edm.micro_dynamics_strength
+    assert balanced.stereo_tone_variation_db > edm.stereo_tone_variation_db
+    assert vocal.stereo_tone_variation_db > balanced.stereo_tone_variation_db
+    assert vocal.stereo_motion_high_amount > balanced.stereo_motion_high_amount
+    assert balanced.stereo_motion_high_amount > edm.stereo_motion_high_amount
+    assert (
+        balanced.contract_max_stereo_width_ratio
+        > edm.contract_max_stereo_width_ratio
+    )
+    assert vocal.contract_max_stereo_width_ratio > (
+        balanced.contract_max_stereo_width_ratio
+    )
+    assert vocal.mono_bass_hz < balanced.mono_bass_hz < edm.mono_bass_hz
     assert edm.limiter_recovery_style == "tight"
-    assert streaming.codec_headroom_margin_db > edm.codec_headroom_margin_db
+    assert vocal.codec_headroom_margin_db > balanced.codec_headroom_margin_db
+
+
+def test_smart_mastering_defaults_to_balanced_preset():
+    balanced = CONFIG_MODULE.SmartMasteringConfig.balanced()
+
+    mastering = MASTERING_MODULE.SmartMastering(8000, resampling_target=8000)
+
+    assert mastering.preset_name == "balanced"
+    assert mastering.target_lufs == pytest.approx(balanced.target_lufs)
+    assert mastering.stereo_width == pytest.approx(balanced.stereo_width)
 
 
 def test_smart_mastering_accepts_preset_name():
@@ -416,6 +470,14 @@ def test_process_runs_follow_up_limiter_when_loudness_is_still_low(
                 max_short_term_lufs=-11.5,
                 max_momentary_lufs=-11.0,
                 crest_factor_db=7.0,
+                stereo_width_ratio=0.2,
+                low_end_mono_ratio=0.95,
+            ),
+            types.SimpleNamespace(
+                integrated_lufs=-10.1,
+                max_short_term_lufs=-10.5,
+                max_momentary_lufs=-10.1,
+                crest_factor_db=6.5,
                 stereo_width_ratio=0.2,
                 low_end_mono_ratio=0.95,
             ),
@@ -853,7 +915,7 @@ def test_process_calls_finalization_stages(monkeypatch: pytest.MonkeyPatch):
     mastering = MASTERING_MODULE.SmartMastering(
         8000,
         resampling_target=8000,
-        preset="safe",
+        preset="balanced",
     )
     source = np.array([0.1, -0.1, 0.2, -0.2], dtype=np.float32)
     stage_calls: list[tuple[str, float | None]] = []
@@ -990,7 +1052,7 @@ def test_process_applies_final_peak_catch_after_character_stage_when_true_peak_i
                 crest_factor_db=6.0,
                 stereo_width_ratio=0.1,
                 low_end_mono_ratio=0.95,
-                true_peak_dbfs=-0.2,
+                true_peak_dbfs=-0.6,
             ),
             types.SimpleNamespace(
                 integrated_lufs=-8.9,
@@ -999,7 +1061,25 @@ def test_process_applies_final_peak_catch_after_character_stage_when_true_peak_i
                 crest_factor_db=6.0,
                 stereo_width_ratio=0.1,
                 low_end_mono_ratio=0.95,
-                true_peak_dbfs=-0.2,
+                true_peak_dbfs=-0.6,
+            ),
+            types.SimpleNamespace(
+                integrated_lufs=-8.9,
+                max_short_term_lufs=-10.0,
+                max_momentary_lufs=-10.0,
+                crest_factor_db=6.0,
+                stereo_width_ratio=0.1,
+                low_end_mono_ratio=0.95,
+                true_peak_dbfs=-0.6,
+            ),
+            types.SimpleNamespace(
+                integrated_lufs=-8.9,
+                max_short_term_lufs=-10.0,
+                max_momentary_lufs=-10.0,
+                crest_factor_db=6.0,
+                stereo_width_ratio=0.1,
+                low_end_mono_ratio=0.95,
+                true_peak_dbfs=-0.6,
             ),
         ]
     )
@@ -1108,7 +1188,25 @@ def test_process_reverts_micro_dynamics_when_character_stage_breaks_contract(
                 crest_factor_db=7.8,
                 stereo_width_ratio=0.3,
                 low_end_mono_ratio=0.95,
-                true_peak_dbfs=-0.2,
+                true_peak_dbfs=-0.4,
+            ),
+            types.SimpleNamespace(
+                integrated_lufs=-4.9,
+                max_short_term_lufs=-3.3,
+                max_momentary_lufs=-2.5,
+                crest_factor_db=7.4,
+                stereo_width_ratio=0.3,
+                low_end_mono_ratio=0.95,
+                true_peak_dbfs=0.7,
+            ),
+            types.SimpleNamespace(
+                integrated_lufs=-4.9,
+                max_short_term_lufs=-3.3,
+                max_momentary_lufs=-2.5,
+                crest_factor_db=7.4,
+                stereo_width_ratio=0.3,
+                low_end_mono_ratio=0.95,
+                true_peak_dbfs=0.7,
             ),
             types.SimpleNamespace(
                 integrated_lufs=-4.9,
@@ -1201,6 +1299,14 @@ def test_process_applies_stereo_restraint_when_follow_up_action_requests_it(
                 crest_factor_db=7.0,
                 stereo_width_ratio=0.8,
                 low_end_mono_ratio=0.4,
+            ),
+            types.SimpleNamespace(
+                integrated_lufs=-11.0,
+                max_short_term_lufs=-10.0,
+                max_momentary_lufs=-9.5,
+                crest_factor_db=6.8,
+                stereo_width_ratio=0.4,
+                low_end_mono_ratio=0.9,
             ),
             types.SimpleNamespace(
                 integrated_lufs=-11.0,
@@ -1313,6 +1419,14 @@ def test_process_skips_relimit_when_follow_up_action_only_restrains_stereo(
                 crest_factor_db=7.0,
                 stereo_width_ratio=0.8,
                 low_end_mono_ratio=0.4,
+            ),
+            types.SimpleNamespace(
+                integrated_lufs=-11.2,
+                max_short_term_lufs=-10.0,
+                max_momentary_lufs=-9.5,
+                crest_factor_db=6.9,
+                stereo_width_ratio=0.4,
+                low_end_mono_ratio=0.9,
             ),
             types.SimpleNamespace(
                 integrated_lufs=-11.2,

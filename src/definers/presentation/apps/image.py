@@ -13,7 +13,7 @@ class ImageApp:
 
     @staticmethod
     def generate_image(text, width, height):
-        from definers.application_text import TextInputValidator
+        from definers.application_text.validation import TextInputValidator
         from definers.image import get_max_resolution
         from definers.ml import optimize_prompt_realism, pipe
 

@@ -1,20 +1,20 @@
 from argparse import Namespace
 
-from definers.application_shell import (
-    CliRequest,
-    LyricVideoCommand,
-    MusicVideoCommand,
-    StartCommand,
-    UnknownCommand,
-    dispatch_cli_command,
-    parse_cli_command,
-)
-from definers.application_shell.commands import create_cli_command_registry
+from definers.application_shell.cli_request import CliRequest
+from definers.application_shell.command_dispatcher import CliCommandDispatcher
+from definers.application_shell.command_parser import CliCommandParser
+from definers.application_shell.command_registry import CliCommandRegistry
+from definers.application_shell.lyric_video_command import LyricVideoCommand
+from definers.application_shell.music_video_command import MusicVideoCommand
+from definers.application_shell.start_command import StartCommand
+from definers.application_shell.unknown_command import UnknownCommand
 
 
 def test_application_shell_facade_exports_parser_and_dispatcher():
-    command_registry = create_cli_command_registry(("chat", "video"))
-    command = parse_cli_command(
+    command_registry = CliCommandRegistry.create_cli_command_registry(
+        ("chat", "video")
+    )
+    command = CliCommandParser.parse_cli_command(
         Namespace(command=" video ", project="chat"),
         read_lyrics_text=lambda value: value,
         command_registry=command_registry,
@@ -24,7 +24,7 @@ def test_application_shell_facade_exports_parser_and_dispatcher():
     assert command.project == "video"
 
     outputs: list[object] = []
-    exit_code = dispatch_cli_command(
+    exit_code = CliCommandDispatcher.dispatch_cli_command(
         MusicVideoCommand(audio="a.mp3", width=320, height=240, fps=15),
         start=lambda project: 0,
         music_video=lambda audio, width, height, fps: (

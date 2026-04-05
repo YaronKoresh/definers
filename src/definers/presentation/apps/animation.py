@@ -9,7 +9,7 @@ class AnimationApp:
         from diffusers.utils import export_to_gif
         from PIL import Image, ImageOps
 
-        from definers.application_text import TextInputValidator
+        from definers.application_text.validation import TextInputValidator
         from definers.constants import MODELS
         from definers.cuda import device
         from definers.ml import optimize_prompt_realism

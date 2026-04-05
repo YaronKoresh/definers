@@ -115,7 +115,7 @@ For mastering diagnostics, `master()` accepts `report_path="...json"` and writes
 Prefer importing from concrete public modules rather than from the package root.
 
 ```python
-from definers.data import prepare_data
+from definers.application_data.preparation import prepare_data
 from definers.ml import train
 from definers.system import run
 ```

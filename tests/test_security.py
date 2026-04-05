@@ -4,9 +4,9 @@ from unittest.mock import patch
 
 import definers.application_data.tokenization as tokenization_module
 from definers.constants import MAX_CONSECUTIVE_SPACES, MAX_INPUT_LENGTH
+from definers.media.web_transfer import download_and_unzip, download_file
 from definers.ml import AutoTrainer
 from definers.system import run, secure_path
-from definers.web import download_and_unzip, download_file
 
 
 class TestSecurity(unittest.TestCase):

@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from definers.data import fetch_dataset
+from definers.application_data.loaders import fetch_dataset
 
 
 class TestFetchDataset(unittest.TestCase):

@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from definers.application_shell.command_registry import CliCommandRegistry
 from definers.application_shell.cli_command_definition import (
     CliCommandDefinition,
 )
@@ -20,22 +21,21 @@ class CliRuntimeService:
     def resolve_gui_registry():
         from importlib import import_module
 
-        chat_module = import_module("definers.chat")
-        namespace = vars(chat_module)
-        registry = getattr(chat_module, "GUI_LAUNCHERS", {})
+        gui_entrypoints_module = import_module(
+            "definers.presentation.gui_entrypoints"
+        )
+        namespace = vars(gui_entrypoints_module)
+        registry = getattr(gui_entrypoints_module, "GUI_LAUNCHERS", {})
         if not isinstance(registry, dict):
             registry = {}
         return registry, namespace
 
     @staticmethod
     def build_cli_command_registry(namespace, *, registry):
-        from definers.application_shell.commands import (
-            create_cli_command_registry,
-        )
         from definers.presentation.launchers import get_gui_project_names
 
         gui_project_names = get_gui_project_names(namespace, registry=registry)
-        return create_cli_command_registry(gui_project_names)
+        return CliCommandRegistry.create_cli_command_registry(gui_project_names)
 
     @classmethod
     def resolve_cli_runtime_state(cls) -> CliRuntimeState:
@@ -56,7 +56,11 @@ class CliRuntimeService:
 
     @staticmethod
     def resolve_cli_handlers():
-        from definers.chat import lyric_video, music_video, start
+        from definers.presentation.gui_entrypoints import (
+            lyric_video,
+            music_video,
+            start,
+        )
 
         return start, music_video, lyric_video
 

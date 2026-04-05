@@ -11,9 +11,10 @@ textarea { overflow-y: auto !important; }
     def launch_video_app():
         import gradio as gr
 
-        from definers.chat import lyric_video, music_video
         from definers.constants import STYLES_DB
         from definers.presentation.gradio_shared import launch_blocks
+        from definers.presentation.lyric_video_service import lyric_video
+        from definers.presentation.music_video_service import music_video
         from definers.video_gui import filter_styles, generate_video_handler
 
         video_theme = gr.themes.Base(primary_hue="cyan", neutral_hue="slate")

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from definers.platform import processes, runtime
+import definers.platform.processes as processes
+import definers.platform.runtime as runtime
 
 
 def test_parse_pid_output_accepts_single_pid_bytes() -> None:

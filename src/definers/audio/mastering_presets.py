@@ -4,10 +4,9 @@ from .config import SmartMasteringConfig
 
 
 class MasteringPresets:
+    balanced = staticmethod(SmartMasteringConfig.balanced)
     edm = staticmethod(SmartMasteringConfig.edm)
-    pop = staticmethod(SmartMasteringConfig.pop)
-    flat = staticmethod(SmartMasteringConfig.flat)
-    safe = staticmethod(SmartMasteringConfig.safe)
+    vocal = staticmethod(SmartMasteringConfig.vocal)
 
     @staticmethod
     def names() -> tuple[str, ...]:
@@ -18,27 +17,22 @@ def mastering_preset(name: str) -> SmartMasteringConfig:
     return SmartMasteringConfig.from_preset(name)
 
 
+def balanced() -> SmartMasteringConfig:
+    return SmartMasteringConfig.balanced()
+
+
 def edm() -> SmartMasteringConfig:
     return SmartMasteringConfig.edm()
 
 
-def pop() -> SmartMasteringConfig:
-    return SmartMasteringConfig.pop()
-
-
-def flat() -> SmartMasteringConfig:
-    return SmartMasteringConfig.flat()
-
-
-def safe() -> SmartMasteringConfig:
-    return SmartMasteringConfig.safe()
+def vocal() -> SmartMasteringConfig:
+    return SmartMasteringConfig.vocal()
 
 
 __all__ = [
     "MasteringPresets",
+    "balanced",
     "edm",
     "mastering_preset",
-    "pop",
-    "flat",
-    "safe",
+    "vocal",
 ]

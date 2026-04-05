@@ -1,24 +1,24 @@
 import hashlib
-import importlib
 import os
 import random
 import string
 import sys
 
+from definers.application_text.system_messages import set_system_message
+from definers.application_text.text_transforms import (
+    camel_case,
+    language,
+    simple_text,
+    strip_nikud,
+)
+from definers.application_text.translation import (
+    ai_translate as _ai_translate,
+    duck_translate,
+    google_translate,
+    translate_with_code_using,
+)
 from definers.persistence.database import Database
 from definers.system import read
-
-application_text_language = importlib.import_module(
-    "definers.application_text.language"
-)
-
-camel_case = application_text_language.camel_case
-duck_translate = application_text_language.duck_translate
-google_translate = application_text_language.google_translate
-language = application_text_language.language
-set_system_message = application_text_language.set_system_message
-simple_text = application_text_language.simple_text
-strip_nikud = application_text_language.strip_nikud
 
 __all__ = [
     "Database",
@@ -90,16 +90,12 @@ class TextFacade:
 
     @staticmethod
     def ai_translate(text: str, lang: str = "en") -> str:
-        return application_text_language.ai_translate(text, lang=lang)
+        return _ai_translate(text, lang=lang)
 
     @staticmethod
     def translate_with_code(text_to_translate: str, lang: str) -> str:
         translator = ai_translate
-        return application_text_language.translate_with_code_using(
-            text_to_translate,
-            lang,
-            translator,
-        )
+        return translate_with_code_using(text_to_translate, lang, translator)
 
 
 random_string = TextFacade.random_string

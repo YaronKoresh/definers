@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from definers.platform import runtime
+import definers.platform.runtime as runtime
 
 
 def test_installed_rejects_blank_package_name() -> None:

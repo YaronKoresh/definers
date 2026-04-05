@@ -12,7 +12,7 @@ from definers.constants import (
     general_positive_prompt,
 )
 from definers.cuda import device
-from definers.data import dtype
+from definers.application_data.arrays import dtype
 from definers.media.image_helpers import (
     extract_image_features,
     features_to_image,

@@ -1,6 +1,6 @@
 import unittest
 
-from definers.data import get_prediction_file_extension
+from definers.application_data.exports import get_prediction_file_extension
 
 
 class TestGetPredictionFileExtension(unittest.TestCase):

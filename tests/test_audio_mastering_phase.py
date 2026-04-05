@@ -117,12 +117,19 @@ def _load_mastering_module(package_name: str):
         resample=lambda y, *_: y,
         remove_spectral_spikes=lambda y, *_: y,
     )
-    sys.modules[f"{package_name}.effects"] = types.SimpleNamespace(
-        apply_exciter=lambda y, *_: y,
-        mix_audio=lambda *_, **__: None,
-        pad_audio=lambda *_, **__: None,
-        stereo=lambda y: y if getattr(y, "ndim", 1) > 1 else np.vstack([y, y]),
+    effects_package = types.ModuleType(f"{package_name}.effects")
+    effects_package.__path__ = []
+    exciter_module = types.ModuleType(f"{package_name}.effects.exciter")
+    exciter_module.apply_exciter = lambda y, *_: y
+    mixing_module = types.ModuleType(f"{package_name}.effects.mixing")
+    mixing_module.stereo = (
+        lambda y: y if getattr(y, "ndim", 1) > 1 else np.vstack([y, y])
     )
+    effects_package.exciter = exciter_module
+    effects_package.mixing = mixing_module
+    sys.modules[f"{package_name}.effects"] = effects_package
+    sys.modules[f"{package_name}.effects.exciter"] = exciter_module
+    sys.modules[f"{package_name}.effects.mixing"] = mixing_module
     sys.modules[f"{package_name}.filters"] = types.SimpleNamespace(
         freq_cut=lambda y, *_, **__: y,
     )

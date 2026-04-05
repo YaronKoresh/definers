@@ -4,13 +4,14 @@ from unittest.mock import patch
 import numpy as np
 from torch.utils.data import TensorDataset
 
-from definers.data import files_to_dataset
+from definers.application_data.loaders import files_to_dataset
 
 
 class TestFilesToDataset(unittest.TestCase):
     def setUp(self):
         self.cupy_patcher = patch(
-            "definers.data.cupy_to_numpy", side_effect=lambda x: x
+            "definers.application_data.arrays.cupy_to_numpy",
+            side_effect=lambda x: x,
         )
         self.mock_cupy = self.cupy_patcher.start()
         self.addCleanup(self.cupy_patcher.stop)
@@ -42,7 +43,7 @@ class TestFilesToDataset(unittest.TestCase):
         mock_load.assert_called_once_with("f1.npy", training=True)
 
     @patch("definers.application_data.loaders.load_as_numpy", return_value=None)
-    @patch("definers.data.logger.exception")
+    @patch("definers.application_data.loader_runtime.logger.exception")
     def test_loading_feature_fails(self, mock_logger_exc, mock_load):
         features_paths = ["bad_feature.npy"]
         labels_paths = ["label.npy"]
@@ -50,7 +51,7 @@ class TestFilesToDataset(unittest.TestCase):
         self.assertIsNone(result)
         mock_logger_exc.assert_called_once()
 
-    @patch("definers.data.logger.warning")
+    @patch("definers.application_data.loader_runtime.logger.warning")
     def test_empty_input_lists(self, mock_logger_warn):
         result = files_to_dataset([], [])
         self.assertIsNone(result)

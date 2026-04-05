@@ -1,11 +1,7 @@
-import importlib
-
 from definers import ml as ml_facade
-from definers.application_text import (
-    system_messages,
-    text_transforms,
-    translation,
-)
+import definers.application_text.system_messages as system_messages
+import definers.application_text.text_transforms as text_transforms
+import definers.application_text.translation as translation
 from definers.audio import (
     editing,
     music_generation,
@@ -54,7 +50,12 @@ from definers.audio.mastering_metrics import (
     MasteringReport,
     generate_mastering_report,
 )
-from definers.audio.mastering_presets import MasteringPresets, edm
+from definers.audio.mastering_presets import (
+    MasteringPresets,
+    balanced,
+    edm,
+    vocal,
+)
 from definers.audio.mastering_profile import SpectralBalanceProfile
 from definers.audio.mastering_reference import (
     ReferenceAnalysis,
@@ -86,7 +87,9 @@ def test_audio_mastering_facade_reexports_reporting_modules():
     assert audio_facade.measure_mastering_loudness is measure_mastering_loudness
     assert audio_facade.measure_true_peak is measure_true_peak
     assert audio_facade.generate_mastering_report is generate_mastering_report
+    assert audio_facade.balanced is balanced
     assert audio_facade.edm is edm
+    assert audio_facade.vocal is vocal
     assert audio_facade.resolve_delivery_profile is resolve_delivery_profile
     assert audio_facade.save_verified_audio is save_verified_audio
     assert audio_facade.compute_dynamic_drive is compute_dynamic_drive
@@ -99,21 +102,12 @@ def test_audio_mastering_facade_reexports_reporting_modules():
     )
 
 
-def test_application_text_language_facade_reexports_specific_modules():
-    language_facade = importlib.import_module(
-        "definers.application_text.language"
-    )
-
-    assert language_facade.ai_translate is translation.ai_translate
-    assert language_facade.simple_text is text_transforms.simple_text
-    assert language_facade.camel_case is text_transforms.camel_case
-    assert (
-        language_facade.set_system_message is system_messages.set_system_message
-    )
-    assert (
-        language_facade.translate_with_code_using
-        is translation.translate_with_code_using
-    )
+def test_application_text_modules_expose_direct_exports():
+    assert callable(translation.ai_translate)
+    assert callable(text_transforms.simple_text)
+    assert callable(text_transforms.camel_case)
+    assert callable(system_messages.set_system_message)
+    assert callable(translation.translate_with_code_using)
 
 
 def test_ml_facade_reexports_specific_modules():
@@ -158,7 +152,9 @@ def test_split_modules_are_directly_importable():
     assert callable(measure_low_end_mono_ratio)
     assert callable(measure_stereo_width)
     assert callable(generate_mastering_report)
+    assert callable(MasteringPresets.balanced)
     assert callable(MasteringPresets.edm)
+    assert callable(MasteringPresets.vocal)
     assert callable(verify_delivery_export)
     assert callable(assess_mastering_contract)
     assert callable(resolve_limiter_recovery_settings)

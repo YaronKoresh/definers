@@ -4,13 +4,16 @@ from unittest.mock import patch
 import numpy as np
 import torch
 
-from definers.data import pad_sequences
+from definers.application_data.preparation import pad_sequences
 
 
 class TestPadSequences(unittest.TestCase):
     def test_pad_sequences_with_numpy_arrays(self):
         X = [np.array([[1, 2], [3, 4]]), np.array([[5, 6]])]
-        with patch("definers.data.cupy_to_numpy", side_effect=lambda x: x):
+        with patch(
+            "definers.application_data.arrays.cupy_to_numpy",
+            side_effect=lambda x: x,
+        ):
             padded_X = pad_sequences(X)
             self.assertIsInstance(padded_X, torch.Tensor)
             self.assertEqual(padded_X.shape, (2, 2, 2))
@@ -22,7 +25,10 @@ class TestPadSequences(unittest.TestCase):
 
     def test_pad_sequences_with_single_sequence(self):
         X = [np.array([[1, 2, 3]])]
-        with patch("definers.data.cupy_to_numpy", side_effect=lambda x: x):
+        with patch(
+            "definers.application_data.arrays.cupy_to_numpy",
+            side_effect=lambda x: x,
+        ):
             padded_X = pad_sequences(X)
             self.assertEqual(padded_X.shape, (1, 1, 3))
             self.assertTrue(
@@ -33,16 +39,19 @@ class TestPadSequences(unittest.TestCase):
 
     def test_pad_sequences_already_padded(self):
         X = [np.array([[1, 2]]), np.array([[3, 4]])]
-        with patch("definers.data.cupy_to_numpy", side_effect=lambda x: x):
+        with patch(
+            "definers.application_data.arrays.cupy_to_numpy",
+            side_effect=lambda x: x,
+        ):
             padded_X = pad_sequences(X)
             self.assertEqual(padded_X.shape, (2, 1, 2))
 
     @patch(
-        "definers.data.three_dim_numpy",
+        "definers.application_data.arrays.three_dim_numpy",
         return_value=np.array([[[1], [2]], [[3]]], dtype=object),
     )
     @patch(
-        "definers.data.cupy_to_numpy",
+        "definers.application_data.arrays.cupy_to_numpy",
         side_effect=lambda x: np.array([[[1.0], [2.0]], [[3.0]]], dtype=object),
     )
     def test_pad_sequences_calls_dependencies(
@@ -55,7 +64,10 @@ class TestPadSequences(unittest.TestCase):
 
     def test_empty_input(self):
         X = []
-        with patch("definers.data.cupy_to_numpy", side_effect=lambda x: x):
+        with patch(
+            "definers.application_data.arrays.cupy_to_numpy",
+            side_effect=lambda x: x,
+        ):
             padded_X = pad_sequences(X)
             self.assertIsInstance(padded_X, torch.Tensor)
             self.assertEqual(padded_X.shape, (0,))

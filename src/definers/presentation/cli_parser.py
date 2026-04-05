@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from definers.application_shell.command_registry import CliCommandRegistry
+from definers.application_shell.request_coercer import CliRequestCoercer
+
 
 class CliParserService:
     @staticmethod
@@ -54,7 +57,6 @@ class CliParserService:
 
     @staticmethod
     def find_unknown_command(argv, *, command_registry):
-        from definers.application_shell.commands import get_known_cli_names
         from definers.presentation.gui_registry import (
             normalize_gui_project_name,
         )
@@ -62,9 +64,9 @@ class CliParserService:
         if not argv:
             return None
         first = normalize_gui_project_name(argv[0])
-        if first in get_known_cli_names(command_registry) or first.startswith(
-            "-"
-        ):
+        if first in CliCommandRegistry.get_known_cli_names(
+            command_registry
+        ) or first.startswith("-"):
             return None
         return first
 
@@ -82,9 +84,7 @@ class CliParserService:
 
     @staticmethod
     def build_cli_request(args):
-        from definers.application_shell.commands import coerce_cli_request
-
-        return coerce_cli_request(args)
+        return CliRequestCoercer.coerce_cli_request(args)
 
 
 build_parser = CliParserService.build_parser

@@ -75,8 +75,8 @@ def train_voice_lab_model(experiment, inp, lvl):
 
 
 def prepare_audio_workspace():
-    from definers.chat import init_stable_whisper
     from definers.ml import init_pretrained_model
+    from definers.presentation.lyric_video_service import init_stable_whisper
     from definers.system import (
         cwd,
         exist,

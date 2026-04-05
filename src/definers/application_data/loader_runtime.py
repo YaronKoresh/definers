@@ -1,3 +1,9 @@
+from definers.logger import init_logger
+
+
+logger = init_logger()
+
+
 class LoaderRuntimeSupport:
     @staticmethod
     def catch(error: Exception) -> None:
@@ -56,6 +62,17 @@ class LoaderRuntimeSupport:
 
     @staticmethod
     def runtime():
-        import definers.data as data_module
+        from types import SimpleNamespace
 
-        return data_module
+        import definers.application_data.arrays as arrays_module
+        import definers.application_data.tokenization as tokenization_module
+
+        return SimpleNamespace(
+            convert_tensor_dtype=arrays_module.convert_tensor_dtype,
+            cupy_to_numpy=arrays_module.cupy_to_numpy,
+            get_max_shapes=arrays_module.get_max_shapes,
+            init_tokenizer=tokenization_module.init_tokenizer,
+            logger=logger,
+            reshape_numpy=arrays_module.reshape_numpy,
+            tokenize_and_pad=tokenization_module.tokenize_and_pad,
+        )

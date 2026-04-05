@@ -1,3 +1,4 @@
+from definers.file_ops import catch
 from definers.presentation.gui_registry import register_gui_launchers
 from definers.presentation.launchers import create_gui_project_starter
 
@@ -111,14 +112,21 @@ def lyric_video(
     )
 
 
-def start(proj: str):
+def start(project: str):
     def on_missing(project_name: str):
-        from definers.system import catch
-
         catch(f"Error: No project called '{project_name}' !")
 
     return create_gui_project_starter(
         globals(),
         on_missing,
         registry=GUI_LAUNCHERS,
-    ).start(proj)
+    ).start(project)
+
+
+__all__ = [
+    "GUI_LAUNCHERS",
+    "init_stable_whisper",
+    "lyric_video",
+    "music_video",
+    "start",
+]

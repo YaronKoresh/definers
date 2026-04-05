@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 
-from definers.application_data import preparation
+import definers.application_data.preparation as preparation
 from definers.application_ml.training import fit
 
 

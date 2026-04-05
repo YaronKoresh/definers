@@ -347,17 +347,32 @@ def test_write_mastering_report_serializes_json(tmp_path: Path):
 
 
 def test_mastering_presets_wrap_config_factories():
+    balanced = PRESETS_MODULE.balanced()
     edm = PRESETS_MODULE.edm()
-    reference = PRESETS_MODULE.flat()
-    streaming = PRESETS_MODULE.mastering_preset("safe")
+    vocal = PRESETS_MODULE.mastering_preset("vocal")
 
+    assert balanced.preset_name == "balanced"
     assert edm.preset_name == "edm"
-    assert reference.preset_name == "flat"
-    assert streaming.preset_name == "safe"
-    assert edm.target_lufs > streaming.target_lufs
-    assert reference.drive_db < edm.drive_db
-    assert edm.micro_dynamics_strength > reference.micro_dynamics_strength
-    assert streaming.codec_headroom_margin_db > edm.codec_headroom_margin_db
+    assert vocal.preset_name == "vocal"
+    assert PRESETS_MODULE.MasteringPresets.names() == (
+        "balanced",
+        "edm",
+        "vocal",
+    )
+    assert edm.target_lufs > balanced.target_lufs > vocal.target_lufs
+    assert edm.drive_db > balanced.drive_db > vocal.drive_db
+    assert edm.exciter_mix > balanced.exciter_mix > vocal.exciter_mix
+    assert edm.bass_boost_db_per_oct > balanced.bass_boost_db_per_oct
+    assert balanced.bass_boost_db_per_oct > vocal.bass_boost_db_per_oct
+    assert balanced.treble_boost_db_per_oct > vocal.treble_boost_db_per_oct
+    assert vocal.treble_boost_db_per_oct > edm.treble_boost_db_per_oct
+    assert vocal.micro_dynamics_strength > balanced.micro_dynamics_strength
+    assert balanced.micro_dynamics_strength > edm.micro_dynamics_strength
+    assert balanced.stereo_tone_variation_db > edm.stereo_tone_variation_db
+    assert vocal.stereo_tone_variation_db > balanced.stereo_tone_variation_db
+    assert vocal.stereo_motion_high_amount > balanced.stereo_motion_high_amount
+    assert balanced.stereo_motion_high_amount > edm.stereo_motion_high_amount
+    assert vocal.mono_bass_hz < balanced.mono_bass_hz < edm.mono_bass_hz
 
 
 def test_unknown_mastering_preset_raises_value_error():

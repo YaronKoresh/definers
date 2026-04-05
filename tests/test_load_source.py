@@ -2,7 +2,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from definers.data import load_source
+from definers.application_data.loaders import load_source
 
 
 class TestLoadSource(unittest.TestCase):

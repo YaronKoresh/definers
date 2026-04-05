@@ -1,9 +1,9 @@
 class TokenizationService:
     @staticmethod
     def runtime():
-        import definers.data as data_module
+        import definers.application_data.arrays as arrays_module
 
-        return data_module
+        return arrays_module
 
     @staticmethod
     def row_to_text(row) -> str:

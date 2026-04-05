@@ -103,7 +103,7 @@ def test_get_gui_project_names_uses_namespace_when_registry_missing():
     assert names == ("video",)
 
 
-def test_launch_installed_project_delegates_to_chat_start():
+def test_launch_installed_project_delegates_to_gui_entrypoints_start():
     with patch(
         "definers.presentation.launchers.import_module"
     ) as mock_import_module:

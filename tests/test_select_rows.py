@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 
 from datasets import Dataset
 
-from definers.data import select_rows
+from definers.application_data.loaders import select_rows
 
 
 class TestSelectRows(unittest.TestCase):

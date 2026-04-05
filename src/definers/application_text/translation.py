@@ -13,7 +13,7 @@ from definers.constants import (
     unesco_mapping,
 )
 from definers.cuda import device
-from definers.web import extract_text
+from definers.media.web_transfer import extract_text
 
 from .text_transforms import language, simple_text, strip_nikud
 

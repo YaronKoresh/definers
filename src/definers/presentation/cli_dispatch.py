@@ -1,3 +1,5 @@
+from definers.application_shell.command_dispatcher import CliCommandDispatcher
+from definers.application_shell.command_parser import CliCommandParser
 from definers.presentation.cli_parser import (
     build_cli_request,
     build_parser,
@@ -31,17 +33,12 @@ class CliDispatchService:
         lyric_video,
         output,
     ):
-        from definers.application_shell.commands import (
-            dispatch_cli_command,
-            parse_cli_command,
-        )
-
-        command = parse_cli_command(
+        command = CliCommandParser.parse_cli_command(
             request,
             read_lyrics_text=CliDispatchService.read_lyrics_text,
             command_registry=command_registry,
         )
-        return dispatch_cli_command(
+        return CliCommandDispatcher.dispatch_cli_command(
             command,
             start=start,
             music_video=music_video,

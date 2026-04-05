@@ -3,7 +3,7 @@ import unittest
 import torch
 from torch.utils.data import TensorDataset
 
-from definers.data import to_loader
+from definers.application_data.preparation import to_loader
 
 
 class TestToLoader(unittest.TestCase):

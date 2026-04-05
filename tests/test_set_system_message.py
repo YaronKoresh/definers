@@ -3,7 +3,7 @@ import unittest
 from unittest.mock import patch
 
 import definers.constants as constants
-from definers.application_text.language import set_system_message
+from definers.application_text.system_messages import set_system_message
 
 
 class TestSetSystemMessage(unittest.TestCase):

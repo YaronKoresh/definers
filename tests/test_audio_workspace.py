@@ -37,7 +37,10 @@ def test_prepare_audio_workspace_initializes_required_models(monkeypatch):
     monkeypatch.setattr("definers.system.install_ffmpeg", lambda: None)
     monkeypatch.setattr("definers.system.cwd", lambda: nullcontext())
     monkeypatch.setattr("definers.system.exist", lambda path: False)
-    monkeypatch.setattr("definers.chat.init_stable_whisper", lambda: None)
+    monkeypatch.setattr(
+        "definers.presentation.lyric_video_service.init_stable_whisper",
+        lambda: None,
+    )
     monkeypatch.setattr(
         "definers.ml.init_pretrained_model",
         lambda model_name: initialized_models.append(model_name),

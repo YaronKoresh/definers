@@ -1,9 +1,9 @@
 class DataExportService:
     @staticmethod
     def read_as_numpy(path: str):
-        from definers.application_data import loaders as loaders_module
+        from definers.application_data.loaders import load_as_numpy
 
-        return loaders_module.load_as_numpy(path)
+        return load_as_numpy(path)
 
     @staticmethod
     def get_prediction_file_extension(pred_type):

@@ -92,14 +92,12 @@ install_optional_module_aliases()
 _LAZY_SUBMODULES = {
     "audio",
     "cuda",
-    "data",
     "image",
     "logger",
     "media",
     "ml",
     "platform",
     "text",
-    "web",
 }
 
 

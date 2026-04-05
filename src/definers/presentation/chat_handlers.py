@@ -1,7 +1,7 @@
 class ChatPresentationService:
     @staticmethod
     def validate_text_input(value):
-        from definers.application_text import TextInputValidator
+        from definers.application_text.validation import TextInputValidator
 
         return TextInputValidator.default().validate(value)
 
@@ -24,7 +24,7 @@ class ChatPresentationService:
         from definers.application_chat.handlers import (
             create_chat_request_handler,
         )
-        from definers.application_text import TextInputValidator
+        from definers.application_text.validation import TextInputValidator
         from definers.constants import language_codes
         from definers.system import log
 
@@ -52,7 +52,7 @@ class ChatPresentationService:
     def get_chat_response(message, history):
         import definers.text as text
         from definers.application_chat.handlers import handle_chat_request
-        from definers.application_text import TextInputValidator
+        from definers.application_text.validation import TextInputValidator
         from definers.constants import language_codes
         from definers.system import log
 

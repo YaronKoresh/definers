@@ -1,22 +1,21 @@
 from argparse import Namespace
 
-from definers.application_shell.commands import (
-    LyricVideoCommand,
-    MusicVideoCommand,
-    StartCommand,
-    UnknownCommand,
-    coerce_cli_request,
-    create_cli_command_registry,
-    dispatch_cli_command,
-    get_known_cli_names,
-    parse_cli_command,
-)
+from definers.application_shell.command_dispatcher import CliCommandDispatcher
+from definers.application_shell.command_parser import CliCommandParser
+from definers.application_shell.command_registry import CliCommandRegistry
+from definers.application_shell.lyric_video_command import LyricVideoCommand
+from definers.application_shell.music_video_command import MusicVideoCommand
+from definers.application_shell.request_coercer import CliRequestCoercer
+from definers.application_shell.start_command import StartCommand
+from definers.application_shell.unknown_command import UnknownCommand
 
-COMMAND_REGISTRY = create_cli_command_registry(("chat", "video"))
+COMMAND_REGISTRY = CliCommandRegistry.create_cli_command_registry(
+    ("chat", "video")
+)
 
 
 def test_parse_cli_command_builds_start_command_from_default_start():
-    command = parse_cli_command(
+    command = CliCommandParser.parse_cli_command(
         Namespace(command=None, project="chat"),
         read_lyrics_text=lambda value: value,
         command_registry=COMMAND_REGISTRY,
@@ -29,7 +28,7 @@ def test_parse_cli_command_builds_start_command_from_default_start():
 
 
 def test_parse_cli_command_normalizes_gui_command_names():
-    command = parse_cli_command(
+    command = CliCommandParser.parse_cli_command(
         Namespace(command=" Video ", project=" Chat "),
         read_lyrics_text=lambda value: value,
         command_registry=COMMAND_REGISTRY,
@@ -42,7 +41,7 @@ def test_parse_cli_command_normalizes_gui_command_names():
 
 
 def test_parse_cli_command_builds_lyric_video_command_with_loaded_lyrics():
-    command = parse_cli_command(
+    command = CliCommandParser.parse_cli_command(
         Namespace(
             command="lyric-video",
             audio="a.mp3",
@@ -78,7 +77,7 @@ def test_parse_cli_command_builds_lyric_video_command_with_loaded_lyrics():
 def test_dispatch_cli_command_writes_music_video_result():
     outputs: list[object] = []
 
-    exit_code = dispatch_cli_command(
+    exit_code = CliCommandDispatcher.dispatch_cli_command(
         MusicVideoCommand(audio="a.mp3", width=320, height=240, fps=15),
         start=lambda project: 0,
         music_video=lambda audio, width, height, fps: (
@@ -98,7 +97,7 @@ def test_dispatch_cli_command_writes_music_video_result():
 def test_dispatch_cli_command_handles_unknown_commands():
     outputs: list[object] = []
 
-    exit_code = dispatch_cli_command(
+    exit_code = CliCommandDispatcher.dispatch_cli_command(
         UnknownCommand(name="nope"),
         start=lambda project: 0,
         music_video=lambda audio, width, height, fps: None,
@@ -111,7 +110,7 @@ def test_dispatch_cli_command_handles_unknown_commands():
 
 
 def test_parse_cli_command_normalizes_unknown_names():
-    command = parse_cli_command(
+    command = CliCommandParser.parse_cli_command(
         Namespace(command=" Nope ", project="chat"),
         read_lyrics_text=lambda value: value,
         command_registry=COMMAND_REGISTRY,
@@ -125,7 +124,7 @@ def test_parse_cli_command_normalizes_unknown_names():
 
 def test_create_cli_command_registry_rejects_builtin_command_conflicts():
     try:
-        create_cli_command_registry(("music-video",))
+        CliCommandRegistry.create_cli_command_registry(("music-video",))
     except ValueError as exc:
         assert str(exc) == "CLI command name conflict: music-video"
     else:
@@ -133,7 +132,10 @@ def test_create_cli_command_registry_rejects_builtin_command_conflicts():
 
 
 def test_get_known_cli_names_can_exclude_option_flags():
-    assert get_known_cli_names(COMMAND_REGISTRY, include_options=False) == (
+    assert CliCommandRegistry.get_known_cli_names(
+        COMMAND_REGISTRY,
+        include_options=False,
+    ) == (
         "start",
         "music-video",
         "lyric-video",
@@ -143,7 +145,9 @@ def test_get_known_cli_names_can_exclude_option_flags():
 
 
 def test_coerce_cli_request_uses_namespace_defaults():
-    request = coerce_cli_request(Namespace(command="start"))
+    request = CliRequestCoercer.coerce_cli_request(
+        Namespace(command="start")
+    )
 
     assert request.project == "chat"
     assert request.position == "bottom"

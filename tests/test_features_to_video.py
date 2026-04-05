@@ -35,7 +35,7 @@ for _name, _value in {
     if not hasattr(path_utils, _name):
         setattr(path_utils, _name, _value)
 
-from definers.video import features_to_video
+from definers.media.video_helpers import features_to_video
 
 
 class TestFeaturesToVideo(unittest.TestCase):

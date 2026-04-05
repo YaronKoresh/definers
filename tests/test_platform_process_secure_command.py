@@ -4,7 +4,13 @@ import os
 
 import pytest
 
-from definers.platform import processes
+import definers.platform.processes as processes
+
+
+def normalize_absolute_path(path: str) -> str:
+    return os.path.normcase(
+        os.path.normpath(os.path.abspath(os.path.expanduser(path)))
+    )
 
 
 def test_secure_command_allows_current_python_executable(
@@ -17,7 +23,12 @@ def test_secure_command_allows_current_python_executable(
 
     result = processes.secure_command([python_path, "-m", "pip", "--version"])
 
-    assert result == [python_path, "-m", "pip", "--version"]
+    assert result == [
+        normalize_absolute_path(python_path),
+        "-m",
+        "pip",
+        "--version",
+    ]
 
 
 def test_secure_command_allows_absolute_executable_resolved_from_path(
@@ -33,7 +44,7 @@ def test_secure_command_allows_absolute_executable_resolved_from_path(
 
     result = processes.secure_command([cmake_path, "--version"])
 
-    assert result == [cmake_path, "--version"]
+    assert result == [normalize_absolute_path(cmake_path), "--version"]
 
 
 def test_secure_command_still_uses_secure_path_for_untrusted_absolute_executable(

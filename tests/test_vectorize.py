@@ -2,7 +2,10 @@ import unittest
 
 import numpy as np
 
-from definers.data import create_vectorizer, vectorize
+from definers.application_data.vectorizers import (
+    create_vectorizer,
+    vectorize,
+)
 
 
 class TestVectorize(unittest.TestCase):

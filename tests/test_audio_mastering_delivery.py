@@ -139,7 +139,7 @@ def test_save_verified_audio_retries_with_attenuation_until_profile_passes():
             read_audio_fn=lambda path: (8000, next(decoded_signals)),
             target_lufs=-10.0,
             ceil_db=-1.0,
-            preset_name="safe",
+            preset_name="balanced",
             delivery_profile_name="streaming_lossy",
             true_peak_oversample_factor=1,
         )
@@ -159,7 +159,7 @@ def test_verify_delivery_export_attaches_stage_metrics_and_contract_assessments(
         "streaming_lossy", "track.mp3"
     )
     contract = CONTRACT_MODULE.resolve_mastering_contract(
-        "safe",
+        "balanced",
         target_lufs=-10.0,
         ceil_db=-1.0,
         max_short_term_lufs=-8.5,
@@ -191,7 +191,7 @@ def test_verify_delivery_export_attaches_stage_metrics_and_contract_assessments(
         read_audio_fn=lambda path: (8000, output_signal),
         target_lufs=-10.0,
         ceil_db=-1.0,
-        preset_name="safe",
+        preset_name="balanced",
         contract=contract,
         character_stage_decision=types.SimpleNamespace(
             applied=True,

@@ -88,17 +88,22 @@ except Exception:
 
 
 try:
-    from definers.data import (
-        create_vectorizer,
+    from definers.application_data.arrays import (
         cupy_to_numpy,
         dtype,
         get_max_shapes,
-        get_prediction_file_extension,
         guess_numpy_type,
-        load_as_numpy,
         numpy_to_cupy,
         one_dim_numpy,
         reshape_numpy,
+    )
+    from definers.application_data.exports import (
+        get_prediction_file_extension,
+    )
+    from definers.application_data.loaders import load_as_numpy
+    from definers.application_data.vectorizers import (
+        create_vectorizer,
+        
     )
 except Exception:
     create_vectorizer = None
@@ -198,12 +203,15 @@ except Exception:
     random_string = None
     simple_text = None
 try:
-    from definers.video import features_to_video, write_video
+    from definers.media.video_helpers import features_to_video, write_video
 except Exception:
     features_to_video = None
     write_video = None
 try:
-    from definers.web import download_file, google_drive_download
+    from definers.media.web_transfer import (
+        download_file,
+        google_drive_download,
+    )
 except Exception:
     download_file = None
     google_drive_download = None

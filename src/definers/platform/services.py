@@ -5,11 +5,9 @@ from dataclasses import dataclass, field
 from threading import RLock
 from typing import Any
 
-from definers.platform import (
-    filesystem as _filesystem,
-    processes as _processes,
-    runtime as _runtime,
-)
+import definers.platform.filesystem as _filesystem
+import definers.platform.processes as _processes
+import definers.platform.runtime as _runtime
 from definers.platform.contracts import (
     CommandInput,
     EnvironmentPort,

@@ -38,9 +38,21 @@ class PreparationService:
 
     @staticmethod
     def data_runtime():
-        import definers.data as data_module
+        from types import SimpleNamespace
 
-        return data_module
+        import definers.application_data.arrays as arrays_module
+        import definers.application_data.loaders as loaders_module
+        import definers.application_data.runtime_patches as runtime_patches
+
+        _, numpy_module = runtime_patches.init_cupy_numpy()
+        return SimpleNamespace(
+            load_source=loaders_module.load_source,
+            drop_columns=loaders_module.drop_columns,
+            three_dim_numpy=arrays_module.three_dim_numpy,
+            cupy_to_numpy=arrays_module.cupy_to_numpy,
+            two_dim_numpy=arrays_module.two_dim_numpy,
+            _np=numpy_module,
+        )
 
     @staticmethod
     def merge_columns(X, y=None):

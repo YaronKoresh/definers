@@ -109,7 +109,7 @@ def test_reference_match_assist_suggests_hotter_target_and_tighter_low_end():
         ],
         axis=0,
     ).astype(np.float32)
-    config = CONFIG_MODULE.SmartMasteringConfig.safe()
+    config = CONFIG_MODULE.SmartMasteringConfig.balanced()
 
     assist = REFERENCE_MODULE.reference_match_assist(
         reference,

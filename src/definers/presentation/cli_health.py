@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from definers.application_shell.command_registry import CliCommandRegistry
+
 
 @dataclass(frozen=True, slots=True)
 class CliHealthSnapshot:
@@ -17,8 +19,6 @@ class CliHealthSnapshot:
 class CliHealthService:
     @staticmethod
     def collect_cli_health_snapshot(*, command_registry, gui_project_names):
-        from definers.application_shell.commands import get_known_cli_names
-
         command_names = tuple(sorted(command_registry))
         normalized_gui_project_names = tuple(sorted(gui_project_names))
         direct_gui_command_names = tuple(
@@ -35,7 +35,9 @@ class CliHealthService:
                 if definition.kind != "start"
             )
         )
-        known_names_with_options = tuple(get_known_cli_names(command_registry))
+        known_names_with_options = tuple(
+            CliCommandRegistry.get_known_cli_names(command_registry)
+        )
         return CliHealthSnapshot(
             command_names=command_names,
             gui_project_names=normalized_gui_project_names,
