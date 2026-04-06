@@ -5,20 +5,7 @@ logger = init_logger()
 
 class LoaderRuntimeSupport:
     @staticmethod
-    def _absolute_path(path: str) -> str:
-        import os
-
-        return os.path.abspath(os.path.expanduser(path))
-
-    @staticmethod
-    def _resolved_path(path: str) -> str:
-        import os
-        from pathlib import Path
-
-        return os.path.normcase(str(Path(path).expanduser().resolve()))
-
-    @classmethod
-    def _trusted_roots(cls) -> list[str]:
+    def _trusted_roots() -> list[str]:
         import os
         import tempfile
 
@@ -28,40 +15,34 @@ class LoaderRuntimeSupport:
             roots.insert(0, configured_root)
         trusted_roots = []
         for root in roots:
+            normalized_root = str(root).strip()
+            if not normalized_root:
+                continue
             try:
-                trusted_roots.append(cls._resolved_path(root))
+                trusted_roots.append(
+                    os.path.abspath(os.path.expanduser(normalized_root))
+                )
             except Exception:
                 continue
         return trusted_roots
-
-    @classmethod
-    def _is_trusted_path(cls, path: str) -> bool:
-        import os
-
-        resolved_path = cls._resolved_path(path)
-        for root in cls._trusted_roots():
-            try:
-                if os.path.commonpath([root, resolved_path]) == root:
-                    return True
-            except ValueError:
-                continue
-        return False
 
     @staticmethod
     def _safe_path(path: str):
         import os
 
+        from definers.system import secure_path
+
         if not path:
             return None
         try:
-            absolute_path = LoaderRuntimeSupport._absolute_path(path)
-            if not LoaderRuntimeSupport._is_trusted_path(absolute_path):
-                logger.error("Path outside allowed root: %s", absolute_path)
+            safe_path = secure_path(
+                str(path).strip(),
+                trust=LoaderRuntimeSupport._trusted_roots(),
+            )
+            if not os.path.exists(safe_path):
+                logger.error("Path does not exist: %s", safe_path)
                 return None
-            if not os.path.exists(absolute_path):
-                logger.error("Path does not exist: %s", absolute_path)
-                return None
-            return absolute_path
+            return safe_path
         except Exception as error:
             logger.exception("Error validating path %s: %s", path, error)
             return None

@@ -34,8 +34,8 @@ jobs:
             const MAX_PATCH_CHARS_PER_FILE = 700;
             const MAX_HIGHLIGHTED_FILES_PER_WINDOW = 6;
             const MAX_PATCH_SNIPPETS_PER_WINDOW = 4;
-            const MAX_SUMMARY_PROMPT_CHARS = 12000;
-            const MAX_SUMMARY_PROMPT_FOOTER_CHARS = 700;
+            const MAX_SUMMARY_BATCHES = 10;
+            const MAX_SUMMARY_BATCH_CONTENT_CHARS = 7200;
             const WINDOW_SEPARATOR = "\n\n═══════════════════════════════════════════\n\n";
             const totalAdditions = files.reduce((sum, file) => sum + file.additions, 0);
             const totalDeletions = files.reduce((sum, file) => sum + file.deletions, 0);
@@ -45,41 +45,6 @@ jobs:
               parts.pop();
               return parts.length > 0 ? parts.slice(0, 2).join("/") : "(root)";
             }
-
-            function extensionForFile(filename) {
-              return filename.includes(".") ? filename.split(".").pop() : "(none)";
-            }
-
-            function summarizeCounts(counts, limit) {
-              return Object.entries(counts)
-                .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
-                .slice(0, limit)
-                .map(([name, count]) => `${name}(${count})`)
-                .join(", ");
-            }
-
-            function clampForPrompt(text, maxChars) {
-              if (text.length <= maxChars) {
-                return text;
-              }
-              if (maxChars <= 0) {
-                return "";
-              }
-              const suffix = "\n[...truncated for prompt budget...]";
-              const trimmedLength = Math.max(maxChars - suffix.length, 0);
-              return text.slice(0, trimmedLength) + suffix;
-            }
-
-            const topDirs = [...new Set(files.map((file) => topDirectoryForFile(file.filename)))];
-            const statusCounts = files.reduce((counts, file) => {
-              counts[file.status] = (counts[file.status] || 0) + 1;
-              return counts;
-            }, {});
-            const extensionCounts = files.reduce((counts, file) => {
-              const extension = extensionForFile(file.filename);
-              counts[extension] = (counts[extension] || 0) + 1;
-              return counts;
-            }, {});
 
             function normalizePatch(patch) {
               if (!patch) {
@@ -135,6 +100,7 @@ jobs:
             function formatWindow(windowFiles, index, options = {}) {
               const highlightedFileLimit = options.highlightedFileLimit ?? MAX_HIGHLIGHTED_FILES_PER_WINDOW;
               const patchSnippetLimit = options.patchSnippetLimit ?? MAX_PATCH_SNIPPETS_PER_WINDOW;
+              const coverageLevel = options.coverageLevel ?? (patchSnippetLimit > 0 ? "full" : "compact");
               const highlightedFiles = [...windowFiles]
                 .sort((left, right) => right.score - left.score || left.filename.localeCompare(right.filename))
                 .slice(0, highlightedFileLimit);
@@ -145,6 +111,7 @@ jobs:
 
               return [
                 `WINDOW ${index + 1}/${windows.length}`,
+                `Coverage level: ${coverageLevel}`,
                 `Files in window: ${windowFiles.length}`,
                 `Highlighted files:`,
                 highlightedFiles.map((file) => `- ${file.filename} [${file.status.toUpperCase()}] (+${file.additions} -${file.deletions})${file.rawPatchAvailable ? "" : " [patch unavailable]"}`).join("\n"),
@@ -166,39 +133,303 @@ jobs:
 
               return [
                 `WINDOW ${index + 1}/${windows.length}`,
+                "Coverage level: minimal",
                 `Files in window: ${windowFiles.length}`,
                 `Top directories: ${windowDirs.join(", ") || "(none)"}`,
                 `Top files: ${topFiles.map((file) => `${file.filename} [${file.status.toUpperCase()}] (+${file.additions} -${file.deletions})`).join("; ") || "(none)"}`
               ].join("\n");
             }
 
-            function summarizeOmittedWindows(candidates) {
-              if (candidates.length === 0) {
-                return "";
+            const windowCandidates = windows.map((windowFiles, index) => ({
+              index,
+              files: windowFiles,
+              score: windowFiles.reduce((sum, file) => sum + file.score, 0),
+              full: formatWindow(windowFiles, index, { coverageLevel: "full" }),
+              compact: formatWindow(windowFiles, index, { highlightedFileLimit: 4, patchSnippetLimit: 0, coverageLevel: "compact" }),
+              minimal: formatMinimalWindow(windowFiles, index)
+            }));
+            const windowEntries = windowCandidates.map((candidate) => ({
+              ...candidate,
+              selectedVariant: "full",
+              selectedContent: candidate.full
+            }));
+
+            function buildSummaryBatches(entries) {
+              const batches = [];
+              let currentBatch = [];
+              let currentBatchChars = 0;
+
+              for (const entry of [...entries].sort((left, right) => left.index - right.index)) {
+                const separatorLength = currentBatch.length > 0 ? WINDOW_SEPARATOR.length : 0;
+                const wouldOverflow = currentBatch.length > 0 && currentBatchChars + separatorLength + entry.selectedContent.length > MAX_SUMMARY_BATCH_CONTENT_CHARS;
+
+                if (wouldOverflow) {
+                  batches.push(currentBatch);
+                  currentBatch = [];
+                  currentBatchChars = 0;
+                }
+
+                currentBatch.push(entry);
+                currentBatchChars += (currentBatch.length > 1 ? WINDOW_SEPARATOR.length : 0) + entry.selectedContent.length;
               }
-              const omittedFiles = candidates.flatMap((candidate) => candidate.files);
-              const omittedDirs = [...new Set(omittedFiles.map((file) => topDirectoryForFile(file.filename)))].slice(0, 8);
-              const omittedExtensionCounts = omittedFiles.reduce((counts, file) => {
-                const extension = extensionForFile(file.filename);
-                counts[extension] = (counts[extension] || 0) + 1;
+
+              if (currentBatch.length > 0) {
+                batches.push(currentBatch);
+              }
+
+              return batches;
+            }
+
+            function downgradeWindowCoverage(entries) {
+              const candidates = entries
+                .map((entry, index) => {
+                  if (entry.selectedVariant === "full") {
+                    return { index, nextVariant: "compact", nextContent: entry.compact, savings: entry.full.length - entry.compact.length, score: entry.score };
+                  }
+                  if (entry.selectedVariant === "compact") {
+                    return { index, nextVariant: "minimal", nextContent: entry.minimal, savings: entry.compact.length - entry.minimal.length, score: entry.score };
+                  }
+                  return null;
+                })
+                .filter(Boolean)
+                .sort((left, right) => right.savings - left.savings || left.score - right.score || left.index - right.index);
+
+              const candidate = candidates[0];
+              if (!candidate || candidate.savings <= 0) {
+                return false;
+              }
+
+              entries[candidate.index].selectedVariant = candidate.nextVariant;
+              entries[candidate.index].selectedContent = candidate.nextContent;
+              return true;
+            }
+
+            function buildOverflowWindow(entries) {
+              const overflowFiles = entries.flatMap((entry) => entry.files);
+              const topOverflowFiles = overflowFiles
+                .slice()
+                .sort((left, right) => scoreFile(right) - scoreFile(left) || left.filename.localeCompare(right.filename))
+                .slice(0, 8);
+              const overflowDirs = [...new Set(overflowFiles.map((file) => topDirectoryForFile(file.filename)))].slice(0, 8);
+
+              return {
+                index: entries[0]?.index ?? windows.length,
+                files: overflowFiles,
+                score: 0,
+                selectedVariant: "minimal",
+                selectedContent: [
+                  "WINDOW OVERFLOW",
+                  "Coverage level: minimal",
+                  `Overflow windows: ${entries.length}`,
+                  `Top directories: ${overflowDirs.join(", ") || "(none)"}`,
+                  `Top files: ${topOverflowFiles.map((file) => `${file.filename} [${file.status.toUpperCase()}] (+${file.additions} -${file.deletions})`).join("; ") || "(none)"}`
+                ].join("\n")
+              };
+            }
+
+            function summarizeCoverage(entries) {
+              return entries.reduce((counts, entry) => {
+                counts[entry.selectedVariant] = (counts[entry.selectedVariant] || 0) + 1;
                 return counts;
-              }, {});
+              }, { full: 0, compact: 0, minimal: 0 });
+            }
+
+            function buildSummaryBatchPrompt(batchEntries, batchIndex, batchCount) {
+              const coverageCounts = summarizeCoverage(batchEntries);
 
               return [
-                "OMITTED WINDOWS",
-                `Count: ${candidates.length}`,
-                `Files omitted from detailed analysis: ${omittedFiles.length}`,
-                `Top omitted directories: ${omittedDirs.join(", ") || "(none)"}`,
-                `Top omitted extensions: ${summarizeCounts(omittedExtensionCounts, 8) || "(none)"}`
+                "You are a principal software engineer analyzing one batch of rolling windows from a large pull request.",
+                "Each batch contains windows in full, compact, or minimal form to stay within prompt budget.",
+                "Use only the evidence shown in this batch. Compact and minimal windows are only partially analyzed.",
+                "Do not invent hidden behavior, missing files, or unsupported motivations.",
+                "",
+                "OUTPUT REQUIREMENTS:",
+                "- Output MUST be valid Markdown.",
+                "- Do NOT wrap the report in triple backticks.",
+                "- Keep the result between 900 and 2400 characters.",
+                "- Preserve explicit signals related to breaking changes, compatibility, migration, api, runtime, database, schema, security, performance, workflow, tooling, tests, and documentation when supported.",
+                "- End your response with the exact final line: END_OF_REPORT",
+                "",
+                "Use EXACTLY this structure:",
+                "",
+                "## Window Batch Analysis",
+                "",
+                "### Batch Scope",
+                "2-4 sentences.",
+                "",
+                "### Release Signals",
+                "2-5 bullets.",
+                "",
+                "### Risks And Checks",
+                "2-5 bullets.",
+                "",
+                "### Classification Signals",
+                "2-6 bullets listing direct technical signals useful for downstream label selection.",
+                "",
+                "BATCH METRICS",
+                `Batch number: ${batchIndex + 1}`,
+                `Total batches: ${batchCount}`,
+                `Windows in batch: ${batchEntries.length}`,
+                `Coverage mix: full=${coverageCounts.full || 0}, compact=${coverageCounts.compact || 0}, minimal=${coverageCounts.minimal || 0}`,
+                "",
+                "WINDOWS",
+                batchEntries.map((entry) => entry.selectedContent).join(WINDOW_SEPARATOR)
               ].join("\n");
             }
 
-            const summaryPromptPrefix = [
-              "You are a principal software engineer analyzing a pull request from rolling file windows.",
-              "This PR may be very large, so each window contains the highest-signal file metadata and selected patch snippets instead of one monolithic diff.",
-              "Some lower-signal windows may be compacted or omitted to stay within a strict prompt budget.",
-              "Use only the evidence shown in the windows. If a file is listed without a patch snippet, treat that file as partially analyzed.",
-              "Treat omitted windows as not analyzed.",
+            let summaryBatches = buildSummaryBatches(windowEntries);
+            while (summaryBatches.length > MAX_SUMMARY_BATCHES && downgradeWindowCoverage(windowEntries)) {
+              summaryBatches = buildSummaryBatches(windowEntries);
+            }
+
+            if (summaryBatches.length > MAX_SUMMARY_BATCHES) {
+              const overflowEntries = summaryBatches.slice(MAX_SUMMARY_BATCHES - 1).flat();
+              summaryBatches = [
+                ...summaryBatches.slice(0, MAX_SUMMARY_BATCHES - 1),
+                [buildOverflowWindow(overflowEntries)]
+              ];
+            }
+
+            for (const [batchIndex, batchEntries] of summaryBatches.entries()) {
+              const prompt = buildSummaryBatchPrompt(batchEntries, batchIndex, summaryBatches.length);
+              fs.writeFileSync(`/tmp/summary_batch_${batchIndex + 1}.txt`, prompt);
+            }
+
+            const totalSelectedWindowChars = windowEntries.reduce((sum, entry) => sum + entry.selectedContent.length, 0);
+            core.setOutput("has_changes", files.length > 0 ? "true" : "false");
+            core.setOutput("files_changed", String(files.length));
+            core.setOutput("additions", String(totalAdditions));
+            core.setOutput("deletions", String(totalDeletions));
+            core.setOutput("windows_count", String(windows.length));
+            core.setOutput("windows_included", String(windowEntries.length));
+            core.setOutput("windows_omitted", "0");
+            core.setOutput("summary_batch_count", String(summaryBatches.length));
+            core.setOutput("summary_prompt_chars", String(totalSelectedWindowChars));
+      - name: AI — Generate Batch Summary 1
+        if: github.event_name == 'pull_request' && github.event.action != 'closed' && fromJSON(steps.collect.outputs.summary_batch_count || '0') >= 1
+        id: ai-summary-batch-1
+        uses: actions/ai-inference@v2
+        with:
+          model: openai/gpt-4o
+          prompt-file: /tmp/summary_batch_1.txt
+          max-completion-tokens: 1200
+      - name: AI — Generate Batch Summary 2
+        if: github.event_name == 'pull_request' && github.event.action != 'closed' && fromJSON(steps.collect.outputs.summary_batch_count || '0') >= 2
+        id: ai-summary-batch-2
+        uses: actions/ai-inference@v2
+        with:
+          model: openai/gpt-4o
+          prompt-file: /tmp/summary_batch_2.txt
+          max-completion-tokens: 1200
+      - name: AI — Generate Batch Summary 3
+        if: github.event_name == 'pull_request' && github.event.action != 'closed' && fromJSON(steps.collect.outputs.summary_batch_count || '0') >= 3
+        id: ai-summary-batch-3
+        uses: actions/ai-inference@v2
+        with:
+          model: openai/gpt-4o
+          prompt-file: /tmp/summary_batch_3.txt
+          max-completion-tokens: 1200
+      - name: AI — Generate Batch Summary 4
+        if: github.event_name == 'pull_request' && github.event.action != 'closed' && fromJSON(steps.collect.outputs.summary_batch_count || '0') >= 4
+        id: ai-summary-batch-4
+        uses: actions/ai-inference@v2
+        with:
+          model: openai/gpt-4o
+          prompt-file: /tmp/summary_batch_4.txt
+          max-completion-tokens: 1200
+      - name: AI — Generate Batch Summary 5
+        if: github.event_name == 'pull_request' && github.event.action != 'closed' && fromJSON(steps.collect.outputs.summary_batch_count || '0') >= 5
+        id: ai-summary-batch-5
+        uses: actions/ai-inference@v2
+        with:
+          model: openai/gpt-4o
+          prompt-file: /tmp/summary_batch_5.txt
+          max-completion-tokens: 1200
+      - name: AI — Generate Batch Summary 6
+        if: github.event_name == 'pull_request' && github.event.action != 'closed' && fromJSON(steps.collect.outputs.summary_batch_count || '0') >= 6
+        id: ai-summary-batch-6
+        uses: actions/ai-inference@v2
+        with:
+          model: openai/gpt-4o
+          prompt-file: /tmp/summary_batch_6.txt
+          max-completion-tokens: 1200
+      - name: AI — Generate Batch Summary 7
+        if: github.event_name == 'pull_request' && github.event.action != 'closed' && fromJSON(steps.collect.outputs.summary_batch_count || '0') >= 7
+        id: ai-summary-batch-7
+        uses: actions/ai-inference@v2
+        with:
+          model: openai/gpt-4o
+          prompt-file: /tmp/summary_batch_7.txt
+          max-completion-tokens: 1200
+      - name: AI — Generate Batch Summary 8
+        if: github.event_name == 'pull_request' && github.event.action != 'closed' && fromJSON(steps.collect.outputs.summary_batch_count || '0') >= 8
+        id: ai-summary-batch-8
+        uses: actions/ai-inference@v2
+        with:
+          model: openai/gpt-4o
+          prompt-file: /tmp/summary_batch_8.txt
+          max-completion-tokens: 1200
+      - name: AI — Generate Batch Summary 9
+        if: github.event_name == 'pull_request' && github.event.action != 'closed' && fromJSON(steps.collect.outputs.summary_batch_count || '0') >= 9
+        id: ai-summary-batch-9
+        uses: actions/ai-inference@v2
+        with:
+          model: openai/gpt-4o
+          prompt-file: /tmp/summary_batch_9.txt
+          max-completion-tokens: 1200
+      - name: AI — Generate Batch Summary 10
+        if: github.event_name == 'pull_request' && github.event.action != 'closed' && fromJSON(steps.collect.outputs.summary_batch_count || '0') >= 10
+        id: ai-summary-batch-10
+        uses: actions/ai-inference@v2
+        with:
+          model: openai/gpt-4o
+          prompt-file: /tmp/summary_batch_10.txt
+          max-completion-tokens: 1200
+      - name: Build Aggregated Summary Prompt
+        if: github.event_name == 'pull_request' && github.event.action != 'closed' && fromJSON(steps.collect.outputs.summary_batch_count || '0') >= 1
+        id: aggregate-summary-prompt
+        env:
+          AI_BATCH_SUMMARY_1: ${{ steps.ai-summary-batch-1.outputs.response }}
+          AI_BATCH_SUMMARY_2: ${{ steps.ai-summary-batch-2.outputs.response }}
+          AI_BATCH_SUMMARY_3: ${{ steps.ai-summary-batch-3.outputs.response }}
+          AI_BATCH_SUMMARY_4: ${{ steps.ai-summary-batch-4.outputs.response }}
+          AI_BATCH_SUMMARY_5: ${{ steps.ai-summary-batch-5.outputs.response }}
+          AI_BATCH_SUMMARY_6: ${{ steps.ai-summary-batch-6.outputs.response }}
+          AI_BATCH_SUMMARY_7: ${{ steps.ai-summary-batch-7.outputs.response }}
+          AI_BATCH_SUMMARY_8: ${{ steps.ai-summary-batch-8.outputs.response }}
+          AI_BATCH_SUMMARY_9: ${{ steps.ai-summary-batch-9.outputs.response }}
+          AI_BATCH_SUMMARY_10: ${{ steps.ai-summary-batch-10.outputs.response }}
+          FILES_CHANGED: ${{ steps.collect.outputs.files_changed }}
+          ADDITIONS: ${{ steps.collect.outputs.additions }}
+          DELETIONS: ${{ steps.collect.outputs.deletions }}
+          WINDOWS_COUNT: ${{ steps.collect.outputs.windows_count }}
+          WINDOWS_INCLUDED: ${{ steps.collect.outputs.windows_included }}
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require("fs");
+
+            function stripEndMarker(text) {
+              return String(text || "").replace(/\nEND_OF_REPORT\s*$/m, "").trim();
+            }
+
+            const batchSummaries = [
+              process.env.AI_BATCH_SUMMARY_1,
+              process.env.AI_BATCH_SUMMARY_2,
+              process.env.AI_BATCH_SUMMARY_3,
+              process.env.AI_BATCH_SUMMARY_4,
+              process.env.AI_BATCH_SUMMARY_5,
+              process.env.AI_BATCH_SUMMARY_6,
+              process.env.AI_BATCH_SUMMARY_7,
+              process.env.AI_BATCH_SUMMARY_8,
+              process.env.AI_BATCH_SUMMARY_9,
+              process.env.AI_BATCH_SUMMARY_10
+            ].map(stripEndMarker).filter(Boolean);
+
+            const summaryPrompt = [
+              "You are a principal software engineer synthesizing hierarchical analyses of a pull request.",
+              "Each batch analysis was generated from a disjoint subset of rolling diff windows.",
+              "Use only the evidence in the batch analyses below.",
               "Do not invent product behavior, hidden files, or motivations that are not supported by the prompt.",
               "",
               "OUTPUT REQUIREMENTS:",
@@ -207,7 +438,7 @@ jobs:
               "- Keep the report concise and review-oriented.",
               "- Output MUST be BETWEEN 1800 and 5000 characters total.",
               "- Focus on the most important change clusters, release relevance, risks, and testing implications.",
-              "- Call out any files or areas that were only partially analyzed because the patch was unavailable or truncated.",
+              "- Call out any files or areas that were only partially analyzed because the upstream windows were compact or minimal.",
               "- End your response with the exact final line: END_OF_REPORT",
               "",
               "Generate Markdown using EXACTLY this structure:",
@@ -233,91 +464,22 @@ jobs:
               "State what was fully analyzed versus partially analyzed.",
               "",
               "GLOBAL METRICS",
-              `Total files: ${files.length}`,
-              `Total additions: ${totalAdditions}`,
-              `Total deletions: ${totalDeletions}`,
-              `Status counts: ${Object.entries(statusCounts).map(([status, count]) => `${status}=${count}`).join(", ")}`,
-              `Extensions: ${summarizeCounts(extensionCounts, 12)}`,
-              `Top directories: ${topDirs.slice(0, 12).join(", ")}`,
-              `Window count: ${windows.length}`,
+              `Total files: ${process.env.FILES_CHANGED || "0"}`,
+              `Total additions: ${process.env.ADDITIONS || "0"}`,
+              `Total deletions: ${process.env.DELETIONS || "0"}`,
+              `Window count: ${process.env.WINDOWS_COUNT || "0"}`,
+              `Windows represented: ${process.env.WINDOWS_INCLUDED || "0"}`,
+              `Batch summaries: ${batchSummaries.length}`,
               "",
-              "ROLLING WINDOWS",
+              "BATCH SUMMARIES",
+              batchSummaries.map((summary, index) => [`BATCH ${index + 1}/${batchSummaries.length}`, summary].join("\n")).join("\n\n═══════════════════════════════════════════\n\n")
             ].join("\n");
 
-            const availableWindowBudget = Math.max(
-              MAX_SUMMARY_PROMPT_CHARS - summaryPromptPrefix.length - MAX_SUMMARY_PROMPT_FOOTER_CHARS,
-              0
-            );
-            const windowCandidates = windows.map((windowFiles, index) => ({
-              index,
-              files: windowFiles,
-              score: windowFiles.reduce((sum, file) => sum + file.score, 0),
-              full: formatWindow(windowFiles, index),
-              compact: formatWindow(windowFiles, index, { highlightedFileLimit: 4, patchSnippetLimit: 0 }),
-              minimal: formatMinimalWindow(windowFiles, index)
-            }));
-            const selectedWindows = [];
-            let usedWindowBudget = 0;
-
-            for (const candidate of [...windowCandidates].sort((left, right) => right.score - left.score || left.index - right.index)) {
-              const separatorLength = selectedWindows.length > 0 ? WINDOW_SEPARATOR.length : 0;
-              const variants = [candidate.full, candidate.compact, candidate.minimal];
-              let chosenVariant = "";
-
-              for (const variant of variants) {
-                if (usedWindowBudget + separatorLength + variant.length <= availableWindowBudget) {
-                  chosenVariant = variant;
-                  break;
-                }
-              }
-
-              if (!chosenVariant && selectedWindows.length === 0) {
-                chosenVariant = clampForPrompt(candidate.minimal, Math.max(availableWindowBudget - separatorLength, 0));
-              }
-
-              if (!chosenVariant) {
-                continue;
-              }
-
-              selectedWindows.push({ index: candidate.index, content: chosenVariant });
-              usedWindowBudget += separatorLength + chosenVariant.length;
-            }
-
-            selectedWindows.sort((left, right) => left.index - right.index);
-            const selectedWindowIndexes = new Set(selectedWindows.map((selected) => selected.index));
-            const omittedCandidates = windowCandidates.filter((candidate) => !selectedWindowIndexes.has(candidate.index));
-            const windowDigestParts = selectedWindows.map((selected) => selected.content);
-            const omittedSummary = summarizeOmittedWindows(omittedCandidates);
-
-            if (omittedSummary) {
-              const remainingBudget = Math.max(
-                MAX_SUMMARY_PROMPT_CHARS - summaryPromptPrefix.length - usedWindowBudget - (windowDigestParts.length > 0 ? WINDOW_SEPARATOR.length : 0),
-                0
-              );
-              const safeOmittedSummary = clampForPrompt(omittedSummary, remainingBudget);
-              if (safeOmittedSummary) {
-                windowDigestParts.push(safeOmittedSummary);
-              }
-            }
-
-            if (windowDigestParts.length === 0) {
-              windowDigestParts.push("No windows fit within the prompt budget. Rely on global metrics only.");
-            }
-
-            const windowDigest = windowDigestParts.join(WINDOW_SEPARATOR);
-            const summaryPrompt = [summaryPromptPrefix, windowDigest].filter(Boolean).join("\n");
-
             fs.writeFileSync("/tmp/summary_prompt.txt", summaryPrompt);
-            core.setOutput("has_changes", files.length > 0 ? "true" : "false");
-            core.setOutput("files_changed", String(files.length));
-            core.setOutput("additions", String(totalAdditions));
-            core.setOutput("deletions", String(totalDeletions));
-            core.setOutput("windows_count", String(windows.length));
-            core.setOutput("windows_included", String(selectedWindows.length));
-            core.setOutput("windows_omitted", String(omittedCandidates.length));
-            core.setOutput("summary_prompt_chars", String(summaryPrompt.length));
+            core.setOutput("prompt_chars", String(summaryPrompt.length));
+            core.setOutput("ready", batchSummaries.length > 0 ? "true" : "false");
       - name: AI — Generate Change Summary
-        if: steps.collect.outputs.has_changes == 'true'
+        if: steps.aggregate-summary-prompt.outputs.ready == 'true'
         id: ai-summary
         uses: actions/ai-inference@v2
         with:
@@ -340,12 +502,14 @@ jobs:
             const detailedSummary = (process.env.AI_DETAILED_SUMMARY || "").replace(/\nEND_OF_REPORT\s*$/m, "").trim();
             const compactPrompt = [
               "You are compressing a PR analysis that was generated from rolling windows of a large pull request.",
-              "Keep the final summary concise, stable across repeated updates, and useful for reviewers deciding release relevance.",
+              "Keep the final summary concise, stable across repeated updates, and useful for reviewers deciding release relevance and label classification.",
               "",
               "OUTPUT REQUIREMENTS:",
               "- Output MUST be valid Markdown.",
               "- Keep the result between 900 and 2200 characters.",
               "- Preserve the strongest technical signals and remove repetition.",
+              "- Preserve explicit breaking-change, compatibility, migration, API, database, schema, runtime, security, workflow, tooling, test, and documentation signals when they are supported.",
+              "- If the evidence implies incompatible behavior or a major version impact, say that explicitly.",
               "- Do not mention labels directly unless they are clearly supported by the summary.",
               "- End your response with the exact final line: END_OF_REPORT",
               "",
@@ -362,6 +526,9 @@ jobs:
               "### Risks And Testing",
               "2-5 bullets covering the top risks and checks.",
               "",
+              "### Classification Signals",
+              "2-6 bullets listing direct, compact technical signals that are most relevant for label selection.",
+              "",
               "PR METRICS",
               `Files changed: ${process.env.FILES_CHANGED || "0"}`,
               `Additions: ${process.env.ADDITIONS || "0"}`,
@@ -373,6 +540,7 @@ jobs:
             ].join("\n");
 
             fs.writeFileSync("/tmp/compact_summary_prompt.txt", compactPrompt);
+            core.setOutput("prompt_chars", String(compactPrompt.length));
             core.setOutput("ready", "true");
       - name: AI — Compact Change Summary
         if: steps.compact-prompt.outputs.ready == 'true'
@@ -471,26 +639,49 @@ jobs:
           steps.issue-summary-prompt.outputs.ready == 'true'
         id: label-prompt
         env:
-          AI_SUMMARY: ${{ steps.ai-compact.outputs.response || steps.ai-issue-summary.outputs.response }}
+          AI_COMPACT_SUMMARY: ${{ steps.ai-compact.outputs.response }}
+          AI_ISSUE_SUMMARY: ${{ steps.ai-issue-summary.outputs.response }}
           EVENT_KIND: ${{ github.event_name }}
         uses: actions/github-script@v8
         with:
           script: |
             const fs = require("fs");
-            const summary = process.env.AI_SUMMARY || "";
             const eventKind = process.env.EVENT_KIND === "issues" ? "issue" : "pull request";
             const sourceLabel = eventKind === "issue" ? "AI-GENERATED ISSUE ANALYSIS" : "AI-GENERATED CHANGE SUMMARY";
             const MAX_AI_LABELS = 6;
+            const MAX_COMPACT_SUMMARY_CHARS = 2200;
+
+            function stripEndMarker(text) {
+              return String(text || "").replace(/\nEND_OF_REPORT\s*$/m, "").trim();
+            }
+
+            function clampForPrompt(text, maxChars) {
+              if (text.length <= maxChars) {
+                return text;
+              }
+              if (maxChars <= 0) {
+                return "";
+              }
+              const suffix = "\n[...truncated for label prompt budget...]";
+              const trimmedLength = Math.max(maxChars - suffix.length, 0);
+              return text.slice(0, trimmedLength) + suffix;
+            }
+
+            const compactSummary = stripEndMarker(process.env.AI_COMPACT_SUMMARY || "");
+            const issueSummary = stripEndMarker(process.env.AI_ISSUE_SUMMARY || "");
+            const summarySections = eventKind === "issue"
+              ? [{ heading: sourceLabel, body: clampForPrompt(issueSummary, MAX_COMPACT_SUMMARY_CHARS) }]
+              : [{ heading: "COMPACT SUMMARY", body: clampForPrompt(compactSummary, MAX_COMPACT_SUMMARY_CHARS) }].filter((section) => section.body);
             const prompt = [
               "You are an expert issue and pull request classifier.",
               eventKind === "issue"
                 ? "You will receive an AI-generated structured analysis of one GitHub issue."
-                : "You will receive an AI-generated technical summary of code changes.",
-              `Based ONLY on the summary below, select up to ${MAX_AI_LABELS} of the most relevant labels from the allowed list.`,
+                : "You will receive an AI-generated compact technical summary of code changes.",
+              `Based ONLY on the evidence below, select up to ${MAX_AI_LABELS} of the most relevant labels from the allowed list.`,
               "",
               "RULES:",
               `- Return at most ${MAX_AI_LABELS} labels, ordered from most to least relevant.`,
-              "- Do NOT try to fill the limit. Returning 1-3 labels is normal. Use more labels only when each one has separate, direct evidence.",
+              "- Return all directly supported labels up to the limit. Returning 2-6 labels is normal for multi-area pull requests or issues; return a single label only when the evidence is genuinely narrow.",
               "- Use only direct evidence from the summary. Do not infer labels from weak hints.",
               "- If a label is only loosely related, omit it.",
               "- Prefer the more specific label over a broader overlapping label.",
@@ -505,7 +696,7 @@ jobs:
               "PREFERENCE RULES:",
               "- Version-critical labels must be prioritized first when evidence exists: breaking-change, enhancement, security, bug, performance, api, database, schema, compatibility, migration, feature-flag, runtime.",
               "- If both broad maintenance labels and version-critical labels apply, put version-critical labels first.",
-              "- If breaking behavior is clearly supported, include breaking-change and rank it first.",
+              "- If the evidence explicitly mentions a breaking change, a major version bump, incompatibility, required migration, or consumer adaptation, include breaking-change and rank it first.",
               "- For issues, prefer improvement and proposal when the item is primarily a request, idea, or opportunity rather than a confirmed implemented feature change.",
               "- For GitHub Actions, bots, repo automation, labeling, issue management, or release workflow changes, strongly prefer workflow, automation, github, ci, config, or release only when the summary clearly supports them.",
               "- Do not apply performance unless the summary explicitly describes speed, caching, efficiency, latency, memory, or throughput improvements.",
@@ -588,11 +779,12 @@ jobs:
               "serialization → Use when data encoding, decoding, wire format handling, or serialization and deserialization behavior changes. Do not use for generic API or schema work unless format transformation is the core change.",
               "",
               "══════════════════════════════════════════",
-              `${sourceLabel}:`,
+              "SUMMARY EVIDENCE:",
               "══════════════════════════════════════════",
-              summary
+              summarySections.map((section) => [section.heading + ":", section.body].join("\n")).join("\n\n══════════════════════════════════════════\n\n") || "(none)"
             ].join("\n");
             fs.writeFileSync("/tmp/label_prompt.txt", prompt);
+            core.setOutput("prompt_chars", String(prompt.length));
             core.setOutput("ready", "true");
       - name: AI — Classify Labels
         if: steps.label-prompt.outputs.ready == 'true'
@@ -704,12 +896,18 @@ jobs:
               'runtime': 'patch'
             };
             const BUMP_ORDER = { none: 0, patch: 1, minor: 2, major: 3 };
-            function hasReleaseRelevantLabel(labels) {
-              return labels.some(label => RELEASE_RELEVANT_LABELS.includes(label));
-            }
             function normalizeLabelName(label) {
               const normalized = String(label || '').trim().toLowerCase();
               return VERSION_LABEL_ALIASES[normalized] || normalized;
+            }
+            function hasLabelName(labels, expectedLabel) {
+              return (labels || []).some((label) => {
+                const labelName = typeof label === 'string' ? label : label?.name;
+                return normalizeLabelName(labelName) === expectedLabel;
+              });
+            }
+            function hasReleaseRelevantLabel(labels) {
+              return RELEASE_RELEVANT_LABELS.some((label) => hasLabelName(labels, label));
             }
             function uniqueValidLabels(labels) {
               return [...new Set((labels || []).map((label) => normalizeLabelName(label)).filter((label) => VALID_LABELS.has(label)))];
@@ -877,7 +1075,7 @@ jobs:
               const releaseItems = [];
               for (const milestone of milestones) {
                 const milestoneItems = await github.paginate(github.rest.issues.listForRepo, { owner, repo, milestone: milestone.number, state: 'all' });
-                releaseItems.push(...milestoneItems.filter((item) => item.pull_request && item.labels.some((label) => RELEASE_RELEVANT_LABELS.includes(label.name))));
+                releaseItems.push(...milestoneItems.filter((item) => item.pull_request && hasReleaseRelevantLabel(item.labels)));
               }
               return releaseItems;
             }
@@ -983,6 +1181,10 @@ jobs:
               const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: issueNumber });
               return comments.find(comment => comment.user.type === 'Bot' && comment.body.includes(MILESTONE_COMMENT_SIGNATURE));
             }
+            async function getExistingMajorAlertComment() {
+              const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: issueNumber });
+              return comments.find((comment) => comment.user.type === 'Bot' && comment.body.includes('MAJOR RELEASE ALERT'));
+            }
             async function upsertBotComment(body, metadata) {
               const existing = await getExistingBotComment();
               const MAX_COMMENT_CHARS = 60000;
@@ -1065,7 +1267,7 @@ jobs:
               let nextAiLabels = [];
               if (isPR && aiLabelsRaw) {
                 const predictedLabels = parsedAiLabels;
-                if (payload.action === 'synchronize') {
+                if (payload.action === 'synchronize' && previousBotLabels.length > 0) {
                   nextAiLabels = mergeSyncLabels(previousBotLabels, predictedLabels);
                 } else {
                   nextAiLabels = predictedLabels;
@@ -1091,7 +1293,7 @@ jobs:
                 await upsertBotComment(commentBody, { aiLabels: nextAiLabels, maxAiLabels: MAX_AI_LABELS });
               }
               const freshIssue = await github.rest.issues.get({ owner, repo, issue_number: issueNumber });
-              const currentLabelNames = freshIssue.data.labels.map(l => l.name);
+              const currentLabelNames = freshIssue.data.labels.map(l => normalizeLabelName(l.name));
               const releaseRelevant = hasReleaseRelevantLabel(currentLabelNames);
               if (!isPR) {
                 if (freshIssue.data.milestone && !releaseRelevant) {
@@ -1132,12 +1334,13 @@ jobs:
               const milestoneChanged = !freshIssue.data.milestone || freshIssue.data.milestone.number !== milestone.number;
               if (milestoneChanged) await github.rest.issues.update({ owner, repo, issue_number: issueNumber, milestone: milestone.number });
               const items = await github.paginate(github.rest.issues.listForRepo, { owner, repo, milestone: milestone.number, state: 'all' });
-              const releaseItems = items.filter(item => item.pull_request && item.labels.some(label => RELEASE_RELEVANT_LABELS.includes(label.name)));
-              const isBreaking = releaseItems.some(item => item.labels.some(label => label.name === 'breaking-change'));
-              if (isBreaking && isPR) {
-                const comments = await github.rest.issues.listComments({ owner, repo, issue_number: issueNumber });
-                const alreadyAlerted = comments.data.some(c => c.body.includes('MAJOR RELEASE ALERT'));
-                if (!alreadyAlerted) await github.rest.issues.createComment({ owner, repo, issue_number: issueNumber, body: `🚨 **MAJOR RELEASE ALERT** 🚨\n\n@${owner} This PR triggers a **major** version bump due to breaking changes detected by AI analysis.` });
+              const releaseItems = items.filter(item => item.pull_request && hasReleaseRelevantLabel(item.labels));
+              const currentPrIsBreaking = currentIssueLabels.includes('breaking-change');
+              const existingMajorAlertComment = isPR ? await getExistingMajorAlertComment() : null;
+              if (currentPrIsBreaking && isPR) {
+                if (!existingMajorAlertComment) await github.rest.issues.createComment({ owner, repo, issue_number: issueNumber, body: `🚨 **MAJOR RELEASE ALERT** 🚨\n\n@${owner} This PR triggers a **major** version bump due to breaking changes detected by AI analysis.` });
+              } else if (existingMajorAlertComment) {
+                await github.rest.issues.deleteComment({ owner, repo, comment_id: existingMajorAlertComment.id });
               }
               const milestoneWithBase = await ensureMilestoneBaseVersion(milestone);
               const shouldRespectManualMilestone = milestoneWithBase.manualTitleLocked || (issueHadMilestoneBeforeAutobot && !milestoneWithBase.hadManagedMarker && !isVersionTag(milestoneWithBase.milestone.title));
@@ -1183,9 +1386,9 @@ jobs:
               const freshMilestone = await github.rest.issues.getMilestone({ owner, repo, milestone_number: mData.number });
               if (freshMilestone.data.open_issues === 0 && freshMilestone.data.state === 'open' && freshMilestone.data.closed_issues > 0) {
                 const closedItems = await github.paginate(github.rest.issues.listForRepo, { owner, repo, milestone: freshMilestone.data.number, state: 'closed' });
-                const closedReleaseItems = closedItems.filter(item => item.pull_request && item.labels.some(label => RELEASE_RELEVANT_LABELS.includes(label.name)));
-                const hasBreaking = closedReleaseItems.some(item => item.labels.some(label => label.name === 'breaking-change'));
-                const hasForcedType = closedReleaseItems.some(item => item.labels.some(label => FORCE_RELEASE_TYPES.includes(label.name)));
+                const closedReleaseItems = closedItems.filter(item => item.pull_request && hasReleaseRelevantLabel(item.labels));
+                const hasBreaking = closedReleaseItems.some(item => hasLabelName(item.labels, 'breaking-change'));
+                const hasForcedType = closedReleaseItems.some(item => item.labels.some(label => FORCE_RELEASE_TYPES.includes(normalizeLabelName(label.name))));
                 if (closedReleaseItems.length < MIN_RELEASE_SIZE && !hasForcedType && !hasBreaking) return;
                 let targetVersion = freshMilestone.data.title;
                 const releases = await github.rest.repos.listReleases({ owner, repo });

@@ -1142,13 +1142,16 @@ class RepositorySyncService:
         from definers.application_ml.safe_deserialization import (
             validate_serialized_model_file,
         )
+        from definers.system import secure_path
+
+        safe_model_path = secure_path(model_path)
 
         if model_type in {"joblib", "pkl"}:
-            validate_serialized_model_file(model_path, model_type)
+            validate_serialized_model_file(safe_model_path, model_type)
             return
         if model_type not in {"bin", "onnx", "pt", "pth", "safetensors"}:
             return
-        with open(model_path, "rb") as file_obj:
+        with open(safe_model_path, "rb") as file_obj:
             header = file_obj.read(512)
         lowered_header = header.lower()
         if lowered_header.startswith(

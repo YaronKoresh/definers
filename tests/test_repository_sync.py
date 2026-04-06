@@ -90,6 +90,27 @@ class TestRepositorySyncHelpers(unittest.TestCase):
         finally:
             Path(temp_file_path).unlink(missing_ok=True)
 
+    def test_validate_downloaded_model_file_secures_path_before_opening(self):
+        temp_file_descriptor, temp_file_path = tempfile.mkstemp(
+            suffix=".safetensors"
+        )
+        os.close(temp_file_descriptor)
+        Path(temp_file_path).write_bytes(b"safe-bytes")
+        try:
+            with patch(
+                "definers.system.secure_path",
+                side_effect=lambda path, trust=None: path,
+            ) as mock_secure_path:
+                repository_sync._validate_downloaded_model_file(
+                    temp_file_path,
+                    "safetensors",
+                )
+
+            mock_secure_path.assert_called_once()
+            self.assertEqual(mock_secure_path.call_args.args[0], temp_file_path)
+        finally:
+            Path(temp_file_path).unlink(missing_ok=True)
+
     def test_trusted_directories_include_common_parent(self):
         trusted_directories = repository_sync._trusted_directories_for_paths(
             (
