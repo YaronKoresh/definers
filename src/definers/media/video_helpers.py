@@ -1,4 +1,4 @@
-from definers.data import init_cupy_numpy
+from definers.application_data.runtime_patches import init_cupy_numpy
 from definers.media.image_helpers import (
     _extract_visual_features,
     _reconstruct_visual_frame,

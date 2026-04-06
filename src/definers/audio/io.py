@@ -7,6 +7,7 @@ import numpy as np
 import definers.file_ops as file_ops
 from definers.platform.filesystem import exist
 from definers.platform.paths import full_path, tmp
+from definers.system import get_ext
 
 
 def is_audio_segment(audio_signal) -> bool:
@@ -30,18 +31,20 @@ def read_audio(audio_file: str) -> tuple[int, np.ndarray]:
     import pydub
 
     audio_segment = pydub.AudioSegment.from_file(audio_file)
-    samples = np.array(audio_segment.get_array_of_samples())
+    samples = np.array(audio_segment.get_array_of_samples(), dtype=np.float32)
 
     audio_data = samples.reshape((-1, audio_segment.channels)).T
 
-    return audio_segment.frame_rate, audio_data.astype(np.float32) / 32768.0
+    sample_width = max(int(getattr(audio_segment, "sample_width", 2)), 1)
+    normalization_scale = float(1 << (sample_width * 8 - 1))
+
+    return audio_segment.frame_rate, audio_data / normalization_scale
 
 
 def save_audio(
     destination_path: str,
     audio_signal: np.ndarray,
     sample_rate: int = 44100,
-    output_format: str = "mp3",
     *,
     bit_depth: int = 32,
     bitrate: int = 320,
@@ -51,7 +54,7 @@ def save_audio(
     import soundfile as sf
 
     base_path = os.path.splitext(str(destination_path))[0]
-    ext = output_format.lower()
+    ext = get_ext(destination_path)
     final_path = f"{base_path}.{ext}"
 
     lossy_params = [

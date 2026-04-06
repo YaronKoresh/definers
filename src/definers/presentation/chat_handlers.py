@@ -1,82 +1,83 @@
-from typing import Any
+class ChatPresentationService:
+    @staticmethod
+    def validate_text_input(value):
+        from definers.application_text.validation import TextInputValidator
 
-import definers.text as text
-from definers.application_chat.contracts import (
-    ChatHistory,
-    ChatMessage,
-    ChatRequest,
-)
-from definers.application_chat.handlers import (
-    build_chat_audit_message as _build_chat_audit_message,
-    create_chat_request,
-    create_chat_request_handler,
-    handle_chat_request,
-)
-from definers.constants import (
-    MAX_CONSECUTIVE_SPACES,
-    MAX_INPUT_LENGTH,
-    language_codes,
-)
-from definers.ml import answer
-from definers.system import log
+        return TextInputValidator.default().validate(value)
 
-
-def validate_text_input(value):
-    import gradio as gr
-
-    if value is None:
-        return ""
-    if len(value) > MAX_INPUT_LENGTH:
-        log(
-            "Validation reject",
-            f"input length {len(value)} exceeds {MAX_INPUT_LENGTH}",
+    @staticmethod
+    def build_chat_audit_message(included_types, original_language):
+        from definers.application_chat.handlers import (
+            build_chat_audit_message as build_application_chat_audit_message,
         )
-        raise gr.Error(f"Input too long ({len(value)} > {MAX_INPUT_LENGTH})")
-    if " " * (MAX_CONSECUTIVE_SPACES + 1) in value:
-        log("Validation reject", "input has excessive consecutive spaces")
-        raise gr.Error("Input contains too many consecutive spaces")
-    return text.simple_text(value)
+        from definers.constants import language_codes
+
+        return build_application_chat_audit_message(
+            included_types,
+            original_language,
+            language_codes,
+        )
+
+    @staticmethod
+    def create_default_chat_request_handler():
+        import definers.text as text
+        from definers.application_chat.handlers import (
+            create_chat_request_handler,
+        )
+        from definers.application_text.validation import TextInputValidator
+        from definers.constants import language_codes
+        from definers.system import log
+
+        validator = TextInputValidator.default()
+        current_answer = answer
+        if current_answer is None:
+            from definers.ml import answer as current_answer
+
+        return create_chat_request_handler(
+            detect_language=text.language,
+            translate_text=text.ai_translate,
+            validate_text=validator.validate,
+            answer=current_answer,
+            log=log,
+            language_names=language_codes,
+        )
+
+    @staticmethod
+    def to_chat_request(message, history):
+        from definers.application_chat.handlers import create_chat_request
+
+        return create_chat_request(message, history)
+
+    @staticmethod
+    def get_chat_response(message, history):
+        import definers.text as text
+        from definers.application_chat.handlers import handle_chat_request
+        from definers.application_text.validation import TextInputValidator
+        from definers.constants import language_codes
+        from definers.system import log
+
+        validator = TextInputValidator.default()
+        current_answer = answer
+        if current_answer is None:
+            from definers.ml import answer as current_answer
+
+        return handle_chat_request(
+            message,
+            history,
+            detect_language=text.language,
+            translate_text=text.ai_translate,
+            validate_text=validator.validate,
+            answer=current_answer,
+            log=log,
+            language_names=language_codes,
+        )
 
 
-def build_chat_audit_message(
-    included_types: list[str], original_language: str | None
-) -> str:
-    return _build_chat_audit_message(
-        included_types,
-        original_language,
-        language_codes,
-    )
-
-
-def create_default_chat_request_handler():
-    return create_chat_request_handler(
-        detect_language=text.language,
-        translate_text=text.ai_translate,
-        validate_text=validate_text_input,
-        answer=answer,
-        log=log,
-        language_names=language_codes,
-    )
-
-
-def to_chat_request(
-    message: ChatMessage,
-    history: ChatHistory,
-) -> ChatRequest:
-    return create_chat_request(message, history)
-
-
-def get_chat_response(
-    message: ChatMessage,
-    history: ChatHistory,
-) -> Any:
-    return handle_chat_request(
-        message,
-        history,
-        detect_language=text.language,
-        translate_text=text.ai_translate,
-        validate_text=validate_text_input,
-        answer=answer,
-        log=log,
-        language_names=language_codes,
-    )
+validate_text_input = ChatPresentationService.validate_text_input
+build_chat_audit_message = ChatPresentationService.build_chat_audit_message
+create_default_chat_request_handler = (
+    ChatPresentationService.create_default_chat_request_handler
+)
+to_chat_request = ChatPresentationService.to_chat_request
+get_chat_response = ChatPresentationService.get_chat_response
+answer = None

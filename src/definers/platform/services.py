@@ -2,13 +2,12 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from threading import RLock
 from typing import Any
 
-from definers.platform import (
-    filesystem as _filesystem,
-    processes as _processes,
-    runtime as _runtime,
-)
+import definers.platform.filesystem as _filesystem
+import definers.platform.processes as _processes
+import definers.platform.runtime as _runtime
 from definers.platform.contracts import (
     CommandInput,
     EnvironmentPort,
@@ -274,17 +273,21 @@ class InfrastructureServiceContext(InfrastructureServiceContextPort):
     current: InfrastructureServices = field(
         default_factory=build_infrastructure_services
     )
+    _lock: RLock = field(default_factory=RLock, init=False, repr=False)
 
     def get(self) -> InfrastructureServices:
-        return self.current
+        with self._lock:
+            return self.current
 
     def set(self, services: InfrastructurePorts) -> InfrastructureServices:
-        self.current = _coerce_infrastructure_services(services)
-        return self.current
+        with self._lock:
+            self.current = _coerce_infrastructure_services(services)
+            return self.current
 
     def reset(self) -> InfrastructureServices:
-        self.current = build_infrastructure_services()
-        return self.current
+        with self._lock:
+            self.current = build_infrastructure_services()
+            return self.current
 
 
 _infrastructure_service_context = InfrastructureServiceContext()

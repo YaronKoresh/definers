@@ -4,9 +4,9 @@ from unittest.mock import patch
 
 import definers.application_data.tokenization as tokenization_module
 from definers.constants import MAX_CONSECUTIVE_SPACES, MAX_INPUT_LENGTH
-from definers.ml import train
+from definers.media.web_transfer import download_and_unzip, download_file
+from definers.ml import AutoTrainer
 from definers.system import run, secure_path
-from definers.web import download_and_unzip, download_file
 
 
 class TestSecurity(unittest.TestCase):
@@ -37,35 +37,19 @@ class TestSecurity(unittest.TestCase):
             os.remove(tmpfile2)
 
     def test_train_selected_rows_validation(self):
+        trainer = AutoTrainer()
 
         with patch.object(
             tokenization_module, "init_tokenizer"
         ) as mock_init_tokenizer:
             with self.assertRaises(ValueError):
-                train(
-                    model_path=None,
-                    remote_src=None,
-                    features=None,
-                    labels=None,
-                    selected_rows="x" * (MAX_INPUT_LENGTH + 1),
+                trainer.train(select="x" * (MAX_INPUT_LENGTH + 1))
+            with self.assertRaises(ValueError):
+                trainer.train(
+                    select="1 " + " " * (MAX_CONSECUTIVE_SPACES + 2) + "2"
                 )
             with self.assertRaises(ValueError):
-                train(
-                    model_path=None,
-                    remote_src=None,
-                    features=None,
-                    labels=None,
-                    selected_rows="1 "
-                    + " " * (MAX_CONSECUTIVE_SPACES + 2)
-                    + "2",
-                )
-            with self.assertRaises(ValueError):
-                train(
-                    model_path=None,
-                    remote_src="http://" + "a" * (MAX_INPUT_LENGTH + 1),
-                    features=None,
-                    labels=None,
-                )
+                trainer.train(data="http://" + "a" * (MAX_INPUT_LENGTH + 1))
             mock_init_tokenizer.assert_not_called()
 
     def test_download_validation(self):

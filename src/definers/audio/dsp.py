@@ -210,7 +210,7 @@ def _despike_audio(data: np.ndarray, windows: tuple[int, ...]) -> np.ndarray:
         median, mad = _windowed_median_and_mad(data, window, mode="reflect")
         sigma = _ROBUST_SIGMA_SCALE * np.maximum(mad, 1e-9)
 
-        threshold = 2.75 + (0.25 * scale_index)
+        threshold = 3.0 + (0.3 * scale_index)
         prominence_threshold = (0.35 + (0.07 * scale_index)) * sigma
 
         upper_limit = median + (threshold * sigma)

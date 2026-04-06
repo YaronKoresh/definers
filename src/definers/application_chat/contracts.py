@@ -29,8 +29,15 @@ class ChatRequest:
 
 
 @dataclass(frozen=True, slots=True)
+class ChatRequestMetadata:
+    includes_text: bool
+    includes_media: bool
+
+
+@dataclass(frozen=True, slots=True)
 class ChatRequestContext:
     request: ChatRequest
+    metadata: ChatRequestMetadata
     base_history: list[HistoryItem]
     history: list[HistoryItem]
     included_types: tuple[str, ...]

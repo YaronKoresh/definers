@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 import torch
 
-from definers.data import dtype
+from definers.application_data.arrays import dtype
 
 
 class TestDtype(unittest.TestCase):

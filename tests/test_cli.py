@@ -34,11 +34,13 @@ def test_package_version_matches_top_level_version():
 
 
 def test_chat_module_import_surface():
-    chat = importlib.import_module("definers.chat")
+    gui_entrypoints = importlib.import_module(
+        "definers.presentation.gui_entrypoints"
+    )
 
-    assert chat.__name__ == "definers.chat"
-    assert hasattr(chat, "start")
-    assert hasattr(chat, "_gui_chat")
+    assert gui_entrypoints.__name__ == "definers.presentation.gui_entrypoints"
+    assert hasattr(gui_entrypoints, "start")
+    assert hasattr(gui_entrypoints, "_gui_chat")
 
 
 def test_help():
@@ -63,9 +65,9 @@ def test_version():
 
 def test_start_dispatch(monkeypatch, tmp_path):
 
-    import definers.chat as chat
+    import definers.presentation.gui_entrypoints as gui_entrypoints
 
-    assert hasattr(chat, "start")
+    assert hasattr(gui_entrypoints, "start")
 
     called = {}
 
@@ -73,7 +75,7 @@ def test_start_dispatch(monkeypatch, tmp_path):
         called["name"] = project
         return 0
 
-    monkeypatch.setattr(chat, "start", fake_start)
+    monkeypatch.setattr(gui_entrypoints, "start", fake_start)
     code, out = run_cli(["start", "video"])
     assert code == 0
     assert called["name"] == "video"
@@ -84,22 +86,30 @@ def test_start_dispatch(monkeypatch, tmp_path):
 
 
 def test_music_video(monkeypatch):
-    import definers.chat as chat
+    import definers.presentation.gui_entrypoints as gui_entrypoints
 
-    assert hasattr(chat, "music_video")
+    assert hasattr(gui_entrypoints, "music_video")
 
-    monkeypatch.setattr(chat, "music_video", lambda a, w, h, f: "/tmp/x.mp4")
+    monkeypatch.setattr(
+        gui_entrypoints,
+        "music_video",
+        lambda a, w, h, f: "/tmp/x.mp4",
+    )
     code, out = run_cli(["music-video", "foo.mp3", "320", "240", "15"])
     assert code == 0
     assert out == "/tmp/x.mp4"
 
 
 def test_lyric_video(monkeypatch, tmp_path, capsys):
-    import definers.chat as chat
+    import definers.presentation.gui_entrypoints as gui_entrypoints
 
-    assert hasattr(chat, "lyric_video")
+    assert hasattr(gui_entrypoints, "lyric_video")
 
-    monkeypatch.setattr(chat, "lyric_video", lambda *args, **k: "/tmp/y.mp4")
+    monkeypatch.setattr(
+        gui_entrypoints,
+        "lyric_video",
+        lambda *args, **k: "/tmp/y.mp4",
+    )
 
     lyrics_file = tmp_path / "lyrics.txt"
     lyrics_file.write_text("hello world")
@@ -121,15 +131,34 @@ def test_unknown_command():
 
 
 def test_start_dispatch_uses_registry_resolution(monkeypatch):
-    import definers.chat as chat
+    import definers.presentation.gui_entrypoints as gui_entrypoints
 
-    assert hasattr(chat, "_gui_chat")
+    assert hasattr(gui_entrypoints, "_gui_chat")
 
     called = []
 
-    monkeypatch.setattr(chat, "_gui_chat", lambda: called.append("chat") or 0)
+    monkeypatch.setattr(
+        gui_entrypoints,
+        "_gui_chat",
+        lambda: called.append("chat") or 0,
+    )
 
     code, out = run_cli(["chat"])
 
     assert code == 0
     assert called == ["chat"]
+
+
+def test_unknown_namespace_only_gui_command_stays_invalid(monkeypatch):
+    import definers.presentation.gui_entrypoints as gui_entrypoints
+
+    monkeypatch.setitem(
+        gui_entrypoints.__dict__,
+        "_gui_namespace_only",
+        lambda: 0,
+    )
+
+    code, out = run_cli(["namespace-only"])
+
+    assert code == 1
+    assert out == "unknown command namespace-only"

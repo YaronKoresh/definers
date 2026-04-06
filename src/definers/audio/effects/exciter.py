@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 from scipy.signal import butter, sosfiltfilt
 
 from ...file_ops import catch, log
-from ..dsp import resample
+from ..dsp import remove_spectral_spikes, resample
 from ..utils import get_rms
 from .mixing import pad_audio
 
@@ -344,6 +344,59 @@ class ExciterAnalysis:
     band_rms: float
     spectral_flatness: float
     high_frequency_ratio: float
+    transient_density: float = 0.0
+    transient_ducking_depth: float = 0.0
+    closed_top_end_factor: float = 0.0
+    spectral_rolloff_hz: float = 0.0
+
+
+def _measure_transient_density(
+    values: np.ndarray,
+    sample_rate: int,
+    config: ExciterConfig = _DEFAULT_CONFIG,
+) -> float:
+    if values.size < 2 or sample_rate <= 0:
+        return 0.0
+
+    delta = np.abs(np.diff(values, prepend=values[..., :1], axis=-1))
+    window_size = max(int(round(sample_rate * 0.008)), 1)
+    smoothed = _moving_average_last_axis(delta, window_size)
+    threshold = float(
+        np.mean(smoothed, dtype=np.float32) + np.std(smoothed, dtype=np.float32)
+    )
+    if not np.isfinite(threshold) or threshold <= 0.0:
+        return 0.0
+    return float(np.mean(smoothed > threshold, dtype=np.float32))
+
+
+def _build_transient_ducking_curve(
+    signal: np.ndarray,
+    sample_rate: int,
+    depth: float,
+) -> np.ndarray:
+    sanitized = _sanitize_audio_array(signal)
+    if sanitized.size == 0 or sample_rate <= 0 or depth <= 0.0:
+        return np.ones_like(sanitized, dtype=np.float32)
+
+    samples_last, _ = _move_samples_to_last(sanitized)
+    linked = np.abs(_collapse_to_mono(samples_last))
+    fast_window = max(int(round(sample_rate * 0.0025)), 1)
+    slow_window = max(int(round(sample_rate * 0.02)), fast_window + 1)
+    fast_env = _moving_average_last_axis(linked, fast_window)
+    slow_env = _moving_average_last_axis(linked, slow_window)
+    transient_mask = np.clip(
+        (fast_env - slow_env) / np.maximum(fast_env, 1e-6),
+        0.0,
+        1.0,
+    )
+    transient_mask = _moving_average_last_axis(
+        transient_mask,
+        max(int(round(sample_rate * 0.004)), 1),
+    )
+    ducking_curve = 1.0 - transient_mask * float(np.clip(depth, 0.0, 0.9))
+    if samples_last.ndim > 1:
+        ducking_curve = ducking_curve[np.newaxis, :]
+    return np.asarray(np.clip(ducking_curve, 0.1, 1.0), dtype=np.float32)
 
 
 def analyze_exciter(
@@ -365,6 +418,8 @@ def analyze_exciter(
             band_rms=0.0,
             spectral_flatness=0.0,
             high_frequency_ratio=0.0,
+            closed_top_end_factor=0.0,
+            spectral_rolloff_hz=0.0,
         )
 
     oversample_factor = (
@@ -420,17 +475,103 @@ def analyze_exciter(
         (0.28 / max(band_rms, config.band_rms_floor))
         * float(crest_factor / 3.0)
     )
-    drive = float(np.clip(drive, config.min_drive, config.max_drive))
+    drive_restraint = float(
+        np.clip(1.02 - max(crest_factor - 3.0, 0.0) * 0.04, 0.72, 1.0)
+    )
 
     mono_signal = _collapse_to_mono(oversampled_signal)
-    _, _, spectral_flatness, high_frequency_ratio = _spectral_summary(
+    freqs, power, spectral_flatness, high_frequency_ratio = _spectral_summary(
         mono_signal,
         oversampled_rate,
         config,
     )
+    spectral_rolloff, _spectral_centroid, _spectral_bandwidth = (
+        _calculate_spectral_features(freqs, power, config)
+    )
+    transient_density = _measure_transient_density(
+        _collapse_to_mono(gated_band),
+        oversampled_rate,
+        config,
+    )
+    air_deficit_factor = float(
+        np.clip((0.08 - high_frequency_ratio) / 0.08, 0.0, 1.0)
+    )
+    rolloff_deficit_factor = float(
+        np.clip((5200.0 - spectral_rolloff) / 3200.0, 0.0, 1.0)
+    )
+    cutoff_deficit_factor = float(
+        np.clip((2600.0 - resolved_cutoff) / 1200.0, 0.0, 1.0)
+    )
+    closed_top_end_factor = float(
+        np.clip(
+            max(
+                air_deficit_factor,
+                rolloff_deficit_factor * 0.9,
+                cutoff_deficit_factor * 0.78,
+            )
+            * (0.64 + (1.0 - np.clip(spectral_flatness, 0.0, 1.0)) * 0.12),
+            0.0,
+            1.0,
+        )
+    )
+    brightness_restraint = float(
+        np.clip(1.0 - max(high_frequency_ratio - 0.12, 0.0) * 1.6, 0.6, 1.0)
+    )
+    transient_density_restraint = float(
+        np.clip(1.02 - max(transient_density - 0.08, 0.0) * 1.8, 0.58, 1.0)
+    )
+    drive = float(
+        np.clip(
+            drive
+            * drive_restraint
+            * brightness_restraint
+            * transient_density_restraint,
+            config.min_drive,
+            config.max_drive,
+        )
+    )
+    transient_guard = float(
+        np.clip(1.02 - max(crest_factor - 2.6, 0.0) * 0.08, 0.38, 1.0)
+    )
+    brightness_guard = float(
+        np.clip(
+            1.15 - 1.8 * high_frequency_ratio - 0.12 * spectral_flatness,
+            0.22,
+            1.0,
+        )
+    )
+    density_guard = float(
+        np.clip(1.04 - max(transient_density - 0.1, 0.0) * 1.15, 0.55, 1.0)
+    )
+    requested_mix = float(np.clip(mix, 0.0, 1.0))
     adaptive_mix = float(
-        np.clip(mix, 0.0, 1.0)
-        * float(np.clip(1.2 - 1.4 * high_frequency_ratio, 0.35, 1.0))
+        requested_mix * brightness_guard * transient_guard * density_guard
+    )
+    restoration_mix_floor = float(
+        requested_mix
+        * np.clip(
+            closed_top_end_factor
+            * (
+                0.52
+                + air_deficit_factor * 0.22
+                + rolloff_deficit_factor * 0.12
+                + cutoff_deficit_factor * 0.08
+            )
+            - max(transient_density - 0.14, 0.0) * 0.18,
+            0.0,
+            0.72,
+        )
+    )
+    adaptive_mix = float(max(adaptive_mix, restoration_mix_floor))
+    transient_ducking_depth = float(
+        np.clip(
+            np.clip((crest_factor - 2.5) / 6.0, 0.0, 1.0) * 0.28
+            + high_frequency_ratio * 0.4
+            + transient_density * 1.2
+            + spectral_flatness * 0.08,
+            0.0,
+            0.72,
+        )
     )
 
     return ExciterAnalysis(
@@ -441,6 +582,10 @@ def analyze_exciter(
         band_rms=band_rms,
         spectral_flatness=spectral_flatness,
         high_frequency_ratio=high_frequency_ratio,
+        transient_density=transient_density,
+        transient_ducking_depth=transient_ducking_depth,
+        closed_top_end_factor=closed_top_end_factor,
+        spectral_rolloff_hz=spectral_rolloff,
     )
 
 
@@ -603,6 +748,7 @@ def _apply_exciter_core(
     )
     spectral_gain = _moving_average_last_axis(spectral_gain, smoothing_bins)
     spectral_gain = np.clip(spectral_gain, 0.0, config.max_spectral_gain)
+    spectral_gain = remove_spectral_spikes(spectral_gain)
 
     residual_spectrum *= spectral_gain
     wet_oversampled = np.fft.irfft(residual_spectrum, n=sample_count, axis=-1)
@@ -617,6 +763,11 @@ def _apply_exciter_core(
     )
 
     dry_aligned, wet_aligned = pad_audio(samples_last, wet_signal)
+    wet_aligned = wet_aligned * _build_transient_ducking_curve(
+        dry_aligned,
+        sample_rate,
+        analysis.transient_ducking_depth,
+    )
     output = dry_aligned + wet_aligned * analysis.adaptive_mix
 
     if config.peak_limit_threshold is not None:
@@ -632,11 +783,26 @@ def apply_exciter(
     sample_rate: int,
     cutoff_hz: float | None = None,
     mix: float = 1.0,
+    max_drive: float | None = None,
+    high_frequency_cutoff_hz: float | None = None,
     config: ExciterConfig = _DEFAULT_CONFIG,
 ) -> np.ndarray:
     sanitized = _sanitize_audio_array(signal)
     if sanitized.size == 0 or sample_rate <= 0:
         return sanitized
+
+    if max_drive is not None or high_frequency_cutoff_hz is not None:
+        config = replace(
+            config,
+            max_drive=(
+                config.max_drive if max_drive is None else float(max_drive)
+            ),
+            high_frequency_cutoff=(
+                config.high_frequency_cutoff
+                if high_frequency_cutoff_hz is None
+                else float(high_frequency_cutoff_hz)
+            ),
+        )
 
     samples_last, restore_layout = _move_samples_to_last(sanitized)
 
@@ -650,7 +816,7 @@ def apply_exciter(
         )
         log(
             "Exciter",
-            f"Adaptive cutoff={analysis.cutoff_hz:.2f}Hz drive={analysis.drive:.2f}dB mix={analysis.adaptive_mix:.2f} oversample=x{analysis.oversample_factor}",
+            f"Adaptive cutoff={analysis.cutoff_hz:.2f}Hz drive={analysis.drive:.2f}dB requested_mix={float(np.clip(mix, 0.0, 1.0)):.2f} adaptive_mix={analysis.adaptive_mix:.2f} top_repair={analysis.closed_top_end_factor:.2f} rolloff={analysis.spectral_rolloff_hz:.2f}Hz oversample=x{analysis.oversample_factor}",
         )
         processed = _apply_exciter_core(
             samples_last, sample_rate, analysis, config
@@ -670,9 +836,23 @@ def apply_exciter_with_analysis(
     sample_rate: int,
     cutoff_hz: float | None = None,
     mix: float = 1.0,
+    max_drive: float | None = None,
+    high_frequency_cutoff_hz: float | None = None,
     config: ExciterConfig = _DEFAULT_CONFIG,
 ) -> tuple[np.ndarray, ExciterAnalysis]:
     sanitized = _sanitize_audio_array(signal)
+    if max_drive is not None or high_frequency_cutoff_hz is not None:
+        config = replace(
+            config,
+            max_drive=(
+                config.max_drive if max_drive is None else float(max_drive)
+            ),
+            high_frequency_cutoff=(
+                config.high_frequency_cutoff
+                if high_frequency_cutoff_hz is None
+                else float(high_frequency_cutoff_hz)
+            ),
+        )
     samples_last, restore_layout = _move_samples_to_last(sanitized)
     analysis = analyze_exciter(
         samples_last, sample_rate, cutoff_hz=cutoff_hz, mix=mix, config=config

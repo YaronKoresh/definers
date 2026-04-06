@@ -1,7 +1,18 @@
 import logging
+import os
+import tempfile
 import unittest
+from concurrent.futures import ThreadPoolExecutor
+from uuid import uuid4
 
 from definers.logger import init_logger
+
+
+def _clear_logger(name: str) -> None:
+    active_logger = logging.getLogger(name)
+    for handler in list(active_logger.handlers):
+        active_logger.removeHandler(handler)
+        handler.close()
 
 
 class TestInitLogger(unittest.TestCase):
@@ -35,6 +46,62 @@ class TestInitLogger(unittest.TestCase):
         logger = init_logger()
         expected_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
         self.assertEqual(logger.handlers[0].formatter._fmt, expected_format)
+
+    def test_repeated_file_logger_initialization_does_not_duplicate_handlers(
+        self,
+    ):
+        logger_name = f"definers.test.logger.{uuid4().hex}"
+        file_descriptor, log_path = tempfile.mkstemp(suffix=".log")
+        os.close(file_descriptor)
+
+        try:
+            logger = init_logger(name=logger_name, log_file=log_path)
+            logger = init_logger(name=logger_name, log_file=log_path)
+
+            stream_handlers = [
+                handler
+                for handler in logger.handlers
+                if isinstance(handler, logging.StreamHandler)
+                and not isinstance(handler, logging.FileHandler)
+            ]
+            file_handlers = [
+                handler
+                for handler in logger.handlers
+                if isinstance(handler, logging.FileHandler)
+            ]
+
+            self.assertEqual(len(stream_handlers), 1)
+            self.assertEqual(len(file_handlers), 1)
+        finally:
+            _clear_logger(logger_name)
+            if os.path.exists(log_path):
+                os.remove(log_path)
+
+    def test_concurrent_logger_initialization_is_idempotent(self):
+        logger_name = f"definers.test.concurrent.{uuid4().hex}"
+
+        try:
+            with ThreadPoolExecutor(max_workers=8) as executor:
+                loggers = list(
+                    executor.map(
+                        lambda _: init_logger(name=logger_name), range(32)
+                    )
+                )
+
+            logger = loggers[0]
+            stream_handlers = [
+                handler
+                for handler in logger.handlers
+                if isinstance(handler, logging.StreamHandler)
+                and not isinstance(handler, logging.FileHandler)
+            ]
+
+            self.assertTrue(
+                all(active_logger is logger for active_logger in loggers)
+            )
+            self.assertEqual(len(stream_handlers), 1)
+        finally:
+            _clear_logger(logger_name)
 
 
 if __name__ == "__main__":

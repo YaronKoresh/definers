@@ -267,7 +267,7 @@ class HybridModel:
         _log(f"Train Time: {train_time:.4f} seconds")
 
     def predict(self, X):
-        from definers.data import cupy_to_numpy
+        from definers.application_data.arrays import cupy_to_numpy
 
         if self.model is None:
             raise ValueError("Model must be trained before prediction.")

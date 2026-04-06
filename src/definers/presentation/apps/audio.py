@@ -4,140 +4,67 @@ from definers.presentation.gradio_shared import init_chat, launch_blocks
 def launch_audio_app():
     import gradio as gr
 
-    from definers import (
-        analyze_audio_features,
+    from definers.audio import (
         audio_to_midi,
         beat_visualizer,
         change_audio_speed,
-        convert_vocal_rvc,
         create_share_links,
         create_spectrum_visualization,
-        cwd,
-        device,
         dj_mix,
-        enhance_audio,
-        exist,
         extend_audio,
         generate_music,
         generate_voice,
         get_audio_feedback,
         identify_instruments,
-        init_pretrained_model,
-        install_audio_effects,
-        install_ffmpeg,
-        language_codes,
         midi_to_audio,
         pitch_shift_vocals,
-        random_string,
-        save_temp_text as save_text_to_file,
-        separate_stems,
-        set_system_message,
         stem_mixer,
-        train_model_rvc,
         transcribe_audio,
     )
-    from definers.chat import init_stable_whisper, lyric_video, music_video
-
-    install_audio_effects()
-    install_ffmpeg()
-    init_stable_whisper()
-    init_pretrained_model("tts")
-
-    svc_installed = False
-    with cwd():
-        if exist("./assets"):
-            svc_installed = True
-
-    if not svc_installed:
-        init_pretrained_model("svc")
-
-    init_pretrained_model("speech-recognition")
-    init_pretrained_model("audio-classification")
-    init_pretrained_model("music")
-    init_pretrained_model("summary")
-    init_pretrained_model("answer")
-    init_pretrained_model("translate")
-
-    set_system_message(
-        name="Definers Audio Assistant",
-        role="the chat assistant for the Definers audio workspace",
-        rules=[
-            "guide users with the application usage",
-            "explain the purpose of each tool in the application",
-            "provide simple, step-by-step instructions on how to use the features based on their UI",
-        ],
-        data=[
-            "The name of the software you help with, is Definers Audio",
-            "Definers Audio provides tools for audio transformation, generation, analysis, and presentation workflows",
-            "The main AI models used by this workspace include openai/whisper-large-v3, MIT/ast-finetuned-audioset-10-10-0.4593, and facebook/musicgen-small",
-            "The supported output formats, are: MP3 (320k), FLAC (16-bit), and WAV (16-bit PCM)",
-            "The export process is by clicking on the small down-arrow download button",
-            """The complete list of the application's features with usage instructions:
-    an audio enhancement tool to auto-tune and master your track - upload your track, choose an output format, and click 'Enhance Audio';
-    audio to midi converter - upload an audio file and click 'Convert to MIDI';
-    midi to audio converter - upload a MIDI file and click 'Convert to Audio';
-    an audio extender that uses AI to seamlessly continue a piece of music - upload your audio, use the 'Extend Duration' slider to choose how many seconds to add, and click 'Extend Audio';
-    a stem mixer that mixes individual instrument tracks (stems) together - upload multiple audio files (e.g., drums.wav, bass.wav). The tool automatically beatmatches them to the first track and mixes them;
-    a track feedbacks generator that provides an analysis and advice on your mix - upload your track and click 'Get Feedback' for written analysis on its dynamics, stereo width, and frequency balance;
-    an instrument identifier from an audio file - upload an audio file and click 'Identify Instruments';
-    a video generator which creates a simple and abstract music visualizer - upload an audio file and click 'Generate Video' to create a video with a pulsing circle that reacts to the music;
-    a speed & pitch changer which changes the playback speed of a track - upload audio, use the 'Speed Factor' slider (e.g., 1.5x is faster), and check 'Preserve Pitch' for a more natural sound;
-    a stems separator which splits a song into vocals and instrumental - upload a full song and choose either 'Acapella (Vocals Only)' or 'Karaoke (Instrumental Only)';
-    a vocal pitch shifter which changes the pitch of only the vocals in a song - upload a song and use the 'Vocal Pitch Shift' slider to raise or lower the vocal pitch in semitones;
-    a voice cloning and conversion tool for voice manipulation, preserving the melody - upload your training audio files, click 'Train' to create a voice model, then use the 'Convert' tab to apply that voice to a new audio input;
-    a dj tool which automatically mixes multiple songs together - upload two or more tracks. Choose 'Beatmatched Crossfade' for a smooth, tempo-synced mix and adjust the 'Transition Duration';
-    an AI music generator which creates original music from a text description - write a description of the music you want (e.g., 'upbeat synthwave'), set the duration, and click 'Generate Music';
-    an AI voice generator which clones a voice to say anything you type - upload a clean 5-15 second 'Reference Voice' sample, type the 'Text to Speak', and click 'Generate Voice';
-    a bpm & key analysis tools which detects a track's musical key and tempo - upload your audio and click 'Analyze Audio';
-    a speech-to-text tool which transcribes speech from an audio file into text - upload an audio file with speech, select the language, and click 'Transcribe Audio'.
-    a spectrum analyzer which creates a visual graph (spectrogram) of an audio's frequencies - upload an audio file and click 'Generate Spectrum'.
-    a beat visualizer which creates a video where an image pulses to the music's beat - upload an image and an audio file. Adjust the 'Beat Intensity' slider to control how much the image reacts.
-    a lyric video creation tool which creates a simple lyric video - upload a song and a background image/video. Then, paste your lyrics into the text box, with each line representing a new phrase on screen.
-    a support chat (that's you!) which answer questions like 'What is Stem Mixing?' or 'How do I use the Vocal Pitch Shifter?' based on his knowledge-base.""",
-        ],
-        formal=True,
-        creative=False,
+    from definers.constants import language_codes
+    from definers.cuda import device
+    from definers.file_ops import save_temp_text as save_text_to_file
+    from definers.ml import (
+        convert_vocal_rvc,
     )
+    from definers.presentation.apps.audio_app_services import (
+        run_audio_analysis_tool,
+        run_audio_preview_tool,
+        run_autotune_song_tool,
+        run_compact_audio_tool,
+        run_humanize_vocals_tool,
+        run_mastering_tool,
+        run_remove_silence_tool,
+        run_split_audio_tool,
+        run_stem_separation_tool,
+    )
+    from definers.presentation.apps.audio_workspace import (
+        AUDIO_FORMAT_CHOICES,
+        AUDIO_TOOL_MAP,
+        get_audio_language_choices,
+        prepare_audio_workspace,
+        train_voice_lab_model,
+    )
+    from definers.presentation.lyric_video_service import lyric_video
+    from definers.presentation.music_video_service import music_video
+    from definers.text import random_string
 
-    def handle_training(experiment, inp, lvl):
-        with cwd():
-            return train_model_rvc(experiment, inp, lvl), lvl + 1
+    prepare_audio_workspace()
 
-    format_choices = ["MP3", "WAV", "FLAC"]
-    language_choices = sorted(list(set(language_codes.values())))
+    format_choices = AUDIO_FORMAT_CHOICES
+    language_choices = get_audio_language_choices(language_codes)
 
     with gr.Blocks(title="Definers Audio") as app:
         gr.HTML(
             """<div id=\"header\"><h1>Definers Audio</h1><p>Audio creation, transformation, analysis, and media tools in one workspace.</p></div>"""
         )
 
-        tool_map = {
-            "Audio Enhancer": "enhancer",
-            "MIDI Tools": "midi_tools",
-            "Audio Extender": "audio_extender",
-            "Stem Mixer": "stem_mixer",
-            "Track Feedback": "feedback",
-            "Instrument ID": "instrument_id",
-            "Music Clip Generation": "video_gen",
-            "Speed & Pitch": "speed",
-            "Stem Separation": "stem",
-            "Vocal Pitch Shifter": "vps",
-            "Voice Lab": "voice_lab",
-            "DJ AutoMix": "dj",
-            "Music Gen": "music_gen",
-            "Voice Gen": "voice_gen",
-            "Analysis": "analysis",
-            "Speech-to-Text": "stt",
-            "Spectrum": "spectrum",
-            "Beat Visualizer": "beat_vis",
-            "Lyric Video": "lyric_vid",
-            "Support Chat": "chatbot",
-        }
+        tool_map = AUDIO_TOOL_MAP
 
         with gr.Row(elem_id="nav-dropdown-wrapper"):
             nav_dropdown = gr.Dropdown(
                 choices=list(tool_map.keys()),
-                value="Audio Enhancer",
+                value="Mastering Studio",
                 label="Select a Tool",
                 elem_id="nav-dropdown",
             )
@@ -147,15 +74,77 @@ def launch_audio_app():
                 with gr.Group(
                     visible=True, elem_classes="tool-container"
                 ) as view_enhancer:
-                    gr.Markdown("## Audio Enhancer")
+                    gr.Markdown("## Mastering Studio")
                     with gr.Row():
                         with gr.Column():
                             enhancer_input = gr.Audio(
-                                label="Upload Track", type="filepath"
+                                label="Upload Mix", type="filepath"
+                            )
+                            enhancer_format = gr.Radio(
+                                format_choices,
+                                label="Output Format",
+                                value="WAV",
+                            )
+                            enhancer_preset = gr.Dropdown(
+                                ["auto", "balanced", "edm", "vocal"],
+                                label="Preset",
+                                value="auto",
+                            )
+                            enhancer_stem_mastering = gr.Checkbox(
+                                label="Stem-aware mastering",
+                                value=True,
+                            )
+                            with gr.Accordion("Macro Controls", open=True):
+                                enhancer_bass = gr.Slider(
+                                    0.0,
+                                    1.0,
+                                    0.5,
+                                    step=0.05,
+                                    label="Bass",
+                                )
+                                enhancer_volume = gr.Slider(
+                                    0.0,
+                                    1.0,
+                                    0.5,
+                                    step=0.05,
+                                    label="Volume",
+                                )
+                                enhancer_effects = gr.Slider(
+                                    0.0,
+                                    1.0,
+                                    0.5,
+                                    step=0.05,
+                                    label="Effects",
+                                )
+                            with gr.Accordion("Advanced Mastering", open=False):
+                                enhancer_stem_model = gr.Textbox(
+                                    label="Stem Model",
+                                    value="mastering",
+                                )
+                                enhancer_stem_shifts = gr.Slider(
+                                    1,
+                                    8,
+                                    2,
+                                    step=1,
+                                    label="Stem Shifts",
+                                )
+                                enhancer_stem_mix_headroom = gr.Slider(
+                                    3.0,
+                                    12.0,
+                                    6.0,
+                                    step=0.5,
+                                    label="Stem Mix Headroom (dB)",
+                                )
+                                enhancer_save_mastered_stems = gr.Checkbox(
+                                    label="Save mastered stems",
+                                    value=True,
+                                )
+                            gr.Markdown(
+                                "Auto preset chooses balanced, edm, or vocal from the input. Legacy or low-quality material may trigger extra restoration stages."
                             )
                             with gr.Row():
                                 enhancer_btn = gr.Button(
-                                    "Enhance Audio", variant="primary"
+                                    "Master Audio", variant="primary"
                                 )
                                 clear_enhancer_btn = gr.Button(
                                     "Clear", variant="secondary"
@@ -163,11 +152,296 @@ def launch_audio_app():
                         with gr.Column():
                             with gr.Group(visible=False) as enhancer_output_box:
                                 enhancer_output = gr.Audio(
-                                    label="Enhancer Output",
+                                    label="Mastered Audio",
                                     interactive=False,
                                     show_download_button=True,
                                 )
+                                enhancer_report = gr.File(
+                                    label="Mastering Report",
+                                    interactive=False,
+                                    visible=False,
+                                )
+                                enhancer_stems_output = gr.File(
+                                    label="Mastered Stems",
+                                    interactive=False,
+                                    file_count="multiple",
+                                    visible=False,
+                                )
+                                enhancer_diagnostics = gr.Markdown()
                                 enhancer_share_links = gr.Markdown()
+                with gr.Group(
+                    visible=False, elem_classes="tool-container"
+                ) as view_vocal_finish:
+                    gr.Markdown("## Vocal Finishing")
+                    with gr.Tabs():
+                        with gr.TabItem("AutoTune"):
+                            with gr.Row():
+                                with gr.Column():
+                                    autotune_input = gr.Audio(
+                                        label="Upload Song", type="filepath"
+                                    )
+                                    autotune_format = gr.Radio(
+                                        format_choices,
+                                        label="Output Format",
+                                        value="WAV",
+                                    )
+                                    autotune_strength = gr.Slider(
+                                        0.0,
+                                        1.0,
+                                        0.7,
+                                        step=0.05,
+                                        label="Pitch Correction Strength",
+                                    )
+                                    autotune_correct_timing = gr.Checkbox(
+                                        label="Correct timing against detected beat grid",
+                                        value=True,
+                                    )
+                                    autotune_quantize = gr.Slider(
+                                        4,
+                                        32,
+                                        16,
+                                        step=4,
+                                        label="Beat Grid Density",
+                                    )
+                                    autotune_tolerance = gr.Slider(
+                                        0,
+                                        50,
+                                        15,
+                                        step=1,
+                                        label="Tolerance (cents)",
+                                    )
+                                    autotune_attack = gr.Slider(
+                                        0.0,
+                                        20.0,
+                                        0.1,
+                                        step=0.1,
+                                        label="Attack Smoothing (ms)",
+                                    )
+                                    with gr.Row():
+                                        autotune_btn = gr.Button(
+                                            "AutoTune Song",
+                                            variant="primary",
+                                        )
+                                        clear_autotune_btn = gr.Button(
+                                            "Clear",
+                                            variant="secondary",
+                                        )
+                                with gr.Column():
+                                    with gr.Group(
+                                        visible=False
+                                    ) as autotune_output_box:
+                                        autotune_output = gr.Audio(
+                                            label="AutoTuned Song",
+                                            interactive=False,
+                                            show_download_button=True,
+                                        )
+                                        autotune_share_links = gr.Markdown()
+                        with gr.TabItem("Humanize Vocals"):
+                            with gr.Row():
+                                with gr.Column():
+                                    humanize_input = gr.Audio(
+                                        label="Upload Vocal Take",
+                                        type="filepath",
+                                    )
+                                    humanize_format = gr.Radio(
+                                        format_choices,
+                                        label="Output Format",
+                                        value="WAV",
+                                    )
+                                    humanize_amount = gr.Slider(
+                                        0.0,
+                                        1.0,
+                                        0.5,
+                                        step=0.05,
+                                        label="Variation Amount",
+                                    )
+                                    with gr.Row():
+                                        humanize_btn = gr.Button(
+                                            "Humanize Vocals",
+                                            variant="primary",
+                                        )
+                                        clear_humanize_btn = gr.Button(
+                                            "Clear",
+                                            variant="secondary",
+                                        )
+                                with gr.Column():
+                                    with gr.Group(
+                                        visible=False
+                                    ) as humanize_output_box:
+                                        humanize_output = gr.Audio(
+                                            label="Humanized Vocals",
+                                            interactive=False,
+                                            show_download_button=True,
+                                        )
+                                        humanize_share_links = gr.Markdown()
+                with gr.Group(
+                    visible=False, elem_classes="tool-container"
+                ) as view_cleanup:
+                    gr.Markdown("## Audio Cleanup")
+                    with gr.Tabs():
+                        with gr.TabItem("Remove Silence"):
+                            with gr.Row():
+                                with gr.Column():
+                                    silence_input = gr.Audio(
+                                        label="Upload Audio", type="filepath"
+                                    )
+                                    silence_format = gr.Radio(
+                                        format_choices,
+                                        label="Output Format",
+                                        value="WAV",
+                                    )
+                                    with gr.Row():
+                                        silence_btn = gr.Button(
+                                            "Remove Silence",
+                                            variant="primary",
+                                        )
+                                        clear_silence_btn = gr.Button(
+                                            "Clear",
+                                            variant="secondary",
+                                        )
+                                with gr.Column():
+                                    with gr.Group(
+                                        visible=False
+                                    ) as silence_output_box:
+                                        silence_output = gr.Audio(
+                                            label="Silence-Reduced Audio",
+                                            interactive=False,
+                                            show_download_button=True,
+                                        )
+                                        silence_share_links = gr.Markdown()
+                        with gr.TabItem("Compact Audio"):
+                            with gr.Row():
+                                with gr.Column():
+                                    compact_input = gr.Audio(
+                                        label="Upload Audio", type="filepath"
+                                    )
+                                    compact_format = gr.Radio(
+                                        format_choices,
+                                        label="Output Format",
+                                        value="MP3",
+                                    )
+                                    gr.Markdown(
+                                        "Creates a lighter export using the project's compact-audio preset."
+                                    )
+                                    with gr.Row():
+                                        compact_btn = gr.Button(
+                                            "Compact Audio",
+                                            variant="primary",
+                                        )
+                                        clear_compact_btn = gr.Button(
+                                            "Clear",
+                                            variant="secondary",
+                                        )
+                                with gr.Column():
+                                    with gr.Group(
+                                        visible=False
+                                    ) as compact_output_box:
+                                        compact_output = gr.Audio(
+                                            label="Compacted Audio",
+                                            interactive=False,
+                                            show_download_button=True,
+                                        )
+                                        compact_share_links = gr.Markdown()
+                with gr.Group(
+                    visible=False, elem_classes="tool-container"
+                ) as view_preview_split:
+                    gr.Markdown("## Preview & Split")
+                    with gr.Tabs():
+                        with gr.TabItem("Smart Preview"):
+                            with gr.Row():
+                                with gr.Column():
+                                    preview_input = gr.Audio(
+                                        label="Upload Audio", type="filepath"
+                                    )
+                                    preview_format = gr.Radio(
+                                        format_choices,
+                                        label="Output Format",
+                                        value="WAV",
+                                    )
+                                    preview_duration = gr.Slider(
+                                        5,
+                                        60,
+                                        30,
+                                        step=1,
+                                        label="Preview Length (seconds)",
+                                    )
+                                    with gr.Row():
+                                        preview_btn = gr.Button(
+                                            "Create Preview",
+                                            variant="primary",
+                                        )
+                                        clear_preview_btn = gr.Button(
+                                            "Clear",
+                                            variant="secondary",
+                                        )
+                                with gr.Column():
+                                    with gr.Group(
+                                        visible=False
+                                    ) as preview_output_box:
+                                        preview_output = gr.Audio(
+                                            label="Preview Clip",
+                                            interactive=False,
+                                            show_download_button=True,
+                                        )
+                                        preview_summary = gr.Markdown()
+                                        preview_share_links = gr.Markdown()
+                        with gr.TabItem("Split Audio"):
+                            with gr.Row():
+                                with gr.Column():
+                                    split_input = gr.Audio(
+                                        label="Upload Audio", type="filepath"
+                                    )
+                                    split_format = gr.Radio(
+                                        format_choices,
+                                        label="Chunk Format",
+                                        value="MP3",
+                                    )
+                                    split_duration = gr.Slider(
+                                        5,
+                                        300,
+                                        30,
+                                        step=1,
+                                        label="Chunk Length (seconds)",
+                                    )
+                                    split_skip_time = gr.Number(
+                                        label="Skip Time Before First Chunk (seconds)",
+                                        value=0,
+                                        precision=2,
+                                    )
+                                    split_chunks_limit = gr.Number(
+                                        label="Maximum Number of Chunks (0 = all)",
+                                        value=0,
+                                        precision=0,
+                                    )
+                                    split_sample_rate = gr.Number(
+                                        label="Target Sample Rate (0 = keep original)",
+                                        value=0,
+                                        precision=0,
+                                    )
+                                    with gr.Row():
+                                        split_btn = gr.Button(
+                                            "Split Audio",
+                                            variant="primary",
+                                        )
+                                        clear_split_btn = gr.Button(
+                                            "Clear",
+                                            variant="secondary",
+                                        )
+                                with gr.Column():
+                                    with gr.Group(
+                                        visible=False
+                                    ) as split_output_box:
+                                        split_preview_output = gr.Audio(
+                                            label="First Chunk Preview",
+                                            interactive=False,
+                                            show_download_button=True,
+                                        )
+                                        split_files_output = gr.File(
+                                            label="Chunk Files",
+                                            interactive=False,
+                                            file_count="multiple",
+                                        )
+                                        split_summary_output = gr.Markdown()
                 with gr.Group(
                     visible=False, elem_classes="tool-container"
                 ) as view_midi_tools:
@@ -407,18 +681,31 @@ def launch_audio_app():
                             stem_input = gr.Audio(
                                 label="Upload Full Mix", type="filepath"
                             )
-                            stem_type = gr.Radio(
+                            stem_mode = gr.Radio(
                                 [
                                     "Acapella (Vocals Only)",
                                     "Karaoke (Instrumental Only)",
+                                    "Vocals + Karaoke",
+                                    "Mastering Layers (Vocals / Drums / Bass / Other)",
                                 ],
-                                label="Separation Type",
+                                label="Separation Mode",
                                 value="Acapella (Vocals Only)",
                             )
                             stem_format = gr.Radio(
                                 format_choices,
                                 label="Output Format",
-                                value=format_choices[0],
+                                value="WAV",
+                            )
+                            stem_model_name = gr.Textbox(
+                                label="Layer Separation Model",
+                                value="mastering",
+                            )
+                            stem_shifts = gr.Slider(
+                                1,
+                                8,
+                                2,
+                                step=1,
+                                label="Layer Separation Shifts",
                             )
                             with gr.Row():
                                 stem_btn = gr.Button(
@@ -430,10 +717,16 @@ def launch_audio_app():
                         with gr.Column():
                             with gr.Group(visible=False) as stem_output_box:
                                 stem_output = gr.Audio(
-                                    label="Separated Track",
+                                    label="Primary Stem Preview",
                                     interactive=False,
                                     show_download_button=True,
                                 )
+                                stem_files_output = gr.File(
+                                    label="Stem Files",
+                                    interactive=False,
+                                    file_count="multiple",
+                                )
+                                stem_summary_output = gr.Markdown()
                                 stem_share_links = gr.Markdown()
                 with gr.Group(
                     visible=False, elem_classes="tool-container"
@@ -494,7 +787,7 @@ def launch_audio_app():
                     with gr.Row():
                         but1 = gr.Button("Train", variant="primary")
                         but1.click(
-                            fn=handle_training,
+                            fn=train_voice_lab_model,
                             inputs=[experiment, inp, lvl],
                             outputs=[outp, lvl],
                         )
@@ -631,12 +924,28 @@ def launch_audio_app():
                 with gr.Group(
                     visible=False, elem_classes="tool-container"
                 ) as view_analysis:
-                    gr.Markdown("## BPM & Key Analysis")
+                    gr.Markdown("## Analysis & Diagnostics")
                     with gr.Row():
                         with gr.Column(scale=1):
                             analysis_input = gr.Audio(
                                 label="Upload Audio", type="filepath"
                             )
+                            with gr.Accordion("Advanced Analysis", open=False):
+                                analysis_hop_length = gr.Number(
+                                    label="Hop Length",
+                                    value=1024,
+                                    precision=0,
+                                )
+                                analysis_duration = gr.Number(
+                                    label="Analysis Window (seconds, 0 = full track)",
+                                    value=0,
+                                    precision=2,
+                                )
+                                analysis_offset = gr.Number(
+                                    label="Start Offset (seconds)",
+                                    value=0,
+                                    precision=2,
+                                )
                             with gr.Row():
                                 analysis_btn = gr.Button(
                                     "Analyze Audio", variant="primary"
@@ -645,10 +954,16 @@ def launch_audio_app():
                                     "Clear", variant="secondary"
                                 )
                         with gr.Column(scale=1):
-                            analysis_bpm_key_output = gr.Textbox(
-                                label="Detected Key & BPM",
-                                interactive=False,
-                            )
+                            with gr.Group(visible=False) as analysis_output_box:
+                                analysis_bpm_key_output = gr.Textbox(
+                                    label="Detected Key & BPM",
+                                    interactive=False,
+                                )
+                                analysis_diagnostics_output = gr.Markdown()
+                                analysis_json_output = gr.File(
+                                    label="Analysis Report",
+                                    interactive=False,
+                                )
                 with gr.Group(
                     visible=False, elem_classes="tool-container"
                 ) as view_stt:
@@ -796,6 +1111,9 @@ def launch_audio_app():
 
         views = {
             "enhancer": view_enhancer,
+            "vocal_finish": view_vocal_finish,
+            "cleanup": view_cleanup,
+            "preview_split": view_preview_split,
             "midi_tools": view_midi_tools,
             "audio_extender": view_audio_extender,
             "stem_mixer": view_stem_mixer,
@@ -830,18 +1148,23 @@ def launch_audio_app():
             outputs=list(views.values()),
         )
 
+        def build_share_markup(result_path):
+            if not result_path:
+                return ""
+            return create_share_links(
+                "definers",
+                "audio",
+                result_path,
+                "Check out this creation from Definers Audio! 🎶",
+            )
+
         def create_ui_handler(
             btn, out_el, out_box, out_share, logic_func, *inputs
         ):
             def ui_handler_generator(*args):
                 try:
                     result = logic_func(*args)
-                    share_html = create_share_links(
-                        "definers",
-                        "audio",
-                        result,
-                        "Check out this creation from Definers Audio! 🎶",
-                    )
+                    share_html = build_share_markup(result)
                     return (
                         gr.update(value=btn.value, interactive=True),
                         gr.update(visible=True),
@@ -862,14 +1185,106 @@ def launch_audio_app():
                 outputs=[btn, out_box, out_el, out_share],
             )
 
-        create_ui_handler(
-            enhancer_btn,
-            enhancer_output,
-            enhancer_output_box,
-            enhancer_share_links,
-            enhance_audio,
-            enhancer_input,
+        def mastering_ui(
+            audio_path,
+            output_format,
+            preset_name,
+            bass,
+            volume,
+            effects,
+            stem_mastering,
+            stem_model_name,
+            stem_shifts_value,
+            stem_mix_headroom_value,
+            save_mastered_stems_value,
+        ):
+            yield {
+                enhancer_btn: gr.update(
+                    value="Mastering...", interactive=False
+                ),
+                enhancer_output_box: gr.update(visible=False),
+                enhancer_output: None,
+                enhancer_report: gr.update(value=None, visible=False),
+                enhancer_stems_output: gr.update(value=None, visible=False),
+                enhancer_diagnostics: "",
+                enhancer_share_links: "",
+            }
+            try:
+                (
+                    mastered_path,
+                    report_path,
+                    diagnostics_text,
+                    stem_files,
+                ) = run_mastering_tool(
+                    audio_path,
+                    output_format,
+                    preset_name,
+                    bass,
+                    volume,
+                    effects,
+                    stem_mastering,
+                    stem_model_name,
+                    stem_shifts_value,
+                    stem_mix_headroom_value,
+                    save_mastered_stems_value,
+                )
+                yield {
+                    enhancer_btn: gr.update(
+                        value="Master Audio", interactive=True
+                    ),
+                    enhancer_output_box: gr.update(visible=True),
+                    enhancer_output: mastered_path,
+                    enhancer_report: gr.update(
+                        value=report_path,
+                        visible=report_path is not None,
+                    ),
+                    enhancer_stems_output: gr.update(
+                        value=stem_files or None,
+                        visible=bool(stem_files),
+                    ),
+                    enhancer_diagnostics: diagnostics_text,
+                    enhancer_share_links: build_share_markup(mastered_path),
+                }
+            except Exception as error:
+                yield {
+                    enhancer_btn: gr.update(
+                        value="Master Audio", interactive=True
+                    ),
+                    enhancer_output_box: gr.update(visible=False),
+                    enhancer_output: None,
+                    enhancer_report: gr.update(value=None, visible=False),
+                    enhancer_stems_output: gr.update(value=None, visible=False),
+                    enhancer_diagnostics: "",
+                    enhancer_share_links: "",
+                }
+                raise gr.Error(str(error))
+
+        enhancer_btn.click(
+            mastering_ui,
+            [
+                enhancer_input,
+                enhancer_format,
+                enhancer_preset,
+                enhancer_bass,
+                enhancer_volume,
+                enhancer_effects,
+                enhancer_stem_mastering,
+                enhancer_stem_model,
+                enhancer_stem_shifts,
+                enhancer_stem_mix_headroom,
+                enhancer_save_mastered_stems,
+            ],
+            [
+                enhancer_btn,
+                enhancer_output_box,
+                enhancer_output,
+                enhancer_report,
+                enhancer_stems_output,
+                enhancer_diagnostics,
+                enhancer_share_links,
+            ],
         )
+
         create_ui_handler(
             a2m_btn,
             a2m_output,
@@ -898,6 +1313,48 @@ def launch_audio_app():
             extender_format,
         )
         create_ui_handler(
+            autotune_btn,
+            autotune_output,
+            autotune_output_box,
+            autotune_share_links,
+            run_autotune_song_tool,
+            autotune_input,
+            autotune_format,
+            autotune_strength,
+            autotune_correct_timing,
+            autotune_quantize,
+            autotune_tolerance,
+            autotune_attack,
+        )
+        create_ui_handler(
+            humanize_btn,
+            humanize_output,
+            humanize_output_box,
+            humanize_share_links,
+            run_humanize_vocals_tool,
+            humanize_input,
+            humanize_amount,
+            humanize_format,
+        )
+        create_ui_handler(
+            silence_btn,
+            silence_output,
+            silence_output_box,
+            silence_share_links,
+            run_remove_silence_tool,
+            silence_input,
+            silence_format,
+        )
+        create_ui_handler(
+            compact_btn,
+            compact_output,
+            compact_output_box,
+            compact_share_links,
+            run_compact_audio_tool,
+            compact_input,
+            compact_format,
+        )
+        create_ui_handler(
             stem_mixer_btn,
             stem_mixer_output,
             stem_mixer_output_box,
@@ -906,6 +1363,116 @@ def launch_audio_app():
             stem_mixer_files,
             stem_mixer_format,
         )
+
+        def preview_ui(audio_path, max_duration, output_format):
+            yield {
+                preview_btn: gr.update(
+                    value="Building Preview...", interactive=False
+                ),
+                preview_output_box: gr.update(visible=False),
+                preview_output: None,
+                preview_summary: "",
+                preview_share_links: "",
+            }
+            try:
+                preview_path, preview_text = run_audio_preview_tool(
+                    audio_path,
+                    max_duration,
+                    output_format,
+                )
+                yield {
+                    preview_btn: gr.update(
+                        value="Create Preview", interactive=True
+                    ),
+                    preview_output_box: gr.update(visible=True),
+                    preview_output: preview_path,
+                    preview_summary: preview_text,
+                    preview_share_links: build_share_markup(preview_path),
+                }
+            except Exception as error:
+                yield {
+                    preview_btn: gr.update(
+                        value="Create Preview", interactive=True
+                    ),
+                    preview_output_box: gr.update(visible=False),
+                    preview_output: None,
+                    preview_summary: "",
+                    preview_share_links: "",
+                }
+                raise gr.Error(str(error))
+
+        preview_btn.click(
+            preview_ui,
+            [preview_input, preview_duration, preview_format],
+            [
+                preview_btn,
+                preview_output_box,
+                preview_output,
+                preview_summary,
+                preview_share_links,
+            ],
+        )
+
+        def split_ui(
+            audio_path,
+            chunk_duration,
+            output_format,
+            chunks_limit,
+            skip_time,
+            target_sample_rate,
+        ):
+            yield {
+                split_btn: gr.update(value="Splitting...", interactive=False),
+                split_output_box: gr.update(visible=False),
+                split_preview_output: None,
+                split_files_output: None,
+                split_summary_output: "",
+            }
+            try:
+                preview_path, split_files, summary_text = run_split_audio_tool(
+                    audio_path,
+                    chunk_duration,
+                    output_format,
+                    chunks_limit,
+                    skip_time,
+                    target_sample_rate,
+                )
+                yield {
+                    split_btn: gr.update(value="Split Audio", interactive=True),
+                    split_output_box: gr.update(visible=True),
+                    split_preview_output: preview_path,
+                    split_files_output: split_files,
+                    split_summary_output: summary_text,
+                }
+            except Exception as error:
+                yield {
+                    split_btn: gr.update(value="Split Audio", interactive=True),
+                    split_output_box: gr.update(visible=False),
+                    split_preview_output: None,
+                    split_files_output: None,
+                    split_summary_output: "",
+                }
+                raise gr.Error(str(error))
+
+        split_btn.click(
+            split_ui,
+            [
+                split_input,
+                split_duration,
+                split_format,
+                split_chunks_limit,
+                split_skip_time,
+                split_sample_rate,
+            ],
+            [
+                split_btn,
+                split_output_box,
+                split_preview_output,
+                split_files_output,
+                split_summary_output,
+            ],
+        )
+
         create_ui_handler(
             video_gen_btn,
             video_gen_output,
@@ -925,16 +1492,81 @@ def launch_audio_app():
             preserve_pitch,
             speed_format,
         )
-        create_ui_handler(
-            stem_btn,
-            stem_output,
-            stem_output_box,
-            stem_share_links,
-            separate_stems,
-            stem_input,
-            stem_type,
-            stem_format,
+
+        def stem_ui(
+            audio_path,
+            separation_mode,
+            output_format,
+            model_name,
+            shifts_value,
+        ):
+            mode_map = {
+                "Acapella (Vocals Only)": "acapella",
+                "Karaoke (Instrumental Only)": "karaoke",
+                "Vocals + Karaoke": "vocals_karaoke",
+                "Mastering Layers (Vocals / Drums / Bass / Other)": "mastering_layers",
+            }
+            resolved_mode = mode_map.get(separation_mode, "acapella")
+            yield {
+                stem_btn: gr.update(value="Separating...", interactive=False),
+                stem_output_box: gr.update(visible=False),
+                stem_output: None,
+                stem_files_output: None,
+                stem_summary_output: "",
+                stem_share_links: "",
+            }
+            try:
+                primary_output, stem_files, summary_text = (
+                    run_stem_separation_tool(
+                        audio_path,
+                        resolved_mode,
+                        output_format,
+                        model_name,
+                        shifts_value,
+                    )
+                )
+                yield {
+                    stem_btn: gr.update(
+                        value="Separate Stems", interactive=True
+                    ),
+                    stem_output_box: gr.update(visible=True),
+                    stem_output: primary_output,
+                    stem_files_output: stem_files,
+                    stem_summary_output: summary_text,
+                    stem_share_links: build_share_markup(primary_output),
+                }
+            except Exception as error:
+                yield {
+                    stem_btn: gr.update(
+                        value="Separate Stems", interactive=True
+                    ),
+                    stem_output_box: gr.update(visible=False),
+                    stem_output: None,
+                    stem_files_output: None,
+                    stem_summary_output: "",
+                    stem_share_links: "",
+                }
+                raise gr.Error(str(error))
+
+        stem_btn.click(
+            stem_ui,
+            [
+                stem_input,
+                stem_mode,
+                stem_format,
+                stem_model_name,
+                stem_shifts,
+            ],
+            [
+                stem_btn,
+                stem_output_box,
+                stem_output,
+                stem_files_output,
+                stem_summary_output,
+                stem_share_links,
+            ],
         )
+
         create_ui_handler(
             vps_btn,
             vps_output,
@@ -1001,6 +1633,63 @@ def launch_audio_app():
             lyric_position,
         )
 
+        def analysis_ui(audio_path, hop_length, duration_value, offset_value):
+            yield {
+                analysis_btn: gr.update(
+                    value="Analyzing...", interactive=False
+                ),
+                analysis_output_box: gr.update(visible=False),
+                analysis_bpm_key_output: "",
+                analysis_diagnostics_output: "",
+                analysis_json_output: None,
+            }
+            try:
+                bpm_key_text, diagnostics_text, report_path = (
+                    run_audio_analysis_tool(
+                        audio_path,
+                        hop_length,
+                        duration_value,
+                        offset_value,
+                    )
+                )
+                yield {
+                    analysis_btn: gr.update(
+                        value="Analyze Audio", interactive=True
+                    ),
+                    analysis_output_box: gr.update(visible=True),
+                    analysis_bpm_key_output: bpm_key_text,
+                    analysis_diagnostics_output: diagnostics_text,
+                    analysis_json_output: report_path,
+                }
+            except Exception as error:
+                yield {
+                    analysis_btn: gr.update(
+                        value="Analyze Audio", interactive=True
+                    ),
+                    analysis_output_box: gr.update(visible=False),
+                    analysis_bpm_key_output: "",
+                    analysis_diagnostics_output: "",
+                    analysis_json_output: None,
+                }
+                raise gr.Error(str(error))
+
+        analysis_btn.click(
+            analysis_ui,
+            [
+                analysis_input,
+                analysis_hop_length,
+                analysis_duration,
+                analysis_offset,
+            ],
+            [
+                analysis_btn,
+                analysis_output_box,
+                analysis_bpm_key_output,
+                analysis_diagnostics_output,
+                analysis_json_output,
+            ],
+        )
+
         def feedback_ui(audio_path):
             yield {
                 feedback_btn: gr.update(
@@ -1057,35 +1746,6 @@ def launch_audio_app():
             instrument_id_ui,
             [instrument_id_input],
             [instrument_id_btn, instrument_id_output],
-        )
-
-        def analysis_ui(audio_path):
-            yield {
-                analysis_btn: gr.update(
-                    value="Analyzing...", interactive=False
-                ),
-                analysis_bpm_key_output: "",
-            }
-            try:
-                bpm_key = analyze_audio_features(audio_path)
-                yield {
-                    analysis_btn: gr.update(
-                        value="Analyze Audio", interactive=True
-                    ),
-                    analysis_bpm_key_output: bpm_key,
-                }
-            except Exception as error:
-                yield {
-                    analysis_btn: gr.update(
-                        value="Analyze Audio", interactive=True
-                    )
-                }
-                raise gr.Error(str(error))
-
-        analysis_btn.click(
-            analysis_ui,
-            [analysis_input],
-            [analysis_btn, analysis_bpm_key_output],
         )
 
         def stt_ui(audio_path, language):
@@ -1162,10 +1822,118 @@ def launch_audio_app():
 
         clear_enhancer_btn.click(
             lambda: clear_ui(
-                enhancer_input, enhancer_output, enhancer_output_box
+                enhancer_input,
+                enhancer_output,
+                enhancer_report,
+                enhancer_stems_output,
+                enhancer_diagnostics,
+                enhancer_share_links,
+                enhancer_output_box,
             ),
             [],
-            [enhancer_input, enhancer_output, enhancer_output_box],
+            [
+                enhancer_input,
+                enhancer_output,
+                enhancer_report,
+                enhancer_stems_output,
+                enhancer_diagnostics,
+                enhancer_share_links,
+                enhancer_output_box,
+            ],
+        )
+        clear_autotune_btn.click(
+            lambda: clear_ui(
+                autotune_input,
+                autotune_output,
+                autotune_share_links,
+                autotune_output_box,
+            ),
+            [],
+            [
+                autotune_input,
+                autotune_output,
+                autotune_share_links,
+                autotune_output_box,
+            ],
+        )
+        clear_humanize_btn.click(
+            lambda: clear_ui(
+                humanize_input,
+                humanize_output,
+                humanize_share_links,
+                humanize_output_box,
+            ),
+            [],
+            [
+                humanize_input,
+                humanize_output,
+                humanize_share_links,
+                humanize_output_box,
+            ],
+        )
+        clear_silence_btn.click(
+            lambda: clear_ui(
+                silence_input,
+                silence_output,
+                silence_share_links,
+                silence_output_box,
+            ),
+            [],
+            [
+                silence_input,
+                silence_output,
+                silence_share_links,
+                silence_output_box,
+            ],
+        )
+        clear_compact_btn.click(
+            lambda: clear_ui(
+                compact_input,
+                compact_output,
+                compact_share_links,
+                compact_output_box,
+            ),
+            [],
+            [
+                compact_input,
+                compact_output,
+                compact_share_links,
+                compact_output_box,
+            ],
+        )
+        clear_preview_btn.click(
+            lambda: clear_ui(
+                preview_input,
+                preview_output,
+                preview_summary,
+                preview_share_links,
+                preview_output_box,
+            ),
+            [],
+            [
+                preview_input,
+                preview_output,
+                preview_summary,
+                preview_share_links,
+                preview_output_box,
+            ],
+        )
+        clear_split_btn.click(
+            lambda: clear_ui(
+                split_input,
+                split_preview_output,
+                split_files_output,
+                split_summary_output,
+                split_output_box,
+            ),
+            [],
+            [
+                split_input,
+                split_preview_output,
+                split_files_output,
+                split_summary_output,
+                split_output_box,
+            ],
         )
         clear_a2m_btn.click(
             lambda: clear_ui(a2m_input, a2m_output, a2m_output_box),
@@ -1216,9 +1984,23 @@ def launch_audio_app():
             [speed_input, speed_output, speed_output_box],
         )
         clear_stem_btn.click(
-            lambda: clear_ui(stem_input, stem_output, stem_output_box),
+            lambda: clear_ui(
+                stem_input,
+                stem_output,
+                stem_files_output,
+                stem_summary_output,
+                stem_share_links,
+                stem_output_box,
+            ),
             [],
-            [stem_input, stem_output, stem_output_box],
+            [
+                stem_input,
+                stem_output,
+                stem_files_output,
+                stem_summary_output,
+                stem_share_links,
+                stem_output_box,
+            ],
         )
         clear_vps_btn.click(
             lambda: clear_ui(vps_input, vps_output, vps_output_box),
@@ -1248,11 +2030,22 @@ def launch_audio_app():
         )
         clear_analysis_btn.click(
             lambda: {
-                **clear_ui(analysis_input),
+                **clear_ui(
+                    analysis_input,
+                    analysis_diagnostics_output,
+                    analysis_json_output,
+                    analysis_output_box,
+                ),
                 **{analysis_bpm_key_output: ""},
             },
             [],
-            [analysis_input, analysis_bpm_key_output],
+            [
+                analysis_input,
+                analysis_bpm_key_output,
+                analysis_diagnostics_output,
+                analysis_json_output,
+                analysis_output_box,
+            ],
         )
         clear_stt_btn.click(
             lambda: clear_ui(stt_input, stt_output, stt_file_output),

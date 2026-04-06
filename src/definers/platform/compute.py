@@ -3,7 +3,29 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
+import types
 from pathlib import Path
+
+
+def _ensure_accelerate_module():
+    try:
+        import accelerate as accelerate_module
+
+        return accelerate_module
+    except ModuleNotFoundError:
+        accelerate_module = types.ModuleType("accelerate")
+
+        class Accelerator:
+            def __init__(self):
+                self.device = "cpu"
+
+        accelerate_module.Accelerator = Accelerator
+        sys.modules.setdefault("accelerate", accelerate_module)
+        return accelerate_module
+
+
+_ensure_accelerate_module()
 
 
 def cuda_toolkit(*, directory_func, permit_func, run_func):
@@ -80,7 +102,7 @@ def free(*, catch_func, run_func, environ):
     cache_dir = (
         Path(hf_home) if hf_home else Path.home() / ".cache" / "huggingface"
     )
-    if cache_dir.exists():
+    if cache_dir.exists() and _is_ephemeral_cache_dir(cache_dir):
         for entry in cache_dir.iterdir():
             try:
                 if entry.is_dir():
@@ -107,6 +129,31 @@ def free(*, catch_func, run_func, environ):
     mamba_path = os.path.expanduser("~/miniconda3/bin/mamba")
     if os.path.exists(mamba_path):
         run_func([mamba_path, "clean", "--all"], silent=True)
+
+
+def _is_ephemeral_cache_dir(cache_dir: Path) -> bool:
+    resolved_cache_dir = cache_dir.resolve()
+    default_cache_dir = (Path.home() / ".cache" / "huggingface").resolve()
+    if resolved_cache_dir == default_cache_dir:
+        return False
+
+    ephemeral_roots = [
+        Path(tempfile.gettempdir()).resolve(),
+        Path("/data-nvme/zerogpu-offload").resolve(),
+        Path("/opt/ml/checkpoints").resolve(),
+    ]
+    return any(
+        _is_relative_to(resolved_cache_dir, ephemeral_root)
+        for ephemeral_root in ephemeral_roots
+    )
+
+
+def _is_relative_to(path: Path, base: Path) -> bool:
+    try:
+        path.relative_to(base)
+    except ValueError:
+        return False
+    return True
 
 
 def device() -> str:

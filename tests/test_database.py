@@ -84,6 +84,32 @@ class TestDatabase(unittest.TestCase):
 
         self.assertEqual(result, [{"id": "1", "value": "ok"}])
 
+    def test_push_same_timestamp_keeps_distinct_records(self):
+        self.db.push("items", {"id": "1", "value": "first"}, timestamp=1000)
+        self.db.push("items", {"id": "2", "value": "second"}, timestamp=1000)
+
+        record_directories = sorted(
+            path.name for path in (Path(self._tmpdir) / "items").iterdir()
+        )
+        history = self.db.history("items")
+
+        self.assertEqual(len(record_directories), 2)
+        self.assertIn("1000", record_directories)
+        self.assertTrue(
+            any(
+                directory_name.startswith("1000-")
+                for directory_name in record_directories
+                if directory_name != "1000"
+            )
+        )
+        self.assertCountEqual(
+            history,
+            [
+                {"id": "1", "value": "first"},
+                {"id": "2", "value": "second"},
+            ],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

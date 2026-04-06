@@ -2,11 +2,7 @@ import unittest
 
 import numpy as np
 
-import definers.data as data
-
-data.np = np
-data._np = np
-from definers.data import guess_numpy_type
+from definers.application_data.arrays import guess_numpy_type
 
 
 class TestGuessNumpyType(unittest.TestCase):

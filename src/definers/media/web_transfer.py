@@ -4,13 +4,15 @@ import io
 import logging
 import os
 import random
+import shutil
 import sys
+import tempfile
 import threading
 import urllib.request
 import zipfile
 from collections.abc import Callable
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Protocol, runtime_checkable
 
 from definers.constants import user_agents
@@ -111,6 +113,24 @@ class HttpChunkedTransferStrategy:
         self.chunk_size_bytes = chunk_size_bytes
         self.request_timeout_seconds = request_timeout_seconds
 
+    def _create_staging_target(self, target_node: Path) -> Path:
+        target_node.parent.mkdir(parents=True, exist_ok=True)
+        file_descriptor, staging_path = tempfile.mkstemp(
+            prefix=f"{target_node.name}.",
+            suffix=".part",
+            dir=target_node.parent,
+        )
+        os.close(file_descriptor)
+        return Path(staging_path)
+
+    def _cleanup_staging_target(self, staging_node: Path) -> None:
+        staging_node.unlink(missing_ok=True)
+
+    def _commit_staging_target(
+        self, staging_node: Path, target_node: Path
+    ) -> None:
+        os.replace(staging_node, target_node)
+
     async def execute_transfer(
         self, source_uri: str, target_node: Path
     ) -> bool:
@@ -122,39 +142,51 @@ class HttpChunkedTransferStrategy:
                 self._execute_transfer_sync, source_uri, target_node
             )
             return True
-        target_node.parent.mkdir(parents=True, exist_ok=True)
+        staging_node = self._create_staging_target(target_node)
         request_timeout = aiohttp.ClientTimeout(
             total=self.request_timeout_seconds
         )
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                source_uri, timeout=request_timeout
-            ) as network_response:
-                network_response.raise_for_status()
-                async with aiofiles.open(
-                    target_node, "wb"
-                ) as persistent_storage:
-                    async for (
-                        data_chunk
-                    ) in network_response.content.iter_chunked(
-                        self.chunk_size_bytes
-                    ):
-                        await persistent_storage.write(data_chunk)
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    source_uri, timeout=request_timeout
+                ) as network_response:
+                    network_response.raise_for_status()
+                    async with aiofiles.open(
+                        staging_node, "wb"
+                    ) as persistent_storage:
+                        async for (
+                            data_chunk
+                        ) in network_response.content.iter_chunked(
+                            self.chunk_size_bytes
+                        ):
+                            await persistent_storage.write(data_chunk)
+            await asyncio.to_thread(
+                self._commit_staging_target, staging_node, target_node
+            )
+        except Exception:
+            await asyncio.to_thread(self._cleanup_staging_target, staging_node)
+            raise
         return True
 
     def _execute_transfer_sync(
         self, source_uri: str, target_node: Path
     ) -> None:
-        target_node.parent.mkdir(parents=True, exist_ok=True)
-        with urllib.request.urlopen(
-            source_uri, timeout=self.request_timeout_seconds
-        ) as response:
-            with open(target_node, "wb") as persistent_storage:
-                while True:
-                    data_chunk = response.read(self.chunk_size_bytes)
-                    if not data_chunk:
-                        break
-                    persistent_storage.write(data_chunk)
+        staging_node = self._create_staging_target(target_node)
+        try:
+            with urllib.request.urlopen(
+                source_uri, timeout=self.request_timeout_seconds
+            ) as response:
+                with open(staging_node, "wb") as persistent_storage:
+                    while True:
+                        data_chunk = response.read(self.chunk_size_bytes)
+                        if not data_chunk:
+                            break
+                        persistent_storage.write(data_chunk)
+            self._commit_staging_target(staging_node, target_node)
+        except Exception:
+            self._cleanup_staging_target(staging_node)
+            raise
 
 
 class ZipExtractTransferStrategy:
@@ -163,6 +195,50 @@ class ZipExtractTransferStrategy:
     ):
         self.chunk_size_bytes = chunk_size_bytes
         self.request_timeout_seconds = request_timeout_seconds
+
+    def _resolve_archive_member_path(
+        self, resolved_target_root: Path, archive_member_name: str
+    ) -> Path:
+        normalized_member_name = str(archive_member_name).replace("\\", "/")
+        member_path = PurePosixPath(normalized_member_name)
+        member_parts = tuple(
+            part for part in member_path.parts if part not in ("", ".")
+        )
+        if (
+            member_path.is_absolute()
+            or not member_parts
+            or any(part == ".." or part.endswith(":") for part in member_parts)
+        ):
+            raise ValueError("Archive member escapes target directory.")
+        destination_node = resolved_target_root.joinpath(
+            *member_parts
+        ).resolve()
+        try:
+            destination_node.relative_to(resolved_target_root)
+        except ValueError as error:
+            value_error = ValueError("Archive member escapes target directory.")
+            value_error.__cause__ = error
+            raise value_error
+        return destination_node
+
+    def _extract_archive(
+        self, archive_context: zipfile.ZipFile, target_node: Path
+    ) -> None:
+        target_node.mkdir(parents=True, exist_ok=True)
+        resolved_target_root = target_node.resolve()
+        for archive_member in archive_context.infolist():
+            destination_node = self._resolve_archive_member_path(
+                resolved_target_root, archive_member.filename
+            )
+            if archive_member.is_dir():
+                destination_node.mkdir(parents=True, exist_ok=True)
+                continue
+            destination_node.parent.mkdir(parents=True, exist_ok=True)
+            with archive_context.open(archive_member) as archive_member_stream:
+                with open(destination_node, "wb") as persistent_storage:
+                    shutil.copyfileobj(
+                        archive_member_stream, persistent_storage
+                    )
 
     async def execute_transfer(
         self, source_uri: str, target_node: Path
@@ -185,7 +261,7 @@ class ZipExtractTransferStrategy:
                 network_response.raise_for_status()
                 memory_buffer = io.BytesIO(await network_response.read())
                 with zipfile.ZipFile(memory_buffer) as archive_context:
-                    archive_context.extractall(target_node)
+                    self._extract_archive(archive_context, target_node)
         return True
 
     def _execute_transfer_sync(
@@ -198,7 +274,7 @@ class ZipExtractTransferStrategy:
             payload = response.read()
         memory_buffer = io.BytesIO(payload)
         with zipfile.ZipFile(memory_buffer) as archive_context:
-            archive_context.extractall(target_node)
+            self._extract_archive(archive_context, target_node)
 
 
 @dataclass(frozen=True, slots=True)

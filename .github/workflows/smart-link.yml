@@ -139,6 +139,8 @@ jobs:
               "",
               "Rules:",
               "- closes: only when the PR very likely resolves the item.",
+              "- closes can target bug reports, enhancement requests, proposals, documentation issues, or other open issues when the PR clearly completes the requested work.",
+              "- Do not reserve closes only for bugs.",
               "- connects: strong dependency or implementation relationship.",
               "- related: looser thematic relation.",
               "- Max 8 closes, 12 connects, 12 related.",
@@ -243,13 +245,13 @@ jobs:
             for (const item of aiConnects) pushBounded(aiConnectCandidates, item.id);
             for (const item of aiRelated) pushBounded(aiRelatedCandidates, item.id);
 
-            const directiveRegex = /\b(close[sd]?|fix(?:e[sd])?|resolve[sd]?|connect(?:s|ed|ing)?|relate(?:s|d|ing)?|reference[sd]?|see|depend(?:s|ed|ing)?(?:\s+on)?)\s+(?:to\s+|on\s+)?(?:(?<repo>[a-z0-9_.-]+\/[a-z0-9_.-]+))?#(?<id>\d+)\b/g;
+            const directiveRegex = /\b(close[sd]?|fix(?:e[sd])?|resolve[sd]?|implement(?:s|ed|ing)?|connect(?:s|ed|ing)?|relate(?:s|d|ing)?|reference[sd]?|see|depend(?:s|ed|ing)?(?:\s+on)?)\s+(?:to\s+|on\s+)?(?:(?<repo>[a-z0-9_.-]+\/[a-z0-9_.-]+))?#(?<id>\d+)\b/g;
             for (const match of scannedText.matchAll(directiveRegex)) {
               const refRepo = match.groups?.repo;
               if (refRepo && refRepo.toLowerCase() !== `${owner}/${repo}`.toLowerCase()) continue;
               const directive = (match[1] || "").toLowerCase();
               const id = match.groups?.id;
-              if (directive.startsWith("close") || directive.startsWith("fix") || directive.startsWith("resolve")) {
+              if (directive.startsWith("close") || directive.startsWith("fix") || directive.startsWith("resolve") || directive.startsWith("implement")) {
                 pushBounded(explicitCloses, id);
               } else if (directive.startsWith("connect") || directive.startsWith("relate") || directive.startsWith("depend")) {
                 pushBounded(strongConnects, id);

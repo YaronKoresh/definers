@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import MagicMock
 
-from definers.data import drop_columns
+from definers.application_data.loaders import drop_columns
 
 
 class TestDropColumns(unittest.TestCase):

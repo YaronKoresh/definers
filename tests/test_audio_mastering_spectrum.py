@@ -20,6 +20,78 @@ ROOT = Path(__file__).resolve().parents[1]
 AUDIO_ROOT = ROOT / "src" / "definers" / "audio"
 
 
+def _install_scipy_stub() -> None:
+    scipy_module = types.ModuleType("scipy")
+    scipy_module.__version__ = "1.11.0"
+    signal_module = types.ModuleType("scipy.signal")
+    ndimage_module = types.ModuleType("scipy.ndimage")
+
+    def _moving_last_axis(values, size, reducer):
+        array = np.asarray(values, dtype=np.float32)
+        out = np.empty_like(array)
+        window = max(int(size), 1)
+        for index in range(array.shape[-1]):
+            start = max(0, index - window + 1)
+            out[..., index] = reducer(array[..., start : index + 1], axis=-1)
+        return out
+
+    def welch(y, fs=1.0, nperseg=256, nfft=None, **kwargs):
+        array = np.asarray(y, dtype=np.float32)
+        if array.ndim > 1:
+            array = np.mean(array, axis=0)
+        fft_size = int(nfft or nperseg or max(array.size, 1))
+        if array.size < fft_size:
+            array = np.pad(array, (0, fft_size - array.size))
+        else:
+            array = array[:fft_size]
+        spectrum = np.fft.rfft(array)
+        power = np.square(np.abs(spectrum)) / max(array.size, 1)
+        freqs = np.fft.rfftfreq(array.size, d=1.0 / float(fs))
+        return freqs.astype(np.float32), power.astype(np.float32)
+
+    def stft(audio_data, fs=44100, nperseg=8192):
+        array = np.asarray(audio_data, dtype=np.float32)
+        if array.ndim > 1:
+            array = np.mean(array, axis=0)
+        freq_count = max(int(nperseg) // 2 + 1, 2)
+        freqs = np.linspace(0.0, fs / 2.0, freq_count, dtype=np.float32)
+        return (
+            freqs,
+            np.array([0.0], dtype=np.float32),
+            np.tile(array, (freq_count, 1)),
+        )
+
+    def istft(Zxx_modified, fs=44100, nperseg=8192):
+        output = np.mean(np.asarray(Zxx_modified, dtype=np.float32), axis=0)
+        return np.array([0.0], dtype=np.float32), output
+
+    signal_module.welch = welch
+    signal_module.stft = stft
+    signal_module.istft = istft
+    signal_module.resample_poly = lambda y, up, down, axis=-1: np.array(
+        y, copy=True
+    )
+    signal_module.butter = lambda *args, **kwargs: ("b", "a")
+    signal_module.sosfilt = lambda sos, x: np.array(x, copy=True)
+    signal_module.sosfiltfilt = lambda sos, x, axis=-1: np.array(x, copy=True)
+
+    ndimage_module.maximum_filter1d = lambda values, size, mode="constant": (
+        _moving_last_axis(values, size, np.max)
+    )
+    ndimage_module.median_filter = lambda values, size, mode="nearest": (
+        np.array(values, dtype=np.float32, copy=True)
+    )
+    ndimage_module.uniform_filter1d = lambda values, size, mode="constant": (
+        _moving_last_axis(values, size, np.mean)
+    )
+
+    scipy_module.signal = signal_module
+    scipy_module.ndimage = ndimage_module
+    sys.modules["scipy"] = scipy_module
+    sys.modules["scipy.signal"] = signal_module
+    sys.modules["scipy.ndimage"] = ndimage_module
+
+
 def _load_mastering_module(package_name: str):
     for name in list(sys.modules):
         if name == package_name or name.startswith(f"{package_name}."):
@@ -44,20 +116,29 @@ def _load_mastering_module(package_name: str):
         remove_spectral_spikes=lambda y, *_: y,
         resample=lambda y, *_: y,
     )
-    sys.modules[f"{package_name}.effects"] = types.SimpleNamespace(
-        apply_exciter=lambda y, *_: y,
-        mix_audio=lambda *_, **__: None,
-        pad_audio=lambda *_, **__: None,
-        stereo=lambda y: y if getattr(y, "ndim", 1) > 1 else np.vstack([y, y]),
+    effects_package = types.ModuleType(f"{package_name}.effects")
+    effects_package.__path__ = []
+    exciter_module = types.ModuleType(f"{package_name}.effects.exciter")
+    exciter_module.apply_exciter = lambda y, *_: y
+    mixing_module = types.ModuleType(f"{package_name}.effects.mixing")
+    mixing_module.stereo = lambda y: (
+        y if getattr(y, "ndim", 1) > 1 else np.vstack([y, y])
     )
+    effects_package.exciter = exciter_module
+    effects_package.mixing = mixing_module
+    sys.modules[f"{package_name}.effects"] = effects_package
+    sys.modules[f"{package_name}.effects.exciter"] = exciter_module
+    sys.modules[f"{package_name}.effects.mixing"] = mixing_module
     sys.modules[f"{package_name}.filters"] = types.SimpleNamespace(
         freq_cut=lambda y, *_, **__: y,
     )
+    _install_scipy_stub()
     sys.modules[f"{package_name}.utils"] = types.SimpleNamespace(
         apply_lufs=lambda y, *_, **__: y,
         generate_bands=lambda start, stop, count: np.geomspace(
             float(start), float(stop), int(count)
         ).tolist(),
+        get_lufs=lambda y, *_: -14.0,
         stereo_widen=lambda y, *_, **__: y,
     )
     if parent_name:

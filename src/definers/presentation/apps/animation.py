@@ -1,32 +1,26 @@
-import math
-import random
+class AnimationApp:
+    @staticmethod
+    def generate_chunk(txt, img, dur, seed, chunk_state, _progress=None):
+        import math
+        import random
 
-from definers.constants import MAX_INPUT_LENGTH, MODELS
-from definers.cuda import device
-from definers.ml import init_pretrained_model, optimize_prompt_realism
-from definers.presentation.chat_handlers import validate_text_input
-from definers.presentation.gradio_shared import launch_blocks
-from definers.system import full_path, tmp
+        import gradio as gr
+        import torch
+        from diffusers.utils import export_to_gif
+        from PIL import Image, ImageOps
 
+        from definers.application_text.validation import TextInputValidator
+        from definers.constants import MODELS
+        from definers.cuda import device
+        from definers.ml import optimize_prompt_realism
+        from definers.system import full_path
 
-def launch_animation_app():
-    import gradio as gr
-    import torch
-    from diffusers.utils import export_to_gif
-    from PIL import Image, ImageOps
-
-    init_pretrained_model("video", True)
-    init_pretrained_model("summary")
-    init_pretrained_model("translate")
-    frames_per_chunk = 5
-    fps = 20
-    steps = 30
-
-    def generate_chunk(
-        txt, img, dur, seed, chunk_state, _progress=gr.Progress()
-    ):
-        txt = validate_text_input(txt)
-        txt = optimize_prompt_realism(txt)
+        validator = TextInputValidator.default()
+        frames_per_chunk = 5
+        fps = 20
+        steps = 30
+        validated_text = validator.validate(txt)
+        validated_text = optimize_prompt_realism(validated_text)
         total_frames = int(dur * fps)
         total_chunks = math.ceil(total_frames / frames_per_chunk)
         current_chunk_index = chunk_state["current_chunk"]
@@ -57,7 +51,7 @@ def launch_animation_app():
             int(seed) + current_chunk_index
         )
         output = MODELS["video"](
-            prompt=txt,
+            prompt=validated_text,
             image=input_image,
             generator=generator,
             num_inference_steps=steps,
@@ -80,7 +74,12 @@ def launch_animation_app():
             gr.update(visible=True),
         )
 
+    @staticmethod
     def combine_chunks(chunk_state):
+        import gradio as gr
+        from PIL import Image
+
+        fps = 20
         if not chunk_state["chunk_paths"]:
             raise gr.Error("No chunks to combine.")
         gr.Info(
@@ -103,7 +102,12 @@ def launch_animation_app():
         )
         return final_gif_path, gr.update(visible=False)
 
+    @staticmethod
     def reset_state(chunk_state):
+        import gradio as gr
+
+        from definers.system import tmp
+
         chunk_state["current_chunk"] = 1
         chunk_state["chunk_paths"] = []
         chunk_state["chunks_path"] = tmp(dir=True)
@@ -115,79 +119,95 @@ def launch_animation_app():
             gr.update(interactive=True),
         )
 
-    with gr.Blocks() as app:
-        chunk_state = gr.State(
-            {
-                "current_chunk": 1,
-                "chunk_paths": [],
-                "chunks_path": tmp(dir=True),
-            }
-        )
-        gr.Markdown("# Image to Animation: Manual Chunking Method")
-        gr.Markdown(
-            "This app generates long animations piece-by-piece to avoid timeouts on free services. **You must click 'Generate Next Chunk' repeatedly** until all chunks are created, then click 'Combine'."
-        )
-        with gr.Row():
-            with gr.Column(scale=1):
-                img = gr.Image(label="Input Image", type="pil", height=420)
-                txt = gr.Textbox(
-                    placeholder="Describe the scene",
-                    value="",
-                    lines=4,
-                    label="Prompt",
-                    container=True,
-                    max_length=MAX_INPUT_LENGTH,
-                )
-                dur = gr.Slider(
-                    minimum=1,
-                    maximum=30,
-                    value=3,
-                    step=1,
-                    label="Total Duration (s)",
-                )
-                with gr.Accordion("Advanced Settings", open=False):
-                    seed = gr.Number(
-                        label="Seed (-1 for random)",
-                        minimum=-1,
-                        value=-1,
+    @staticmethod
+    def launch_animation_app():
+        import gradio as gr
+
+        from definers.constants import MAX_INPUT_LENGTH
+        from definers.ml import init_pretrained_model
+        from definers.presentation.gradio_shared import launch_blocks
+        from definers.system import tmp
+
+        init_pretrained_model("video", True)
+        init_pretrained_model("summary")
+        init_pretrained_model("translate")
+
+        with gr.Blocks() as app:
+            chunk_state = gr.State(
+                {
+                    "current_chunk": 1,
+                    "chunk_paths": [],
+                    "chunks_path": tmp(dir=True),
+                }
+            )
+            gr.Markdown("# Image to Animation: Manual Chunking Method")
+            gr.Markdown(
+                "This app generates long animations piece-by-piece to avoid timeouts on free services. **You must click 'Generate Next Chunk' repeatedly** until all chunks are created, then click 'Combine'."
+            )
+            with gr.Row():
+                with gr.Column(scale=1):
+                    img = gr.Image(label="Input Image", type="pil", height=420)
+                    txt = gr.Textbox(
+                        placeholder="Describe the scene",
+                        value="",
+                        lines=4,
+                        label="Prompt",
+                        container=True,
+                        max_length=MAX_INPUT_LENGTH,
                     )
-            with gr.Column(scale=1):
-                out = gr.Image(
-                    label="Latest Generated Chunk / Final Animation",
-                    interactive=False,
-                    height=420,
+                    dur = gr.Slider(
+                        minimum=1,
+                        maximum=30,
+                        value=3,
+                        step=1,
+                        label="Total Duration (s)",
+                    )
+                    with gr.Accordion("Advanced Settings", open=False):
+                        seed = gr.Number(
+                            label="Seed (-1 for random)",
+                            minimum=-1,
+                            value=-1,
+                        )
+                with gr.Column(scale=1):
+                    out = gr.Image(
+                        label="Latest Generated Chunk / Final Animation",
+                        interactive=False,
+                        height=420,
+                    )
+                    prog = gr.Markdown("Ready to generate the first chunk.")
+            with gr.Row():
+                generate_button = gr.Button(
+                    "Generate Next Chunk",
+                    variant="primary",
                 )
-                prog = gr.Markdown("Ready to generate the first chunk.")
-        with gr.Row():
-            generate_button = gr.Button(
-                "Generate Next Chunk",
-                variant="primary",
+                combine_button = gr.Button(
+                    "Combine Chunks into Final GIF",
+                    variant="stop",
+                    visible=False,
+                )
+                reset_button = gr.Button("Start Over")
+            generate_button.click(
+                fn=AnimationApp.generate_chunk,
+                inputs=[txt, img, dur, seed, chunk_state],
+                outputs=[out, chunk_state, prog, combine_button],
             )
-            combine_button = gr.Button(
-                "Combine Chunks into Final GIF",
-                variant="stop",
-                visible=False,
+            combine_button.click(
+                fn=AnimationApp.combine_chunks,
+                inputs=[chunk_state],
+                outputs=[out, combine_button],
             )
-            reset_button = gr.Button("Start Over")
-        generate_button.click(
-            fn=generate_chunk,
-            inputs=[txt, img, dur, seed, chunk_state],
-            outputs=[out, chunk_state, prog, combine_button],
-        )
-        combine_button.click(
-            fn=combine_chunks,
-            inputs=[chunk_state],
-            outputs=[out, combine_button],
-        )
-        reset_button.click(
-            fn=reset_state,
-            inputs=[chunk_state],
-            outputs=[
-                chunk_state,
-                out,
-                prog,
-                combine_button,
-                generate_button,
-            ],
-        )
-    launch_blocks(app)
+            reset_button.click(
+                fn=AnimationApp.reset_state,
+                inputs=[chunk_state],
+                outputs=[
+                    chunk_state,
+                    out,
+                    prog,
+                    combine_button,
+                    generate_button,
+                ],
+            )
+        launch_blocks(app)
+
+
+launch_animation_app = AnimationApp.launch_animation_app

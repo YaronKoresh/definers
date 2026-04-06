@@ -1,4 +1,4 @@
-from definers.persistence import database as database_module
+import definers.persistence.database as database_module
 from definers.persistence.database import Database
 
 
@@ -64,3 +64,18 @@ def test_latest_returns_mapping_for_selected_databases(tmp_path):
         "items": [{"id": "1", "value": "one"}],
         "events": [{"id": "2", "value": "two"}],
     }
+
+
+def test_history_reads_collision_safe_record_directories(tmp_path):
+    database = Database(str(tmp_path))
+    collision_path = tmp_path / "items" / "1000-collision"
+    collision_path.mkdir(parents=True)
+    (collision_path / "id").write_text("1", encoding="utf-8")
+    (collision_path / "value").write_text("manual", encoding="utf-8")
+
+    database.push("items", {"id": "2", "value": "live"}, timestamp=2_000)
+
+    assert database.history("items") == [
+        {"id": "2", "value": "live"},
+        {"id": "1", "value": "manual"},
+    ]

@@ -1,8 +1,11 @@
 import logging
 import os
+import sys
 from datetime import datetime
+from threading import RLock
 
 MESSAGE_SCHEMA = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+_LOGGER_LOCK = RLock()
 
 
 def _parse_level(value: str | int | None, default_level: int) -> int:
@@ -29,34 +32,65 @@ def init_logger(
         "LOGLEVEL"
     )
     final_level = _parse_level(level or environment_level, default_level)
-    active_logger = logging.getLogger(name)
-    active_logger.propagate = propagate
-    active_logger.setLevel(final_level)
-
-    if log_file is None:
-        log_file = os.environ.get("DEFINERS_LOG_FILE")
-
+    resolved_log_file = log_file or os.environ.get("DEFINERS_LOG_FILE")
     formatter = logging.Formatter(MESSAGE_SCHEMA)
-    existing_handlers = {
-        type(handler): handler for handler in active_logger.handlers
-    }
 
-    if enable_console and logging.StreamHandler not in existing_handlers:
-        stream_handler = logging.StreamHandler()
-        stream_handler.setFormatter(formatter)
-        stream_handler.setLevel(final_level)
-        active_logger.addHandler(stream_handler)
+    with _LOGGER_LOCK:
+        active_logger = logging.getLogger(name)
+        active_logger.propagate = propagate
+        active_logger.setLevel(final_level)
 
-    if log_file and logging.FileHandler not in existing_handlers:
-        file_handler = logging.FileHandler(log_file, encoding="utf-8")
-        file_handler.setFormatter(formatter)
-        file_handler.setLevel(final_level)
-        active_logger.addHandler(file_handler)
+        console_handler: logging.Handler | None = None
+        file_handlers: dict[str, logging.FileHandler] = {}
+        for handler in list(active_logger.handlers):
+            if isinstance(handler, logging.FileHandler):
+                handler_key = os.path.normcase(
+                    os.path.abspath(os.path.expanduser(handler.baseFilename))
+                )
+                if handler_key in file_handlers:
+                    active_logger.removeHandler(handler)
+                    handler.close()
+                    continue
+                file_handlers[handler_key] = handler
+            elif isinstance(handler, logging.StreamHandler):
+                stream = getattr(handler, "stream", None)
+                if console_handler is None and stream in {
+                    None,
+                    sys.stderr,
+                    sys.stdout,
+                }:
+                    console_handler = handler
+                elif stream in {None, sys.stderr, sys.stdout}:
+                    active_logger.removeHandler(handler)
+                    handler.close()
+                    continue
+            handler.setFormatter(formatter)
+            handler.setLevel(final_level)
 
-    for handler in active_logger.handlers:
-        handler.setLevel(final_level)
+        if enable_console and console_handler is None:
+            console_handler = logging.StreamHandler()
+            console_handler.setFormatter(formatter)
+            console_handler.setLevel(final_level)
+            active_logger.addHandler(console_handler)
 
-    return active_logger
+        if resolved_log_file:
+            normalized_log_file = os.path.normcase(
+                os.path.abspath(os.path.expanduser(resolved_log_file))
+            )
+            if normalized_log_file not in file_handlers:
+                file_handler = logging.FileHandler(
+                    normalized_log_file,
+                    encoding="utf-8",
+                )
+                file_handler.setFormatter(formatter)
+                file_handler.setLevel(final_level)
+                active_logger.addHandler(file_handler)
+
+        for handler in active_logger.handlers:
+            handler.setFormatter(formatter)
+            handler.setLevel(final_level)
+
+        return active_logger
 
 
 def init_debug_logger(name: str) -> logging.Logger:

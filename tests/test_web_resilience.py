@@ -8,9 +8,9 @@ from definers.media.web_transfer import (
     HttpChunkedTransferStrategy,
     ResourceRetrievalOrchestrator,
     ZipExtractTransferStrategy,
+    download_file,
     execute_async_operation,
 )
-from definers.web import download_file
 
 
 class FlakyTransferStrategy:

@@ -1,151 +1,89 @@
-import argparse
-from collections.abc import Sequence
-from pathlib import Path
-
-from definers.application_shell.commands import (
-    CliRequest,
-    LyricVideoPort,
-    MusicVideoPort,
-    OutputPort,
-    StartProjectPort,
-    coerce_cli_request,
-    dispatch_cli_command,
-    parse_cli_command,
+from definers.application_shell.command_dispatcher import CliCommandDispatcher
+from definers.application_shell.command_parser import CliCommandParser
+from definers.presentation.cli_parser import (
+    build_cli_request,
+    build_parser,
+    find_unknown_command,
+    read_lyrics_text,
 )
-from definers.presentation.gui_registry import normalize_gui_project_name
-
-GUI_PROJECTS = (
-    "translate",
-    "animation",
-    "image",
-    "chat",
-    "faiss",
-    "video",
-    "audio",
-    "train",
-)
-
-GUI_COMMANDS = tuple(
-    normalize_gui_project_name(command) for command in GUI_PROJECTS
-)
-
-KNOWN_COMMANDS = GUI_COMMANDS + (
-    "start",
-    "music-video",
-    "lyric-video",
-    "--help",
-    "--version",
+from definers.presentation.cli_runtime import (
+    resolve_cli_command_registry,
+    resolve_cli_handlers,
+    resolve_cli_runtime_state,
+    resolve_gui_registry,
 )
 
 
-def build_parser(version: str) -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="definers")
-    parser.add_argument("--version", action="version", version=version)
+class CliDispatchService:
+    resolve_gui_registry = staticmethod(resolve_gui_registry)
+    resolve_cli_command_registry = staticmethod(resolve_cli_command_registry)
+    build_parser = staticmethod(build_parser)
+    find_unknown_command = staticmethod(find_unknown_command)
+    read_lyrics_text = staticmethod(read_lyrics_text)
+    build_cli_request = staticmethod(build_cli_request)
+    resolve_cli_handlers = staticmethod(resolve_cli_handlers)
 
-    subparsers = parser.add_subparsers(dest="command")
-
-    start_parser = subparsers.add_parser("start", help="launch a GUI by name")
-    start_parser.add_argument(
-        "project", nargs="?", default="chat", help="project to launch"
-    )
-
-    for name in GUI_COMMANDS:
-        subparsers.add_parser(name, help=f"launch the {name} interface")
-
-    music_video_parser = subparsers.add_parser(
-        "music-video", help="create a music visualizer video"
-    )
-    music_video_parser.add_argument("audio", help="input audio file path")
-    music_video_parser.add_argument("width", type=int, help="video width")
-    music_video_parser.add_argument("height", type=int, help="video height")
-    music_video_parser.add_argument("fps", type=int, help="frames per second")
-
-    lyric_video_parser = subparsers.add_parser(
-        "lyric-video", help="create a lyric video"
-    )
-    lyric_video_parser.add_argument("audio", help="input audio file")
-    lyric_video_parser.add_argument("background", help="background video/image")
-    lyric_video_parser.add_argument("lyrics", help="lyrics text or file")
-    lyric_video_parser.add_argument(
-        "position", choices=["top", "center", "bottom"], default="bottom"
-    )
-    lyric_video_parser.add_argument("--max-dim", type=int, default=640)
-    lyric_video_parser.add_argument("--font-size", type=int, default=70)
-    lyric_video_parser.add_argument("--text-color", default="white")
-    lyric_video_parser.add_argument("--stroke-color", default="black")
-    lyric_video_parser.add_argument("--stroke-width", type=int, default=2)
-    lyric_video_parser.add_argument("--fade", type=float, default=0.5)
-    return parser
-
-
-def find_unknown_command(argv: Sequence[str]) -> str | None:
-    if not argv:
-        return None
-    first = normalize_gui_project_name(argv[0])
-    if first in KNOWN_COMMANDS or first.startswith("-"):
-        return None
-    return first
-
-
-def read_lyrics_text(lyrics: str) -> str:
-    lyrics_path = Path(lyrics)
-    if lyrics_path.is_file():
-        try:
-            return lyrics_path.read_text(encoding="utf-8")
-        except OSError:
-            return lyrics
-    return lyrics
-
-
-def build_cli_request(args: argparse.Namespace) -> CliRequest:
-    return coerce_cli_request(args)
-
-
-def resolve_cli_handlers() -> tuple[
-    StartProjectPort, MusicVideoPort, LyricVideoPort
-]:
-    from definers.chat import lyric_video, music_video, start
-
-    return start, music_video, lyric_video
-
-
-def dispatch_request(
-    request: CliRequest,
-    *,
-    start: StartProjectPort,
-    music_video: MusicVideoPort,
-    lyric_video: LyricVideoPort,
-    output: OutputPort,
-) -> int:
-    command = parse_cli_command(
+    @staticmethod
+    def dispatch_request(
         request,
-        read_lyrics_text=read_lyrics_text,
-        gui_commands=GUI_COMMANDS,
-    )
-    return dispatch_cli_command(
-        command,
-        start=start,
-        music_video=music_video,
-        lyric_video=lyric_video,
-        output=output,
-    )
+        *,
+        command_registry,
+        start,
+        music_video,
+        lyric_video,
+        output,
+    ):
+        command = CliCommandParser.parse_cli_command(
+            request,
+            read_lyrics_text=CliDispatchService.read_lyrics_text,
+            command_registry=command_registry,
+        )
+        return CliCommandDispatcher.dispatch_cli_command(
+            command,
+            start=start,
+            music_video=music_video,
+            lyric_video=lyric_video,
+            output=output,
+        )
+
+    @staticmethod
+    def run_cli(argv, *, version):
+        runtime_state = resolve_cli_runtime_state()
+        command_registry = runtime_state.command_registry
+        parser = CliDispatchService.build_parser(
+            version,
+            command_registry=command_registry,
+        )
+
+        unknown_command = CliDispatchService.find_unknown_command(
+            argv,
+            command_registry=command_registry,
+        )
+        if unknown_command is not None:
+            print(f"unknown command {unknown_command}")
+            return 1
+
+        args = parser.parse_args(list(argv))
+        request = CliDispatchService.build_cli_request(args)
+        start, music_video, lyric_video = (
+            CliDispatchService.resolve_cli_handlers()
+        )
+        return CliDispatchService.dispatch_request(
+            request,
+            command_registry=command_registry,
+            start=start,
+            music_video=music_video,
+            lyric_video=lyric_video,
+            output=print,
+        )
 
 
-def run_cli(argv: Sequence[str], *, version: str) -> int:
-    parser = build_parser(version)
-
-    unknown_command = find_unknown_command(argv)
-    if unknown_command is not None:
-        print(f"unknown command {unknown_command}")
-        return 1
-
-    args = parser.parse_args(list(argv))
-    request = build_cli_request(args)
-    start, music_video, lyric_video = resolve_cli_handlers()
-    return dispatch_request(
-        request,
-        start=start,
-        music_video=music_video,
-        lyric_video=lyric_video,
-        output=print,
-    )
+resolve_gui_registry = CliDispatchService.resolve_gui_registry
+resolve_cli_command_registry = CliDispatchService.resolve_cli_command_registry
+build_parser = CliDispatchService.build_parser
+find_unknown_command = CliDispatchService.find_unknown_command
+read_lyrics_text = CliDispatchService.read_lyrics_text
+build_cli_request = CliDispatchService.build_cli_request
+resolve_cli_handlers = CliDispatchService.resolve_cli_handlers
+dispatch_request = CliDispatchService.dispatch_request
+run_cli = CliDispatchService.run_cli

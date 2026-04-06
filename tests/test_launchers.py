@@ -12,9 +12,27 @@ def test_register_gui_launchers_normalizes_names():
     def launch_chat():
         return "chat"
 
-    registry = register_gui_launchers({" Chat ": launch_chat, "bad": None})
+    registry = register_gui_launchers({" Chat ": launch_chat})
 
     assert registry == {"chat": launch_chat}
+
+
+def test_register_gui_launchers_rejects_unsupported_launcher_types():
+    try:
+        register_gui_launchers({"chat": None})
+    except ValueError as exc:
+        assert str(exc) == "Unsupported GUI launcher for project chat"
+    else:
+        raise AssertionError("expected ValueError")
+
+
+def test_register_gui_launchers_rejects_string_launcher_without_namespace():
+    try:
+        register_gui_launchers({"chat": "_gui_chat"})
+    except ValueError as exc:
+        assert str(exc) == "GUI launcher chat requires a namespace"
+    else:
+        raise AssertionError("expected ValueError")
 
 
 def test_start_project_uses_explicit_registry_first():
@@ -66,7 +84,7 @@ def test_start_project_calls_missing_handler_for_unknown_project():
     assert result == "missing:unknown"
 
 
-def test_get_gui_project_names_merges_registry_and_namespace():
+def test_get_gui_project_names_prefers_registry_when_available():
     registry = register_gui_launchers({" chat ": lambda: "chat"})
 
     names = get_gui_project_names(
@@ -74,10 +92,18 @@ def test_get_gui_project_names_merges_registry_and_namespace():
         registry=registry,
     )
 
-    assert names == ("chat", "video")
+    assert names == ("chat",)
 
 
-def test_launch_installed_project_delegates_to_chat_start():
+def test_get_gui_project_names_uses_namespace_when_registry_missing():
+    names = get_gui_project_names(
+        {"_gui_video": lambda: "video", "other": object()},
+    )
+
+    assert names == ("video",)
+
+
+def test_launch_installed_project_delegates_to_gui_entrypoints_start():
     with patch(
         "definers.presentation.launchers.import_module"
     ) as mock_import_module:
