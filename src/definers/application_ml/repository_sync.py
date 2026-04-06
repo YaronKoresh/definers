@@ -401,6 +401,7 @@ class RepositorySyncService:
         url: str, requested_model_type: str | None
     ):
         from pathlib import Path
+        from pathlib import PurePosixPath
 
         remote_urls = _discover_remote_shard_urls(url)
         resolved_model_type = _resolve_model_type(url, requested_model_type)
@@ -424,7 +425,9 @@ class RepositorySyncService:
         temp_directory = Path(tmp(dir=True))
         local_files = []
         for remote_url in remote_urls:
-            target_path = str(temp_directory / _remote_file_name(remote_url))
+            remote_name = PurePosixPath(remote_url).name
+            safe_name = Path(remote_name).name
+            target_path = str(temp_directory / safe_name)
             downloaded_path = download_file(remote_url, target_path)
             if downloaded_path is None:
                 raise FileNotFoundError(
