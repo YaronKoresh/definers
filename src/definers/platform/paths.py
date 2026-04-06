@@ -112,12 +112,51 @@ def tmp(suffix: str | None = None, keep: bool = True, dir: bool = False):
     return temporary_name
 
 
+def _contains_glob_wildcards(path_part: str) -> bool:
+    return any(character in path_part for character in "*?[")
+
+
+def _safe_glob_pattern(pattern: str) -> str | None:
+    if not isinstance(pattern, str):
+        return None
+    clean_pattern = unicodedata.normalize("NFKC", pattern)
+    clean_pattern = " ".join(clean_pattern.split())
+    if not clean_pattern or "\x00" in clean_pattern:
+        return None
+    if clean_pattern.startswith(("http://", "https://", "file://")):
+        return None
+
+    normalized_pattern = normalize_path(clean_pattern)
+    pattern_path = Path(os.path.expanduser(normalized_pattern))
+    anchor_parts: list[str] = []
+    wildcard_parts: list[str] = []
+    wildcard_seen = False
+
+    for part in pattern_path.parts:
+        if wildcard_seen or _contains_glob_wildcards(part):
+            wildcard_seen = True
+            wildcard_parts.append(part)
+            continue
+        anchor_parts.append(part)
+
+    anchor_path = full_path(*anchor_parts) if anchor_parts else full_path(".")
+    try:
+        secure_path(anchor_path)
+    except Exception:
+        return None
+    if not wildcard_parts:
+        return anchor_path
+    return normalize_path(os.path.join(anchor_path, *wildcard_parts))
+
+
 def paths(*patterns: str) -> list[str]:
     from glob import glob as _glob
 
-    resolved_patterns = [full_path(pattern) for pattern in patterns]
     collected_paths: list[str] = []
-    for pattern in resolved_patterns:
+    for candidate_pattern in patterns:
+        pattern = _safe_glob_pattern(candidate_pattern)
+        if pattern is None:
+            continue
         try:
             collected_paths.extend(list(_glob(pattern, recursive=True)))
         except Exception:

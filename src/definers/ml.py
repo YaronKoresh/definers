@@ -2132,15 +2132,21 @@ class AutoTrainer:
             return getattr(value, "name")
         return value
 
-    def _looks_like_path(self, value) -> bool:
+    def _safe_local_path(self, value):
         value = self._coerce_reference(value)
         if value is None:
-            return False
+            return None
         text = str(value).strip()
         if not text:
-            return False
-        if os.path.exists(text):
-            return True
+            return None
+        from definers.system import secure_path
+
+        try:
+            return secure_path(text)
+        except Exception:
+            return None
+
+    def _has_known_path_suffix(self, text: str) -> bool:
         known_suffixes = (
             ".csv",
             ".json",
@@ -2160,12 +2166,29 @@ class AutoTrainer:
         )
         return text.lower().endswith(known_suffixes)
 
+    def _looks_like_path(self, value) -> bool:
+        value = self._coerce_reference(value)
+        if value is None:
+            return False
+        text = str(value).strip()
+        if not text:
+            return False
+        safe_path = self._safe_local_path(text)
+        if safe_path is None:
+            return False
+        if os.path.exists(safe_path):
+            return True
+        return self._has_known_path_suffix(text)
+
     def _looks_like_remote_source(self, value) -> bool:
         value = self._coerce_reference(value)
         if value is None:
             return False
         text = str(value).strip()
-        if not text or os.path.exists(text):
+        if not text:
+            return False
+        safe_path = self._safe_local_path(text)
+        if safe_path is not None and os.path.exists(safe_path):
             return False
         if text.startswith(("http://", "https://")):
             return True
