@@ -1085,11 +1085,17 @@ class RepositorySyncService:
         import os
         from pathlib import Path
 
-        normalized_paths = [str(Path(path).resolve()) for path in paths if path]
+        # Normalize all provided paths to absolute, resolved strings.
+        normalized_paths = []
+        for path in paths:
+            if not path:
+                continue
+            resolved = Path(str(path)).resolve()
+            normalized_paths.append(str(resolved))
         if not normalized_paths:
             return ()
         parent_directories = [
-            str(Path(path).resolve().parent) for path in normalized_paths
+            str(Path(p).resolve().parent) for p in normalized_paths
         ]
         common_directory = os.path.commonpath(parent_directories)
         trusted_directories = {common_directory}
