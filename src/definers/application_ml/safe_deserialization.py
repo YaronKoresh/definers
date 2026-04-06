@@ -46,19 +46,20 @@ def _normalize_and_secure_path(path: str) -> str:
     This leverages the existing secure_path helper and the repository sync
     trusted_directories_for_paths helper so that even if an untrusted value is
     passed in, file access is restricted to a safe location.
-    """
-    from pathlib import Path
 
+    The raw path string is passed directly to secure_path, and any required
+    resolution is handled inside secure_path and trusted_directories_for_paths
+    to centralize and constrain filesystem interactions.
+    """
     from definers.application_ml.repository_sync import RepositorySyncService
     from definers.system import secure_path
 
-    # Normalize to an absolute filesystem path.
-    normalized = str(Path(str(path)).expanduser().resolve())
-    # Derive trusted directories from the normalized path itself.
+    # Derive trusted directories from the raw path.
     trusted_directories = RepositorySyncService.trusted_directories_for_paths(
-        (normalized,)
+        (path,)
     )
-    return secure_path(normalized, trust=trusted_directories)
+    # Let secure_path perform normalization while enforcing the trust boundary.
+    return secure_path(path, trust=trusted_directories)
 
 
 def _reject_blocked_global(module: str, name: str) -> None:

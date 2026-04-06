@@ -1088,7 +1088,12 @@ class RepositorySyncService:
         for path in paths:
             if not path:
                 continue
-            resolved = Path(str(path)).resolve()
+            candidate = Path(str(path))
+            # Normalize the candidate path and skip any values that do not
+            # resolve to an absolute filesystem location.
+            resolved = candidate.resolve()
+            if not resolved.is_absolute():
+                continue
             resolved_paths.append(resolved)
         if not resolved_paths:
             return ()
