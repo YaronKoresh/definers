@@ -6,6 +6,7 @@ from unittest import mock
 import pytest
 
 TEST_LAZY_SUBMODULES = (
+    "application_data",
     "audio",
     "cuda",
     "logger",
@@ -96,7 +97,38 @@ def test_multiple_lazy_attributes_use_package_qualified_import_names():
     unload_package_root()
 
 
-@pytest.mark.parametrize("attribute_name", ["logger", "cuda", "media", "ml"])
+def test_application_data_lazy_attribute_exposes_submodules():
+    unload_package_root()
+
+    import definers
+
+    first_value = definers.application_data.arrays
+    second_value = definers.application_data.arrays
+
+    assert first_value is second_value
+    assert first_value.__name__ == "definers.application_data.arrays"
+    assert definers.application_data.__dict__["arrays"] is first_value
+    unload_package_root()
+
+
+def test_application_data_patch_target_resolves_after_root_reload():
+    unload_package_root()
+
+    with mock.patch(
+        "definers.application_data.arrays.two_dim_numpy",
+        return_value="patched",
+    ):
+        import definers
+
+        assert definers.application_data.arrays.two_dim_numpy([]) == "patched"
+
+    unload_package_root()
+
+
+@pytest.mark.parametrize(
+    "attribute_name",
+    ["application_data", "logger", "cuda", "media", "ml"],
+)
 def test_lazy_attribute_caches_module_for_rca_regressions(attribute_name: str):
     unload_package_root()
     original_import_module = importlib.import_module

@@ -95,6 +95,7 @@ sox = load_sox_module()
 install_optional_module_aliases()
 
 _LAZY_SUBMODULES = {
+    "application_data",
     "application_ml",
     "audio",
     "cuda",
