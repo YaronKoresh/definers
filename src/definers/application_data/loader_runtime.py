@@ -5,23 +5,52 @@ logger = init_logger()
 
 class LoaderRuntimeSupport:
     @staticmethod
-    def _safe_path(path: str):
-        """
-        Normalize and validate a filesystem path against a safe root.
+    def _resolved_path(path: str) -> str:
+        import os
+        from pathlib import Path
 
-        Returns the absolute normalized path if it is within the configured
-        data root and exists; otherwise returns None.
-        """
+        return os.path.normcase(str(Path(path).expanduser().resolve()))
+
+    @classmethod
+    def _trusted_roots(cls) -> list[str]:
+        import os
+        import tempfile
+
+        roots = [os.getcwd(), tempfile.gettempdir()]
+        configured_root = os.environ.get("DEFINERS_DATA_ROOT", "").strip()
+        if configured_root:
+            roots.insert(0, configured_root)
+        trusted_roots = []
+        for root in roots:
+            try:
+                trusted_roots.append(cls._resolved_path(root))
+            except Exception:
+                continue
+        return trusted_roots
+
+    @classmethod
+    def _is_trusted_path(cls, path: str) -> bool:
+        import os
+
+        resolved_path = cls._resolved_path(path)
+        for root in cls._trusted_roots():
+            try:
+                if os.path.commonpath([root, resolved_path]) == root:
+                    return True
+            except ValueError:
+                continue
+        return False
+
+    @staticmethod
+    def _safe_path(path: str):
         import os
 
         if not path:
             return None
         try:
-            base_root = os.environ.get("DEFINERS_DATA_ROOT", os.getcwd())
-            base_root = os.path.abspath(base_root)
             full_path = os.path.abspath(path)
-            # Ensure the target path is inside the allowed root directory.
-            if os.path.commonpath([base_root, full_path]) != base_root:
+
+            if not LoaderRuntimeSupport._is_trusted_path(full_path):
                 logger.error("Path outside allowed root: %s", full_path)
                 return None
             if not os.path.exists(full_path):
@@ -57,7 +86,7 @@ class LoaderRuntimeSupport:
 
     @staticmethod
     def read(path: str):
-        # Validate and normalize path before accessing the filesystem.
+
         safe_path = LoaderRuntimeSupport._safe_path(path)
         if safe_path is None:
             return None

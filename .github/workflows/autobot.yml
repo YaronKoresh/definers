@@ -29,10 +29,10 @@ jobs:
             const { owner, repo } = context.repo;
             const pr = context.payload.pull_request;
             const files = await github.paginate(github.rest.pulls.listFiles, { owner, repo, pull_number: pr.number, per_page: 100 });
-            const MAX_FILES_PER_WINDOW = 40;
-            const MAX_PATCH_CHARS_PER_WINDOW = 14000;
-            const MAX_PATCH_CHARS_PER_FILE = 1400;
-            const MAX_HIGHLIGHTED_FILES_PER_WINDOW = 12;
+            const MAX_FILES_PER_WINDOW = 20;
+            const MAX_PATCH_CHARS_PER_WINDOW = 7000;
+            const MAX_PATCH_CHARS_PER_FILE = 700;
+            const MAX_HIGHLIGHTED_FILES_PER_WINDOW = 6;
             const MAX_PATCH_SNIPPETS_PER_WINDOW = 4;
             const totalAdditions = files.reduce((sum, file) => sum + file.additions, 0);
             const totalDeletions = files.reduce((sum, file) => sum + file.deletions, 0);
@@ -250,20 +250,96 @@ jobs:
           model: openai/gpt-4o
           prompt-file: /tmp/compact_summary_prompt.txt
           max-completion-tokens: 1200
+      - name: Build Issue Summary Prompt
+        if: >-
+          github.event_name == 'issues' &&
+          github.event.action != 'closed'
+        id: issue-summary-prompt
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require("fs");
+            const issue = context.payload.issue;
+            const existingLabels = (issue.labels || [])
+              .map((label) => typeof label === "string" ? label : label.name)
+              .filter(Boolean);
+            const prompt = [
+              "You are a principal software engineer triaging one GitHub issue.",
+              "Analyze the issue as an intake artifact, not as implemented code.",
+              "Use only the evidence in the title, body, and existing labels.",
+              "Do not invent missing repro steps, architecture, or hidden product behavior.",
+              "",
+              "OUTPUT REQUIREMENTS:",
+              "- Output MUST be valid Markdown.",
+              "- Do NOT wrap the report in triple backticks.",
+              "- Keep the result between 900 and 2400 characters.",
+              "- Make the summary precise enough to support high-quality label classification.",
+              "- Distinguish between confirmed defects, enhancement requests, proposals, documentation problems, and operational/runtime concerns.",
+              "- End your response with the exact final line: END_OF_REPORT",
+              "",
+              "Use EXACTLY this structure:",
+              "",
+              "## Issue Analysis",
+              "",
+              "### Intake Summary",
+              "2-4 sentences describing the core request or problem.",
+              "",
+              "### Evidence Signals",
+              "2-5 bullets citing the strongest concrete signals from the issue text.",
+              "",
+              "### Likely Classification",
+              "2-5 bullets naming the strongest candidate label families and why.",
+              "",
+              "### Risks Or Unknowns",
+              "1-4 bullets covering ambiguity, missing information, or notable impact areas.",
+              "",
+              "### Release Relevance",
+              "State whether the issue looks release-relevant and why.",
+              "",
+              "ISSUE METRICS",
+              `Issue number: ${issue.number}`,
+              `State: ${issue.state}`,
+              `Existing labels: ${existingLabels.join(", ") || "(none)"}`,
+              `Author association: ${issue.author_association || "UNKNOWN"}`,
+              "",
+              "ISSUE TITLE",
+              String(issue.title || ""),
+              "",
+              "ISSUE BODY",
+              String(issue.body || "").slice(0, 18000)
+            ].join("\n");
+
+            fs.writeFileSync("/tmp/issue_summary_prompt.txt", prompt);
+            core.setOutput("ready", "true");
+      - name: AI — Generate Issue Summary
+        if: steps.issue-summary-prompt.outputs.ready == 'true'
+        id: ai-issue-summary
+        uses: actions/ai-inference@v2
+        with:
+          model: openai/gpt-4o
+          prompt-file: /tmp/issue_summary_prompt.txt
+          max-completion-tokens: 1400
       - name: Build Label Prompt
-        if: steps.collect.outputs.has_changes == 'true'
+        if: >-
+          steps.collect.outputs.has_changes == 'true' ||
+          steps.issue-summary-prompt.outputs.ready == 'true'
         id: label-prompt
         env:
-          AI_SUMMARY: ${{ steps.ai-compact.outputs.response }}
+          AI_SUMMARY: ${{ steps.ai-compact.outputs.response || steps.ai-issue-summary.outputs.response }}
+          EVENT_KIND: ${{ github.event_name }}
         uses: actions/github-script@v8
         with:
           script: |
             const fs = require("fs");
             const summary = process.env.AI_SUMMARY || "";
+            const eventKind = process.env.EVENT_KIND === "issues" ? "issue" : "pull request";
+            const sourceLabel = eventKind === "issue" ? "AI-GENERATED ISSUE ANALYSIS" : "AI-GENERATED CHANGE SUMMARY";
             const MAX_AI_LABELS = 6;
             const prompt = [
               "You are an expert issue and pull request classifier.",
-              "You will receive an AI-generated technical summary of code changes.",
+              eventKind === "issue"
+                ? "You will receive an AI-generated structured analysis of one GitHub issue."
+                : "You will receive an AI-generated technical summary of code changes.",
               `Based ONLY on the summary below, select up to ${MAX_AI_LABELS} of the most relevant labels from the allowed list.`,
               "",
               "RULES:",
@@ -275,6 +351,7 @@ jobs:
               "- Include support labels only when the summary independently supports them after higher-signal labels are chosen.",
               "- Do not add secondary labels just because they often appear with the primary label.",
               "- Keep release-relevant labels when clearly supported even if the PR also includes testing, CI, docs, or refactor work.",
+              "- For issues, classify the reported problem or requested work, not the future implementation details that are not yet evidenced.",
               "- Return ONLY a valid JSON array of label name strings. No markdown, no explanation, no extra text.",
               "- Return label names exactly as provided in ALLOWED LABELS (lowercase).",
               "- If nothing fits, return an empty array: []",
@@ -283,6 +360,7 @@ jobs:
               "- Version-critical labels must be prioritized first when evidence exists: breaking-change, enhancement, security, bug, performance, api, database, schema, compatibility, migration, feature-flag, runtime.",
               "- If both broad maintenance labels and version-critical labels apply, put version-critical labels first.",
               "- If breaking behavior is clearly supported, include breaking-change and rank it first.",
+              "- For issues, prefer improvement and proposal when the item is primarily a request, idea, or opportunity rather than a confirmed implemented feature change.",
               "- For GitHub Actions, bots, repo automation, labeling, issue management, or release workflow changes, strongly prefer workflow, automation, github, ci, config, or release only when the summary clearly supports them.",
               "- Do not apply performance unless the summary explicitly describes speed, caching, efficiency, latency, memory, or throughput improvements.",
               "- Do not apply cleanup unless the summary explicitly says code, files, or logic were removed as obsolete or unused.",
@@ -301,6 +379,8 @@ jobs:
               "",
               "bug → Use when the summary clearly says incorrect behavior, a regression, a crash, a failure, or a broken path was fixed. Do not use for general hardening, refactoring, or new capability work unless a specific bug is explicitly described.",
               "enhancement → Use when the change adds a new feature, expands capability, or materially improves behavior from a user or product perspective. Do not use for internal cleanup, refactoring, or maintenance-only work with no meaningful capability gain.",
+              "improvement → Use mainly for issues that request a meaningful improvement or describe a gap, limitation, or opportunity without proving a concrete defect. Prefer enhancement for implemented PR changes and bug for confirmed incorrect behavior.",
+              "proposal → Use mainly for issues that outline a suggested direction, plan, or concept for future work. Prefer enhancement when the change is already implemented or clearly framed as delivered capability.",
               "documentation → Use when the main work is changing READMEs, guides, docs, comments, or explanatory material. Do not use just because a code change includes tiny incidental wording updates.",
               "breaking-change → Use when consumers must adapt because of incompatible API, contract, config, or behavior changes. Do not use for additive changes or internal restructuring that preserves compatibility.",
               "ui → Use when visible interface layout, styling, interaction flow, or presentation changes are part of the actual work. Do not use for backend-only or hidden implementation changes.",
@@ -362,7 +442,7 @@ jobs:
               "serialization → Use when data encoding, decoding, wire format handling, or serialization and deserialization behavior changes. Do not use for generic API or schema work unless format transformation is the core change.",
               "",
               "══════════════════════════════════════════",
-              "AI-GENERATED CHANGE SUMMARY:",
+              `${sourceLabel}:`,
               "══════════════════════════════════════════",
               summary
             ].join("\n");
@@ -378,7 +458,7 @@ jobs:
           max-completion-tokens: 600
       - name: Manage Project
         env:
-          AI_SUMMARY: ${{ steps.ai-compact.outputs.response }}
+          AI_SUMMARY: ${{ steps.ai-compact.outputs.response || steps.ai-issue-summary.outputs.response }}
           AI_LABELS_RAW: ${{ steps.ai-labels.outputs.response }}
         uses: actions/github-script@v8
         with:
@@ -400,6 +480,8 @@ jobs:
             const labelDefinitions = {
               'bug': { color: 'd73a4a', description: "Something isn't working" },
               'enhancement': { color: 'a2eeef', description: "New feature or request" },
+              'improvement': { color: 'a2eeef', description: "Improvement request or capability expansion" },
+              'proposal': { color: 'bfd4f2', description: "Proposed future work or product change" },
               'documentation': { color: '0075ca', description: "Improvements or additions to documentation" },
               'breaking-change': { color: 'b60205', description: "Incompatible API changes" },
               'ui': { color: 'd4c5f9', description: "Visual or UI/UX improvements" },
@@ -483,9 +565,12 @@ jobs:
               const normalized = String(label || '').trim().toLowerCase();
               return VERSION_LABEL_ALIASES[normalized] || normalized;
             }
+            function uniqueValidLabels(labels) {
+              return [...new Set((labels || []).map((label) => normalizeLabelName(label)).filter((label) => VALID_LABELS.has(label)))];
+            }
             function trimLowSignalLabels(labels) {
               if (labels.length <= 3) return labels;
-              const uniqueLabels = [...new Set(labels.map(normalizeLabelName).filter(label => VALID_LABELS.has(label)))];
+              const uniqueLabels = uniqueValidLabels(labels);
               const versionCritical = VERSION_SENSITIVE_LABELS.filter(label => uniqueLabels.includes(label));
               const primary = uniqueLabels.filter(label => !SECONDARY_LABELS.includes(label) && !versionCritical.includes(label));
               const secondary = uniqueLabels.filter(label => SECONDARY_LABELS.includes(label));
@@ -675,6 +760,62 @@ jobs:
               }
               return [];
             }
+            function labelNamesFromIssue(issue) {
+              return uniqueValidLabels((issue?.labels || []).map((label) => typeof label === 'string' ? label : label.name));
+            }
+            function inferIssueLabels(issue) {
+              const title = String(issue?.title || '').toLowerCase();
+              const body = String(issue?.body || '').toLowerCase();
+              const text = `${title}\n${body}`;
+              const inferred = [];
+              const addLabel = (label) => {
+                const normalized = normalizeLabelName(label);
+                if (VALID_LABELS.has(normalized) && !inferred.includes(normalized)) inferred.push(normalized);
+              };
+              const hasMarker = (markers) => markers.some((marker) => text.includes(marker));
+
+              if (
+                hasMarker([
+                  'documentation issue report',
+                  'link(s) to the affected documentation',
+                  'detailed description of the problem',
+                  'proposed solution (optional)'
+                ]) || /\b(docs?|documentation|readme)\b/.test(title)
+              ) {
+                addLabel('documentation');
+              }
+
+              if (
+                hasMarker([
+                  'proposing an improvement or enhancement',
+                  'current situation and problem/opportunity',
+                  'proposed improvement/enhancement',
+                  'potential costs, challenges, and considerations',
+                  'alternatives considered (optional)',
+                  'proposed steps or implementation plan (optional)'
+                ]) || /\b(feature request|enhancement|proposal|improvement)\b/.test(title)
+              ) {
+                addLabel('enhancement');
+                addLabel('improvement');
+                addLabel('proposal');
+              }
+
+              if (
+                hasMarker([
+                  'thank you for helping us squash this bug',
+                  'detailed steps to reproduce',
+                  'potential causes / workarounds / related issues (optional)',
+                  'custom modifications / configuration'
+                ]) || /\b(bug|crash|error|failure|broken|regression)\b/.test(title)
+              ) {
+                addLabel('bug');
+              }
+
+              return inferred;
+            }
+            function issueFallbackSupportLabels(issue) {
+              return inferIssueLabels(issue).filter((label) => ['improvement', 'proposal'].includes(label));
+            }
             function extractBotMetadata(body) {
               const match = body.match(/<!-- autobot-metadata:(.+?) -->/s);
               if (!match) return {};
@@ -759,19 +900,33 @@ jobs:
               const aiSummary = (process.env.AI_SUMMARY || '').replace(/\nEND_OF_REPORT\s*$/m, '').trim();
               const aiLabelsRaw = process.env.AI_LABELS_RAW || '';
               const aiSummaryForComment = aiSummary.replace(/\nEND_OF_REPORT\s*$/m, '').trim();
+              const payloadIssue = payload.issue || {};
+              const existingIssueLabels = labelNamesFromIssue(payloadIssue);
+              const parsedAiLabels = trimLowSignalLabels(parseAILabels(aiLabelsRaw)).slice(0, MAX_AI_LABELS);
+              if (!isPR) {
+                const fallbackSupportLabels = issueFallbackSupportLabels(payloadIssue);
+                const inferredIssueLabels = parsedAiLabels.length > 0
+                  ? uniqueValidLabels([...existingIssueLabels, ...parsedAiLabels, ...fallbackSupportLabels])
+                  : uniqueValidLabels([...existingIssueLabels, ...inferIssueLabels(payloadIssue)]);
+                const issueLabelsToAdd = inferredIssueLabels.filter((label) => !existingIssueLabels.includes(label));
+                if (issueLabelsToAdd.length > 0) {
+                  for (const label of issueLabelsToAdd) await ensureLabelExists(label);
+                  await github.rest.issues.addLabels({ owner, repo, issue_number: issueNumber, labels: issueLabelsToAdd });
+                }
+              }
               const existingBotComment = isPR ? await getExistingBotComment() : null;
               const previousBotLabels = existingBotComment ? (extractBotMetadata(existingBotComment.body).aiLabels || []).map(normalizeLabelName) : [];
               let nextAiLabels = [];
               if (isPR && aiLabelsRaw) {
-                const predictedLabels = trimLowSignalLabels(parseAILabels(aiLabelsRaw)).slice(0, MAX_AI_LABELS);
+                const predictedLabels = parsedAiLabels;
                 if (payload.action === 'synchronize') {
                   nextAiLabels = mergeSyncLabels(previousBotLabels, predictedLabels);
                 } else {
                   nextAiLabels = predictedLabels;
                 }
               }
-              const labelsToRemove = previousBotLabels.filter(label => !nextAiLabels.includes(label));
-              const labelsToAdd = nextAiLabels.filter(label => !previousBotLabels.includes(label));
+              const labelsToRemove = isPR ? previousBotLabels.filter(label => !nextAiLabels.includes(label)) : [];
+              const labelsToAdd = isPR ? nextAiLabels.filter(label => !previousBotLabels.includes(label)) : [];
               for (const label of labelsToRemove) {
                 try {
                   await github.rest.issues.removeLabel({ owner, repo, issue_number: issueNumber, name: label });

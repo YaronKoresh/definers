@@ -78,10 +78,9 @@ class DatasetValueLoader:
         try:
             import logging
 
-            from definers.constants import iio_formats
             import definers.application_data.loader_runtime as loader_runtime_module
+            from definers.constants import iio_formats
 
-            # Normalize and validate the path before loading any data.
             safe_path = loader_runtime_module.LoaderRuntimeSupport._safe_path(
                 path
             )

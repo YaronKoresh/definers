@@ -400,8 +400,7 @@ class RepositorySyncService:
     def resolve_generic_remote_source(
         url: str, requested_model_type: str | None
     ):
-        from pathlib import Path
-        from pathlib import PurePosixPath
+        from pathlib import Path, PurePosixPath
 
         remote_urls = _discover_remote_shard_urls(url)
         resolved_model_type = _resolve_model_type(url, requested_model_type)
@@ -1085,7 +1084,6 @@ class RepositorySyncService:
         import os
         from pathlib import Path
 
-        # Normalize all provided paths to absolute, resolved strings.
         normalized_paths = []
         for path in paths:
             if not path:

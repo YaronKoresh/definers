@@ -244,32 +244,21 @@ def answer(history: list):
 
 
 def _normalize_model_task(task: str) -> str:
-    """
-    Normalize and validate a model task reference originating from user input.
-
-    Only allow:
-      - Known task keys present in the global `tasks` mapping.
-      - Explicit HTTP/HTTPS URLs.
-      - Hugging Face style references of the form "org/name" or full HF URLs.
-    """
     from definers.application_ml.repository_sync import (
-        is_huggingface_reference as _is_huggingface_reference,
         is_http_url as _is_http_url,
+        is_huggingface_reference as _is_huggingface_reference,
     )
 
     text = str(task).strip()
     if not text:
         raise ValueError("task is required")
 
-    # Allow explicit mapping keys to pass through unchanged.
     if text in tasks:
         return text
 
-    # Allow well-formed HF references or HTTP(S) URLs.
     if _is_huggingface_reference(text) or _is_http_url(text):
         return text
 
-    # Reject arbitrary local filesystem paths.
     raise ValueError(f"Unsupported task reference: {text!r}")
 
 
