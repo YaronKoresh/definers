@@ -39,6 +39,28 @@ def _normalize_model_type(model_type: str) -> str:
     return normalized_model_type
 
 
+def _normalize_and_secure_path(path: str) -> str:
+    """
+    Normalize the given filesystem path and constrain it to trusted directories.
+
+    This leverages the existing secure_path helper and the repository sync
+    trusted_directories_for_paths helper so that even if an untrusted value is
+    passed in, file access is restricted to a safe location.
+    """
+    from pathlib import Path
+
+    from definers.application_ml.repository_sync import RepositorySyncService
+    from definers.system import secure_path
+
+    # Normalize to an absolute filesystem path.
+    normalized = str(Path(str(path)).expanduser().resolve())
+    # Derive trusted directories from the normalized path itself.
+    trusted_directories = RepositorySyncService.trusted_directories_for_paths(
+        (normalized,)
+    )
+    return secure_path(normalized, trust=trusted_directories)
+
+
 def _reject_blocked_global(module: str, name: str) -> None:
     normalized_global = (str(module).strip().lower(), str(name).strip().lower())
     if normalized_global in _BLOCKED_GLOBALS:
@@ -66,7 +88,8 @@ class GuardedJoblibUnpickler(
 
 def validate_serialized_model_file(path: str, model_type: str) -> None:
     _normalize_model_type(model_type)
-    with open(path, "rb") as file_obj:
+    secured_path = _normalize_and_secure_path(path)
+    with open(secured_path, "rb") as file_obj:
         header = file_obj.read(512)
     lowered_header = header.lstrip().lower()
     if lowered_header.startswith(_LFS_PREFIX):
@@ -79,10 +102,11 @@ def validate_serialized_model_file(path: str, model_type: str) -> None:
 
 def load_serialized_model(path: str, model_type: str):
     normalized_model_type = _normalize_model_type(model_type)
-    validate_serialized_model_file(path, normalized_model_type)
+    secured_path = _normalize_and_secure_path(path)
+    validate_serialized_model_file(secured_path, normalized_model_type)
     if normalized_model_type == "joblib":
-        return _load_joblib_model(path)
-    return _load_pickle_model(path)
+        return _load_joblib_model(secured_path)
+    return _load_pickle_model(secured_path)
 
 
 def _load_pickle_model(path: str):
