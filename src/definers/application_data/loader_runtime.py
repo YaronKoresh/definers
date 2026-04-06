@@ -48,7 +48,8 @@ class LoaderRuntimeSupport:
         if not path:
             return None
         try:
-            full_path = os.path.abspath(path)
+            # Normalize the input path using the same logic as for trusted roots
+            full_path = LoaderRuntimeSupport._resolved_path(path)
 
             if not LoaderRuntimeSupport._is_trusted_path(full_path):
                 logger.error("Path outside allowed root: %s", full_path)
