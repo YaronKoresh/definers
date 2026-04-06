@@ -66,7 +66,6 @@ AUDIO_EXPORTS = {
         "SmartMastering",
         "audio_eq",
         "master",
-        "master_stems",
     ),
     **_module_exports(
         "mastering_stems",

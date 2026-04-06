@@ -681,19 +681,6 @@ def master(
     )
 
 
-def master_stems(
-    input_path: str,
-    output_path: str | None = None,
-    **kwargs: object,
-) -> tuple[str | None, MasteringReport | None]:
-    return _master_internal(
-        input_path,
-        output_path=output_path,
-        stem_mastering=True,
-        **kwargs,
-    )
-
-
 def _master_internal(
     input_path: str,
     *,

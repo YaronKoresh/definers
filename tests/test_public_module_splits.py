@@ -69,7 +69,7 @@ from definers.audio.mastering_stems import (
     process_stem_layers,
     resolve_stem_mastering_plan,
 )
-from definers.audio.mastering import master_stems
+from definers.audio.mastering import master
 from definers.ml_health import get_ml_health_snapshot, ml_health_markdown
 from definers.ml_regression import linear_regression, predict_linear_regression
 from definers.ml_text import map_reduce_summary, optimize_prompt_realism
@@ -104,7 +104,7 @@ def test_audio_mastering_facade_reexports_reporting_modules():
     assert audio_facade.resolve_mastering_contract is resolve_mastering_contract
     assert audio_facade.measure_stereo_width is measure_stereo_width
     assert audio_facade.reference_match_assist is reference_match_assist
-    assert audio_facade.master_stems is master_stems
+    assert audio_facade.master is master
     assert (
         audio_facade.apply_micro_dynamics_finish is apply_micro_dynamics_finish
     )

@@ -2590,7 +2590,7 @@ def test_master_stems_forces_stem_mastering(monkeypatch: pytest.MonkeyPatch):
         or ("out.wav", None),
     )
 
-    mastered_path, report = MASTERING_MODULE.master_stems(
+    mastered_path, report = MASTERING_MODULE.master(
         "input.wav",
         output_path="out.wav",
         preset="vocal",
