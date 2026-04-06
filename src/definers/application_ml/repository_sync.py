@@ -1084,20 +1084,25 @@ class RepositorySyncService:
         import os
         from pathlib import Path
 
-        normalized_paths = []
+        resolved_paths: list[Path] = []
         for path in paths:
             if not path:
                 continue
             resolved = Path(str(path)).resolve()
-            normalized_paths.append(str(resolved))
-        if not normalized_paths:
+            resolved_paths.append(resolved)
+        if not resolved_paths:
             return ()
-        parent_directories = [
-            str(Path(p).resolve().parent) for p in normalized_paths
-        ]
+        parent_directories = [str(p.parent) for p in resolved_paths]
         common_directory = os.path.commonpath(parent_directories)
-        trusted_directories = {common_directory}
-        trusted_directories.update(parent_directories)
+        common_directory_path = Path(common_directory).resolve()
+        trusted_directories = {str(common_directory_path)}
+        for directory in parent_directories:
+            dir_path = Path(directory).resolve()
+            try:
+                dir_path.relative_to(common_directory_path)
+            except ValueError:
+                continue
+            trusted_directories.add(str(dir_path))
         return tuple(sorted(trusted_directories))
 
     @staticmethod
