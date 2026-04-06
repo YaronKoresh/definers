@@ -79,20 +79,28 @@ class DatasetValueLoader:
             import logging
 
             from definers.constants import iio_formats
+            import definers.application_data.loader_runtime as loader_runtime_module
 
-            extension = cls.path_extension(path)
+            # Normalize and validate the path before loading any data.
+            safe_path = loader_runtime_module.LoaderRuntimeSupport._safe_path(
+                path
+            )
+            if safe_path is None:
+                logging.error("Rejected unsafe or invalid path: %s", path)
+                return None
+            extension = cls.path_extension(safe_path)
             if extension is None:
-                logging.error("Invalid path format: %s", path)
+                logging.error("Invalid path format: %s", safe_path)
                 return None
             if extension in ["wav", "mp3"]:
-                return cls.load_audio_values(path, training)
+                return cls.load_audio_values(safe_path, training)
             if extension in ["csv", "xlsx", "json"]:
-                return cls.load_table_values(path, extension)
+                return cls.load_table_values(safe_path, extension)
             if extension == "txt":
-                return cls.load_text_values(path)
+                return cls.load_text_values(safe_path)
             if extension in iio_formats:
-                return cls.load_image_values(path)
-            return cls.load_video_values(path)
+                return cls.load_image_values(safe_path)
+            return cls.load_video_values(safe_path)
         except Exception as error:
             import definers.application_data.loaders as loaders_module
 

@@ -5,6 +5,34 @@ logger = init_logger()
 
 class LoaderRuntimeSupport:
     @staticmethod
+    def _safe_path(path: str):
+        """
+        Normalize and validate a filesystem path against a safe root.
+
+        Returns the absolute normalized path if it is within the configured
+        data root and exists; otherwise returns None.
+        """
+        import os
+
+        if not path:
+            return None
+        try:
+            base_root = os.environ.get("DEFINERS_DATA_ROOT", os.getcwd())
+            base_root = os.path.abspath(base_root)
+            full_path = os.path.abspath(path)
+            # Ensure the target path is inside the allowed root directory.
+            if os.path.commonpath([base_root, full_path]) != base_root:
+                logger.error("Path outside allowed root: %s", full_path)
+                return None
+            if not os.path.exists(full_path):
+                logger.error("Path does not exist: %s", full_path)
+                return None
+            return full_path
+        except Exception as error:
+            logger.exception("Error validating path %s: %s", path, error)
+            return None
+
+    @staticmethod
     def catch(error: Exception) -> None:
         try:
             from definers.system import catch as runtime_catch
@@ -29,17 +57,24 @@ class LoaderRuntimeSupport:
 
     @staticmethod
     def read(path: str):
+        # Validate and normalize path before accessing the filesystem.
+        safe_path = LoaderRuntimeSupport._safe_path(path)
+        if safe_path is None:
+            return None
         try:
             from definers.system import read as runtime_read
 
-            return runtime_read(path)
+            return runtime_read(safe_path)
         except Exception:
             import os
 
-            if os.path.isdir(path):
-                return [os.path.join(path, name) for name in os.listdir(path)]
+            if os.path.isdir(safe_path):
+                return [
+                    os.path.join(safe_path, name)
+                    for name in os.listdir(safe_path)
+                ]
             try:
-                with open(path, encoding="utf-8") as file:
+                with open(safe_path, encoding="utf-8") as file:
                     return file.read()
             except OSError:
                 return None
