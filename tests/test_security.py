@@ -31,8 +31,8 @@ class TestSecurity(unittest.TestCase):
         tmpfile2 = "temp_test_file2.tmp"
         open(tmpfile2, "w").close()
         try:
-            result2 = secure_path(tmpfile2, os.path.abspath("some/nonexistent"))
-            self.assertTrue(result2.endswith(tmpfile2))
+            with self.assertRaises(ValueError):
+                secure_path(tmpfile2, os.path.abspath("some/nonexistent"))
         finally:
             os.remove(tmpfile2)
 

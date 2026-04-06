@@ -1,9 +1,19 @@
 class TextGenerationService:
     @staticmethod
+    def ensure_summary_runtime():
+        from definers.constants import MODELS, TOKENIZERS
+
+        if MODELS["summary"] is None or TOKENIZERS["summary"] is None:
+            from definers.ml import init_pretrained_model
+
+            init_pretrained_model("summary")
+
+    @staticmethod
     def encode_summary_prompt(text_to_summarize):
         from definers.constants import TOKENIZERS
         from definers.cuda import device
 
+        TextGenerationService.ensure_summary_runtime()
         prefix = "summarize: "
         encoded = TOKENIZERS["summary"](
             prefix + text_to_summarize,
@@ -40,6 +50,7 @@ class TextGenerationService:
     def summarize(cls, text_to_summarize: str) -> str:
         from definers.constants import MODELS, TOKENIZERS
 
+        cls.ensure_summary_runtime()
         encoded = cls.encode_summary_prompt(text_to_summarize)
         generated = MODELS["summary"].generate(
             **encoded,

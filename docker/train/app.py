@@ -11,6 +11,7 @@ APT_PACKAGES = (
     "curl",
     "libssl-dev",
 )
+PACKAGE_EXTRA_GROUPS: tuple[str, ...] = ()
 PACKAGE_SPEC = "definers @ git+https://github.com/YaronKoresh/definers.git"
 
 
@@ -26,8 +27,8 @@ def install_runtime() -> None:
         "-m",
         "pip",
         "install",
+        "--prefer-binary",
         "--no-cache-dir",
-        "--force-reinstall",
         PACKAGE_SPEC,
     )
 

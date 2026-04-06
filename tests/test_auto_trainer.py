@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -210,6 +211,12 @@ class TestAutoTrainer(unittest.TestCase):
             "Mode: remote-dataset", render_training_plan_markdown(plan)
         )
         self.assertIn("Order By: shuffle", render_training_plan_markdown(plan))
+
+    def test_file_dataset_detection_rejects_untrusted_absolute_path(self):
+        trainer = AutoTrainer()
+        outside_path = str(Path.cwd().parent / "outside.csv")
+
+        self.assertFalse(trainer._is_file_dataset(outside_path))
 
 
 if __name__ == "__main__":

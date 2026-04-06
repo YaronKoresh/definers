@@ -32,14 +32,7 @@ class ImageApp:
         import gradio as gr
 
         from definers.constants import MAX_INPUT_LENGTH
-        from definers.image import init_upscale
-        from definers.ml import init_pretrained_model
         from definers.presentation.gradio_shared import launch_blocks
-
-        init_pretrained_model("translate", True)
-        init_pretrained_model("summary", True)
-        init_pretrained_model("image", True)
-        init_upscale()
 
         with gr.Blocks() as app:
             gr.Markdown("# Text-to-Image generator")

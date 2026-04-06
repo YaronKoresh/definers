@@ -249,7 +249,9 @@ def test_prepare_answer_history_falls_back_to_librosa_only_after_failure(
     ]
 
 
-def test_answer_service_text_only_flow_never_touches_optional_dependencies():
+def test_answer_service_text_only_flow_never_touches_optional_dependencies(
+    monkeypatch,
+):
     class NoMediaDependencyLoader:
         def load_image_module(self):
             raise AssertionError("image dependency should not load")
@@ -263,6 +265,12 @@ def test_answer_service_text_only_flow_never_touches_optional_dependencies():
     model = SimpleNamespace(
         generate=lambda **kwargs: kwargs["prompt"],
     )
+    init_calls = []
+
+    monkeypatch.setattr(
+        "definers.ml.init_pretrained_model",
+        lambda task: init_calls.append(task),
+    )
 
     response = AnswerService.answer(
         [{"role": "user", "content": "plain english"}],
@@ -273,23 +281,35 @@ def test_answer_service_text_only_flow_never_touches_optional_dependencies():
     assert response == (
         "<|system|>system<|end|><|user|>plain english<|end|><|assistant|>"
     )
+    assert init_calls == []
 
 
-def test_answer_service_returns_none_without_model():
+def test_answer_service_bootstraps_missing_model(monkeypatch):
     loader = TrackingDependencyLoader(
         image_module=object(),
         soundfile_module=object(),
         librosa_module=object(),
     )
+    runtime = runtime_stub(model=None)
 
-    assert (
-        AnswerService.answer(
-            [{"role": "user", "content": {"path": "one.jpg"}}],
-            runtime_stub(model=None),
-            dependency_loader=loader,
-        )
-        is None
+    def build_model(**kwargs):
+        return kwargs["prompt"]
+
+    def fake_init_pretrained_model(task):
+        assert task == "answer"
+        runtime.MODELS["answer"] = SimpleNamespace(generate=build_model)
+        runtime.PROCESSORS["answer"] = None
+
+    monkeypatch.setattr(
+        "definers.ml.init_pretrained_model",
+        fake_init_pretrained_model,
     )
+
+    assert AnswerService.answer(
+        [{"role": "user", "content": "plain english"}],
+        runtime,
+        dependency_loader=loader,
+    ) == ("<|system|>system<|end|><|user|>plain english<|end|><|assistant|>")
     assert loader.image_calls == 0
     assert loader.soundfile_calls == 0
     assert loader.librosa_calls == 0

@@ -170,6 +170,8 @@ def install_ffmpeg_linux():
 def install_ffmpeg():
     from . import system as system_module
 
+    if system_module.runnable("ffmpeg"):
+        return True
     if system_module.installed("ffmpeg"):
         return True
     system_name = system_module.get_os_name()

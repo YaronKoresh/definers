@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+import definers.platform.paths as path_module
 from definers.system import secure_path
 
 
@@ -46,6 +47,30 @@ def test_sanitize_path_prevents_traversal(tmp_path):
 
     with pytest.raises(ValueError):
         secure_path(str(base / "../b/foo"), trust=str(base))
+
+
+def test_sanitize_path_restricts_to_explicit_trust(tmp_path):
+    base = tmp_path / "base"
+    base.mkdir()
+    outside = tmp_path / "outside.txt"
+    outside.write_text("z")
+
+    with pytest.raises(ValueError):
+        secure_path(str(outside), trust=str(base))
+
+
+def test_paths_skips_untrusted_glob_pattern():
+    outside_pattern = str(Path.cwd().parent / "*.csv")
+
+    assert path_module.paths(outside_pattern) == []
+
+
+def test_paths_expands_relative_glob_within_cwd(tmp_path):
+    sample_file = tmp_path / "sample.txt"
+    sample_file.write_text("x", encoding="utf-8")
+
+    with path_module.cwd(str(tmp_path)):
+        assert path_module.paths("*.txt") == [str(sample_file.resolve())]
 
 
 def test_git_branch_and_run_list(monkeypatch, tmp_path):

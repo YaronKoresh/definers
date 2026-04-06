@@ -62,6 +62,8 @@ def lyric_video(
     else:
         lyrics_text = "\n".join(lines)
         try:
+            if MODELS["stable-whisper"] is None:
+                init_stable_whisper()
             model = MODELS["stable-whisper"]
             print("Transcribing audio with music-optimized settings...")
             result = model.transcribe(

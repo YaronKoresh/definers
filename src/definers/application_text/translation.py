@@ -133,6 +133,10 @@ def ai_translate(text: str, lang: str = "en") -> str:
     normalized_text = strip_nikud(text)
     long_paragraph_threshold = 800
     target_code = resolve_target_code(lang)
+    if MODELS["translate"] is None or TOKENIZERS["translate"] is None:
+        from definers.ml import init_pretrained_model
+
+        init_pretrained_model("translate")
     model = MODELS["translate"]
     tokenizer = TOKENIZERS["translate"]
     tokenizer.tgt_lang = target_code

@@ -673,10 +673,13 @@ def git(user: str, repo: str, branch: str = "main", parent: str = "."):
 def init_model_repo(task: str, turbo: bool = True):
     import torch
 
+    from definers.optional_dependencies import ensure_ml_task_runtime
+
     global MODELS
     global TOKENIZERS
     free()
     model = None
+    ensure_ml_task_runtime(task)
     if task in ["translate"]:
         import nltk
         from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
@@ -1015,6 +1018,9 @@ def pipe(
     from diffusers.utils import export_to_video
     from PIL import Image
 
+    if MODELS.get(task) is None:
+        init_pretrained_model(task)
+
     params1 = []
     params2 = {}
     if task in ["image", "video"]:
@@ -1151,7 +1157,10 @@ def rvc_to_onnx(model_path):
     from definers.system import secure_path
 
     try:
-        model_path = secure_path(model_path)
+        model_path = secure_path(
+            model_path,
+            trust=_trusted_paths_from_environment(),
+        )
     except Exception as e:
         logger.error(f"Unsafe model path in rvc_to_onnx: {e}")
         return None
@@ -1237,6 +1246,16 @@ def export_files_rvc(experiment: str):
     return exported_files
 
 
+def _trusted_paths_from_environment() -> list[str] | None:
+    configured_paths = os.environ.get("DEFINERS_TRUSTED_PATHS", "")
+    trusted_paths = [
+        path.strip()
+        for path in configured_paths.split(os.pathsep)
+        if path.strip()
+    ]
+    return trusted_paths or None
+
+
 def find_latest_checkpoint(folder_path: str, model_name: str) -> str | None:
     from definers.system import secure_path
 
@@ -1244,7 +1263,10 @@ def find_latest_checkpoint(folder_path: str, model_name: str) -> str | None:
         f"Searching for latest checkpoint in '{folder_path}' with model name '{model_name}'"
     )
     try:
-        folder_path = secure_path(folder_path)
+        folder_path = secure_path(
+            folder_path,
+            trust=_trusted_paths_from_environment(),
+        )
     except Exception as e:
         logger.error(f"Invalid checkpoint folder: {e}")
         return None
@@ -1296,10 +1318,11 @@ def train_model_rvc(
         return None
 
     try:
-        path = secure_path(path)
+        path = secure_path(path, trust=_trusted_paths_from_environment())
     except Exception as e:
         logger.error(f"Invalid audio path for training: {e}")
         return None
+    init_pretrained_model("svc")
     import pydub
     import torch
 
@@ -1651,6 +1674,7 @@ def convert_vocal_rvc(experiment: str, path: str):
         return None
 
     try:
+        init_pretrained_model("svc")
         from .configs.config import Config
         from .infer.modules.vc.modules import VC
     except ImportError as e:
@@ -1658,7 +1682,7 @@ def convert_vocal_rvc(experiment: str, path: str):
         return None
 
     try:
-        path = secure_path(path)
+        path = secure_path(path, trust=_trusted_paths_from_environment())
     except Exception as e:
         logger.error(f"Invalid audio path for conversion: {e}")
         return None
@@ -2108,15 +2132,21 @@ class AutoTrainer:
             return getattr(value, "name")
         return value
 
-    def _looks_like_path(self, value) -> bool:
+    def _safe_local_path(self, value):
         value = self._coerce_reference(value)
         if value is None:
-            return False
+            return None
         text = str(value).strip()
         if not text:
-            return False
-        if os.path.exists(text):
-            return True
+            return None
+        from definers.system import secure_path
+
+        try:
+            return secure_path(text)
+        except Exception:
+            return None
+
+    def _has_known_path_suffix(self, text: str) -> bool:
         known_suffixes = (
             ".csv",
             ".json",
@@ -2136,12 +2166,29 @@ class AutoTrainer:
         )
         return text.lower().endswith(known_suffixes)
 
+    def _looks_like_path(self, value) -> bool:
+        value = self._coerce_reference(value)
+        if value is None:
+            return False
+        text = str(value).strip()
+        if not text:
+            return False
+        safe_path = self._safe_local_path(text)
+        if safe_path is None:
+            return False
+        if os.path.exists(safe_path):
+            return True
+        return self._has_known_path_suffix(text)
+
     def _looks_like_remote_source(self, value) -> bool:
         value = self._coerce_reference(value)
         if value is None:
             return False
         text = str(value).strip()
-        if not text or os.path.exists(text):
+        if not text:
+            return False
+        safe_path = self._safe_local_path(text)
+        if safe_path is not None and os.path.exists(safe_path):
             return False
         if text.startswith(("http://", "https://")):
             return True

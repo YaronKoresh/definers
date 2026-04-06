@@ -357,9 +357,7 @@ def build_train_app():
         handle_training,
         handle_validate_ml_health,
     )
-    from definers.system import install_ffmpeg
 
-    install_ffmpeg()
     task_choices = sorted(tasks)
     dataset_choices = ["parquet", "json", "csv", "arrow", "webdataset", "txt"]
     model_type_choices = [

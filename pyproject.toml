@@ -12,7 +12,7 @@ authors = [
 ]
 description = "A comprehensive Python toolkit for AI, data processing, media manipulation, and system utilities."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.13"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
@@ -44,8 +44,8 @@ Issues = "https://github.com/YaronKoresh/definers/issues"
 audio = [
     "audio-separator>=0.30.0",
     "librosa>=0.10.0",
+    "midi2audio",
     "numba>=0.57.0",
-    "openai-whisper>=20231117",
     "pydub>=0.25.1",
     "soundfile>=0.12.0",
     "sox>=1.4.1",
@@ -65,6 +65,7 @@ image = [
     "refiners @ git+https://github.com/finegrain-ai/refiners@d288e94fa8eed1386bd28cd0d5ceb8109c3ff398",
 ]
 video = [
+    "edlib",
     "imageio>=2.30.0",
     "imageio-ffmpeg>=0.4.0",
     "moviepy>=1.0.3",
@@ -111,6 +112,7 @@ all = [
 ]
 dev = [
     "pytest>=7.4.0",
+    "cssselect>=1.2.0",
     "pytest-asyncio",
     "pytest-cov>=4.1.0",
     "pytest-mock>=3.12.0",

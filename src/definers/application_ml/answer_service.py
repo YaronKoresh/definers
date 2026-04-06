@@ -14,6 +14,12 @@ class AnswerService:
         processor = runtime.PROCESSORS.get("answer")
         model = runtime.MODELS.get("answer")
         if model is None:
+            from definers.ml import init_pretrained_model
+
+            init_pretrained_model("answer")
+            processor = runtime.PROCESSORS.get("answer")
+            model = runtime.MODELS.get("answer")
+        if model is None:
             return None
         if dependency_loader is None:
             dependency_loader = AnswerDependencyLoader()

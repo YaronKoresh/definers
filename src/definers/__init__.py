@@ -7,6 +7,10 @@ from importlib.metadata import PackageNotFoundError, version as _pkg_version
 from types import ModuleType
 from typing import Any
 
+from .optional_dependencies import install_import_hook
+
+install_import_hook()
+
 
 def _resolve_version() -> str:
     try:
@@ -103,6 +107,7 @@ _LAZY_SUBMODULES = {
     "logger",
     "media",
     "ml",
+    "optional_dependencies",
     "platform",
     "system",
     "text",

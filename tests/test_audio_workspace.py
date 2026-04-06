@@ -29,17 +29,26 @@ def test_train_voice_lab_model_returns_incremented_level(monkeypatch):
     )
 
 
-def test_prepare_audio_workspace_initializes_required_models(monkeypatch):
+def test_prepare_audio_workspace_defers_runtime_bootstrap(monkeypatch):
     initialized_models = []
+    stable_whisper_calls = []
+    ffmpeg_calls = []
+    audio_effect_calls = []
     system_message = {}
 
-    monkeypatch.setattr("definers.system.install_audio_effects", lambda: None)
-    monkeypatch.setattr("definers.system.install_ffmpeg", lambda: None)
+    monkeypatch.setattr(
+        "definers.system.install_audio_effects",
+        lambda: audio_effect_calls.append("audio-effects"),
+    )
+    monkeypatch.setattr(
+        "definers.system.install_ffmpeg",
+        lambda: ffmpeg_calls.append("ffmpeg"),
+    )
     monkeypatch.setattr("definers.system.cwd", lambda: nullcontext())
     monkeypatch.setattr("definers.system.exist", lambda path: False)
     monkeypatch.setattr(
         "definers.presentation.lyric_video_service.init_stable_whisper",
-        lambda: None,
+        lambda: stable_whisper_calls.append("stable-whisper"),
     )
     monkeypatch.setattr(
         "definers.ml.init_pretrained_model",
@@ -53,16 +62,10 @@ def test_prepare_audio_workspace_initializes_required_models(monkeypatch):
     result = prepare_audio_workspace()
 
     assert result == {"svc_installed": False}
-    assert initialized_models == [
-        "tts",
-        "svc",
-        "speech-recognition",
-        "audio-classification",
-        "music",
-        "summary",
-        "answer",
-        "translate",
-    ]
+    assert initialized_models == []
+    assert stable_whisper_calls == []
+    assert ffmpeg_calls == []
+    assert audio_effect_calls == []
     assert system_message["name"] == "Definers Audio Assistant"
     assert "Support Chat" in AUDIO_TOOL_MAP
     assert "Mastering Studio" in AUDIO_TOOL_MAP
