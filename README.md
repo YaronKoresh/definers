@@ -625,7 +625,7 @@ poe ml-health
 | Workflow | Purpose |
 | --- | --- |
 | `check.yml` | Pull-request gate across Python `3.10`, `3.11`, and `3.12` with `poe check` |
-| `quality.yml` | Push and manual quality validation including lint, format check, and targeted resilience tests |
+| `quality.yml` | Push and manual quality validation including lint, format check, and tests |
 | Additional workflows | Publish, CodeQL, dependency review, stale automation, and repository maintenance |
 
 ## Troubleshooting
