@@ -5,6 +5,12 @@ logger = init_logger()
 
 class LoaderRuntimeSupport:
     @staticmethod
+    def _absolute_path(path: str) -> str:
+        import os
+
+        return os.path.abspath(os.path.expanduser(path))
+
+    @staticmethod
     def _resolved_path(path: str) -> str:
         import os
         from pathlib import Path
@@ -48,16 +54,14 @@ class LoaderRuntimeSupport:
         if not path:
             return None
         try:
-            # Normalize the input path using the same logic as for trusted roots
-            full_path = LoaderRuntimeSupport._resolved_path(path)
-
-            if not LoaderRuntimeSupport._is_trusted_path(full_path):
-                logger.error("Path outside allowed root: %s", full_path)
+            absolute_path = LoaderRuntimeSupport._absolute_path(path)
+            if not LoaderRuntimeSupport._is_trusted_path(absolute_path):
+                logger.error("Path outside allowed root: %s", absolute_path)
                 return None
-            if not os.path.exists(full_path):
-                logger.error("Path does not exist: %s", full_path)
+            if not os.path.exists(absolute_path):
+                logger.error("Path does not exist: %s", absolute_path)
                 return None
-            return full_path
+            return absolute_path
         except Exception as error:
             logger.exception("Error validating path %s: %s", path, error)
             return None

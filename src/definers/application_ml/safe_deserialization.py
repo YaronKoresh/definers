@@ -39,26 +39,9 @@ def _normalize_model_type(model_type: str) -> str:
     return normalized_model_type
 
 
-def _normalize_and_secure_path(path: str) -> str:
-    """
-    Normalize the given filesystem path and constrain it to trusted directories.
-
-    This leverages the existing secure_path helper and the repository sync
-    trusted_directories_for_paths helper so that even if an untrusted value is
-    passed in, file access is restricted to a safe location.
-
-    The raw path string is passed directly to secure_path, and any required
-    resolution is handled inside secure_path and trusted_directories_for_paths
-    to centralize and constrain filesystem interactions.
-    """
-    from definers.application_ml.repository_sync import RepositorySyncService
+def _normalize_and_secure_path(path: str, trusted_directories=None) -> str:
     from definers.system import secure_path
 
-    # Derive trusted directories from the raw path.
-    trusted_directories = RepositorySyncService.trusted_directories_for_paths(
-        (path,)
-    )
-    # Let secure_path perform normalization while enforcing the trust boundary.
     return secure_path(path, trust=trusted_directories)
 
 
@@ -87,9 +70,11 @@ class GuardedJoblibUnpickler(
     pass
 
 
-def validate_serialized_model_file(path: str, model_type: str) -> None:
+def validate_serialized_model_file(
+    path: str, model_type: str, trusted_directories=None
+) -> None:
     _normalize_model_type(model_type)
-    secured_path = _normalize_and_secure_path(path)
+    secured_path = _normalize_and_secure_path(path, trusted_directories)
     with open(secured_path, "rb") as file_obj:
         header = file_obj.read(512)
     lowered_header = header.lstrip().lower()
@@ -101,10 +86,14 @@ def validate_serialized_model_file(path: str, model_type: str) -> None:
         raise ValueError("Downloaded HTML instead of serialized model bytes.")
 
 
-def load_serialized_model(path: str, model_type: str):
+def load_serialized_model(path: str, model_type: str, trusted_directories=None):
     normalized_model_type = _normalize_model_type(model_type)
-    secured_path = _normalize_and_secure_path(path)
-    validate_serialized_model_file(secured_path, normalized_model_type)
+    secured_path = _normalize_and_secure_path(path, trusted_directories)
+    validate_serialized_model_file(
+        secured_path,
+        normalized_model_type,
+        trusted_directories=trusted_directories,
+    )
     if normalized_model_type == "joblib":
         return _load_joblib_model(secured_path)
     return _load_pickle_model(secured_path)

@@ -34,20 +34,49 @@ jobs:
             const MAX_PATCH_CHARS_PER_FILE = 700;
             const MAX_HIGHLIGHTED_FILES_PER_WINDOW = 6;
             const MAX_PATCH_SNIPPETS_PER_WINDOW = 4;
+            const MAX_SUMMARY_PROMPT_CHARS = 12000;
+            const MAX_SUMMARY_PROMPT_FOOTER_CHARS = 700;
+            const WINDOW_SEPARATOR = "\n\n═══════════════════════════════════════════\n\n";
             const totalAdditions = files.reduce((sum, file) => sum + file.additions, 0);
             const totalDeletions = files.reduce((sum, file) => sum + file.deletions, 0);
-            const fileExtensions = [...new Set(files.map(file => file.filename.includes(".") ? file.filename.split(".").pop() : "(none)"))];
-            const topDirs = [...new Set(files.map(file => {
-              const parts = file.filename.split("/");
+
+            function topDirectoryForFile(filename) {
+              const parts = filename.split("/");
               parts.pop();
               return parts.length > 0 ? parts.slice(0, 2).join("/") : "(root)";
-            }))];
+            }
+
+            function extensionForFile(filename) {
+              return filename.includes(".") ? filename.split(".").pop() : "(none)";
+            }
+
+            function summarizeCounts(counts, limit) {
+              return Object.entries(counts)
+                .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+                .slice(0, limit)
+                .map(([name, count]) => `${name}(${count})`)
+                .join(", ");
+            }
+
+            function clampForPrompt(text, maxChars) {
+              if (text.length <= maxChars) {
+                return text;
+              }
+              if (maxChars <= 0) {
+                return "";
+              }
+              const suffix = "\n[...truncated for prompt budget...]";
+              const trimmedLength = Math.max(maxChars - suffix.length, 0);
+              return text.slice(0, trimmedLength) + suffix;
+            }
+
+            const topDirs = [...new Set(files.map((file) => topDirectoryForFile(file.filename)))];
             const statusCounts = files.reduce((counts, file) => {
               counts[file.status] = (counts[file.status] || 0) + 1;
               return counts;
             }, {});
             const extensionCounts = files.reduce((counts, file) => {
-              const extension = file.filename.includes(".") ? file.filename.split(".").pop() : "(none)";
+              const extension = extensionForFile(file.filename);
               counts[extension] = (counts[extension] || 0) + 1;
               return counts;
             }, {});
@@ -103,23 +132,25 @@ jobs:
               windows.push(currentWindow);
             }
 
-            function formatWindow(windowFiles, index) {
+            function formatWindow(windowFiles, index, options = {}) {
+              const highlightedFileLimit = options.highlightedFileLimit ?? MAX_HIGHLIGHTED_FILES_PER_WINDOW;
+              const patchSnippetLimit = options.patchSnippetLimit ?? MAX_PATCH_SNIPPETS_PER_WINDOW;
               const highlightedFiles = [...windowFiles]
-                .sort((left, right) => right.score - left.score)
-                .slice(0, MAX_HIGHLIGHTED_FILES_PER_WINDOW);
-              const detailedPatchFiles = highlightedFiles
-                .filter(file => file.rawPatchAvailable)
-                .slice(0, MAX_PATCH_SNIPPETS_PER_WINDOW);
+                .sort((left, right) => right.score - left.score || left.filename.localeCompare(right.filename))
+                .slice(0, highlightedFileLimit);
+              const detailedPatchFiles = patchSnippetLimit > 0
+                ? highlightedFiles.filter((file) => file.rawPatchAvailable).slice(0, patchSnippetLimit)
+                : [];
               const omittedFileCount = Math.max(windowFiles.length - highlightedFiles.length, 0);
 
               return [
                 `WINDOW ${index + 1}/${windows.length}`,
                 `Files in window: ${windowFiles.length}`,
                 `Highlighted files:`,
-                highlightedFiles.map(file => `- ${file.filename} [${file.status.toUpperCase()}] (+${file.additions} -${file.deletions})${file.rawPatchAvailable ? "" : " [patch unavailable]"}`).join("\n"),
+                highlightedFiles.map((file) => `- ${file.filename} [${file.status.toUpperCase()}] (+${file.additions} -${file.deletions})${file.rawPatchAvailable ? "" : " [patch unavailable]"}`).join("\n"),
                 omittedFileCount > 0 ? `Additional lower-signal files not expanded in this window: ${omittedFileCount}` : "All files in this window are highlighted.",
                 detailedPatchFiles.length > 0 ? "Detailed patch snippets:" : "Detailed patch snippets: none available in this window.",
-                detailedPatchFiles.map(file => [
+                detailedPatchFiles.map((file) => [
                   `FILE: ${file.filename}`,
                   `STATUS: ${file.status.toUpperCase()} (+${file.additions} -${file.deletions})`,
                   file.patch
@@ -127,11 +158,47 @@ jobs:
               ].filter(Boolean).join("\n\n");
             }
 
-            const windowDigest = windows.map((windowFiles, index) => formatWindow(windowFiles, index)).join("\n\n═══════════════════════════════════════════\n\n");
-            const summaryPrompt = [
+            function formatMinimalWindow(windowFiles, index) {
+              const topFiles = [...windowFiles]
+                .sort((left, right) => right.score - left.score || left.filename.localeCompare(right.filename))
+                .slice(0, 3);
+              const windowDirs = [...new Set(windowFiles.map((file) => topDirectoryForFile(file.filename)))].slice(0, 4);
+
+              return [
+                `WINDOW ${index + 1}/${windows.length}`,
+                `Files in window: ${windowFiles.length}`,
+                `Top directories: ${windowDirs.join(", ") || "(none)"}`,
+                `Top files: ${topFiles.map((file) => `${file.filename} [${file.status.toUpperCase()}] (+${file.additions} -${file.deletions})`).join("; ") || "(none)"}`
+              ].join("\n");
+            }
+
+            function summarizeOmittedWindows(candidates) {
+              if (candidates.length === 0) {
+                return "";
+              }
+              const omittedFiles = candidates.flatMap((candidate) => candidate.files);
+              const omittedDirs = [...new Set(omittedFiles.map((file) => topDirectoryForFile(file.filename)))].slice(0, 8);
+              const omittedExtensionCounts = omittedFiles.reduce((counts, file) => {
+                const extension = extensionForFile(file.filename);
+                counts[extension] = (counts[extension] || 0) + 1;
+                return counts;
+              }, {});
+
+              return [
+                "OMITTED WINDOWS",
+                `Count: ${candidates.length}`,
+                `Files omitted from detailed analysis: ${omittedFiles.length}`,
+                `Top omitted directories: ${omittedDirs.join(", ") || "(none)"}`,
+                `Top omitted extensions: ${summarizeCounts(omittedExtensionCounts, 8) || "(none)"}`
+              ].join("\n");
+            }
+
+            const summaryPromptPrefix = [
               "You are a principal software engineer analyzing a pull request from rolling file windows.",
               "This PR may be very large, so each window contains the highest-signal file metadata and selected patch snippets instead of one monolithic diff.",
+              "Some lower-signal windows may be compacted or omitted to stay within a strict prompt budget.",
               "Use only the evidence shown in the windows. If a file is listed without a patch snippet, treat that file as partially analyzed.",
+              "Treat omitted windows as not analyzed.",
               "Do not invent product behavior, hidden files, or motivations that are not supported by the prompt.",
               "",
               "OUTPUT REQUIREMENTS:",
@@ -170,13 +237,75 @@ jobs:
               `Total additions: ${totalAdditions}`,
               `Total deletions: ${totalDeletions}`,
               `Status counts: ${Object.entries(statusCounts).map(([status, count]) => `${status}=${count}`).join(", ")}`,
-              `Extensions: ${Object.entries(extensionCounts).sort((left, right) => right[1] - left[1]).slice(0, 12).map(([extension, count]) => `${extension}(${count})`).join(", ")}`,
+              `Extensions: ${summarizeCounts(extensionCounts, 12)}`,
               `Top directories: ${topDirs.slice(0, 12).join(", ")}`,
               `Window count: ${windows.length}`,
               "",
               "ROLLING WINDOWS",
-              windowDigest
             ].join("\n");
+
+            const availableWindowBudget = Math.max(
+              MAX_SUMMARY_PROMPT_CHARS - summaryPromptPrefix.length - MAX_SUMMARY_PROMPT_FOOTER_CHARS,
+              0
+            );
+            const windowCandidates = windows.map((windowFiles, index) => ({
+              index,
+              files: windowFiles,
+              score: windowFiles.reduce((sum, file) => sum + file.score, 0),
+              full: formatWindow(windowFiles, index),
+              compact: formatWindow(windowFiles, index, { highlightedFileLimit: 4, patchSnippetLimit: 0 }),
+              minimal: formatMinimalWindow(windowFiles, index)
+            }));
+            const selectedWindows = [];
+            let usedWindowBudget = 0;
+
+            for (const candidate of [...windowCandidates].sort((left, right) => right.score - left.score || left.index - right.index)) {
+              const separatorLength = selectedWindows.length > 0 ? WINDOW_SEPARATOR.length : 0;
+              const variants = [candidate.full, candidate.compact, candidate.minimal];
+              let chosenVariant = "";
+
+              for (const variant of variants) {
+                if (usedWindowBudget + separatorLength + variant.length <= availableWindowBudget) {
+                  chosenVariant = variant;
+                  break;
+                }
+              }
+
+              if (!chosenVariant && selectedWindows.length === 0) {
+                chosenVariant = clampForPrompt(candidate.minimal, Math.max(availableWindowBudget - separatorLength, 0));
+              }
+
+              if (!chosenVariant) {
+                continue;
+              }
+
+              selectedWindows.push({ index: candidate.index, content: chosenVariant });
+              usedWindowBudget += separatorLength + chosenVariant.length;
+            }
+
+            selectedWindows.sort((left, right) => left.index - right.index);
+            const selectedWindowIndexes = new Set(selectedWindows.map((selected) => selected.index));
+            const omittedCandidates = windowCandidates.filter((candidate) => !selectedWindowIndexes.has(candidate.index));
+            const windowDigestParts = selectedWindows.map((selected) => selected.content);
+            const omittedSummary = summarizeOmittedWindows(omittedCandidates);
+
+            if (omittedSummary) {
+              const remainingBudget = Math.max(
+                MAX_SUMMARY_PROMPT_CHARS - summaryPromptPrefix.length - usedWindowBudget - (windowDigestParts.length > 0 ? WINDOW_SEPARATOR.length : 0),
+                0
+              );
+              const safeOmittedSummary = clampForPrompt(omittedSummary, remainingBudget);
+              if (safeOmittedSummary) {
+                windowDigestParts.push(safeOmittedSummary);
+              }
+            }
+
+            if (windowDigestParts.length === 0) {
+              windowDigestParts.push("No windows fit within the prompt budget. Rely on global metrics only.");
+            }
+
+            const windowDigest = windowDigestParts.join(WINDOW_SEPARATOR);
+            const summaryPrompt = [summaryPromptPrefix, windowDigest].filter(Boolean).join("\n");
 
             fs.writeFileSync("/tmp/summary_prompt.txt", summaryPrompt);
             core.setOutput("has_changes", files.length > 0 ? "true" : "false");
@@ -184,6 +313,9 @@ jobs:
             core.setOutput("additions", String(totalAdditions));
             core.setOutput("deletions", String(totalDeletions));
             core.setOutput("windows_count", String(windows.length));
+            core.setOutput("windows_included", String(selectedWindows.length));
+            core.setOutput("windows_omitted", String(omittedCandidates.length));
+            core.setOutput("summary_prompt_chars", String(summaryPrompt.length));
       - name: AI — Generate Change Summary
         if: steps.collect.outputs.has_changes == 'true'
         id: ai-summary
@@ -191,7 +323,7 @@ jobs:
         with:
           model: openai/gpt-4o
           prompt-file: /tmp/summary_prompt.txt
-          max-completion-tokens: 2600
+          max-completion-tokens: 1400
       - name: Build Compact Summary Prompt
         if: steps.collect.outputs.has_changes == 'true'
         id: compact-prompt
@@ -260,9 +392,23 @@ jobs:
           script: |
             const fs = require("fs");
             const issue = context.payload.issue;
+            const MAX_ISSUE_BODY_CHARS = 12000;
             const existingLabels = (issue.labels || [])
               .map((label) => typeof label === "string" ? label : label.name)
               .filter(Boolean);
+
+            function clampForPrompt(text, maxChars) {
+              if (text.length <= maxChars) {
+                return text;
+              }
+              if (maxChars <= 0) {
+                return "";
+              }
+              const suffix = "\n[...truncated for prompt budget...]";
+              const trimmedLength = Math.max(maxChars - suffix.length, 0);
+              return text.slice(0, trimmedLength) + suffix;
+            }
+
             const prompt = [
               "You are a principal software engineer triaging one GitHub issue.",
               "Analyze the issue as an intake artifact, not as implemented code.",
@@ -306,7 +452,7 @@ jobs:
               String(issue.title || ""),
               "",
               "ISSUE BODY",
-              String(issue.body || "").slice(0, 18000)
+              clampForPrompt(String(issue.body || ""), MAX_ISSUE_BODY_CHARS)
             ].join("\n");
 
             fs.writeFileSync("/tmp/issue_summary_prompt.txt", prompt);

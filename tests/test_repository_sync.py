@@ -103,6 +103,19 @@ class TestRepositorySyncHelpers(unittest.TestCase):
             trusted_directories,
         )
 
+    def test_trusted_directories_ignore_relative_paths(self):
+        trusted_directories = repository_sync._trusted_directories_for_paths(
+            (
+                "relative/model/file1.safetensors",
+                "C:/Users/User/.cache/huggingface/hub/model-a/file2.safetensors",
+            )
+        )
+
+        self.assertEqual(
+            trusted_directories,
+            ("C:\\Users\\User\\.cache\\huggingface\\hub\\model-a",),
+        )
+
     def test_transformers_text_generation_repo_detection(self):
         repo_files = (
             "config.json",
@@ -173,6 +186,7 @@ class TestRepositorySyncHuggingFaceRouting(unittest.TestCase):
             shard_paths=(),
             loader_kind="file",
             task_key=blob_url,
+            trusted_directories=("C:\\tmp",),
         )
         self.assertEqual(len(secure_path_calls), 1)
         self.assertEqual(secure_path_calls[0][0], "C:/tmp/model.safetensors")
@@ -227,7 +241,16 @@ class TestRepositorySyncHuggingFaceRouting(unittest.TestCase):
                 "C:\\Users\\User\\.cache\\huggingface\\hub\\models--ibm-granite--granite-4.0-h-350m\\snapshots\\3b17b717b8f2f5d305b0a92c1491e239aeda19c8",
             ),
         )
-        mock_load.assert_called_once()
+        mock_load.assert_called_once_with(
+            cached_path,
+            "safetensors",
+            shard_paths=(),
+            loader_kind="file",
+            task_key=blob_url,
+            trusted_directories=(
+                "C:\\Users\\User\\.cache\\huggingface\\hub\\models--ibm-granite--granite-4.0-h-350m\\snapshots\\3b17b717b8f2f5d305b0a92c1491e239aeda19c8",
+            ),
+        )
 
     def test_select_huggingface_files_accepts_suffix_hint(self):
         reference = repository_sync.HuggingFaceReference("user/model")

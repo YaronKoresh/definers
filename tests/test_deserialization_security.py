@@ -8,7 +8,7 @@ from unittest.mock import patch
 import joblib
 import numpy as np
 
-from definers.application_ml import repository_sync
+from definers.application_ml import repository_sync, safe_deserialization
 from definers.ml import AutoTrainer, init_custom_model
 
 
@@ -95,6 +95,31 @@ class TestDeserializationSecurity(unittest.TestCase):
                 model_path,
                 "joblib",
             )
+
+    def test_repository_sync_passes_trusted_directories_to_serialized_loader(
+        self,
+    ):
+        trusted_directories = (
+            "C:\\Users\\User\\.cache\\huggingface\\hub\\model-a",
+        )
+
+        with patch.object(
+            safe_deserialization,
+            "load_serialized_model",
+            return_value={"name": "safe-model"},
+        ) as mock_load_serialized_model:
+            loaded_model = repository_sync._load_model(
+                "C:/Users/User/.cache/huggingface/hub/model-a/model.joblib",
+                "joblib",
+                trusted_directories=trusted_directories,
+            )
+
+        self.assertEqual(loaded_model, {"name": "safe-model"})
+        mock_load_serialized_model.assert_called_once_with(
+            "C:/Users/User/.cache/huggingface/hub/model-a/model.joblib",
+            "joblib",
+            trusted_directories=trusted_directories,
+        )
 
 
 if __name__ == "__main__":

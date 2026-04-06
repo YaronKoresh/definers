@@ -253,17 +253,12 @@ def _normalize_model_task(task: str) -> str:
     if not text:
         raise ValueError("task is required")
 
-    # Allow known task keys directly.
     if text in tasks:
         return text
 
-    # Allow well-formed Hugging Face references or HTTP(S) URLs.
     if _is_huggingface_reference(text) or _is_http_url(text):
         return text
 
-    # Reject values that look like local filesystem paths to avoid
-    # uncontrolled path usage based on user-provided task values.
-    # This covers absolute/relative paths and Windows drive roots.
     if (
         text.startswith(("/", ".", "~"))
         or os.sep in text
@@ -272,7 +267,6 @@ def _normalize_model_task(task: str) -> str:
     ):
         raise ValueError(f"Unsupported task reference: {text!r}")
 
-    # For any other unrecognized reference, fail closed.
     raise ValueError(f"Unsupported task reference: {text!r}")
 
 

@@ -212,6 +212,7 @@ class RepositorySyncService:
                 shard_paths=shard_paths,
                 loader_kind=resolved_source.loader_kind,
                 task_key=task,
+                trusted_directories=trusted_directories,
             )
             if model is None:
                 raise RuntimeError(
@@ -241,6 +242,7 @@ class RepositorySyncService:
         shard_paths=(),
         loader_kind: str = "file",
         task_key: str | None = None,
+        trusted_directories=None,
     ):
         from definers.application_ml.safe_deserialization import (
             load_serialized_model,
@@ -263,13 +265,21 @@ class RepositorySyncService:
         if len(load_paths) > 1:
             logger.info(f"Detected {len(load_paths)} model shards.")
         if model_type == "joblib":
-            return load_serialized_model(model_path, model_type)
+            return load_serialized_model(
+                model_path,
+                model_type,
+                trusted_directories=trusted_directories,
+            )
         if model_type == "onnx":
             import onnxruntime
 
             return onnxruntime.InferenceSession(model_path)
         if model_type == "pkl":
-            return load_serialized_model(model_path, model_type)
+            return load_serialized_model(
+                model_path,
+                model_type,
+                trusted_directories=trusted_directories,
+            )
         if model_type in {"bin", "pt", "pth"}:
             import torch
 
@@ -1081,33 +1091,48 @@ class RepositorySyncService:
 
     @staticmethod
     def trusted_directories_for_paths(paths):
+        import ntpath
         import os
-        from pathlib import Path
+        import re
 
-        resolved_paths: list[Path] = []
+        windows_path_pattern = re.compile(r"^(?:[A-Za-z]:[\\/]|\\\\)")
+        directory_groups = {"nt": [], "posix": []}
+        path_modules = {"nt": ntpath, "posix": os.path}
         for path in paths:
-            if not path:
+            normalized_path = str(path).strip()
+            if not normalized_path:
                 continue
-            candidate = Path(str(path))
-            # Normalize the candidate path and skip any values that do not
-            # resolve to an absolute filesystem location.
-            resolved = candidate.resolve()
-            if not resolved.is_absolute():
+            group_name = (
+                "nt" if windows_path_pattern.match(normalized_path) else "posix"
+            )
+            path_module = path_modules[group_name]
+            absolute_path = path_module.normpath(
+                path_module.expanduser(normalized_path)
+            )
+            if not path_module.isabs(absolute_path):
                 continue
-            resolved_paths.append(resolved)
-        if not resolved_paths:
-            return ()
-        parent_directories = [str(p.parent) for p in resolved_paths]
-        common_directory = os.path.commonpath(parent_directories)
-        common_directory_path = Path(common_directory).resolve()
-        trusted_directories = {str(common_directory_path)}
-        for directory in parent_directories:
-            dir_path = Path(directory).resolve()
-            try:
-                dir_path.relative_to(common_directory_path)
-            except ValueError:
+            parent_directory = (
+                path_module.dirname(absolute_path) or absolute_path
+            )
+            directory_groups[group_name].append(parent_directory)
+
+        trusted_directories = set()
+        for group_name, parent_directories in directory_groups.items():
+            if not parent_directories:
                 continue
-            trusted_directories.add(str(dir_path))
+            path_module = path_modules[group_name]
+            common_directory = path_module.commonpath(parent_directories)
+            trusted_directories.add(path_module.normpath(common_directory))
+            for directory in parent_directories:
+                try:
+                    if (
+                        path_module.commonpath([common_directory, directory])
+                        != common_directory
+                    ):
+                        continue
+                except ValueError:
+                    continue
+                trusted_directories.add(path_module.normpath(directory))
         return tuple(sorted(trusted_directories))
 
     @staticmethod
