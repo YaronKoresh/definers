@@ -455,6 +455,8 @@ def upscale(
     from refiners.fluxion.utils import manual_seed
     from refiners.foundationals.latent_diffusion import Solver, solvers
 
+    if MODELS["upscale"] is None:
+        init_upscale()
     if upscale_factor < 2 or upscale_factor > 4:
         return
     if not seed:

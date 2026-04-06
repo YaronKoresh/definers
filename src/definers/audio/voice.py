@@ -30,8 +30,11 @@ def value_to_keys(dictionary: dict, target_value) -> list:
 def humanize_vocals(audio_path: str, amount: float = 0.5) -> str | None:
     import soundfile as sf
 
+    from definers.system import install_audio_effects
+
     temp_dir = None
     try:
+        install_audio_effects()
         if not exist(audio_path):
             return None
 
@@ -220,6 +223,9 @@ def autotune_song(
     import soundfile as sf
     from scipy.signal import medfilt
 
+    from definers.system import install_audio_effects
+
+    install_audio_effects()
     if output_path is None:
         output_path = tmp("wav", keep=False)
     audio_path = normalize_audio_to_peak(audio_path)

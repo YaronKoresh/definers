@@ -81,38 +81,13 @@ def train_voice_lab_model(experiment, inp, lvl):
 
 
 def prepare_audio_workspace():
-    from definers.ml import init_pretrained_model
-    from definers.presentation.lyric_video_service import init_stable_whisper
-    from definers.system import (
-        cwd,
-        exist,
-        install_audio_effects,
-        install_ffmpeg,
-    )
+    from definers.system import cwd, exist
     from definers.text import set_system_message
-
-    install_audio_effects()
-    install_ffmpeg()
-    init_stable_whisper()
-    init_pretrained_model("tts")
 
     svc_installed = False
     with cwd():
         if exist("./assets"):
             svc_installed = True
-
-    if not svc_installed:
-        init_pretrained_model("svc")
-
-    for model_name in (
-        "speech-recognition",
-        "audio-classification",
-        "music",
-        "summary",
-        "answer",
-        "translate",
-    ):
-        init_pretrained_model(model_name)
 
     set_system_message(
         name="Definers Audio Assistant",

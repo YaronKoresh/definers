@@ -1,13 +1,20 @@
 class TranslateApp:
     @staticmethod
+    def target_language_code(target_language, language_codes):
+        normalized_target_language = str(target_language).strip().lower()
+        for code, language_name in language_codes.items():
+            if str(language_name).strip().lower() == normalized_target_language:
+                return code
+        return normalized_target_language
+
+    @staticmethod
     def translate_text(txt, tgt_lang):
         import definers.text as text
-        from definers.audio import value_to_keys
         from definers.constants import language_codes
 
         return text.ai_translate(
             txt,
-            value_to_keys(language_codes, tgt_lang)[0],
+            TranslateApp.target_language_code(tgt_lang, language_codes),
         )
 
     @staticmethod
@@ -15,11 +22,8 @@ class TranslateApp:
         import gradio as gr
 
         from definers.constants import language_codes
-        from definers.ml import init_pretrained_model
         from definers.presentation.gradio_shared import launch_blocks
         from definers.system import unique
-
-        init_pretrained_model("translate", True)
 
         with gr.Blocks() as app:
             gr.Markdown("# AI Translator")

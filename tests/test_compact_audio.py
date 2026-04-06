@@ -23,8 +23,9 @@ compact_audio = AUDIO_IO_MODULE.compact_audio
 
 
 class TestCompactAudio(unittest.TestCase):
+    @patch("definers.system.install_ffmpeg")
     @patch("subprocess.run")
-    def test_compact_audio_success(self, mock_run):
+    def test_compact_audio_success(self, mock_run, mock_install_ffmpeg):
         input_file = "input.mp3"
         output_file = "output.mp3"
         result = compact_audio(input_file, output_file)
@@ -42,16 +43,24 @@ class TestCompactAudio(unittest.TestCase):
             "1",
             output_file,
         ]
+        mock_install_ffmpeg.assert_called_once_with()
         mock_run.assert_called_once_with(expected_command, check=True)
 
+    @patch("definers.system.install_ffmpeg")
     @patch("subprocess.run")
     @patch("definers.file_ops.catch")
-    def test_compact_audio_failure(self, mock_catch, mock_run):
+    def test_compact_audio_failure(
+        self,
+        mock_catch,
+        mock_run,
+        mock_install_ffmpeg,
+    ):
         mock_run.side_effect = subprocess.CalledProcessError(1, "ffmpeg")
         input_file = "input.mp3"
         output_file = "output.mp3"
         result = compact_audio(input_file, output_file)
         self.assertIsNone(result)
+        mock_install_ffmpeg.assert_called_once_with()
         mock_catch.assert_called_once()
         self.assertIsInstance(
             mock_catch.call_args[0][0], subprocess.CalledProcessError

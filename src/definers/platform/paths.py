@@ -176,13 +176,14 @@ def secure_path(
             trust_bases = trust
 
         bases = [Path(full_path(base)) for base in trust_bases if base.strip()]
-        current_directory = Path.cwd().resolve()
-        if current_directory not in bases:
-            bases.append(current_directory)
+        if trust is None:
+            current_directory = Path.cwd().resolve()
+            if current_directory not in bases:
+                bases.append(current_directory)
 
-        temp_directory = Path(full_path(tempfile.gettempdir())).resolve()
-        if temp_directory not in bases:
-            bases.append(temp_directory)
+            temp_directory = Path(full_path(tempfile.gettempdir())).resolve()
+            if temp_directory not in bases:
+                bases.append(temp_directory)
 
         is_safe = any(_is_relative_to(resolved_path, base) for base in bases)
         if not is_safe:

@@ -139,6 +139,10 @@ sequenceDiagram
 
 ### Base Install
 
+Definers currently targets Python 3.10 through 3.12. The optional stacks are not yet supported on Python 3.13.
+
+When `definers` is imported, it enables on-demand installation for known optional Python dependencies. If a supported optional module is missing, the runtime installs the required package set and retries automatically.
+
 ```bash
 pip install .
 ```
@@ -148,6 +152,8 @@ pip install .
 ```bash
 pip install ".[audio,ml,web]"
 ```
+
+You can still preinstall targeted extras for reproducible cold starts, but the runtime doesn't require the entire optional graph up front.
 
 ### Development Install
 
@@ -169,18 +175,18 @@ Windows contributors can use [scripts/install.bat](scripts/install.bat), which p
 | `ml` | Model training, inference, embeddings, export | Includes substantial ML framework dependencies |
 | `nlp` | Translation and language processing | Adds text and inference packages |
 | `web` | Retrieval, scraping, Gradio UI, web utilities | Includes Gradio and scraping-related packages |
-| `cuda` | GPU-oriented acceleration stack | Advanced path with host-level prerequisites |
+Each Docker entrypoint installs the base `definers` package from Git. Optional Python dependencies are resolved on demand at runtime.
 | `all` | Aggregates the main domain extras | Does not include `dev` or `cuda` |
 | `dev` | Pytest, Ruff, Poe, build, pre-commit, Vulture | Local contributor toolchain |
 
-Definers is intentionally segmented so that narrow adoption does not require the entire dependency graph.
-
-## Quick Start
-
-### Prepare Data And Train A Model
-
-```python
-from definers.application_data.preparation import prepare_data
+| `audio` | none at build time |
+| `animation` | none at build time |
+| `chat` | none at build time |
+| `faiss` | none at build time |
+| `image` | none at build time |
+| `train` | none at build time |
+| `translate` | none at build time |
+| `video` | none at build time |
 from definers.ml import train
 
 dataset = prepare_data(
@@ -409,12 +415,25 @@ definers lyric-video /path/to/song.wav /path/to/background.mp4 /path/to/lyrics.t
 
 Each app folder under `docker/` contains a container entrypoint layout with `app.py`, `Dockerfile`, and `docker-compose.yml`.
 
+Each Docker entrypoint installs the base `definers` package from Git. Optional Python dependencies are resolved on demand at runtime.
+
 ```bash
 cd docker/chat
 docker compose up --build
 ```
 
 The same folder shape exists for `audio`, `image`, `video`, `animation`, `translate`, `train`, and `faiss`.
+
+| Docker App | Installed Extras |
+| --- | --- |
+| `audio` | none at build time |
+| `animation` | none at build time |
+| `chat` | none at build time |
+| `faiss` | none at build time |
+| `image` | none at build time |
+| `train` | none at build time |
+| `translate` | none at build time |
+| `video` | none at build time |
 
 | When To Use | Best Fit |
 | --- | --- |

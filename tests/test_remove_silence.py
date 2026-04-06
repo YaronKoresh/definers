@@ -23,8 +23,9 @@ remove_silence = AUDIO_IO_MODULE.remove_silence
 
 
 class TestRemoveSilence(unittest.TestCase):
+    @patch("definers.system.install_ffmpeg")
     @patch("subprocess.run")
-    def test_remove_silence_success(self, mock_run):
+    def test_remove_silence_success(self, mock_run, mock_install_ffmpeg):
         input_file = "input.wav"
         output_file = "output.wav"
         result = remove_silence(input_file, output_file)
@@ -40,15 +41,23 @@ class TestRemoveSilence(unittest.TestCase):
             "silenceremove=stop_duration=0.1:stop_threshold=-32dB",
             output_file,
         ]
+        mock_install_ffmpeg.assert_called_once_with()
         mock_run.assert_called_once_with(expected_command, check=True)
 
+    @patch("definers.system.install_ffmpeg")
     @patch("subprocess.run")
     @patch("_test_remove_silence_io.file_ops.catch")
-    def test_remove_silence_failure(self, mock_catch, mock_run):
+    def test_remove_silence_failure(
+        self,
+        mock_catch,
+        mock_run,
+        mock_install_ffmpeg,
+    ):
         mock_run.side_effect = subprocess.CalledProcessError(1, "ffmpeg")
         input_file = "input.wav"
         output_file = "output.wav"
         remove_silence(input_file, output_file)
+        mock_install_ffmpeg.assert_called_once_with()
         self.assertTrue(mock_catch.called)
         (args, kwargs) = mock_catch.call_args
         self.assertIsInstance(args[0], subprocess.CalledProcessError)

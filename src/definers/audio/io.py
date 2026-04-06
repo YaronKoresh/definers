@@ -19,6 +19,10 @@ def is_audio_segment(audio_signal) -> bool:
 def run_ffmpeg(command: list[str]):
     import subprocess
 
+    from definers.system import install_ffmpeg
+
+    install_ffmpeg()
+
     try:
         subprocess.run(command, check=True)
         return command[-1]
@@ -29,6 +33,10 @@ def run_ffmpeg(command: list[str]):
 
 def read_audio(audio_file: str) -> tuple[int, np.ndarray]:
     import pydub
+
+    from definers.system import install_ffmpeg
+
+    install_ffmpeg()
 
     audio_segment = pydub.AudioSegment.from_file(audio_file)
     samples = np.array(audio_segment.get_array_of_samples(), dtype=np.float32)
@@ -52,6 +60,10 @@ def save_audio(
 ) -> None:
     import pydub
     import soundfile as sf
+
+    from definers.system import install_ffmpeg
+
+    install_ffmpeg()
 
     base_path = os.path.splitext(str(destination_path))[0]
     ext = get_ext(destination_path)
@@ -122,6 +134,10 @@ def split_audio(
     import os
 
     import pydub
+
+    from definers.system import install_ffmpeg
+
+    install_ffmpeg()
 
     audio_file_path = full_path(audio_file_path)
     if not exist(audio_file_path):

@@ -48,6 +48,16 @@ def test_sanitize_path_prevents_traversal(tmp_path):
         secure_path(str(base / "../b/foo"), trust=str(base))
 
 
+def test_sanitize_path_restricts_to_explicit_trust(tmp_path):
+    base = tmp_path / "base"
+    base.mkdir()
+    outside = tmp_path / "outside.txt"
+    outside.write_text("z")
+
+    with pytest.raises(ValueError):
+        secure_path(str(outside), trust=str(base))
+
+
 def test_git_branch_and_run_list(monkeypatch, tmp_path):
     from definers.system import run
 

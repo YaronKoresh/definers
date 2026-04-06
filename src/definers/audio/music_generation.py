@@ -18,6 +18,10 @@ def generate_music(prompt: str, duration_s: float, format_choice: str) -> str:
     import pydub
     from scipy.io.wavfile import write as write_wav
 
+    from definers.ml import init_pretrained_model
+
+    if MODELS["music"] is None or PROCESSORS["music"] is None:
+        init_pretrained_model("music")
     inputs = PROCESSORS["music"](
         text=[prompt],
         padding=True,
@@ -54,9 +58,10 @@ def extend_audio(
     import pydub
     import soundfile as sf
 
+    from definers.ml import init_pretrained_model
+
     if MODELS["music"] is None or PROCESSORS["music"] is None:
-        catch("MusicGen model is not available for audio extension.")
-        return None
+        init_pretrained_model("music")
     y, sr = librosa.load(audio_path, sr=None, mono=True)
     prompt_duration_s = min(15.0, len(y) / sr)
     prompt_wav = y[-int(prompt_duration_s * sr) :]
@@ -125,6 +130,10 @@ def audio_to_midi(audio_path: str):
 
 def midi_to_audio(midi_path: str, format_choice: str):
     from midi2audio import FluidSynth
+
+    from definers.system import install_audio_effects
+
+    install_audio_effects()
 
     soundfont_paths = [
         os.path.join(

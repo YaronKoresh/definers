@@ -46,9 +46,32 @@ def test_read_audio_scales_using_sample_width():
     )
 
     with patch.dict(sys.modules, {"pydub": pydub_module}):
-        sr, audio = IO_MODULE.read_audio("demo.wav")
+        with patch("definers.system.install_ffmpeg", lambda: None):
+            sr, audio = IO_MODULE.read_audio("demo.wav")
 
     assert sr == 48000
     assert audio.shape == (2, 2)
     assert audio[0, 0] == np.float32(8388607 / 8388608)
     assert audio[1, 0] == np.float32(-8388608 / 8388608)
+
+
+def test_read_audio_bootstraps_ffmpeg_before_loading():
+    fake_segment = FakeAudioSegment(
+        [1, 2],
+        channels=1,
+        frame_rate=16000,
+        sample_width=2,
+    )
+    pydub_module = types.SimpleNamespace(
+        AudioSegment=types.SimpleNamespace(from_file=lambda path: fake_segment)
+    )
+    calls = []
+
+    with patch.dict(sys.modules, {"pydub": pydub_module}):
+        with patch(
+            "definers.system.install_ffmpeg",
+            lambda: calls.append("ffmpeg"),
+        ):
+            IO_MODULE.read_audio("demo.wav")
+
+    assert calls == ["ffmpeg"]

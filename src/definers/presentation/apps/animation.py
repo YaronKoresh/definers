@@ -124,13 +124,8 @@ class AnimationApp:
         import gradio as gr
 
         from definers.constants import MAX_INPUT_LENGTH
-        from definers.ml import init_pretrained_model
         from definers.presentation.gradio_shared import launch_blocks
         from definers.system import tmp
-
-        init_pretrained_model("video", True)
-        init_pretrained_model("summary")
-        init_pretrained_model("translate")
 
         with gr.Blocks() as app:
             chunk_state = gr.State(
