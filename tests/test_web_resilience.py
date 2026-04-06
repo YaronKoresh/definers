@@ -7,8 +7,8 @@ from definers.capabilities import CircuitBreaker
 from definers.media.web_transfer import (
     HttpChunkedTransferStrategy,
     ResourceRetrievalOrchestrator,
-    download_file,
     ZipExtractTransferStrategy,
+    download_file,
     execute_async_operation,
 )
 

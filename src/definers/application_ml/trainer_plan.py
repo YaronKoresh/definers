@@ -15,6 +15,8 @@ class TrainingPlan:
     test_split: float
     label_columns: tuple[str, ...]
     drop_columns: tuple[str, ...]
+    order_by: str | None
+    stratify: str | None
     selected_rows: str | None
     resume_from: str | None
 
@@ -53,6 +55,8 @@ class TrainerPlanService:
         test_split: float,
         label_columns,
         drop_columns,
+        order_by: str | None,
+        stratify: str | None,
         selected_rows: str | None,
         resume_from: str | None,
         is_remote_dataset: bool,
@@ -72,6 +76,8 @@ class TrainerPlanService:
             test_split=test_split,
             label_columns=tuple(label_columns or ()),
             drop_columns=tuple(drop_columns or ()),
+            order_by=order_by,
+            stratify=stratify,
             selected_rows=selected_rows,
             resume_from=resume_from,
         )
@@ -90,6 +96,8 @@ class TrainerPlanService:
             f"- Test Split: {plan.test_split}",
             f"- Label Columns: {', '.join(plan.label_columns) or 'none'}",
             f"- Drop Columns: {', '.join(plan.drop_columns) or 'none'}",
+            f"- Order By: {plan.order_by or 'none'}",
+            f"- Stratify: {plan.stratify or 'none'}",
             f"- Selected Rows: {plan.selected_rows or 'all'}",
             f"- Resume From: {plan.resume_from or 'none'}",
         ]

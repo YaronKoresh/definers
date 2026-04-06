@@ -78,8 +78,8 @@ def _install_scipy_stub() -> None:
     ndimage_module.maximum_filter1d = lambda values, size, mode="constant": (
         _moving_last_axis(values, size, np.max)
     )
-    ndimage_module.median_filter = lambda values, size, mode="nearest": np.array(
-        values, dtype=np.float32, copy=True
+    ndimage_module.median_filter = lambda values, size, mode="nearest": (
+        np.array(values, dtype=np.float32, copy=True)
     )
     ndimage_module.uniform_filter1d = lambda values, size, mode="constant": (
         _moving_last_axis(values, size, np.mean)
@@ -126,8 +126,8 @@ def _load_mastering_module(package_name: str):
     exciter_module = types.ModuleType(f"{package_name}.effects.exciter")
     exciter_module.apply_exciter = lambda y, *_: y
     mixing_module = types.ModuleType(f"{package_name}.effects.mixing")
-    mixing_module.stereo = (
-        lambda y: y if getattr(y, "ndim", 1) > 1 else np.vstack([y, y])
+    mixing_module.stereo = lambda y: (
+        y if getattr(y, "ndim", 1) > 1 else np.vstack([y, y])
     )
     effects_package.exciter = exciter_module
     effects_package.mixing = mixing_module
@@ -364,7 +364,9 @@ def test_apply_eq_pushes_presence_repair_for_closed_legacy_material(
         "measure_spectrum",
         lambda y: (
             np.array([-4.0, -6.0, -6.5, -8.0, -9.2, -9.5], dtype=float),
-            np.array([120.0, 700.0, 2200.0, 5000.0, 9000.0, 15000.0], dtype=float),
+            np.array(
+                [120.0, 700.0, 2200.0, 5000.0, 9000.0, 15000.0], dtype=float
+            ),
         ),
     )
     monkeypatch.setattr(
@@ -418,7 +420,9 @@ def test_apply_eq_cuts_mud_and_restores_treble_for_old_closed_material(
         "measure_spectrum",
         lambda y: (
             np.array([0.0, 4.6, 3.4, -3.8, -6.2, -8.4], dtype=float),
-            np.array([70.0, 220.0, 420.0, 2400.0, 7000.0, 12000.0], dtype=float),
+            np.array(
+                [70.0, 220.0, 420.0, 2400.0, 7000.0, 12000.0], dtype=float
+            ),
         ),
     )
     monkeypatch.setattr(
@@ -460,7 +464,9 @@ def test_apply_eq_deharshes_upper_mids_while_preserving_air_repair(
         "measure_spectrum",
         lambda y: (
             np.array([-1.0, -2.2, 1.8, -5.6, -7.2, -8.4], dtype=float),
-            np.array([120.0, 1800.0, 3600.0, 6200.0, 9000.0, 15000.0], dtype=float),
+            np.array(
+                [120.0, 1800.0, 3600.0, 6200.0, 9000.0, 15000.0], dtype=float
+            ),
         ),
     )
     monkeypatch.setattr(
@@ -501,7 +507,9 @@ def test_apply_eq_restrains_legacy_low_end_excess_when_body_repair_is_hot(
         "measure_spectrum",
         lambda y: (
             np.array([-5.8, 1.4, 2.2, -4.6, -7.3, -8.9], dtype=float),
-            np.array([60.0, 130.0, 260.0, 2400.0, 7000.0, 12000.0], dtype=float),
+            np.array(
+                [60.0, 130.0, 260.0, 2400.0, 7000.0, 12000.0], dtype=float
+            ),
         ),
     )
     monkeypatch.setattr(
@@ -561,7 +569,9 @@ def test_apply_eq_builds_broader_high_shelf_for_closed_four_k_rolloff(
         "measure_spectrum",
         lambda y: (
             np.array([-1.0, -2.0, -3.2, -8.5, -12.4, -15.2], dtype=float),
-            np.array([180.0, 1100.0, 2600.0, 4200.0, 8000.0, 14000.0], dtype=float),
+            np.array(
+                [180.0, 1100.0, 2600.0, 4200.0, 8000.0, 14000.0], dtype=float
+            ),
         ),
     )
     monkeypatch.setattr(
@@ -619,7 +629,9 @@ def test_build_spectral_balance_profile_detects_legacy_low_end_restraint_pressur
     )
 
     correction_db = np.array([3.7, -2.9, -4.4, 4.1, 7.3, 8.8], dtype=float)
-    f_axis = np.array([55.0, 130.0, 260.0, 2400.0, 7000.0, 12000.0], dtype=float)
+    f_axis = np.array(
+        [55.0, 130.0, 260.0, 2400.0, 7000.0, 12000.0], dtype=float
+    )
 
     profile = mastering.build_spectral_balance_profile(correction_db, f_axis)
 
@@ -638,7 +650,9 @@ def test_build_spectral_balance_profile_rebalances_legacy_low_end_loaded_materia
         spectral_rescue_band_intensity=0.55,
     )
 
-    f_axis = np.array([60.0, 220.0, 420.0, 2400.0, 7000.0, 12000.0], dtype=float)
+    f_axis = np.array(
+        [60.0, 220.0, 420.0, 2400.0, 7000.0, 12000.0], dtype=float
+    )
     low_end_loaded_profile = mastering.build_spectral_balance_profile(
         np.array([1.2, -4.9, -3.6, 4.2, 7.6, 9.1], dtype=float),
         f_axis,
@@ -660,16 +674,18 @@ def test_apply_stem_cleanup_shapes_closed_vocal_stem(
     monkeypatch: pytest.MonkeyPatch,
 ):
     mastering = _make_mastering_instance()
-    mastering.spectral_balance_profile = MASTERING_MODULE.SpectralBalanceProfile(
-        rescue_factor=1.0,
-        correction_strength=1.0,
-        max_boost_db=12.0,
-        max_cut_db=6.0,
-        band_intensity=1.0,
-        restoration_factor=1.0,
-        air_restoration_factor=1.0,
-        body_restoration_factor=0.8,
-        closure_repair_factor=1.0,
+    mastering.spectral_balance_profile = (
+        MASTERING_MODULE.SpectralBalanceProfile(
+            rescue_factor=1.0,
+            correction_strength=1.0,
+            max_boost_db=12.0,
+            max_cut_db=6.0,
+            band_intensity=1.0,
+            restoration_factor=1.0,
+            air_restoration_factor=1.0,
+            body_restoration_factor=0.8,
+            closure_repair_factor=1.0,
+        )
     )
     captured: list[np.ndarray] = []
 
@@ -747,16 +763,18 @@ def test_apply_stem_cleanup_noise_gate_cleans_low_level_tail():
 
 def test_apply_stem_cleanup_preserves_drum_body_under_high_repair_pressure():
     mastering = _make_mastering_instance()
-    mastering.spectral_balance_profile = MASTERING_MODULE.SpectralBalanceProfile(
-        rescue_factor=1.0,
-        correction_strength=1.0,
-        max_boost_db=12.0,
-        max_cut_db=6.0,
-        band_intensity=1.0,
-        restoration_factor=1.0,
-        air_restoration_factor=0.92,
-        body_restoration_factor=0.8,
-        closure_repair_factor=1.0,
+    mastering.spectral_balance_profile = (
+        MASTERING_MODULE.SpectralBalanceProfile(
+            rescue_factor=1.0,
+            correction_strength=1.0,
+            max_boost_db=12.0,
+            max_cut_db=6.0,
+            band_intensity=1.0,
+            restoration_factor=1.0,
+            air_restoration_factor=0.92,
+            body_restoration_factor=0.8,
+            closure_repair_factor=1.0,
+        )
     )
     source = np.full(640, 0.03, dtype=np.float32)
     source[120:164] += 0.78
@@ -814,7 +832,9 @@ def test_build_spectral_balance_profile_detects_mud_and_closed_top_end_pressure(
     )
 
     correction_db = np.array([1.2, -4.9, -3.6, 4.2, 7.6, 9.1], dtype=float)
-    f_axis = np.array([60.0, 220.0, 420.0, 2400.0, 7000.0, 12000.0], dtype=float)
+    f_axis = np.array(
+        [60.0, 220.0, 420.0, 2400.0, 7000.0, 12000.0], dtype=float
+    )
 
     profile = mastering.build_spectral_balance_profile(correction_db, f_axis)
 
@@ -835,7 +855,9 @@ def test_build_spectral_balance_profile_detects_harshness_risk_under_closed_top_
     )
 
     correction_db = np.array([0.8, 2.5, -2.8, 5.9, 7.6, 8.9], dtype=float)
-    f_axis = np.array([80.0, 1800.0, 3600.0, 6200.0, 9000.0, 12000.0], dtype=float)
+    f_axis = np.array(
+        [80.0, 1800.0, 3600.0, 6200.0, 9000.0, 12000.0], dtype=float
+    )
 
     profile = mastering.build_spectral_balance_profile(correction_db, f_axis)
 

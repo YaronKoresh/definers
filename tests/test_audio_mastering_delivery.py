@@ -177,21 +177,25 @@ def test_save_verified_audio_preserves_signal_without_remastering(
         raising=False,
     )
 
-    final_path, final_signal, verification = DELIVERY_MODULE.save_verified_audio(
-        destination_path="track.wav",
-        audio_signal=source,
-        sample_rate=8000,
-        input_signal=np.zeros_like(source),
-        save_audio_fn=lambda **kwargs: saved_signals.append(
-            np.array(kwargs["audio_signal"], copy=True)
+    final_path, final_signal, verification = (
+        DELIVERY_MODULE.save_verified_audio(
+            destination_path="track.wav",
+            audio_signal=source,
+            sample_rate=8000,
+            input_signal=np.zeros_like(source),
+            save_audio_fn=lambda **kwargs: (
+                saved_signals.append(
+                    np.array(kwargs["audio_signal"], copy=True)
+                )
+                or kwargs["destination_path"]
+            ),
+            read_audio_fn=lambda path: (8000, np.array(source, copy=True)),
+            target_lufs=-10.0,
+            ceil_db=-0.1,
+            preset_name="balanced",
+            delivery_profile_name="lossless",
+            true_peak_oversample_factor=1,
         )
-        or kwargs["destination_path"],
-        read_audio_fn=lambda path: (8000, np.array(source, copy=True)),
-        target_lufs=-10.0,
-        ceil_db=-0.1,
-        preset_name="balanced",
-        delivery_profile_name="lossless",
-        true_peak_oversample_factor=1,
     )
 
     assert final_path == "track.wav"

@@ -62,7 +62,7 @@ Definers is built around a practical view of AI infrastructure: model work, medi
 
 | Domain | Core Public Entry Points | Representative Tasks |
 | --- | --- | --- |
-| Audio | `analyze_audio`, `analyze_audio_features`, `extract_audio_features`, `separate_stems`, `master` | Analysis, mastering, transcription, generation, mixing |
+| Audio | `analyze_audio`, `analyze_audio_features`, `audio_preview`, `split_audio`, `remove_silence`, `compact_audio`, `separate_stems`, `separate_stem_layers`, `master`, `autotune_song`, `humanize_vocals` | Analysis, mastering, vocal finishing, cleanup, preview, stem separation, transcription, generation, mixing |
 | Image | `extract_image_features`, `features_to_image`, `save_image`, `get_max_resolution` | Feature extraction, reconstruction, upscaling, export |
 | Video | `features_to_video`, video UI and composition flows | Render pipelines, architect-style composition, media generation |
 | Data | `prepare_data`, `fetch_dataset`, `files_to_dataset`, `create_vectorizer` | Data ingestion, batching, splitting, vectorization |
@@ -245,11 +245,27 @@ plan = trainer.training_plan(
     target="label",
     label_columns="label",
     drop="unused_column",
+    order_by="shuffle",
     select="1-200",
+    stratify="label",
 )
 
 print(render_training_plan_markdown(plan))
 ```
+
+### Launch The ML Studio
+
+```bash
+definers train
+```
+
+The `train` launcher opens a single ML studio surface for:
+
+- training plans, remote/local training, and artifact resume flows
+- saved-model prediction and task-based inference
+- answer runtime execution from the ML facade
+- text feature extraction, reconstruction, summary, and prompt tooling
+- ML health inspection, K-means guidance, RVC checkpoint lookup, and model bootstrap actions
 
 ### Inspect ML Health
 
@@ -372,12 +388,12 @@ definers lyric-video /path/to/song.wav /path/to/background.mp4 /path/to/lyrics.t
 | Project | Purpose | Startup Paths |
 | --- | --- | --- |
 | `chat` | Multimodal chat interface | CLI, installed launcher, Docker |
-| `audio` | Audio production and analysis workflows | CLI, installed launcher, Docker |
+| `audio` | Mastering, vocal finishing, cleanup, preview, stem separation, and analysis workflows | CLI, installed launcher, Docker |
 | `image` | Image generation and upscaling tools | CLI, installed launcher, Docker |
 | `video` | Video composition and architect workflows | CLI, installed launcher, Docker |
 | `animation` | Chunked image-to-animation workflow | CLI, installed launcher, Docker |
 | `translate` | Translation and caption-oriented interface | CLI, installed launcher, Docker |
-| `train` | Training and prediction interface | CLI, installed launcher, Docker |
+| `train` | Full ML studio for training, prediction, inference, answer runtime, text tooling, health checks, and model bootstrap | CLI, installed launcher, Docker |
 | `faiss` | FAISS-oriented utility surface | CLI, installed launcher, Docker |
 
 ### Launcher Contracts
@@ -515,7 +531,7 @@ Operational guardrails are a first-class part of the design.
 
 All external command execution flows through `definers.system.run()` and its platform-specific delegates.
 
-- Prefer list-form commands such as `[`"ffmpeg"`, `"-i"`, `"input.mp4"`, `"output.wav"`]`.
+- Prefer list-form commands such as `["ffmpeg", "-i", "input.mp4", "output.wav"]`.
 - Avoid free-form shell strings unless shell semantics are required deliberately.
 - Guarded runtime execution rejects unsafe string command patterns such as shell separators in protected paths.
 
@@ -545,7 +561,7 @@ If a serialized model load is blocked, regenerate the artifact from a trusted so
 | --- | --- |
 | Python requirement | `>=3.10` |
 | Check workflow matrix | Python `3.10`, `3.11`, `3.12` |
-| Quality workflow matrix | Python `3.10`, `3.12` |
+| Quality workflow matrix | Python `3.10`, `3.11`, `3.12` |
 | External tools | FFmpeg often required, `sox` sometimes required, CUDA host support optional |
 
 ### Practical Prerequisites

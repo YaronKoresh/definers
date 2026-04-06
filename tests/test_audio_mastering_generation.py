@@ -80,8 +80,8 @@ def _install_scipy_stub() -> None:
     ndimage_module.maximum_filter1d = lambda values, size, mode="constant": (
         _moving_last_axis(values, size, np.max)
     )
-    ndimage_module.median_filter = lambda values, size, mode="nearest": np.array(
-        values, dtype=np.float32, copy=True
+    ndimage_module.median_filter = lambda values, size, mode="nearest": (
+        np.array(values, dtype=np.float32, copy=True)
     )
     ndimage_module.uniform_filter1d = lambda values, size, mode="constant": (
         _moving_last_axis(values, size, np.mean)
@@ -124,8 +124,8 @@ def _load_mastering_module(package_name: str):
     exciter_module = types.ModuleType(f"{package_name}.effects.exciter")
     exciter_module.apply_exciter = lambda y, *_: y
     mixing_module = types.ModuleType(f"{package_name}.effects.mixing")
-    mixing_module.stereo = (
-        lambda y: y if getattr(y, "ndim", 1) > 1 else np.vstack([y, y])
+    mixing_module.stereo = lambda y: (
+        y if getattr(y, "ndim", 1) > 1 else np.vstack([y, y])
     )
     effects_package.exciter = exciter_module
     effects_package.mixing = mixing_module
@@ -162,7 +162,9 @@ CONFIG_MODULE, MASTERING_MODULE = _load_mastering_module(
 def test_default_intensity_remains_neutral_one():
     config = CONFIG_MODULE.SmartMasteringConfig()
 
-    assert config.intensity == pytest.approx(1.0)
+    assert config.intensity == pytest.approx(
+        CONFIG_MODULE.SmartMasteringConfig.balanced().intensity
+    )
     assert config.preset_name == "balanced"
     assert CONFIG_MODULE.SmartMasteringConfig.preset_names() == (
         "balanced",
@@ -298,6 +300,7 @@ def test_dataclass_replace_preserves_low_level_overrides():
     config = CONFIG_MODULE.SmartMasteringConfig(
         volume=1.0,
         bass_ratio=9.0,
+        effects=0.0,
     )
 
     updated = replace(config, effects=1.0)
@@ -552,6 +555,24 @@ def test_resolve_mastering_kwargs_for_input_preserves_explicit_preset_override(
     assert called == ["auto"]
 
 
+def test_resolve_mastering_kwargs_for_input_reuses_input_analysis_preset():
+    analysis = MASTERING_MODULE.MasteringInputAnalysis(
+        preset_name="edm",
+        quality_flags=("Low-Quality",),
+        target_sample_rate=44100,
+        metrics=None,
+    )
+
+    resolved = MASTERING_MODULE._resolve_mastering_kwargs_for_input(
+        np.zeros(64, dtype=np.float32),
+        44100,
+        {},
+        input_analysis=analysis,
+    )
+
+    assert resolved == {"preset": "edm"}
+
+
 def test_analyze_mastering_input_flags_legacy_and_low_quality(
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -574,8 +595,8 @@ def test_analyze_mastering_input_flags_legacy_and_low_quality(
     )
     monkeypatch.setattr(
         MASTERING_MODULE,
-        "_select_mastering_preset",
-        lambda signal, sample_rate: "vocal",
+        "_select_mastering_preset_from_metrics",
+        lambda metrics: "vocal",
     )
 
     analysis = MASTERING_MODULE._analyze_mastering_input(
@@ -1070,7 +1091,9 @@ def test_process_stem_skips_master_bus_stages(
     monkeypatch.setattr(
         mastering,
         "apply_limiter",
-        lambda y, drive_db, ceil_db, **kwargs: stage_calls.append("limiter") or y,
+        lambda y, drive_db, ceil_db, **kwargs: (
+            stage_calls.append("limiter") or y
+        ),
     )
     monkeypatch.setattr(
         mastering,
@@ -1095,7 +1118,9 @@ def test_process_stem_skips_master_bus_stages(
     monkeypatch.setattr(
         MASTERING_MODULE,
         "get_lufs",
-        lambda y, sr: (_ for _ in ()).throw(AssertionError("stem path should not read LUFS")),
+        lambda y, sr: (_ for _ in ()).throw(
+            AssertionError("stem path should not read LUFS")
+        ),
     )
     monkeypatch.setattr(
         MASTERING_MODULE,
@@ -1302,16 +1327,18 @@ def test_process_scales_exciter_controls_for_legacy_repair(
     )
 
     def fake_apply_eq(y):
-        mastering.spectral_balance_profile = MASTERING_MODULE.SpectralBalanceProfile(
-            rescue_factor=1.0,
-            correction_strength=mastering.correction_strength,
-            max_boost_db=mastering.max_spectrum_boost_db,
-            max_cut_db=mastering.max_spectrum_cut_db,
-            band_intensity=mastering.config.intensity,
-            restoration_factor=1.0,
-            air_restoration_factor=1.0,
-            body_restoration_factor=0.8,
-            closure_repair_factor=1.0,
+        mastering.spectral_balance_profile = (
+            MASTERING_MODULE.SpectralBalanceProfile(
+                rescue_factor=1.0,
+                correction_strength=mastering.correction_strength,
+                max_boost_db=mastering.max_spectrum_boost_db,
+                max_cut_db=mastering.max_spectrum_cut_db,
+                band_intensity=mastering.config.intensity,
+                restoration_factor=1.0,
+                air_restoration_factor=1.0,
+                body_restoration_factor=0.8,
+                closure_repair_factor=1.0,
+            )
         )
         return y
 
@@ -1336,9 +1363,7 @@ def test_process_lowers_exciter_cutoff_for_closed_legacy_repair(
         exciter_high_frequency_cutoff_hz=7200.0,
     )
     source = np.array([0.1, -0.1, 0.2, -0.2], dtype=np.float32)
-    exciter_calls: list[
-        tuple[float | None, float, float, float | None]
-    ] = []
+    exciter_calls: list[tuple[float | None, float, float, float | None]] = []
     loudness_values = iter([-10.0])
 
     monkeypatch.setattr(
@@ -1406,16 +1431,18 @@ def test_process_lowers_exciter_cutoff_for_closed_legacy_repair(
     )
 
     def fake_apply_eq(y):
-        mastering.spectral_balance_profile = MASTERING_MODULE.SpectralBalanceProfile(
-            rescue_factor=1.0,
-            correction_strength=mastering.correction_strength,
-            max_boost_db=mastering.max_spectrum_boost_db,
-            max_cut_db=mastering.max_spectrum_cut_db,
-            band_intensity=mastering.config.intensity,
-            restoration_factor=1.0,
-            air_restoration_factor=1.0,
-            body_restoration_factor=0.75,
-            closure_repair_factor=1.0,
+        mastering.spectral_balance_profile = (
+            MASTERING_MODULE.SpectralBalanceProfile(
+                rescue_factor=1.0,
+                correction_strength=mastering.correction_strength,
+                max_boost_db=mastering.max_spectrum_boost_db,
+                max_cut_db=mastering.max_spectrum_cut_db,
+                band_intensity=mastering.config.intensity,
+                restoration_factor=1.0,
+                air_restoration_factor=1.0,
+                body_restoration_factor=0.75,
+                closure_repair_factor=1.0,
+            )
         )
         return y
 
@@ -1440,9 +1467,7 @@ def test_process_retains_more_exciter_air_for_low_end_loaded_legacy_rebalance(
         exciter_high_frequency_cutoff_hz=7200.0,
     )
     source = np.array([0.1, -0.1, 0.2, -0.2], dtype=np.float32)
-    exciter_calls: list[
-        tuple[float | None, float, float, float | None]
-    ] = []
+    exciter_calls: list[tuple[float | None, float, float, float | None]] = []
     loudness_values = iter([-10.0, -10.0])
     rebalance_levels = iter([0.0, 1.0])
 
@@ -1511,17 +1536,19 @@ def test_process_retains_more_exciter_air_for_low_end_loaded_legacy_rebalance(
     )
 
     def fake_apply_eq(y):
-        mastering.spectral_balance_profile = MASTERING_MODULE.SpectralBalanceProfile(
-            rescue_factor=1.0,
-            correction_strength=mastering.correction_strength,
-            max_boost_db=mastering.max_spectrum_boost_db,
-            max_cut_db=mastering.max_spectrum_cut_db,
-            band_intensity=mastering.config.intensity,
-            restoration_factor=1.0,
-            air_restoration_factor=1.0,
-            body_restoration_factor=0.75,
-            closure_repair_factor=1.0,
-            legacy_tonal_rebalance_factor=next(rebalance_levels),
+        mastering.spectral_balance_profile = (
+            MASTERING_MODULE.SpectralBalanceProfile(
+                rescue_factor=1.0,
+                correction_strength=mastering.correction_strength,
+                max_boost_db=mastering.max_spectrum_boost_db,
+                max_cut_db=mastering.max_spectrum_cut_db,
+                band_intensity=mastering.config.intensity,
+                restoration_factor=1.0,
+                air_restoration_factor=1.0,
+                body_restoration_factor=0.75,
+                closure_repair_factor=1.0,
+                legacy_tonal_rebalance_factor=next(rebalance_levels),
+            )
         )
         return y
 
@@ -1548,9 +1575,7 @@ def test_process_deharshes_exciter_controls_when_harshness_risk_is_high(
         exciter_high_frequency_cutoff_hz=7200.0,
     )
     source = np.array([0.1, -0.1, 0.2, -0.2], dtype=np.float32)
-    exciter_calls: list[
-        tuple[float | None, float, float, float | None]
-    ] = []
+    exciter_calls: list[tuple[float | None, float, float, float | None]] = []
     loudness_values = iter([-10.0, -10.0])
     harshness_levels = iter([0.0, 1.0])
 
@@ -1619,17 +1644,19 @@ def test_process_deharshes_exciter_controls_when_harshness_risk_is_high(
     )
 
     def fake_apply_eq(y):
-        mastering.spectral_balance_profile = MASTERING_MODULE.SpectralBalanceProfile(
-            rescue_factor=1.0,
-            correction_strength=mastering.correction_strength,
-            max_boost_db=mastering.max_spectrum_boost_db,
-            max_cut_db=mastering.max_spectrum_cut_db,
-            band_intensity=mastering.config.intensity,
-            restoration_factor=1.0,
-            air_restoration_factor=1.0,
-            body_restoration_factor=0.8,
-            closure_repair_factor=1.0,
-            harshness_restraint_factor=next(harshness_levels),
+        mastering.spectral_balance_profile = (
+            MASTERING_MODULE.SpectralBalanceProfile(
+                rescue_factor=1.0,
+                correction_strength=mastering.correction_strength,
+                max_boost_db=mastering.max_spectrum_boost_db,
+                max_cut_db=mastering.max_spectrum_cut_db,
+                band_intensity=mastering.config.intensity,
+                restoration_factor=1.0,
+                air_restoration_factor=1.0,
+                body_restoration_factor=0.8,
+                closure_repair_factor=1.0,
+                harshness_restraint_factor=next(harshness_levels),
+            )
         )
         return y
 
@@ -2579,15 +2606,17 @@ def test_master_stems_forces_stem_mastering(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(
         MASTERING_MODULE,
         "_master_internal",
-        lambda input_path, *, output_path, stem_mastering, **kwargs: captured.update(
-            {
-                "input_path": input_path,
-                "output_path": output_path,
-                "stem_mastering": stem_mastering,
-                "kwargs": dict(kwargs),
-            }
-        )
-        or ("out.wav", None),
+        lambda input_path, *, output_path, stem_mastering, **kwargs: (
+            captured.update(
+                {
+                    "input_path": input_path,
+                    "output_path": output_path,
+                    "stem_mastering": stem_mastering,
+                    "kwargs": dict(kwargs),
+                }
+            )
+            or ("out.wav", None)
+        ),
     )
 
     mastered_path, report = MASTERING_MODULE.master(
@@ -2623,7 +2652,17 @@ def test_master_routes_stem_mastering_through_audio_separator_pipeline(
     )
     processed_inputs: list[np.ndarray] = []
     helper_calls: list[
-        tuple[str, str, int, tuple[str, ...], float, dict[str, object], bool, str | None, str]
+        tuple[
+            str,
+            str,
+            int,
+            tuple[str, ...],
+            float,
+            dict[str, object],
+            bool,
+            str | None,
+            str,
+        ]
     ] = []
     mixed_signal = np.full((2, 8), 0.25, dtype=np.float32)
 

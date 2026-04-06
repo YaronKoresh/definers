@@ -6,13 +6,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from definers.application_data.arrays import dtype
 from definers.constants import (
     MODELS,
     general_negative_prompt,
     general_positive_prompt,
 )
 from definers.cuda import device
-from definers.application_data.arrays import dtype
 from definers.media.image_helpers import (
     extract_image_features,
     features_to_image,

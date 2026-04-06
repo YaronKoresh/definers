@@ -89,8 +89,7 @@ def _repair_narrow_stereo_image(
         np.clip(
             max(
                 getattr(self, "mono_bass_hz", 140.0) * 2.4,
-                getattr(self, "stereo_tone_variation_cutoff_hz", 1400.0)
-                * 0.9,
+                getattr(self, "stereo_tone_variation_cutoff_hz", 1400.0) * 0.9,
                 700.0,
             ),
             350.0,
@@ -111,10 +110,7 @@ def _repair_narrow_stereo_image(
         int(
             round(
                 self.resampling_target
-                * (
-                    0.00045
-                    + 0.00115 * restoration_factor * width_deficit
-                )
+                * (0.00045 + 0.00115 * restoration_factor * width_deficit)
             )
         ),
         1,
@@ -135,17 +131,19 @@ def _repair_narrow_stereo_image(
             current_width_ratio
             + width_deficit
             * (
-                0.05
-                + restoration_factor * 0.12
-                + air_restoration_factor * 0.05
+                0.05 + restoration_factor * 0.12 + air_restoration_factor * 0.05
             ),
             0.0,
             0.22,
         )
     )
-    target_side_rms = upper_band_rms * target_width_ratio / max(
-        1.0 - target_width_ratio,
-        1e-6,
+    target_side_rms = (
+        upper_band_rms
+        * target_width_ratio
+        / max(
+            1.0 - target_width_ratio,
+            1e-6,
+        )
     )
     added_side_rms = max(target_side_rms - side_rms, 0.0)
     if synthesized_rms <= 1e-6 or added_side_rms <= 1e-6:

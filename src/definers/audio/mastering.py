@@ -7,7 +7,7 @@ import numpy as np
 from scipy import signal
 from scipy.ndimage import maximum_filter1d, uniform_filter1d
 
-from definers.system import get_ext
+from definers.system import get_ext, tmp
 
 from ..file_ops import log
 from .config import SmartMasteringConfig
@@ -62,7 +62,10 @@ from .mastering_metrics import (
     MasteringReport,
     write_mastering_report as _write_mastering_report,
 )
-from .mastering_pipeline import process as _process, process_stem as _process_stem
+from .mastering_pipeline import (
+    process as _process,
+    process_stem as _process_stem,
+)
 from .mastering_profile import (
     SpectralBalanceProfile,
     build_spectral_balance_profile as _build_spectral_balance_profile,
@@ -205,7 +208,9 @@ def _collect_mastering_input_metrics(
             int(sample_rate),
         )
         stereo_motion = _measure_stereo_motion(signal_array, int(sample_rate))
-        band_profile = _measure_preset_band_profile(signal_array, int(sample_rate))
+        band_profile = _measure_preset_band_profile(
+            signal_array, int(sample_rate)
+        )
     except Exception:
         return None
 
@@ -238,23 +243,13 @@ def _select_mastering_preset_from_metrics(
     vocal_score = float(
         0.34
         * np.clip(
-            (
-                metrics.presence_share
-                - metrics.bass_share * 0.72
-                - 0.06
-            )
-            / 0.22,
+            (metrics.presence_share - metrics.bass_share * 0.72 - 0.06) / 0.22,
             0.0,
             1.0,
         )
         + 0.18
         * np.clip(
-            (
-                metrics.air_share
-                - metrics.bass_share * 0.35
-                - 0.02
-            )
-            / 0.16,
+            (metrics.air_share - metrics.bass_share * 0.35 - 0.02) / 0.16,
             0.0,
             1.0,
         )
@@ -354,7 +349,7 @@ def _analyze_mastering_input(
         )
 
     return MasteringInputAnalysis(
-        preset_name=_select_mastering_preset(signal_to_analyze, sample_rate),
+        preset_name=_select_mastering_preset_from_metrics(metrics),
         quality_flags=_resolve_mastering_quality_flags(metrics, sample_rate),
         target_sample_rate=target_sample_rate,
         metrics=metrics,
@@ -371,7 +366,9 @@ def _select_mastering_preset(
     return _select_mastering_preset_from_metrics(metrics)
 
 
-def _resolve_explicit_preset_name(mastering_kwargs: dict[str, object]) -> str | None:
+def _resolve_explicit_preset_name(
+    mastering_kwargs: dict[str, object],
+) -> str | None:
     for key in ("preset", "preset_name"):
         value = mastering_kwargs.get(key)
         if value is None:
@@ -386,23 +383,36 @@ def _resolve_mastering_kwargs_for_input(
     input_signal: np.ndarray,
     input_sample_rate: int,
     mastering_kwargs: dict[str, object],
+    *,
+    input_analysis: MasteringInputAnalysis | None = None,
 ) -> dict[str, object]:
     resolved_kwargs = dict(mastering_kwargs)
     explicit_preset_name = _resolve_explicit_preset_name(resolved_kwargs)
     if explicit_preset_name is not None:
         return resolved_kwargs
 
-    selected_preset = _select_mastering_preset(input_signal, input_sample_rate)
+    if input_analysis is None:
+        selected_preset = _select_mastering_preset(
+            input_signal,
+            input_sample_rate,
+        )
+    else:
+        selected_preset = input_analysis.preset_name
     resolved_kwargs["preset"] = selected_preset
     preset_name_value = resolved_kwargs.get("preset_name")
-    if preset_name_value is None or str(preset_name_value).strip().lower() == "auto":
+    if (
+        preset_name_value is None
+        or str(preset_name_value).strip().lower() == "auto"
+    ):
         resolved_kwargs.pop("preset_name", None)
     return resolved_kwargs
 
 
 def _resolve_mastered_stems_output_dir(output_path: str) -> str:
     resolved_output_path = Path(str(output_path))
-    return str(resolved_output_path.parent / f"{resolved_output_path.stem}_stems")
+    return str(
+        resolved_output_path.parent / f"{resolved_output_path.stem}_stems"
+    )
 
 
 class SmartMastering:
@@ -691,16 +701,16 @@ def _master_internal(
     try:
         from .io import read_audio, save_audio
 
-        report_path = kwargs.pop("report_path", f'{output_path}.report.json' if output_path else None)
+        report_path = kwargs.pop(
+            "report_path", f"{output_path}.report.json" if output_path else None
+        )
         report_indent = int(kwargs.pop("report_indent", 2))
         bit_depth = int(kwargs.pop("bit_depth", 32))
         bitrate = int(kwargs.pop("bitrate", 320))
         compression_level = int(kwargs.pop("compression_level", 9))
         stem_model_name = str(kwargs.pop("stem_model_name", "mastering"))
         stem_shifts = int(kwargs.pop("stem_shifts", 2))
-        stem_mix_headroom_db = float(
-            kwargs.pop("stem_mix_headroom_db", 6.0)
-        )
+        stem_mix_headroom_db = float(kwargs.pop("stem_mix_headroom_db", 6.0))
         save_mastered_stems = bool(
             kwargs.pop("save_mastered_stems", stem_mastering)
         )
@@ -713,7 +723,9 @@ def _master_internal(
         )
 
         input_sample_rate, input_signal = read_audio(input_path)
-        resolved_output_path = output_path or tmp(get_ext(input_path), keep=False)
+        resolved_output_path = output_path or tmp(
+            get_ext(input_path), keep=False
+        )
         processing_sample_rate = input_sample_rate
         processing_signal = np.array(input_signal, dtype=np.float32, copy=True)
         input_analysis = _analyze_mastering_input(
@@ -724,6 +736,7 @@ def _master_internal(
             processing_signal,
             input_sample_rate,
             dict(kwargs),
+            input_analysis=input_analysis,
         )
         resolved_mastering_kwargs.setdefault(
             "resampling_target",
@@ -732,7 +745,7 @@ def _master_internal(
         if _resolve_explicit_preset_name(dict(kwargs)) is None:
             log(
                 "Auto-selected mastering preset",
-                resolved_mastering_kwargs['preset']
+                resolved_mastering_kwargs["preset"],
             )
         if input_analysis.quality_flags:
             log(
@@ -867,18 +880,18 @@ def _render_master_output(
         post_eq_signal=getattr(mastering, "last_stage_signals", {}).get(
             "post_eq"
         ),
-        post_spatial_signal=getattr(
-            mastering, "last_stage_signals", {}
-        ).get("post_spatial"),
-        post_limiter_signal=getattr(
-            mastering, "last_stage_signals", {}
-        ).get("post_limiter"),
-        post_character_signal=getattr(
-            mastering, "last_stage_signals", {}
-        ).get("post_character"),
-        post_peak_catch_signal=getattr(
-            mastering, "last_stage_signals", {}
-        ).get("post_peak_catch"),
+        post_spatial_signal=getattr(mastering, "last_stage_signals", {}).get(
+            "post_spatial"
+        ),
+        post_limiter_signal=getattr(mastering, "last_stage_signals", {}).get(
+            "post_limiter"
+        ),
+        post_character_signal=getattr(mastering, "last_stage_signals", {}).get(
+            "post_character"
+        ),
+        post_peak_catch_signal=getattr(mastering, "last_stage_signals", {}).get(
+            "post_peak_catch"
+        ),
         post_delivery_trim_signal=getattr(
             mastering, "last_stage_signals", {}
         ).get("post_delivery_trim"),

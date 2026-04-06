@@ -93,7 +93,9 @@ def smooth_curve(
 
 
 def _normalize_stem_role(stem_role: str | None) -> str:
-    normalized_role = "other" if stem_role is None else str(stem_role).strip().lower()
+    normalized_role = (
+        "other" if stem_role is None else str(stem_role).strip().lower()
+    )
     return normalized_role or "other"
 
 
@@ -239,14 +241,18 @@ def _resolve_stem_noise_gate_profile(
     strength = float(np.clip(gate_strength, 0.0, 1.5))
 
     if normalized_role == "drums":
-        intensity = float(np.clip((0.74 + cleanup_pressure * 0.14) * strength, 0.0, 1.0))
+        intensity = float(
+            np.clip((0.74 + cleanup_pressure * 0.14) * strength, 0.0, 1.0)
+        )
         return {
             "fast_ms": 1.3,
             "slow_ms": 11.0,
             "hold_ms": 54.0,
             "release_ms": 18.0,
             "noise_percentile": 38.0,
-            "threshold_ratio": float(np.clip(0.07 + intensity * 0.02, 0.045, 0.18)),
+            "threshold_ratio": float(
+                np.clip(0.07 + intensity * 0.02, 0.045, 0.18)
+            ),
             "full_open_ratio": 0.16,
             "floor": float(np.clip(0.055 - intensity * 0.02, 0.022, 0.06)),
             "transient_bias": 0.92,
@@ -256,14 +262,18 @@ def _resolve_stem_noise_gate_profile(
         }
 
     if normalized_role == "vocals":
-        intensity = float(np.clip((0.6 + cleanup_pressure * 0.18) * strength, 0.0, 1.0))
+        intensity = float(
+            np.clip((0.6 + cleanup_pressure * 0.18) * strength, 0.0, 1.0)
+        )
         return {
             "fast_ms": 3.6,
             "slow_ms": 32.0,
             "hold_ms": 96.0,
             "release_ms": 42.0,
             "noise_percentile": 24.0,
-            "threshold_ratio": float(np.clip(0.065 + intensity * 0.03, 0.045, 0.18)),
+            "threshold_ratio": float(
+                np.clip(0.065 + intensity * 0.03, 0.045, 0.18)
+            ),
             "full_open_ratio": 0.24,
             "floor": float(np.clip(0.06 - intensity * 0.024, 0.02, 0.068)),
             "transient_bias": 0.32,
@@ -273,14 +283,18 @@ def _resolve_stem_noise_gate_profile(
         }
 
     if normalized_role == "bass":
-        intensity = float(np.clip((0.5 + cleanup_pressure * 0.14) * strength, 0.0, 0.94))
+        intensity = float(
+            np.clip((0.5 + cleanup_pressure * 0.14) * strength, 0.0, 0.94)
+        )
         return {
             "fast_ms": 6.0,
             "slow_ms": 56.0,
             "hold_ms": 132.0,
             "release_ms": 56.0,
             "noise_percentile": 18.0,
-            "threshold_ratio": float(np.clip(0.11 + intensity * 0.025, 0.075, 0.22)),
+            "threshold_ratio": float(
+                np.clip(0.11 + intensity * 0.025, 0.075, 0.22)
+            ),
             "full_open_ratio": 0.28,
             "floor": float(np.clip(0.13 - intensity * 0.018, 0.08, 0.13)),
             "transient_bias": 0.12,
@@ -289,7 +303,9 @@ def _resolve_stem_noise_gate_profile(
             "mix": float(np.clip(0.22 + intensity * 0.1, 0.0, 0.56)),
         }
 
-    intensity = float(np.clip((0.58 + cleanup_pressure * 0.18) * strength, 0.0, 1.0))
+    intensity = float(
+        np.clip((0.58 + cleanup_pressure * 0.18) * strength, 0.0, 1.0)
+    )
     return {
         "fast_ms": 3.4,
         "slow_ms": 28.0,
@@ -367,9 +383,7 @@ def _build_stem_activity_mask(
     )
     activity = np.clip(
         activity
-        + transient
-        * cleanup_profile["transient_blend"]
-        * (1.0 - activity),
+        + transient * cleanup_profile["transient_blend"] * (1.0 - activity),
         0.0,
         1.0,
     )
@@ -438,15 +452,23 @@ def _build_stem_noise_gate_mask(
         fast_env * (1.0 + transient * gate_profile["transient_bias"]),
     )
 
-    noise_floor = float(np.percentile(slow_env, gate_profile["noise_percentile"]))
+    noise_floor = float(
+        np.percentile(slow_env, gate_profile["noise_percentile"])
+    )
     peak_env = float(np.percentile(control_env, 99.8))
     if peak_env <= noise_floor + 1e-6:
         return np.ones_like(mono_energy, dtype=np.float32)
 
-    open_threshold = noise_floor + (peak_env - noise_floor) * gate_profile["threshold_ratio"]
-    full_open_level = open_threshold + (peak_env - open_threshold) * gate_profile["full_open_ratio"]
+    open_threshold = (
+        noise_floor + (peak_env - noise_floor) * gate_profile["threshold_ratio"]
+    )
+    full_open_level = (
+        open_threshold
+        + (peak_env - open_threshold) * gate_profile["full_open_ratio"]
+    )
     gate_curve = np.clip(
-        (control_env - open_threshold) / (full_open_level - open_threshold + 1e-6),
+        (control_env - open_threshold)
+        / (full_open_level - open_threshold + 1e-6),
         0.0,
         1.0,
     )
@@ -478,7 +500,9 @@ def _apply_stem_residual_suppression(
     if y.size == 0:
         return y
 
-    cleanup_profile = _resolve_stem_residual_profile(stem_role, cleanup_pressure)
+    cleanup_profile = _resolve_stem_residual_profile(
+        stem_role, cleanup_pressure
+    )
     channels = y if y.ndim > 1 else y[np.newaxis, :]
     working_channels = np.asarray(channels, dtype=np.float32)
     mono_energy = np.mean(np.abs(working_channels), axis=0)
@@ -499,18 +523,21 @@ def _apply_stem_residual_suppression(
         peak = float(np.max(np.abs(cleaned_channel)))
         if peak > 1e-6 and expansion_mix > 0.0:
             normalized = np.clip(np.abs(cleaned_channel) / peak, 0.0, 1.0)
-            expanded_channel = np.sign(cleaned_channel) * peak * np.power(
-                normalized,
-                1.0 + expansion_drive,
+            expanded_channel = (
+                np.sign(cleaned_channel)
+                * peak
+                * np.power(
+                    normalized,
+                    1.0 + expansion_drive,
+                )
             )
-            cleaned_channel = cleaned_channel * (1.0 - expansion_mix) + expanded_channel * expansion_mix
+            cleaned_channel = (
+                cleaned_channel * (1.0 - expansion_mix)
+                + expanded_channel * expansion_mix
+            )
         cleaned_channels.append(cleaned_channel)
 
-    cleaned = (
-        np.vstack(cleaned_channels)
-        if y.ndim > 1
-        else cleaned_channels[0]
-    )
+    cleaned = np.vstack(cleaned_channels) if y.ndim > 1 else cleaned_channels[0]
     return _restore_audio_dtype(cleaned, y.dtype)
 
 
@@ -545,7 +572,9 @@ def _apply_stem_noise_gate(
         cleanup_pressure,
         gate_strength,
     )
-    residual_profile = _resolve_stem_residual_profile(stem_role, cleanup_pressure)
+    residual_profile = _resolve_stem_residual_profile(
+        stem_role, cleanup_pressure
+    )
     gate_mask = _build_stem_noise_gate_mask(
         mono_energy,
         sample_rate=self.resampling_target,
@@ -581,10 +610,18 @@ def _resolve_stem_cleanup_anchors(
     presence_cut_hz = self._fit_frequency(
         max(self.treble_transition_hz * 0.82, 2900.0)
     )
-    air_low_hz = self._fit_frequency(max(self.treble_transition_hz * 1.28, 5200.0))
-    air_high_hz = self._fit_frequency(max(self.treble_transition_hz * 1.95, 9000.0))
-    harmonic_low_hz = self._fit_frequency(max(self.bass_transition_hz * 2.0, 850.0))
-    harmonic_high_hz = self._fit_frequency(max(self.bass_transition_hz * 3.1, 1800.0))
+    air_low_hz = self._fit_frequency(
+        max(self.treble_transition_hz * 1.28, 5200.0)
+    )
+    air_high_hz = self._fit_frequency(
+        max(self.treble_transition_hz * 1.95, 9000.0)
+    )
+    harmonic_low_hz = self._fit_frequency(
+        max(self.bass_transition_hz * 2.0, 850.0)
+    )
+    harmonic_high_hz = self._fit_frequency(
+        max(self.bass_transition_hz * 3.1, 1800.0)
+    )
 
     if normalized_role == "bass":
         mud_cut_db = float(
@@ -592,7 +629,9 @@ def _resolve_stem_cleanup_anchors(
         )
         harmonic_boost_db = float(
             np.clip(
-                0.08 + closure_repair_factor * 0.28 + air_restoration_factor * 0.14,
+                0.08
+                + closure_repair_factor * 0.28
+                + air_restoration_factor * 0.14,
                 0.0,
                 0.95,
             )
@@ -609,7 +648,9 @@ def _resolve_stem_cleanup_anchors(
     if normalized_role == "vocals":
         mud_cut_db = float(
             np.clip(
-                0.22 + body_restoration_factor * 0.92 + closure_repair_factor * 0.14,
+                0.22
+                + body_restoration_factor * 0.92
+                + closure_repair_factor * 0.14,
                 0.0,
                 1.7,
             )
@@ -622,14 +663,18 @@ def _resolve_stem_cleanup_anchors(
         )
         air_low_boost_db = float(
             np.clip(
-                0.08 + air_restoration_factor * 0.45 + closure_repair_factor * 0.18,
+                0.08
+                + air_restoration_factor * 0.45
+                + closure_repair_factor * 0.18,
                 0.0,
                 0.95,
             )
         )
         air_high_boost_db = float(
             np.clip(
-                0.16 + air_restoration_factor * 1.08 + closure_repair_factor * 0.36,
+                0.16
+                + air_restoration_factor * 1.08
+                + closure_repair_factor * 0.36,
                 0.0,
                 2.25,
             )
@@ -930,12 +975,16 @@ def apply_eq(
     )
     high_band_mask = f_axis >= presence_start_hz
     negative_correction_db = np.maximum(-correction_db, 0.0)
-    presence_deficit_db = float(
-        np.mean(positive_correction_db[presence_mask], dtype=np.float32)
-    ) if np.any(presence_mask) else 0.0
-    high_band_deficit_db = float(
-        np.mean(positive_correction_db[high_band_mask], dtype=np.float32)
-    ) if np.any(high_band_mask) else 0.0
+    presence_deficit_db = (
+        float(np.mean(positive_correction_db[presence_mask], dtype=np.float32))
+        if np.any(presence_mask)
+        else 0.0
+    )
+    high_band_deficit_db = (
+        float(np.mean(positive_correction_db[high_band_mask], dtype=np.float32))
+        if np.any(high_band_mask)
+        else 0.0
+    )
     if closure_repair_factor <= 0.0:
         closure_repair_factor = float(
             np.clip(
@@ -956,7 +1005,9 @@ def apply_eq(
                 1.0,
             )
         )
-    mud_low_hz = float(min(self.high_cut, max(self.bass_transition_hz * 1.15, 160.0)))
+    mud_low_hz = float(
+        min(self.high_cut, max(self.bass_transition_hz * 1.15, 160.0))
+    )
     mud_high_hz = float(
         min(
             self.high_cut,
@@ -976,8 +1027,7 @@ def apply_eq(
         )
         mud_cleanup_factor = float(
             np.clip(
-                (max(mud_excess_db, mud_peak_excess_db * 0.9) - 1.15)
-                / 4.35,
+                (max(mud_excess_db, mud_peak_excess_db * 0.9) - 1.15) / 4.35,
                 0.0,
                 1.0,
             )
@@ -1014,18 +1064,42 @@ def apply_eq(
         f_axis <= low_end_focus_high_hz
     )
     if low_end_restraint_factor <= 0.0:
-        bass_excess_db = float(
-            np.mean(negative_correction_db[f_axis <= self.bass_transition_hz], dtype=np.float32)
-        ) if np.any(f_axis <= self.bass_transition_hz) else 0.0
-        bass_peak_excess_db = float(
-            np.percentile(negative_correction_db[f_axis <= self.bass_transition_hz], 78.0)
-        ) if np.any(f_axis <= self.bass_transition_hz) else 0.0
-        low_end_focus_excess_db = float(
-            np.mean(negative_correction_db[low_end_focus_mask], dtype=np.float32)
-        ) if np.any(low_end_focus_mask) else 0.0
-        low_end_focus_peak_excess_db = float(
-            np.percentile(negative_correction_db[low_end_focus_mask], 80.0)
-        ) if np.any(low_end_focus_mask) else 0.0
+        bass_excess_db = (
+            float(
+                np.mean(
+                    negative_correction_db[f_axis <= self.bass_transition_hz],
+                    dtype=np.float32,
+                )
+            )
+            if np.any(f_axis <= self.bass_transition_hz)
+            else 0.0
+        )
+        bass_peak_excess_db = (
+            float(
+                np.percentile(
+                    negative_correction_db[f_axis <= self.bass_transition_hz],
+                    78.0,
+                )
+            )
+            if np.any(f_axis <= self.bass_transition_hz)
+            else 0.0
+        )
+        low_end_focus_excess_db = (
+            float(
+                np.mean(
+                    negative_correction_db[low_end_focus_mask], dtype=np.float32
+                )
+            )
+            if np.any(low_end_focus_mask)
+            else 0.0
+        )
+        low_end_focus_peak_excess_db = (
+            float(
+                np.percentile(negative_correction_db[low_end_focus_mask], 80.0)
+            )
+            if np.any(low_end_focus_mask)
+            else 0.0
+        )
         low_end_restraint_factor = float(
             np.clip(
                 (
@@ -1056,7 +1130,9 @@ def apply_eq(
                 1.0,
             )
         )
-    harsh_low_hz = float(min(self.high_cut, max(presence_start_hz * 1.08, 2600.0)))
+    harsh_low_hz = float(
+        min(self.high_cut, max(presence_start_hz * 1.08, 2600.0))
+    )
     harsh_high_hz = float(
         min(
             self.high_cut,
@@ -1074,17 +1150,25 @@ def apply_eq(
             max(sibilance_low_hz + 1.0, min(self.high_cut, 9200.0)),
         )
     )
-    sibilance_mask = (f_axis >= sibilance_low_hz) & (f_axis <= sibilance_high_hz)
+    sibilance_mask = (f_axis >= sibilance_low_hz) & (
+        f_axis <= sibilance_high_hz
+    )
     if harshness_restraint_factor <= 0.0:
-        harsh_excess_db = float(
-            np.mean(negative_correction_db[harsh_mask], dtype=np.float32)
-        ) if np.any(harsh_mask) else 0.0
-        harsh_peak_excess_db = float(
-            np.percentile(negative_correction_db[harsh_mask], 82.0)
-        ) if np.any(harsh_mask) else 0.0
-        sibilance_peak_excess_db = float(
-            np.percentile(negative_correction_db[sibilance_mask], 78.0)
-        ) if np.any(sibilance_mask) else 0.0
+        harsh_excess_db = (
+            float(np.mean(negative_correction_db[harsh_mask], dtype=np.float32))
+            if np.any(harsh_mask)
+            else 0.0
+        )
+        harsh_peak_excess_db = (
+            float(np.percentile(negative_correction_db[harsh_mask], 82.0))
+            if np.any(harsh_mask)
+            else 0.0
+        )
+        sibilance_peak_excess_db = (
+            float(np.percentile(negative_correction_db[sibilance_mask], 78.0))
+            if np.any(sibilance_mask)
+            else 0.0
+        )
         harshness_restraint_factor = float(
             np.clip(
                 (
@@ -1143,7 +1227,12 @@ def apply_eq(
         1.0,
     )
     presence_span_denominator = max(
-        float(np.log2(max(self.treble_transition_hz, reference_hz + 1.0) / reference_hz)),
+        float(
+            np.log2(
+                max(self.treble_transition_hz, reference_hz + 1.0)
+                / reference_hz
+            )
+        ),
         1e-6,
     )
     presence_shape = np.clip(
@@ -1153,17 +1242,19 @@ def apply_eq(
         1.0,
     )
     presence_shape = np.clip(presence_shape - high_shape * 0.65, 0.0, 1.0)
-    mud_center_hz = float(min(self.high_cut, max(self.bass_transition_hz * 1.9, 280.0)))
-    mud_high_shape_hz = float(min(self.high_cut, max(mud_center_hz * 1.85, 620.0)))
+    mud_center_hz = float(
+        min(self.high_cut, max(self.bass_transition_hz * 1.9, 280.0))
+    )
+    mud_high_shape_hz = float(
+        min(self.high_cut, max(mud_center_hz * 1.85, 620.0))
+    )
     mud_rise_denominator = max(
         float(np.log2(max(mud_center_hz, mud_low_hz + 1.0) / mud_low_hz)),
         1e-6,
     )
     mud_fall_denominator = max(
         float(
-            np.log2(
-                max(mud_high_shape_hz, mud_center_hz + 1.0) / mud_center_hz
-            )
+            np.log2(max(mud_high_shape_hz, mud_center_hz + 1.0) / mud_center_hz)
         ),
         1e-6,
     )
@@ -1219,7 +1310,9 @@ def apply_eq(
         1.0,
     )
     low_end_focus_fall_shape = np.clip(
-        np.log2(low_end_focus_high_hz / np.maximum(f_axis, low_end_focus_center_hz))
+        np.log2(
+            low_end_focus_high_hz / np.maximum(f_axis, low_end_focus_center_hz)
+        )
         / low_end_focus_fall_denominator,
         0.0,
         1.0,
@@ -1232,7 +1325,7 @@ def apply_eq(
         1.0,
     )
     low_end_restraint_shape = np.clip(
-        np.maximum(low_shape * 0.42, low_end_focus_shape),
+        np.maximum(low_shape * 0.42, low_end_focus_shape + mud_shape * 0.02),
         0.0,
         1.0,
     )
@@ -1247,7 +1340,9 @@ def apply_eq(
         1e-6,
     )
     harsh_fall_denominator = max(
-        float(np.log2(max(harsh_high_hz, harsh_center_hz + 1.0) / harsh_center_hz)),
+        float(
+            np.log2(max(harsh_high_hz, harsh_center_hz + 1.0) / harsh_center_hz)
+        ),
         1e-6,
     )
     harsh_rise_shape = np.clip(
@@ -1272,14 +1367,27 @@ def apply_eq(
     sibilance_shape = np.clip(
         np.log2(np.maximum(f_axis, sibilance_low_hz) / sibilance_low_hz)
         / max(
-            float(np.log2(max(sibilance_high_hz, sibilance_low_hz + 1.0) / sibilance_low_hz)),
+            float(
+                np.log2(
+                    max(sibilance_high_hz, sibilance_low_hz + 1.0)
+                    / sibilance_low_hz
+                )
+            ),
             1e-6,
         ),
         0.0,
         1.0,
     )
     sibilance_shape = np.clip(
-        sibilance_shape * (1.0 - np.clip((f_axis - sibilance_high_hz) / max(sibilance_high_hz, 1.0), 0.0, 1.0)),
+        sibilance_shape
+        * (
+            1.0
+            - np.clip(
+                (f_axis - sibilance_high_hz) / max(sibilance_high_hz, 1.0),
+                0.0,
+                1.0,
+            )
+        ),
         0.0,
         1.0,
     )
@@ -1290,7 +1398,12 @@ def apply_eq(
         )
     )
     closed_top_span_denominator = max(
-        float(np.log2(max(self.high_cut, closed_top_start_hz + 1.0) / closed_top_start_hz)),
+        float(
+            np.log2(
+                max(self.high_cut, closed_top_start_hz + 1.0)
+                / closed_top_start_hz
+            )
+        ),
         1e-6,
     )
     closed_top_ramp = np.clip(
@@ -1316,46 +1429,45 @@ def apply_eq(
         )
     )
     air_shelf_shape = np.clip(high_shape + presence_shape * 0.42, 0.0, 1.0)
-    correction_db += low_shape * body_restoration_factor * (
-        0.6 * (1.0 - low_end_restraint_factor * 0.9)
-    )
-    correction_db -= low_end_restraint_shape * low_end_restraint_factor * (
-        1.02
-        + mud_cleanup_factor * 0.5
-        + closure_repair_factor * 0.22
+    correction_db += (
+        low_shape
+        * body_restoration_factor
+        * (0.6 * (1.0 - low_end_restraint_factor * 0.9))
     )
     correction_db -= (
         low_end_restraint_shape
-        * legacy_tonal_rebalance_factor
-        * 0.18
+        * low_end_restraint_factor
+        * (1.02 + mud_cleanup_factor * 0.5 + closure_repair_factor * 0.22)
     )
-    correction_db -= mud_shape * mud_cleanup_factor * (
-        1.55
-        + body_restoration_factor * 0.35
-        + closure_repair_factor * 0.3
+    correction_db -= (
+        low_end_restraint_shape * legacy_tonal_rebalance_factor * 0.18
+    )
+    correction_db -= (
+        mud_shape
+        * mud_cleanup_factor
+        * (1.55 + body_restoration_factor * 0.35 + closure_repair_factor * 0.3)
     )
     correction_db += presence_shape * closure_repair_factor * 0.95
     correction_db += high_shape * air_restoration_factor * 1.1
     correction_db += high_shape * closure_repair_factor * 0.55
     correction_db += air_shelf_shape * treble_repair_factor * 0.42
     correction_db += high_shape * legacy_tonal_rebalance_factor * 0.24
+    correction_db += air_shelf_shape * legacy_tonal_rebalance_factor * 0.46
     correction_db += (
-        air_shelf_shape
-        * legacy_tonal_rebalance_factor
-        * 0.46
-    )
-    correction_db += closed_top_shape * closed_top_end_repair_factor * (
-        0.88 + legacy_tonal_rebalance_factor * 0.16
+        closed_top_shape
+        * closed_top_end_repair_factor
+        * (0.88 + legacy_tonal_rebalance_factor * 0.16)
     )
     correction_db += air_shelf_shape * closed_top_end_repair_factor * 0.24
-    correction_db -= harshness_shape * harshness_restraint_factor * (
-        0.9
-        + treble_repair_factor * 0.62
-        + closure_repair_factor * 0.22
+    correction_db -= (
+        harshness_shape
+        * harshness_restraint_factor
+        * (0.9 + treble_repair_factor * 0.62 + closure_repair_factor * 0.22)
     )
-    correction_db -= sibilance_shape * harshness_restraint_factor * (
-        0.18
-        + air_restoration_factor * 0.16
+    correction_db -= (
+        sibilance_shape
+        * harshness_restraint_factor
+        * (0.18 + air_restoration_factor * 0.16)
     )
 
     correction_db[0], correction_db[-1] = 0.0, 0.0

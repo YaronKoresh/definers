@@ -291,13 +291,17 @@ def _apply_linear_export_ceiling(
 def _decoded_peak_excess_db(
     verification_result: DeliveryVerificationResult,
 ) -> float | None:
-    decoded_metrics = getattr(verification_result.report, "decoded_metrics", None)
+    decoded_metrics = getattr(
+        verification_result.report, "decoded_metrics", None
+    )
     decoded_limit_dbfs = verification_result.profile.decoded_true_peak_dbfs
     if decoded_metrics is None or decoded_limit_dbfs is None:
         return None
 
     decoded_true_peak_dbfs = getattr(decoded_metrics, "true_peak_dbfs", None)
-    if decoded_true_peak_dbfs is None or not np.isfinite(decoded_true_peak_dbfs):
+    if decoded_true_peak_dbfs is None or not np.isfinite(
+        decoded_true_peak_dbfs
+    ):
         return None
 
     return float(decoded_true_peak_dbfs - float(decoded_limit_dbfs))
@@ -427,7 +431,9 @@ def save_verified_audio(
         attenuation_db = float(decoded_peak_excess_db + 0.1)
         attenuation_linear = float(10.0 ** (-attenuation_db / 20.0))
         attenuated_signal = working_signal * attenuation_linear
-        attenuated_signal = _apply_linear_export_ceiling(attenuated_signal, ceil_db)
+        attenuated_signal = _apply_linear_export_ceiling(
+            attenuated_signal, ceil_db
+        )
         if np.allclose(attenuated_signal, working_signal, atol=1e-8, rtol=0.0):
             break
         working_signal = attenuated_signal

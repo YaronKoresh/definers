@@ -356,7 +356,9 @@ def test_write_mastering_report_serializes_json(tmp_path: Path):
         post_clamp_true_peak_dbfs=-0.2,
         headroom_recovery_gain_db=0.2,
         headroom_recovery_mode="makeup_only",
-        headroom_recovery_failure_reasons=("loudness_already_within_tolerance",),
+        headroom_recovery_failure_reasons=(
+            "loudness_already_within_tolerance",
+        ),
     )
     destination = tmp_path / "mastering-report.json"
 

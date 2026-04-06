@@ -62,9 +62,7 @@ class GuiProjectStarter:
         if importer is None:
             from importlib import import_module as importer
 
-        return importer("definers.presentation.gui_entrypoints").start(
-            project
-        )
+        return importer("definers.presentation.gui_entrypoints").start(project)
 
 
 get_gui_project_names = GuiProjectStarter.get_gui_project_names

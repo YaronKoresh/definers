@@ -5,7 +5,6 @@ from typing import Any, ClassVar
 
 import numpy as np
 
-
 _PRESET_MACRO_DEFAULTS: dict[str, dict[str, float]] = {
     "balanced": {
         "bass": 0.5,
@@ -642,7 +641,9 @@ class SmartMasteringConfig:
         object.__setattr__(self, "delivery_profile", delivery_profile)
         object.__setattr__(self, "resampling_target", int(resampling_target))
         object.__setattr__(self, "smoothing_fraction", smoothing_fraction)
-        object.__setattr__(self, "correction_strength", float(correction_strength))
+        object.__setattr__(
+            self, "correction_strength", float(correction_strength)
+        )
         object.__setattr__(self, "analysis_low_hz", float(analysis_low_hz))
         object.__setattr__(
             self,
@@ -878,26 +879,21 @@ class SmartMasteringConfig:
             return self._resolve_low_end_mono_tightening()
 
         spec = self._derived_field_specs[field_name]
-        if field_name == "intensity" and self._band_intensity_override is not None:
+        if (
+            field_name == "intensity"
+            and self._band_intensity_override is not None
+        ):
             return float(np.clip(self._band_intensity_override, 0.25, 2.5))
 
         bass, volume, effects = self._macro_vector()
         return _apply_numeric_spec(spec, bass, volume, effects)
 
     def _resolve_delivery_decoded_true_peak_dbfs(self) -> float | None:
-        if (
-            self.volume < 0.9
-            or self.effects > 0.3
-            or self.bass < 0.75
-        ):
+        if self.volume < 0.9 or self.effects > 0.3 or self.bass < 0.75:
             return None
         loudness_pressure = float(np.clip((self.volume - 0.9) / 0.1, 0.0, 1.0))
-        bass_pressure = float(
-            np.clip((self.bass - 0.75) / 0.25, 0.0, 1.0)
-        )
-        effect_restraint = float(
-            np.clip((0.3 - self.effects) / 0.3, 0.0, 1.0)
-        )
+        bass_pressure = float(np.clip((self.bass - 0.75) / 0.25, 0.0, 1.0))
+        effect_restraint = float(np.clip((0.3 - self.effects) / 0.3, 0.0, 1.0))
         resolved = -0.3 - loudness_pressure * 0.45
         resolved -= bass_pressure * 0.1 + effect_restraint * 0.15
         return float(np.clip(resolved, -1.0, -0.3))

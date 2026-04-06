@@ -83,6 +83,11 @@ def _install_optional_module_alias(
 def install_optional_module_aliases() -> None:
     _install_optional_module_alias("cv2", "opencv_compat")
     _install_optional_module_alias("datasets", "datasets_compat")
+    _install_optional_module_alias(
+        "googledrivedownloader", "googledrivedownloader_compat"
+    )
+    _install_optional_module_alias("playwright", "playwright_compat")
+    _install_optional_module_alias("refiners", "refiners_compat")
 
 
 __version__ = _resolve_version()
@@ -90,6 +95,7 @@ sox = load_sox_module()
 install_optional_module_aliases()
 
 _LAZY_SUBMODULES = {
+    "application_ml",
     "audio",
     "cuda",
     "image",
@@ -97,6 +103,7 @@ _LAZY_SUBMODULES = {
     "media",
     "ml",
     "platform",
+    "system",
     "text",
 }
 

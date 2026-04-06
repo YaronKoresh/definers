@@ -76,7 +76,10 @@ def test_resolve_stem_mastering_plan_clips_exciter_mix_and_staggers_drive():
     assert drums.overrides["exciter_mix"] <= 1.0
     assert vocals.overrides["exciter_mix"] <= 1.0
     assert piano.overrides["exciter_mix"] <= 1.0
-    assert vocals.overrides["exciter_max_drive"] < drums.overrides["exciter_max_drive"]
+    assert (
+        vocals.overrides["exciter_max_drive"]
+        < drums.overrides["exciter_max_drive"]
+    )
     assert "exciter_max_drive" not in piano.overrides
 
 
@@ -88,22 +91,31 @@ def test_mix_stem_layers_aligns_sample_rates_and_applies_headroom():
         ),
         "vocals": (
             8000,
-            np.array([[0.7, 0.7, 0.7, 0.7], [0.7, 0.7, 0.7, 0.7]], dtype=np.float32),
+            np.array(
+                [[0.7, 0.7, 0.7, 0.7], [0.7, 0.7, 0.7, 0.7]], dtype=np.float32
+            ),
         ),
     }
 
     mixed_sr, mixed_signal = MASTERING_STEMS_MODULE.mix_stem_layers(
         stems,
         mix_headroom_db=6.0,
-        resample_fn=lambda y, sr, target_sr: np.repeat(y, target_sr // sr, axis=-1),
+        resample_fn=lambda y, sr, target_sr: np.repeat(
+            y, target_sr // sr, axis=-1
+        ),
     )
 
     assert mixed_sr == 8000
     assert mixed_signal.shape == (2, 4)
-    assert float(np.max(np.abs(mixed_signal))) <= float(10.0 ** (-6.0 / 20.0)) + 1e-6
+    assert (
+        float(np.max(np.abs(mixed_signal)))
+        <= float(10.0 ** (-6.0 / 20.0)) + 1e-6
+    )
 
 
-def test_process_stem_layers_processes_each_stem_and_cleans_temp_dir(tmp_path: Path):
+def test_process_stem_layers_processes_each_stem_and_cleans_temp_dir(
+    tmp_path: Path,
+):
     base = CONFIG_MODULE.SmartMasteringConfig.balanced()
     processed_calls: list[tuple[int, dict[str, object]]] = []
     deleted_paths: list[str] = []
@@ -197,12 +209,16 @@ def test_process_stem_layers_preserves_output_order_when_threads_finish_out_of_o
         ),
         read_audio_fn=lambda path: (
             8000,
-            np.full((2, 32), 0.2 if path == "drums.wav" else 0.1, dtype=np.float32),
+            np.full(
+                (2, 32), 0.2 if path == "drums.wav" else 0.1, dtype=np.float32
+            ),
         ),
         delete_fn=lambda path: None,
         mix_headroom_db=3.0,
         mastered_stems_output_dir=str(stems_dir),
-        save_audio_fn=lambda **kwargs: saved_stems.append(kwargs["destination_path"]),
+        save_audio_fn=lambda **kwargs: saved_stems.append(
+            kwargs["destination_path"]
+        ),
     )
 
     assert saved_stems == [
@@ -304,10 +320,18 @@ def test_resolve_stem_tone_layers_varies_by_role():
     base = CONFIG_MODULE.SmartMasteringConfig.balanced()
 
     bass_layers = MASTERING_STEMS_MODULE._resolve_stem_tone_layers("bass", base)
-    vocal_layers = MASTERING_STEMS_MODULE._resolve_stem_tone_layers("vocals", base)
-    guitar_layers = MASTERING_STEMS_MODULE._resolve_stem_tone_layers("guitar", base)
-    piano_layers = MASTERING_STEMS_MODULE._resolve_stem_tone_layers("piano", base)
-    other_layers = MASTERING_STEMS_MODULE._resolve_stem_tone_layers("other", base)
+    vocal_layers = MASTERING_STEMS_MODULE._resolve_stem_tone_layers(
+        "vocals", base
+    )
+    guitar_layers = MASTERING_STEMS_MODULE._resolve_stem_tone_layers(
+        "guitar", base
+    )
+    piano_layers = MASTERING_STEMS_MODULE._resolve_stem_tone_layers(
+        "piano", base
+    )
+    other_layers = MASTERING_STEMS_MODULE._resolve_stem_tone_layers(
+        "other", base
+    )
 
     assert tuple(semitones for semitones, _mix in bass_layers) == (-0.07, 12.0)
     assert tuple(semitones for semitones, _mix in vocal_layers) == (
@@ -345,7 +369,9 @@ def test_apply_stem_tone_enrichment_skips_drums_by_default():
         8000,
         "drums",
         base,
-        pitch_shift_fn=lambda channel, sample_rate, semitones: np.zeros_like(channel),
+        pitch_shift_fn=lambda channel, sample_rate, semitones: np.zeros_like(
+            channel
+        ),
     )
 
     assert np.array_equal(enriched, signal)

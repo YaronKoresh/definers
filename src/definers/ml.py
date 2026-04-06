@@ -103,7 +103,6 @@ try:
     from definers.application_data.loaders import load_as_numpy
     from definers.application_data.vectorizers import (
         create_vectorizer,
-        
     )
 except Exception:
     create_vectorizer = None
@@ -2159,6 +2158,15 @@ class AutoTrainer:
         text = str(value).strip()
         return [text] if text else None
 
+    def _normalize_optional_text(self, name: str, value):
+        value = self._coerce_reference(value)
+        if value is None:
+            return None
+        text = str(value).strip()
+        if not text:
+            return None
+        return _validate_str_param(name, text)
+
     def _normalize_selected_rows(self, value):
         value = self._coerce_reference(value)
         if not check_parameter(value):
@@ -2176,6 +2184,8 @@ class AutoTrainer:
         label_columns=None,
         drop=None,
         select=None,
+        order_by=None,
+        stratify=None,
         validation_split: float | None = None,
         test_split: float | None = None,
         batch_size: int | None = None,
@@ -2211,6 +2221,8 @@ class AutoTrainer:
             test_split=active_test_split,
             label_columns=normalized_label_columns,
             drop_columns=normalized_drop,
+            order_by=self._normalize_optional_text("order_by", order_by),
+            stratify=self._normalize_optional_text("stratify", stratify),
             selected_rows=normalized_select,
             resume_from=self._coerce_reference(resume_from),
             is_remote_dataset=self._is_remote_dataset(source),
@@ -2331,7 +2343,7 @@ class AutoTrainer:
             catch(error)
             return None
         self.model = load_serialized_model(safe_model_path, "joblib")
-        self.model_path = safe_model_path
+        self.model_path = str(resolved_model_path)
         return self.model
 
     def save(self, model_path: str | None = None):

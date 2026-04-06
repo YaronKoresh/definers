@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+import os
+from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-import os
 from pathlib import Path
-from typing import Callable, Mapping, Sequence
 
 import numpy as np
 
@@ -97,7 +97,9 @@ def _measure_active_stem_level_dbfs(signal: np.ndarray) -> float:
         )
     )
     active_mask = mono_energy >= activity_threshold
-    active_signal = stereo_signal[:, active_mask] if np.any(active_mask) else stereo_signal
+    active_signal = (
+        stereo_signal[:, active_mask] if np.any(active_mask) else stereo_signal
+    )
     rms_level = float(
         np.sqrt(
             np.mean(
@@ -130,7 +132,9 @@ def _apply_stem_mix_balance(
     )
     balanced_signal = stereo_signal * _stem_mix_gain_linear(applied_gain_db)
 
-    peak = float(np.max(np.abs(balanced_signal))) if balanced_signal.size else 0.0
+    peak = (
+        float(np.max(np.abs(balanced_signal))) if balanced_signal.size else 0.0
+    )
     if peak > 0.98:
         balanced_signal = balanced_signal * (0.98 / peak)
 
@@ -149,7 +153,9 @@ def _prepare_mixed_stem_layers(
 
     resolved_sample_rate = int(
         target_sample_rate
-        or max(int(sample_rate) for sample_rate, _signal in stem_layers.values())
+        or max(
+            int(sample_rate) for sample_rate, _signal in stem_layers.values()
+        )
     )
     prepared_layers: dict[str, tuple[int, np.ndarray]] = {}
     max_length = 0
@@ -198,7 +204,11 @@ def _prepare_mixed_stem_layers(
                 for stem_name, (sample_rate, signal) in aligned_layers.items()
             }
 
-    return resolved_sample_rate, aligned_layers, mixed.astype(np.float32, copy=False)
+    return (
+        resolved_sample_rate,
+        aligned_layers,
+        mixed.astype(np.float32, copy=False),
+    )
 
 
 def _save_mastered_stem_layers(
@@ -218,7 +228,8 @@ def _save_mastered_stem_layers(
     for stem_name, (sample_rate, signal) in stem_layers.items():
         save_audio_fn(
             destination_path=str(
-                resolved_output_dir / f"{stem_name}_mastered.{normalized_format}"
+                resolved_output_dir
+                / f"{stem_name}_mastered.{normalized_format}"
             ),
             audio_signal=_as_stereo(signal),
             sample_rate=int(sample_rate),
@@ -236,7 +247,9 @@ def _resolve_stem_tone_layers(
         return ()
 
     mix_amount = float(
-        np.clip(getattr(base_config, "stem_tone_enrichment_mix", 0.08), 0.0, 0.24)
+        np.clip(
+            getattr(base_config, "stem_tone_enrichment_mix", 0.08), 0.0, 0.24
+        )
     )
     if mix_amount <= 0.0:
         return ()
@@ -285,7 +298,9 @@ def _resolve_parallel_stem_workers(stem_count: int) -> int:
     return max(1, min(stem_count, cpu_count, 3))
 
 
-def _load_pitch_shift_fn() -> Callable[[np.ndarray, int, float], np.ndarray] | None:
+def _load_pitch_shift_fn() -> (
+    Callable[[np.ndarray, int, float], np.ndarray] | None
+):
     try:
         import librosa
     except Exception:
@@ -307,7 +322,8 @@ def _apply_stem_tone_enrichment(
     stem_name: str,
     base_config: SmartMasteringConfig,
     *,
-    pitch_shift_fn: Callable[[np.ndarray, int, float], np.ndarray] | None = None,
+    pitch_shift_fn: Callable[[np.ndarray, int, float], np.ndarray]
+    | None = None,
 ) -> np.ndarray:
     stereo_signal = _as_stereo(signal)
     if stereo_signal.shape[-1] < 128:
@@ -321,14 +337,18 @@ def _apply_stem_tone_enrichment(
         return stereo_signal
 
     enriched = stereo_signal.astype(np.float32, copy=True)
-    dry_peak = float(np.max(np.abs(stereo_signal))) if stereo_signal.size else 0.0
+    dry_peak = (
+        float(np.max(np.abs(stereo_signal))) if stereo_signal.size else 0.0
+    )
 
     for semitones, mix in tone_layers:
         if mix <= 0.0:
             continue
         shifted_channels = []
         for channel in stereo_signal:
-            shifted_channel = resolved_pitch_shift_fn(channel, sample_rate, semitones)
+            shifted_channel = resolved_pitch_shift_fn(
+                channel, sample_rate, semitones
+            )
             shifted_channels.append(
                 _match_signal_length(shifted_channel, stereo_signal.shape[-1])
             )
@@ -386,18 +406,26 @@ def resolve_stem_mastering_plan(
         shared_overrides.update(
             {
                 "drive_db": shared_drive_db + 0.35,
-                "bass_boost_db_per_oct": base_config.bass_boost_db_per_oct + 0.22,
-                "treble_boost_db_per_oct": base_config.treble_boost_db_per_oct + 0.18,
-                "exciter_mix": float(np.clip(base_config.exciter_mix + 0.08, 0.0, 1.0)),
+                "bass_boost_db_per_oct": base_config.bass_boost_db_per_oct
+                + 0.22,
+                "treble_boost_db_per_oct": base_config.treble_boost_db_per_oct
+                + 0.18,
+                "exciter_mix": float(
+                    np.clip(base_config.exciter_mix + 0.08, 0.0, 1.0)
+                ),
                 "exciter_max_drive": base_config.exciter_max_drive + 0.45,
                 "exciter_high_frequency_cutoff_hz": None
                 if base_config.exciter_high_frequency_cutoff_hz is None
-                else max(base_config.exciter_high_frequency_cutoff_hz - 700.0, 3500.0),
+                else max(
+                    base_config.exciter_high_frequency_cutoff_hz - 700.0, 3500.0
+                ),
                 "limiter_recovery_style": "tight",
                 "low_end_mono_tightening": "firm",
                 "low_end_mono_tightening_amount": 0.95,
                 "micro_dynamics_strength": float(
-                    np.clip(base_config.micro_dynamics_strength * 0.7, 0.0, 0.18)
+                    np.clip(
+                        base_config.micro_dynamics_strength * 0.7, 0.0, 0.18
+                    )
                 ),
                 "stereo_width": float(np.clip(shared_width, 0.98, 1.1)),
             }
@@ -407,10 +435,17 @@ def resolve_stem_mastering_plan(
         shared_overrides.update(
             {
                 "drive_db": shared_drive_db + 0.12,
-                "bass_boost_db_per_oct": base_config.bass_boost_db_per_oct + 0.35,
-                "treble_boost_db_per_oct": max(base_config.treble_boost_db_per_oct - 0.4, 0.0),
-                "exciter_mix": float(np.clip(base_config.exciter_mix * 0.62, 0.0, 1.0)),
-                "exciter_max_drive": max(base_config.exciter_max_drive * 0.82, 0.5),
+                "bass_boost_db_per_oct": base_config.bass_boost_db_per_oct
+                + 0.35,
+                "treble_boost_db_per_oct": max(
+                    base_config.treble_boost_db_per_oct - 0.4, 0.0
+                ),
+                "exciter_mix": float(
+                    np.clip(base_config.exciter_mix * 0.62, 0.0, 1.0)
+                ),
+                "exciter_max_drive": max(
+                    base_config.exciter_max_drive * 0.82, 0.5
+                ),
                 "stereo_width": 0.94,
                 "mono_bass_hz": max(base_config.mono_bass_hz, 145.0),
                 "stereo_tone_variation_db": 0.0,
@@ -419,7 +454,9 @@ def resolve_stem_mastering_plan(
                 "low_end_mono_tightening": "firm",
                 "low_end_mono_tightening_amount": 1.0,
                 "micro_dynamics_strength": float(
-                    np.clip(base_config.micro_dynamics_strength * 0.55, 0.0, 0.12)
+                    np.clip(
+                        base_config.micro_dynamics_strength * 0.55, 0.0, 0.12
+                    )
                 ),
             }
         )
@@ -428,15 +465,24 @@ def resolve_stem_mastering_plan(
         shared_overrides.update(
             {
                 "drive_db": shared_drive_db + 0.08,
-                "treble_boost_db_per_oct": base_config.treble_boost_db_per_oct + 0.2,
-                "bass_boost_db_per_oct": max(base_config.bass_boost_db_per_oct - 0.12, 0.0),
-                "exciter_mix": float(np.clip(base_config.exciter_mix + 0.1, 0.0, 1.0)),
+                "treble_boost_db_per_oct": base_config.treble_boost_db_per_oct
+                + 0.2,
+                "bass_boost_db_per_oct": max(
+                    base_config.bass_boost_db_per_oct - 0.12, 0.0
+                ),
+                "exciter_mix": float(
+                    np.clip(base_config.exciter_mix + 0.1, 0.0, 1.0)
+                ),
                 "exciter_max_drive": base_config.exciter_max_drive + 0.2,
                 "stereo_width": float(np.clip(shared_width + 0.1, 1.0, 1.3)),
                 "micro_dynamics_strength": float(
-                    np.clip(base_config.micro_dynamics_strength + 0.05, 0.0, 0.32)
+                    np.clip(
+                        base_config.micro_dynamics_strength + 0.05, 0.0, 0.32
+                    )
                 ),
-                "start_treble_boost_hz": max(base_config.start_treble_boost_hz - 250.0, 2200.0),
+                "start_treble_boost_hz": max(
+                    base_config.start_treble_boost_hz - 250.0, 2200.0
+                ),
                 "low_end_mono_tightening": "gentle",
                 "low_end_mono_tightening_amount": 0.45,
             }
@@ -446,11 +492,16 @@ def resolve_stem_mastering_plan(
         shared_overrides.update(
             {
                 "drive_db": shared_drive_db + 0.05,
-                "treble_boost_db_per_oct": base_config.treble_boost_db_per_oct + 0.12,
-                "exciter_mix": float(np.clip(base_config.exciter_mix + 0.05, 0.0, 1.0)),
+                "treble_boost_db_per_oct": base_config.treble_boost_db_per_oct
+                + 0.12,
+                "exciter_mix": float(
+                    np.clip(base_config.exciter_mix + 0.05, 0.0, 1.0)
+                ),
                 "stereo_width": float(np.clip(shared_width + 0.05, 0.96, 1.24)),
                 "micro_dynamics_strength": float(
-                    np.clip(base_config.micro_dynamics_strength + 0.02, 0.0, 0.25)
+                    np.clip(
+                        base_config.micro_dynamics_strength + 0.02, 0.0, 0.25
+                    )
                 ),
                 "low_end_mono_tightening": "gentle",
                 "low_end_mono_tightening_amount": 0.35,
@@ -461,11 +512,16 @@ def resolve_stem_mastering_plan(
         shared_overrides.update(
             {
                 "drive_db": shared_drive_db + 0.03,
-                "treble_boost_db_per_oct": base_config.treble_boost_db_per_oct + 0.1,
-                "exciter_mix": float(np.clip(base_config.exciter_mix + 0.04, 0.0, 1.0)),
+                "treble_boost_db_per_oct": base_config.treble_boost_db_per_oct
+                + 0.1,
+                "exciter_mix": float(
+                    np.clip(base_config.exciter_mix + 0.04, 0.0, 1.0)
+                ),
                 "stereo_width": float(np.clip(shared_width + 0.04, 0.98, 1.24)),
                 "micro_dynamics_strength": float(
-                    np.clip(base_config.micro_dynamics_strength + 0.03, 0.0, 0.28)
+                    np.clip(
+                        base_config.micro_dynamics_strength + 0.03, 0.0, 0.28
+                    )
                 ),
                 "low_end_mono_tightening": "gentle",
                 "low_end_mono_tightening_amount": 0.3,
@@ -476,12 +532,18 @@ def resolve_stem_mastering_plan(
         shared_overrides.update(
             {
                 "drive_db": shared_drive_db + 0.05,
-                "bass_boost_db_per_oct": base_config.bass_boost_db_per_oct + 0.08,
-                "treble_boost_db_per_oct": base_config.treble_boost_db_per_oct + 0.12,
-                "exciter_mix": float(np.clip(base_config.exciter_mix + 0.05, 0.0, 1.0)),
+                "bass_boost_db_per_oct": base_config.bass_boost_db_per_oct
+                + 0.08,
+                "treble_boost_db_per_oct": base_config.treble_boost_db_per_oct
+                + 0.12,
+                "exciter_mix": float(
+                    np.clip(base_config.exciter_mix + 0.05, 0.0, 1.0)
+                ),
                 "stereo_width": float(np.clip(shared_width + 0.08, 1.0, 1.28)),
                 "micro_dynamics_strength": float(
-                    np.clip(base_config.micro_dynamics_strength + 0.02, 0.0, 0.25)
+                    np.clip(
+                        base_config.micro_dynamics_strength + 0.02, 0.0, 0.25
+                    )
                 ),
                 "low_end_mono_tightening": "balanced",
                 "low_end_mono_tightening_amount": 0.55,
@@ -516,7 +578,9 @@ def process_stem_layers(
     *,
     base_config: SmartMasteringConfig,
     base_mastering_kwargs: Mapping[str, object],
-    process_stem_fn: Callable[[np.ndarray, int, dict[str, object]], tuple[int, np.ndarray]],
+    process_stem_fn: Callable[
+        [np.ndarray, int, dict[str, object]], tuple[int, np.ndarray]
+    ],
     separate_stems_fn: Callable[..., tuple[dict[str, str], str]],
     read_audio_fn: Callable[[str], tuple[int, np.ndarray]],
     delete_fn: Callable[[str], object],
@@ -525,7 +589,8 @@ def process_stem_layers(
     quality_flags: Sequence[str] = (),
     mix_headroom_db: float = 6.0,
     resample_fn: Callable[[np.ndarray, int, int], np.ndarray] | None = None,
-    pitch_shift_fn: Callable[[np.ndarray, int, float], np.ndarray] | None = None,
+    pitch_shift_fn: Callable[[np.ndarray, int, float], np.ndarray]
+    | None = None,
     save_mastered_stems: bool = True,
     mastered_stems_output_dir: str | None = None,
     save_audio_fn: Callable[..., str | None] | None = None,
@@ -573,9 +638,7 @@ def process_stem_layers(
             model_name=model_name,
             shifts=shifts,
             quality_flags=tuple(
-                str(flag).strip()
-                for flag in quality_flags
-                if str(flag).strip()
+                str(flag).strip() for flag in quality_flags if str(flag).strip()
             ),
         )
         if not stem_paths:
@@ -606,10 +669,12 @@ def process_stem_layers(
                     ].result()
                     mastered_layers[normalized_name] = processed_result
 
-        mixed_sample_rate, aligned_layers, mixed_signal = _prepare_mixed_stem_layers(
-            mastered_layers,
-            mix_headroom_db=mix_headroom_db,
-            resample_fn=resample_fn,
+        mixed_sample_rate, aligned_layers, mixed_signal = (
+            _prepare_mixed_stem_layers(
+                mastered_layers,
+                mix_headroom_db=mix_headroom_db,
+                resample_fn=resample_fn,
+            )
         )
         if (
             save_mastered_stems

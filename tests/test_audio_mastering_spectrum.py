@@ -78,8 +78,8 @@ def _install_scipy_stub() -> None:
     ndimage_module.maximum_filter1d = lambda values, size, mode="constant": (
         _moving_last_axis(values, size, np.max)
     )
-    ndimage_module.median_filter = lambda values, size, mode="nearest": np.array(
-        values, dtype=np.float32, copy=True
+    ndimage_module.median_filter = lambda values, size, mode="nearest": (
+        np.array(values, dtype=np.float32, copy=True)
     )
     ndimage_module.uniform_filter1d = lambda values, size, mode="constant": (
         _moving_last_axis(values, size, np.mean)
@@ -121,8 +121,8 @@ def _load_mastering_module(package_name: str):
     exciter_module = types.ModuleType(f"{package_name}.effects.exciter")
     exciter_module.apply_exciter = lambda y, *_: y
     mixing_module = types.ModuleType(f"{package_name}.effects.mixing")
-    mixing_module.stereo = (
-        lambda y: y if getattr(y, "ndim", 1) > 1 else np.vstack([y, y])
+    mixing_module.stereo = lambda y: (
+        y if getattr(y, "ndim", 1) > 1 else np.vstack([y, y])
     )
     effects_package.exciter = exciter_module
     effects_package.mixing = mixing_module

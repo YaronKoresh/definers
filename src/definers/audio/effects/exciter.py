@@ -545,10 +545,7 @@ def analyze_exciter(
     )
     requested_mix = float(np.clip(mix, 0.0, 1.0))
     adaptive_mix = float(
-        requested_mix
-        * brightness_guard
-        * transient_guard
-        * density_guard
+        requested_mix * brightness_guard * transient_guard * density_guard
     )
     restoration_mix_floor = float(
         requested_mix

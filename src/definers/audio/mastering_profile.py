@@ -175,7 +175,9 @@ def build_spectral_balance_profile(
 
     bass_mask = safe_freqs <= self.bass_transition_hz
     treble_mask = safe_freqs >= self.treble_transition_hz
-    mud_low_hz = float(min(self.high_cut, max(self.bass_transition_hz * 1.15, 160.0)))
+    mud_low_hz = float(
+        min(self.high_cut, max(self.bass_transition_hz * 1.15, 160.0))
+    )
     mud_high_hz = float(
         min(
             self.high_cut,
@@ -216,8 +218,12 @@ def build_spectral_balance_profile(
             max(self.treble_transition_hz * 0.55, 1800.0),
         )
     )
-    presence_mask = (safe_freqs >= presence_low_hz) & (safe_freqs < air_focus_hz)
-    harsh_low_hz = float(min(self.high_cut, max(presence_low_hz * 1.08, 2600.0)))
+    presence_mask = (safe_freqs >= presence_low_hz) & (
+        safe_freqs < air_focus_hz
+    )
+    harsh_low_hz = float(
+        min(self.high_cut, max(presence_low_hz * 1.08, 2600.0))
+    )
     harsh_high_hz = float(
         min(
             self.high_cut,
@@ -235,7 +241,9 @@ def build_spectral_balance_profile(
             max(sibilance_low_hz + 1.0, min(self.high_cut, 9200.0)),
         )
     )
-    sibilance_mask = (safe_freqs >= sibilance_low_hz) & (safe_freqs <= sibilance_high_hz)
+    sibilance_mask = (safe_freqs >= sibilance_low_hz) & (
+        safe_freqs <= sibilance_high_hz
+    )
     air_mask = safe_freqs >= air_focus_hz
     closed_top_low_hz = float(
         min(
@@ -301,7 +309,9 @@ def build_spectral_balance_profile(
         closed_top_deficit_db = float(
             max(
                 0.0,
-                np.mean(positive_correction_db[closed_top_mask], dtype=np.float32),
+                np.mean(
+                    positive_correction_db[closed_top_mask], dtype=np.float32
+                ),
             )
         )
 
@@ -344,7 +354,9 @@ def build_spectral_balance_profile(
     low_end_focus_excess_db = 0.0
     if np.any(low_end_focus_mask):
         low_end_focus_excess_db = float(
-            np.mean(negative_correction_db[low_end_focus_mask], dtype=np.float32)
+            np.mean(
+                negative_correction_db[low_end_focus_mask], dtype=np.float32
+            )
         )
 
     low_end_focus_peak_excess_db = 0.0
@@ -428,7 +440,9 @@ def build_spectral_balance_profile(
         )
     )
     body_restoration_factor = float(
-        np.clip((bass_deficit_db + dual_end_repair_factor * 3.0) / 10.0, 0.0, 1.0)
+        np.clip(
+            (bass_deficit_db + dual_end_repair_factor * 3.0) / 10.0, 0.0, 1.0
+        )
     )
     rescue_factor = float(
         np.clip(max(mismatch_factor, club_voicing_factor * 0.9), 0.0, 1.0)
@@ -566,11 +580,7 @@ def build_spectral_balance_profile(
                     restoration_factor * 0.74,
                 ),
             )
-            * (
-                0.56
-                + mud_cleanup_factor * 0.22
-                + restoration_factor * 0.12
-            )
+            * (0.56 + mud_cleanup_factor * 0.22 + restoration_factor * 0.12)
             * (1.0 - harshness_restraint_factor * 0.45),
             0.0,
             1.0,

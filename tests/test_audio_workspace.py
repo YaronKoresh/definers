@@ -65,3 +65,7 @@ def test_prepare_audio_workspace_initializes_required_models(monkeypatch):
     ]
     assert system_message["name"] == "Definers Audio Assistant"
     assert "Support Chat" in AUDIO_TOOL_MAP
+    assert "Mastering Studio" in AUDIO_TOOL_MAP
+    assert "Vocal Finishing" in AUDIO_TOOL_MAP
+    assert "Audio Cleanup" in AUDIO_TOOL_MAP
+    assert "Preview & Split" in AUDIO_TOOL_MAP

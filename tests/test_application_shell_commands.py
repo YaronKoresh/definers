@@ -145,9 +145,7 @@ def test_get_known_cli_names_can_exclude_option_flags():
 
 
 def test_coerce_cli_request_uses_namespace_defaults():
-    request = CliRequestCoercer.coerce_cli_request(
-        Namespace(command="start")
-    )
+    request = CliRequestCoercer.coerce_cli_request(Namespace(command="start"))
 
     assert request.project == "chat"
     assert request.position == "bottom"

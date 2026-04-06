@@ -33,9 +33,7 @@ def test_collect_cli_health_snapshot_reports_registry_metrics():
 
 
 def test_validate_cli_health_snapshot_rejects_missing_direct_commands():
-    command_registry = CliCommandRegistry.create_cli_command_registry(
-        ["chat"]
-    )
+    command_registry = CliCommandRegistry.create_cli_command_registry(["chat"])
     snapshot = collect_cli_health_snapshot(
         command_registry=command_registry,
         gui_project_names=("chat", "audio"),

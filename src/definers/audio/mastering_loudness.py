@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import importlib
+import sys
 from dataclasses import asdict, dataclass
 from functools import cache, lru_cache
 from typing import Any
@@ -22,6 +24,7 @@ _DEMAN_HIGH_SHELF_Q = 0.7071752369554193
 _DEMAN_HIGH_SHELF_FC_HZ = 1681.9744509555319
 _DEMAN_HIGH_PASS_Q = 0.5003270373253953
 _DEMAN_HIGH_PASS_FC_HZ = 38.13547087613982
+_REAL_SCIPY_SIGNAL_ATTRS: dict[str, Any] = {}
 
 
 @dataclass(frozen=True, slots=True)
@@ -146,6 +149,100 @@ def _k_weighting_coefficients(
     return high_shelf_b, high_shelf_a, high_pass_b, high_pass_a
 
 
+def _fallback_lfilter(
+    b: np.ndarray,
+    a: np.ndarray,
+    values: np.ndarray,
+    *,
+    axis: int = -1,
+) -> np.ndarray:
+    x = np.asarray(values, dtype=np.float64)
+    if x.size == 0:
+        return np.array(x, copy=True)
+    normalized_axis = axis if axis >= 0 else x.ndim + axis
+    if normalized_axis != x.ndim - 1:
+        x = np.moveaxis(x, normalized_axis, -1)
+    b_array = np.asarray(b, dtype=np.float64)
+    a_array = np.asarray(a, dtype=np.float64)
+    if b_array.size == 0 or a_array.size == 0:
+        return np.array(values, copy=True)
+    a0 = float(a_array[0])
+    if not np.isfinite(a0) or abs(a0) <= 1e-12:
+        raise ValueError("Filter denominator must start with a finite value")
+    if a0 != 1.0:
+        b_array = b_array / a0
+        a_array = a_array / a0
+    order = max(len(a_array), len(b_array))
+    if order == 1:
+        filtered = b_array[0] * x
+        if normalized_axis != x.ndim - 1:
+            filtered = np.moveaxis(filtered, -1, normalized_axis)
+        return filtered
+    b_pad = np.pad(b_array, (0, order - len(b_array)))
+    a_pad = np.pad(a_array, (0, order - len(a_array)))
+    state = np.zeros(x.shape[:-1] + (order - 1,), dtype=np.float64)
+    filtered = np.empty_like(x, dtype=np.float64)
+    for sample_index in range(x.shape[-1]):
+        x_n = x[..., sample_index]
+        y_n = b_pad[0] * x_n + state[..., 0]
+        filtered[..., sample_index] = y_n
+        if order > 2:
+            state[..., :-1] = (
+                state[..., 1:]
+                + b_pad[1:-1] * x_n[..., np.newaxis]
+                - a_pad[1:-1] * y_n[..., np.newaxis]
+            )
+        state[..., -1] = b_pad[-1] * x_n - a_pad[-1] * y_n
+    if normalized_axis != x.ndim - 1:
+        filtered = np.moveaxis(filtered, -1, normalized_axis)
+    return filtered
+
+
+def _load_real_scipy_signal_attr(name: str):
+    cached = _REAL_SCIPY_SIGNAL_ATTRS.get(name)
+    if cached is not None:
+        return cached
+    original_modules = {
+        key: value
+        for key, value in sys.modules.items()
+        if key == "scipy" or key.startswith("scipy.")
+    }
+    try:
+        for key in tuple(original_modules):
+            sys.modules.pop(key, None)
+        real_signal = importlib.import_module("scipy.signal")
+        resolved_attr = getattr(real_signal, name, None)
+        if resolved_attr is not None:
+            _REAL_SCIPY_SIGNAL_ATTRS[name] = resolved_attr
+        return resolved_attr
+    except Exception:
+        return None
+    finally:
+        for key in tuple(sys.modules):
+            if (
+                key == "scipy" or key.startswith("scipy.")
+            ) and key not in original_modules:
+                sys.modules.pop(key, None)
+        sys.modules.update(original_modules)
+
+
+def _safe_lfilter(
+    signal_module: Any,
+    b: np.ndarray,
+    a: np.ndarray,
+    values: np.ndarray,
+    *,
+    axis: int = -1,
+) -> np.ndarray:
+    lfilter = getattr(signal_module, "lfilter", None)
+    if callable(lfilter):
+        return lfilter(b, a, values, axis=axis)
+    real_lfilter = _load_real_scipy_signal_attr("lfilter")
+    if callable(real_lfilter):
+        return real_lfilter(b, a, values, axis=axis)
+    return _fallback_lfilter(b, a, values, axis=axis)
+
+
 def _weighted_power_series(
     y: np.ndarray,
     sr: int,
@@ -156,11 +253,19 @@ def _weighted_power_series(
     high_shelf_b, high_shelf_a, high_pass_b, high_pass_a = (
         _k_weighting_coefficients(sr)
     )
-    weighted = signal_module.lfilter(
-        high_shelf_b, high_shelf_a, channels, axis=-1
+    weighted = _safe_lfilter(
+        signal_module,
+        high_shelf_b,
+        high_shelf_a,
+        channels,
+        axis=-1,
     )
-    weighted = signal_module.lfilter(
-        high_pass_b, high_pass_a, weighted, axis=-1
+    weighted = _safe_lfilter(
+        signal_module,
+        high_pass_b,
+        high_pass_a,
+        weighted,
+        axis=-1,
     )
     channel_weights = _loudness_channel_weights(weighted.shape[0])[
         :, np.newaxis

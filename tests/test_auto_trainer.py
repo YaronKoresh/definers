@@ -191,7 +191,9 @@ class TestAutoTrainer(unittest.TestCase):
             target="label",
             label_columns="label",
             drop="unused",
+            order_by="shuffle",
             select="1-20",
+            stratify="label",
             resume_from="model.joblib",
         )
 
@@ -200,11 +202,14 @@ class TestAutoTrainer(unittest.TestCase):
         self.assertEqual(plan.source_type, "parquet")
         self.assertEqual(plan.label_columns, ("label",))
         self.assertEqual(plan.drop_columns, ("unused",))
+        self.assertEqual(plan.order_by, "shuffle")
+        self.assertEqual(plan.stratify, "label")
         self.assertEqual(plan.selected_rows, "1-20")
         self.assertEqual(plan.resume_from, "model.joblib")
         self.assertIn(
             "Mode: remote-dataset", render_training_plan_markdown(plan)
         )
+        self.assertIn("Order By: shuffle", render_training_plan_markdown(plan))
 
 
 if __name__ == "__main__":

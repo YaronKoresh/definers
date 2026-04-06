@@ -4,7 +4,28 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import types
 from pathlib import Path
+
+
+def _ensure_accelerate_module():
+    try:
+        import accelerate as accelerate_module
+
+        return accelerate_module
+    except ModuleNotFoundError:
+        accelerate_module = types.ModuleType("accelerate")
+
+        class Accelerator:
+            def __init__(self):
+                self.device = "cpu"
+
+        accelerate_module.Accelerator = Accelerator
+        sys.modules.setdefault("accelerate", accelerate_module)
+        return accelerate_module
+
+
+_ensure_accelerate_module()
 
 
 def cuda_toolkit(*, directory_func, permit_func, run_func):

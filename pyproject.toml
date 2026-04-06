@@ -215,6 +215,9 @@ cmd = "python -m compileall -q ."
 [tool.poe.tasks.lint]
 cmd = "ruff check ."
 
+[tool.poe.tasks.check-format]
+cmd = "ruff format --check ."
+
 [tool.poe.tasks.pre-commit]
 cmd = "pre-commit run --all-files"
 

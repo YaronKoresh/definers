@@ -236,7 +236,7 @@ def compute_primary_soft_clip_ratio(self, dynamic_drive_db: float) -> float:
             1.0,
         )
     )
-    drive_soft_clip_push = max(float(dynamic_drive_db), 0.0) * 0.006
+    max(float(dynamic_drive_db), 0.0) * 0.006
     return float(
         np.clip(
             self.limiter_soft_clip_ratio

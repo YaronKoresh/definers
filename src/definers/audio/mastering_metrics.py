@@ -41,7 +41,9 @@ def _measure_metric_batch(
         array = np.asarray(signal_value)
         key = (id(signal_value), int(sample_rate_value))
         aliases[name] = key
-        if key in results_by_key or any(existing_key == key for existing_key, *_ in unique_jobs):
+        if key in results_by_key or any(
+            existing_key == key for existing_key, *_ in unique_jobs
+        ):
             continue
         max_length = max(
             max_length,
@@ -76,10 +78,7 @@ def _measure_metric_batch(
                 signal_module=signal_module,
             )
 
-    return {
-        name: results_by_key[key]
-        for name, key in aliases.items()
-    }
+    return {name: results_by_key[key] for name, key in aliases.items()}
 
 
 @dataclass(frozen=True, slots=True)

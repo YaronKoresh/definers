@@ -3,10 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from definers.application_shell.command_registry import CliCommandRegistry
 from definers.application_shell.cli_command_definition import (
     CliCommandDefinition,
 )
+from definers.application_shell.command_registry import CliCommandRegistry
 
 
 @dataclass(frozen=True, slots=True)

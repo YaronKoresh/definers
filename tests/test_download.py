@@ -7,9 +7,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import definers.media.web_transfer as web_transfer_module
 import definers.os_utils as os_utils
 import definers.path_utils as path_utils
-import definers.media.web_transfer as web_transfer_module
 
 if not hasattr(os_utils, "get_python_version"):
     os_utils.get_python_version = lambda: "3.10"

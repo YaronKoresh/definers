@@ -38,9 +38,7 @@ def test_chat_module_import_surface():
         "definers.presentation.gui_entrypoints"
     )
 
-    assert (
-        gui_entrypoints.__name__ == "definers.presentation.gui_entrypoints"
-    )
+    assert gui_entrypoints.__name__ == "definers.presentation.gui_entrypoints"
     assert hasattr(gui_entrypoints, "start")
     assert hasattr(gui_entrypoints, "_gui_chat")
 

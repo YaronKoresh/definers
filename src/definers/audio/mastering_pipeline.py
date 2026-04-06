@@ -147,18 +147,16 @@ def _apply_exciter_stage(
     )
     effective_exciter_max_drive = float(
         max(
-            effective_exciter_max_drive * (1.0 - harshness_restraint_factor * 0.18),
+            effective_exciter_max_drive
+            * (1.0 - harshness_restraint_factor * 0.18),
             0.5,
         )
     )
     effective_exciter_cutoff_hz = self.exciter_cutoff_hz
-    if (
-        effective_exciter_cutoff_hz is None
-        and (
-            restoration_factor > 0.0
-            or air_restoration_factor > 0.0
-            or closure_repair_factor > 0.0
-        )
+    if effective_exciter_cutoff_hz is None and (
+        restoration_factor > 0.0
+        or air_restoration_factor > 0.0
+        or closure_repair_factor > 0.0
     ):
         upper_cutoff_hz = float(max(min(self.high_cut * 0.82, 4200.0), 1650.0))
         adaptive_cutoff_hz = float(
@@ -172,17 +170,22 @@ def _apply_exciter_stage(
         effective_exciter_cutoff_hz = float(
             np.clip(adaptive_cutoff_hz, 1650.0, upper_cutoff_hz)
         )
-    if effective_exciter_cutoff_hz is not None and harshness_restraint_factor > 0.0:
+    if (
+        effective_exciter_cutoff_hz is not None
+        and harshness_restraint_factor > 0.0
+    ):
         effective_exciter_cutoff_hz = float(
             min(
                 max(self.high_cut * 0.82, 1650.0),
-                effective_exciter_cutoff_hz + harshness_restraint_factor * 650.0,
+                effective_exciter_cutoff_hz
+                + harshness_restraint_factor * 650.0,
             )
         )
-    effective_exciter_high_frequency_cutoff_hz = self.exciter_high_frequency_cutoff_hz
-    if (
-        effective_exciter_high_frequency_cutoff_hz is not None
-        and (restoration_factor > 0.0 or air_restoration_factor > 0.0)
+    effective_exciter_high_frequency_cutoff_hz = (
+        self.exciter_high_frequency_cutoff_hz
+    )
+    if effective_exciter_high_frequency_cutoff_hz is not None and (
+        restoration_factor > 0.0 or air_restoration_factor > 0.0
     ):
         effective_exciter_high_frequency_cutoff_hz = float(
             min(

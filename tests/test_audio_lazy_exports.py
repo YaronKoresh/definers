@@ -6,6 +6,15 @@ from unittest import mock
 import pytest
 
 
+def snapshot_audio_package() -> dict[str, types.ModuleType]:
+    return {
+        module_name: module
+        for module_name, module in sys.modules.items()
+        if module_name == "definers.audio"
+        or module_name.startswith("definers.audio.")
+    }
+
+
 def unload_audio_package() -> None:
     for module_name in list(sys.modules):
         if module_name == "definers.audio" or module_name.startswith(
@@ -14,7 +23,13 @@ def unload_audio_package() -> None:
             sys.modules.pop(module_name, None)
 
 
+def restore_audio_package(snapshot: dict[str, types.ModuleType]) -> None:
+    unload_audio_package()
+    sys.modules.update(snapshot)
+
+
 def test_lazy_audio_export_imports_once_and_caches_value():
+    original_snapshot = snapshot_audio_package()
     unload_audio_package()
     original_import_module = importlib.import_module
     preview_module = types.ModuleType("definers.audio.preview")
@@ -41,10 +56,11 @@ def test_lazy_audio_export_imports_once_and_caches_value():
         audio_module.__dict__["audio_preview"] is preview_module.audio_preview
     )
     assert imported_names.count("definers.audio.preview") == 1
-    unload_audio_package()
+    restore_audio_package(original_snapshot)
 
 
 def test_lazy_audio_export_handles_multiple_modules_independently():
+    original_snapshot = snapshot_audio_package()
     unload_audio_package()
     original_import_module = importlib.import_module
     preview_module = types.ModuleType("definers.audio.preview")
@@ -71,10 +87,11 @@ def test_lazy_audio_export_handles_multiple_modules_independently():
 
     assert imported_names.count("definers.audio.preview") == 1
     assert imported_names.count("definers.audio.voice") == 1
-    unload_audio_package()
+    restore_audio_package(original_snapshot)
 
 
 def test_unknown_audio_export_raises_attribute_error_without_caching():
+    original_snapshot = snapshot_audio_package()
     unload_audio_package()
     audio_module = importlib.import_module("definers.audio")
 
@@ -82,4 +99,4 @@ def test_unknown_audio_export_raises_attribute_error_without_caching():
         getattr(audio_module, "missing_audio_feature")
 
     assert "missing_audio_feature" not in audio_module.__dict__
-    unload_audio_package()
+    restore_audio_package(original_snapshot)

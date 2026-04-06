@@ -1,5 +1,8 @@
+from types import SimpleNamespace
+
 import numpy as np
 import pytest
+from scipy import signal as scipy_signal
 
 from definers.audio.mastering_loudness import (
     get_lufs,
@@ -100,3 +103,29 @@ def test_measure_mastering_loudness_matches_bs1770_reference_metrics_across_samp
         abs=_BLOCK_LOUDNESS_ABSOLUTE_TOLERANCE,
     )
     assert metrics.loudness_range_lu == pytest.approx(expected["lra"], abs=5e-5)
+
+
+def test_measure_mastering_loudness_falls_back_when_signal_has_no_lfilter() -> (
+    None
+):
+    tone = _tone(220.0, 10.0, 48000)
+
+    reference = measure_mastering_loudness(tone, 48000)
+    fallback_signal = SimpleNamespace(
+        resample_poly=scipy_signal.resample_poly,
+    )
+
+    fallback_metrics = measure_mastering_loudness(
+        tone,
+        48000,
+        signal_module=fallback_signal,
+    )
+
+    assert fallback_metrics.integrated_lufs == pytest.approx(
+        reference.integrated_lufs,
+        abs=5e-5,
+    )
+    assert fallback_metrics.max_momentary_lufs == pytest.approx(
+        reference.max_momentary_lufs,
+        abs=_BLOCK_LOUDNESS_ABSOLUTE_TOLERANCE,
+    )
