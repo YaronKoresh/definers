@@ -403,8 +403,8 @@ def test_mastering_presets_wrap_config_factories():
     )
     assert edm.bass_boost_db_per_oct > balanced.bass_boost_db_per_oct
     assert balanced.bass_boost_db_per_oct > vocal.bass_boost_db_per_oct
-    assert balanced.treble_boost_db_per_oct > vocal.treble_boost_db_per_oct
-    assert vocal.treble_boost_db_per_oct > edm.treble_boost_db_per_oct
+    assert vocal.treble_boost_db_per_oct > balanced.treble_boost_db_per_oct
+    assert balanced.treble_boost_db_per_oct > edm.treble_boost_db_per_oct
     assert vocal.micro_dynamics_strength > balanced.micro_dynamics_strength
     assert balanced.micro_dynamics_strength > edm.micro_dynamics_strength
     assert balanced.stereo_tone_variation_db > edm.stereo_tone_variation_db

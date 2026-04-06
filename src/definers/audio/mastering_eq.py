@@ -144,6 +144,22 @@ def _restore_audio_dtype(values: np.ndarray, dtype: np.dtype) -> np.ndarray:
     return values.astype(dtype, copy=False)
 
 
+def _resolve_stem_cleanup_pressure(
+    stem_role: str | None,
+    cleanup_pressure: float,
+) -> float:
+    normalized_role = _normalize_stem_role(stem_role)
+    pressure = float(np.clip(cleanup_pressure, 0.0, 1.0))
+
+    if normalized_role == "drums":
+        return float(np.clip(pressure * 0.45, 0.0, 1.0))
+    if normalized_role == "vocals":
+        return float(np.clip(pressure * 0.68, 0.0, 1.0))
+    if normalized_role == "bass":
+        return float(np.clip(pressure * 0.74, 0.0, 1.0))
+    return float(np.clip(pressure * 0.7, 0.0, 1.0))
+
+
 def _resolve_stem_residual_profile(
     stem_role: str | None,
     cleanup_pressure: float,
@@ -151,66 +167,66 @@ def _resolve_stem_residual_profile(
     normalized_role = _normalize_stem_role(stem_role)
 
     if normalized_role == "drums":
-        intensity = float(np.clip(0.8 + cleanup_pressure * 0.2, 0.0, 1.0))
+        intensity = float(np.clip(0.62 + cleanup_pressure * 0.18, 0.0, 1.0))
         return {
-            "fast_ms": 1.5,
-            "slow_ms": 12.0,
-            "hold_ms": 54.0,
-            "release_ms": 8.0,
-            "noise_percentile": 42.0,
-            "suppression_floor": float(0.012 + (1.0 - intensity) * 0.045),
-            "activity_exponent": 0.58,
-            "activity_floor_scale": 0.92,
-            "transient_blend": 0.95,
-            "expansion_drive": float(1.4 + intensity * 0.5),
-            "expansion_mix": float(0.5 + intensity * 0.3),
+            "fast_ms": 1.8,
+            "slow_ms": 14.0,
+            "hold_ms": 68.0,
+            "release_ms": 14.0,
+            "noise_percentile": 38.0,
+            "suppression_floor": float(0.07 + (1.0 - intensity) * 0.05),
+            "activity_exponent": 0.68,
+            "activity_floor_scale": 0.94,
+            "transient_blend": 0.9,
+            "expansion_drive": float(0.42 + intensity * 0.36),
+            "expansion_mix": float(0.16 + intensity * 0.18),
         }
 
     if normalized_role == "vocals":
-        intensity = float(np.clip(0.58 + cleanup_pressure * 0.28, 0.0, 1.0))
+        intensity = float(np.clip(0.52 + cleanup_pressure * 0.22, 0.0, 1.0))
         return {
-            "fast_ms": 4.5,
-            "slow_ms": 44.0,
-            "hold_ms": 82.0,
-            "release_ms": 28.0,
-            "noise_percentile": 30.0,
-            "suppression_floor": float(0.08 + (1.0 - intensity) * 0.08),
-            "activity_exponent": 0.78,
-            "activity_floor_scale": 0.36,
-            "transient_blend": 0.22,
-            "expansion_drive": float(0.78 + intensity * 0.42),
-            "expansion_mix": float(0.34 + intensity * 0.2),
+            "fast_ms": 5.5,
+            "slow_ms": 52.0,
+            "hold_ms": 94.0,
+            "release_ms": 34.0,
+            "noise_percentile": 28.0,
+            "suppression_floor": float(0.115 + (1.0 - intensity) * 0.08),
+            "activity_exponent": 0.84,
+            "activity_floor_scale": 0.44,
+            "transient_blend": 0.16,
+            "expansion_drive": float(0.46 + intensity * 0.24),
+            "expansion_mix": float(0.18 + intensity * 0.14),
         }
 
     if normalized_role == "bass":
-        intensity = float(np.clip(0.48 + cleanup_pressure * 0.22, 0.0, 1.0))
+        intensity = float(np.clip(0.44 + cleanup_pressure * 0.18, 0.0, 1.0))
         return {
             "fast_ms": 7.0,
-            "slow_ms": 68.0,
-            "hold_ms": 110.0,
-            "release_ms": 38.0,
+            "slow_ms": 76.0,
+            "hold_ms": 126.0,
+            "release_ms": 46.0,
             "noise_percentile": 24.0,
-            "suppression_floor": float(0.14 + (1.0 - intensity) * 0.08),
-            "activity_exponent": 0.92,
-            "activity_floor_scale": 0.48,
+            "suppression_floor": float(0.18 + (1.0 - intensity) * 0.08),
+            "activity_exponent": 0.96,
+            "activity_floor_scale": 0.56,
             "transient_blend": 0.08,
-            "expansion_drive": float(0.4 + intensity * 0.22),
-            "expansion_mix": float(0.18 + intensity * 0.16),
+            "expansion_drive": float(0.24 + intensity * 0.16),
+            "expansion_mix": float(0.08 + intensity * 0.08),
         }
 
-    intensity = float(np.clip(0.66 + cleanup_pressure * 0.26, 0.0, 1.0))
+    intensity = float(np.clip(0.58 + cleanup_pressure * 0.22, 0.0, 1.0))
     return {
-        "fast_ms": 4.0,
-        "slow_ms": 34.0,
-        "hold_ms": 74.0,
-        "release_ms": 24.0,
-        "noise_percentile": 32.0,
-        "suppression_floor": float(0.055 + (1.0 - intensity) * 0.06),
-        "activity_exponent": 0.72,
-        "activity_floor_scale": 0.54,
-        "transient_blend": 0.26,
-        "expansion_drive": float(0.92 + intensity * 0.38),
-        "expansion_mix": float(0.36 + intensity * 0.22),
+        "fast_ms": 4.5,
+        "slow_ms": 42.0,
+        "hold_ms": 86.0,
+        "release_ms": 30.0,
+        "noise_percentile": 30.0,
+        "suppression_floor": float(0.1 + (1.0 - intensity) * 0.07),
+        "activity_exponent": 0.8,
+        "activity_floor_scale": 0.6,
+        "transient_blend": 0.18,
+        "expansion_drive": float(0.58 + intensity * 0.24),
+        "expansion_mix": float(0.2 + intensity * 0.14),
     }
 
 
@@ -223,70 +239,70 @@ def _resolve_stem_noise_gate_profile(
     strength = float(np.clip(gate_strength, 0.0, 1.5))
 
     if normalized_role == "drums":
-        intensity = float(np.clip((0.84 + cleanup_pressure * 0.18) * strength, 0.0, 1.2))
+        intensity = float(np.clip((0.74 + cleanup_pressure * 0.14) * strength, 0.0, 1.0))
         return {
-            "fast_ms": 1.1,
-            "slow_ms": 9.0,
-            "hold_ms": 46.0,
-            "release_ms": 12.0,
+            "fast_ms": 1.3,
+            "slow_ms": 11.0,
+            "hold_ms": 54.0,
+            "release_ms": 18.0,
             "noise_percentile": 38.0,
-            "threshold_ratio": float(np.clip(0.1 + intensity * 0.03, 0.06, 0.24)),
-            "full_open_ratio": 0.14,
-            "floor": float(np.clip(0.01 - intensity * 0.008, 0.0, 0.02)),
-            "transient_bias": 1.0,
-            "open_exponent": 0.72,
-            "active_floor_scale": 0.96,
-            "mix": float(np.clip(0.62 + intensity * 0.12, 0.0, 0.9)),
+            "threshold_ratio": float(np.clip(0.07 + intensity * 0.02, 0.045, 0.18)),
+            "full_open_ratio": 0.16,
+            "floor": float(np.clip(0.055 - intensity * 0.02, 0.022, 0.06)),
+            "transient_bias": 0.92,
+            "open_exponent": 0.68,
+            "active_floor_scale": 0.98,
+            "mix": float(np.clip(0.48 + intensity * 0.1, 0.0, 0.72)),
         }
 
     if normalized_role == "vocals":
-        intensity = float(np.clip((0.68 + cleanup_pressure * 0.24) * strength, 0.0, 1.1))
+        intensity = float(np.clip((0.6 + cleanup_pressure * 0.18) * strength, 0.0, 1.0))
         return {
-            "fast_ms": 3.2,
-            "slow_ms": 28.0,
-            "hold_ms": 88.0,
-            "release_ms": 34.0,
+            "fast_ms": 3.6,
+            "slow_ms": 32.0,
+            "hold_ms": 96.0,
+            "release_ms": 42.0,
             "noise_percentile": 24.0,
-            "threshold_ratio": float(np.clip(0.07 + intensity * 0.04, 0.05, 0.2)),
-            "full_open_ratio": 0.2,
-            "floor": float(np.clip(0.055 - intensity * 0.02, 0.02, 0.08)),
-            "transient_bias": 0.42,
-            "open_exponent": 0.84,
+            "threshold_ratio": float(np.clip(0.065 + intensity * 0.03, 0.045, 0.18)),
+            "full_open_ratio": 0.24,
+            "floor": float(np.clip(0.06 - intensity * 0.024, 0.02, 0.068)),
+            "transient_bias": 0.32,
+            "open_exponent": 0.88,
             "active_floor_scale": 0.82,
-            "mix": float(np.clip(0.42 + intensity * 0.14, 0.0, 0.78)),
+            "mix": float(np.clip(0.46 + intensity * 0.14, 0.0, 0.74)),
         }
 
     if normalized_role == "bass":
-        intensity = float(np.clip((0.56 + cleanup_pressure * 0.18) * strength, 0.0, 1.0))
+        intensity = float(np.clip((0.5 + cleanup_pressure * 0.14) * strength, 0.0, 0.94))
         return {
-            "fast_ms": 5.5,
-            "slow_ms": 48.0,
-            "hold_ms": 120.0,
-            "release_ms": 48.0,
+            "fast_ms": 6.0,
+            "slow_ms": 56.0,
+            "hold_ms": 132.0,
+            "release_ms": 56.0,
             "noise_percentile": 18.0,
-            "threshold_ratio": float(np.clip(0.12 + intensity * 0.03, 0.08, 0.24)),
-            "full_open_ratio": 0.24,
-            "floor": float(np.clip(0.11 - intensity * 0.02, 0.06, 0.12)),
+            "threshold_ratio": float(np.clip(0.11 + intensity * 0.025, 0.075, 0.22)),
+            "full_open_ratio": 0.28,
+            "floor": float(np.clip(0.13 - intensity * 0.018, 0.08, 0.13)),
             "transient_bias": 0.12,
-            "open_exponent": 0.96,
-            "active_floor_scale": 0.74,
-            "mix": float(np.clip(0.34 + intensity * 0.12, 0.0, 0.68)),
+            "open_exponent": 0.98,
+            "active_floor_scale": 0.8,
+            "mix": float(np.clip(0.22 + intensity * 0.1, 0.0, 0.56)),
         }
 
-    intensity = float(np.clip((0.64 + cleanup_pressure * 0.22) * strength, 0.0, 1.1))
+    intensity = float(np.clip((0.58 + cleanup_pressure * 0.18) * strength, 0.0, 1.0))
     return {
-        "fast_ms": 3.0,
-        "slow_ms": 24.0,
-        "hold_ms": 78.0,
-        "release_ms": 30.0,
+        "fast_ms": 3.4,
+        "slow_ms": 28.0,
+        "hold_ms": 86.0,
+        "release_ms": 36.0,
         "noise_percentile": 24.0,
-        "threshold_ratio": float(np.clip(0.08 + intensity * 0.04, 0.05, 0.22)),
-        "full_open_ratio": 0.22,
-        "floor": float(np.clip(0.045 - intensity * 0.015, 0.02, 0.06)),
+        "threshold_ratio": float(np.clip(0.075 + intensity * 0.03, 0.045, 0.2)),
+        "full_open_ratio": 0.24,
+        "floor": float(np.clip(0.058 - intensity * 0.014, 0.03, 0.065)),
         "transient_bias": 0.28,
-        "open_exponent": 0.86,
-        "active_floor_scale": 0.78,
-        "mix": float(np.clip(0.4 + intensity * 0.14, 0.0, 0.74)),
+        "open_exponent": 0.9,
+        "active_floor_scale": 0.82,
+        "mix": float(np.clip(0.32 + intensity * 0.12, 0.0, 0.62)),
     }
 
 
@@ -722,6 +738,10 @@ def apply_stem_cleanup(
             0.0,
             1.0,
         )
+    )
+    cleanup_pressure = _resolve_stem_cleanup_pressure(
+        stem_role,
+        cleanup_pressure,
     )
     cleaned = y
     if cleanup_pressure > 0.04:

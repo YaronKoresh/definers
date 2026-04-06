@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -156,13 +157,42 @@ def _measure_preset_band_profile(
     }
 
 
-def _select_mastering_preset(
+@dataclass(frozen=True, slots=True)
+class MasteringInputMetrics:
+    integrated_lufs: float
+    crest_factor_db: float
+    stereo_width_ratio: float
+    low_end_mono_ratio: float
+    spectral_tilt: float
+    transient_density: float
+    stereo_motion: float
+    bass_share: float
+    low_mid_share: float
+    presence_share: float
+    air_share: float
+
+
+@dataclass(frozen=True, slots=True)
+class MasteringInputAnalysis:
+    preset_name: str
+    quality_flags: tuple[str, ...]
+    target_sample_rate: int
+    metrics: MasteringInputMetrics | None
+
+
+def _resolve_mastering_processing_sample_rate(input_sample_rate: int) -> int:
+    if int(input_sample_rate) >= 48000:
+        return 48000
+    return 44100
+
+
+def _collect_mastering_input_metrics(
     signal_to_analyze: np.ndarray,
     sample_rate: int,
-) -> str:
+) -> MasteringInputMetrics | None:
     signal_array = _sanitize_audio_for_preset_selection(signal_to_analyze)
     if signal_array.size == 0 or sample_rate <= 0:
-        return "balanced"
+        return None
 
     try:
         loudness_metrics = _measure_mastering_loudness(
@@ -177,55 +207,84 @@ def _select_mastering_preset(
         stereo_motion = _measure_stereo_motion(signal_array, int(sample_rate))
         band_profile = _measure_preset_band_profile(signal_array, int(sample_rate))
     except Exception:
-        return "balanced"
+        return None
 
-    integrated_lufs = float(loudness_metrics.integrated_lufs)
-    crest_factor_db = float(loudness_metrics.crest_factor_db)
-    stereo_width_ratio = float(loudness_metrics.stereo_width_ratio)
-    low_end_mono_ratio = float(loudness_metrics.low_end_mono_ratio)
-    bass_share = float(band_profile["bass_share"])
-    low_mid_share = float(band_profile["low_mid_share"])
-    presence_share = float(band_profile["presence_share"])
-    air_share = float(band_profile["air_share"])
+    return MasteringInputMetrics(
+        integrated_lufs=float(loudness_metrics.integrated_lufs),
+        crest_factor_db=float(loudness_metrics.crest_factor_db),
+        stereo_width_ratio=float(loudness_metrics.stereo_width_ratio),
+        low_end_mono_ratio=float(loudness_metrics.low_end_mono_ratio),
+        spectral_tilt=float(spectral_tilt),
+        transient_density=float(transient_density),
+        stereo_motion=float(stereo_motion),
+        bass_share=float(band_profile["bass_share"]),
+        low_mid_share=float(band_profile["low_mid_share"]),
+        presence_share=float(band_profile["presence_share"]),
+        air_share=float(band_profile["air_share"]),
+    )
 
+
+def _select_mastering_preset_from_metrics(
+    metrics: MasteringInputMetrics,
+) -> str:
     edm_score = float(
-        0.3 * np.clip((bass_share - 0.22) / 0.18, 0.0, 1.0)
-        + 0.22 * np.clip((10.0 - crest_factor_db) / 5.0, 0.0, 1.0)
-        + 0.18 * np.clip((integrated_lufs + 16.0) / 9.0, 0.0, 1.0)
-        + 0.15 * np.clip((transient_density - 0.055) / 0.12, 0.0, 1.0)
-        + 0.08 * np.clip((low_end_mono_ratio - 0.7) / 0.25, 0.0, 1.0)
-        + 0.07 * np.clip((0.33 - stereo_width_ratio) / 0.23, 0.0, 1.0)
+        0.3 * np.clip((metrics.bass_share - 0.22) / 0.18, 0.0, 1.0)
+        + 0.22 * np.clip((10.0 - metrics.crest_factor_db) / 5.0, 0.0, 1.0)
+        + 0.18 * np.clip((metrics.integrated_lufs + 16.0) / 9.0, 0.0, 1.0)
+        + 0.15 * np.clip((metrics.transient_density - 0.055) / 0.12, 0.0, 1.0)
+        + 0.08 * np.clip((metrics.low_end_mono_ratio - 0.7) / 0.25, 0.0, 1.0)
+        + 0.07 * np.clip((0.33 - metrics.stereo_width_ratio) / 0.23, 0.0, 1.0)
     )
     vocal_score = float(
-        0.34 * np.clip((presence_share - bass_share * 0.72 - 0.06) / 0.22, 0.0, 1.0)
-        + 0.18 * np.clip((air_share - bass_share * 0.35 - 0.02) / 0.16, 0.0, 1.0)
-        + 0.18 * np.clip((crest_factor_db - 11.5) / 6.0, 0.0, 1.0)
-        + 0.12 * np.clip((stereo_width_ratio - 0.22) / 0.35, 0.0, 1.0)
-        + 0.1 * np.clip((stereo_motion - 0.02) / 0.16, 0.0, 1.0)
-        + 0.08 * np.clip((0.095 - transient_density) / 0.08, 0.0, 1.0)
-        + 0.0 * np.clip((spectral_tilt + 8.0) / 8.0, 0.0, 1.0)
+        0.34
+        * np.clip(
+            (
+                metrics.presence_share
+                - metrics.bass_share * 0.72
+                - 0.06
+            )
+            / 0.22,
+            0.0,
+            1.0,
+        )
+        + 0.18
+        * np.clip(
+            (
+                metrics.air_share
+                - metrics.bass_share * 0.35
+                - 0.02
+            )
+            / 0.16,
+            0.0,
+            1.0,
+        )
+        + 0.18 * np.clip((metrics.crest_factor_db - 11.5) / 6.0, 0.0, 1.0)
+        + 0.12 * np.clip((metrics.stereo_width_ratio - 0.22) / 0.35, 0.0, 1.0)
+        + 0.1 * np.clip((metrics.stereo_motion - 0.02) / 0.16, 0.0, 1.0)
+        + 0.08 * np.clip((0.095 - metrics.transient_density) / 0.08, 0.0, 1.0)
+        + 0.0 * np.clip((metrics.spectral_tilt + 8.0) / 8.0, 0.0, 1.0)
     )
     legacy_vocal_score = float(
         0.24
         * np.clip(
             (
-                low_mid_share
-                + bass_share * 0.45
-                - presence_share
-                - air_share * 0.6
+                metrics.low_mid_share
+                + metrics.bass_share * 0.45
+                - metrics.presence_share
+                - metrics.air_share * 0.6
                 - 0.12
             )
             / 0.26,
             0.0,
             1.0,
         )
-        + 0.2 * np.clip(((-spectral_tilt) - 5.8) / 4.6, 0.0, 1.0)
-        + 0.14 * np.clip((0.075 - air_share) / 0.065, 0.0, 1.0)
-        + 0.12 * np.clip((0.24 - stereo_width_ratio) / 0.18, 0.0, 1.0)
-        + 0.1 * np.clip((0.055 - stereo_motion) / 0.055, 0.0, 1.0)
-        + 0.08 * np.clip((crest_factor_db - 10.5) / 4.5, 0.0, 1.0)
-        + 0.06 * np.clip((0.08 - transient_density) / 0.065, 0.0, 1.0)
-        + 0.06 * np.clip((low_end_mono_ratio - 0.84) / 0.12, 0.0, 1.0)
+        + 0.2 * np.clip(((-metrics.spectral_tilt) - 5.8) / 4.6, 0.0, 1.0)
+        + 0.14 * np.clip((0.075 - metrics.air_share) / 0.065, 0.0, 1.0)
+        + 0.12 * np.clip((0.24 - metrics.stereo_width_ratio) / 0.18, 0.0, 1.0)
+        + 0.1 * np.clip((0.055 - metrics.stereo_motion) / 0.055, 0.0, 1.0)
+        + 0.08 * np.clip((metrics.crest_factor_db - 10.5) / 4.5, 0.0, 1.0)
+        + 0.06 * np.clip((0.08 - metrics.transient_density) / 0.065, 0.0, 1.0)
+        + 0.06 * np.clip((metrics.low_end_mono_ratio - 0.84) / 0.12, 0.0, 1.0)
     )
 
     if edm_score >= 0.56 and edm_score >= vocal_score + 0.08:
@@ -235,6 +294,81 @@ def _select_mastering_preset(
     if legacy_vocal_score >= 0.54:
         return "vocal"
     return "balanced"
+
+
+def _resolve_mastering_quality_flags(
+    metrics: MasteringInputMetrics,
+    input_sample_rate: int,
+) -> tuple[str, ...]:
+    old_recording_score = float(
+        0.24
+        * np.clip(
+            (
+                metrics.low_mid_share
+                + metrics.bass_share * 0.45
+                - metrics.presence_share
+                - metrics.air_share * 0.7
+                - 0.12
+            )
+            / 0.26,
+            0.0,
+            1.0,
+        )
+        + 0.2 * np.clip(((-metrics.spectral_tilt) - 5.8) / 4.6, 0.0, 1.0)
+        + 0.14 * np.clip((0.075 - metrics.air_share) / 0.065, 0.0, 1.0)
+        + 0.14 * np.clip((0.24 - metrics.stereo_width_ratio) / 0.18, 0.0, 1.0)
+        + 0.1 * np.clip((0.055 - metrics.stereo_motion) / 0.055, 0.0, 1.0)
+        + 0.1 * np.clip((metrics.low_end_mono_ratio - 0.84) / 0.12, 0.0, 1.0)
+        + 0.08 * np.clip((metrics.crest_factor_db - 10.5) / 4.5, 0.0, 1.0)
+    )
+    low_quality_score = float(
+        0.2 * np.clip((44100.0 - float(input_sample_rate)) / 22050.0, 0.0, 1.0)
+        + 0.18 * np.clip((0.12 - metrics.presence_share) / 0.1, 0.0, 1.0)
+        + 0.16 * np.clip((0.045 - metrics.air_share) / 0.045, 0.0, 1.0)
+        + 0.15 * np.clip((0.2 - metrics.stereo_width_ratio) / 0.18, 0.0, 1.0)
+        + 0.11 * np.clip((0.045 - metrics.stereo_motion) / 0.045, 0.0, 1.0)
+        + 0.1 * np.clip((9.0 - metrics.crest_factor_db) / 5.0, 0.0, 1.0)
+        + 0.1 * np.clip((metrics.low_mid_share - 0.36) / 0.18, 0.0, 1.0)
+    )
+
+    quality_flags: list[str] = []
+    if old_recording_score >= 0.54:
+        quality_flags.append("Old-Recording")
+    if low_quality_score >= 0.52 or int(input_sample_rate) < 44100:
+        quality_flags.append("Low-Quality")
+    return tuple(quality_flags)
+
+
+def _analyze_mastering_input(
+    signal_to_analyze: np.ndarray,
+    sample_rate: int,
+) -> MasteringInputAnalysis:
+    metrics = _collect_mastering_input_metrics(signal_to_analyze, sample_rate)
+    target_sample_rate = _resolve_mastering_processing_sample_rate(sample_rate)
+    if metrics is None:
+        return MasteringInputAnalysis(
+            preset_name="balanced",
+            quality_flags=(),
+            target_sample_rate=target_sample_rate,
+            metrics=None,
+        )
+
+    return MasteringInputAnalysis(
+        preset_name=_select_mastering_preset(signal_to_analyze, sample_rate),
+        quality_flags=_resolve_mastering_quality_flags(metrics, sample_rate),
+        target_sample_rate=target_sample_rate,
+        metrics=metrics,
+    )
+
+
+def _select_mastering_preset(
+    signal_to_analyze: np.ndarray,
+    sample_rate: int,
+) -> str:
+    metrics = _collect_mastering_input_metrics(signal_to_analyze, sample_rate)
+    if metrics is None:
+        return "balanced"
+    return _select_mastering_preset_from_metrics(metrics)
 
 
 def _resolve_explicit_preset_name(mastering_kwargs: dict[str, object]) -> str | None:
@@ -559,6 +693,7 @@ def master_stems(
         **kwargs,
     )
 
+
 def _master_internal(
     input_path: str,
     *,
@@ -569,12 +704,12 @@ def _master_internal(
     try:
         from .io import read_audio, save_audio
 
-        report_path = kwargs.pop("report_path", None)
+        report_path = kwargs.pop("report_path", f'{output_path}.report.json' if output_path else None)
         report_indent = int(kwargs.pop("report_indent", 2))
         bit_depth = int(kwargs.pop("bit_depth", 32))
         bitrate = int(kwargs.pop("bitrate", 320))
         compression_level = int(kwargs.pop("compression_level", 9))
-        stem_model_name = str(kwargs.pop("stem_model_name", "htdemucs_6s"))
+        stem_model_name = str(kwargs.pop("stem_model_name", "mastering"))
         stem_shifts = int(kwargs.pop("stem_shifts", 2))
         stem_mix_headroom_db = float(
             kwargs.pop("stem_mix_headroom_db", 6.0)
@@ -594,15 +729,28 @@ def _master_internal(
         resolved_output_path = output_path or tmp(get_ext(input_path), keep=False)
         processing_sample_rate = input_sample_rate
         processing_signal = np.array(input_signal, dtype=np.float32, copy=True)
+        input_analysis = _analyze_mastering_input(
+            processing_signal,
+            input_sample_rate,
+        )
         resolved_mastering_kwargs = _resolve_mastering_kwargs_for_input(
             processing_signal,
             input_sample_rate,
             dict(kwargs),
         )
+        resolved_mastering_kwargs.setdefault(
+            "resampling_target",
+            input_analysis.target_sample_rate,
+        )
         if _resolve_explicit_preset_name(dict(kwargs)) is None:
             log(
                 "Auto-selected mastering preset",
                 resolved_mastering_kwargs['preset']
+            )
+        if input_analysis.quality_flags:
+            log(
+                "Auto-detected mastering input quality flags",
+                ", ".join(input_analysis.quality_flags),
             )
 
         if stem_mastering:
@@ -625,6 +773,7 @@ def _master_internal(
                 delete_fn=delete,
                 model_name=stem_model_name,
                 shifts=stem_shifts,
+                quality_flags=input_analysis.quality_flags,
                 mix_headroom_db=stem_mix_headroom_db,
                 save_mastered_stems=save_mastered_stems,
                 mastered_stems_output_dir=(

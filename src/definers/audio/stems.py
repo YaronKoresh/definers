@@ -1,14 +1,17 @@
 from __future__ import annotations
 
-import sys
+import os
+import re
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Sequence
 
 import librosa
 import numpy as np
 
 from definers.constants import MODELS
 from definers.logger import init_logger
-from definers.system import catch, delete, run, tmp
+from definers.system import catch, delete, tmp
 from definers.text import random_string
 
 from .io import read_audio, save_audio
@@ -16,63 +19,643 @@ from .utils import normalize_audio_to_peak
 
 _logger = init_logger()
 
+_LEGACY_VOCAL_PAIR_MODEL_NAMES = {
+    "auto",
+    "hdemucs_mmi",
+    "hdemucs_mmi.yaml",
+    "mastering",
+}
 
-def _normalize_demucs_option(value: str, *, option_name: str) -> str:
+_MASTERING_RESERVED_MODEL_NAMES = {
+    "auto",
+    "mastering",
+}
+
+_STEM_NAME_ALIASES = {
+    "vocals": "vocals",
+    "vocal": "vocals",
+    "instrumental": "instrumental",
+    "inst": "instrumental",
+    "no vocals": "instrumental",
+    "no_vocals": "instrumental",
+    "karaoke": "instrumental",
+    "other": "other",
+    "drums": "drums",
+    "bass": "bass",
+    "guitar": "guitar",
+    "piano": "piano",
+    "noreverb": "noreverb",
+    "no reverb": "noreverb",
+    "reverb": "reverb",
+    "dry": "dry",
+    "no noise": "no_noise",
+    "noise": "noise",
+    "no bleed": "no_bleed",
+    "bleed": "bleed",
+}
+
+
+@dataclass(frozen=True, slots=True)
+class SeparatorModelStage:
+    model_candidates: tuple[str, ...]
+    preferred_stems: tuple[str, ...]
+    required: bool = True
+
+
+@dataclass(frozen=True, slots=True)
+class MasteringSeparatorPlan:
+    target_sample_rate: int
+    quality_flags: tuple[str, ...]
+    preprocess_stages: tuple[SeparatorModelStage, ...]
+    reference_split_stage: SeparatorModelStage
+    four_stem_stage: SeparatorModelStage
+    vocal_stage: SeparatorModelStage
+    vocal_restoration_stage: SeparatorModelStage
+    instrumental_cleanup_stage: SeparatorModelStage
+
+
+def _normalize_model_name(value: str, *, option_name: str) -> str:
     normalized = str(value).strip()
     if not normalized:
         raise ValueError(f"Missing {option_name}")
     if any(
-        not (character.isalnum() or character in {"_", "-"})
+        not (character.isalnum() or character in {"_", "-", ".", "/", "+"})
         for character in normalized
     ):
         raise ValueError(f"Invalid {option_name}: {value}")
+    if normalized.lower().startswith(("htdemucs", "hdemucs")):
+        suffix = Path(normalized).suffix.lower()
+        if suffix not in {".yaml", ".yml"}:
+            normalized = f"{normalized}.yaml"
     return normalized
+
+
+def _normalize_optional_model_name(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    if not normalized:
+        return None
+    return _normalize_model_name(
+        normalized,
+        option_name="separator model name",
+    )
+
+
+def _normalize_stage_candidates(candidates: Sequence[str]) -> tuple[str, ...]:
+    normalized_candidates: list[str] = []
+    for candidate in candidates:
+        normalized_candidate = _normalize_model_name(
+            candidate,
+            option_name="separator model candidate",
+        )
+        if normalized_candidate not in normalized_candidates:
+            normalized_candidates.append(normalized_candidate)
+    return tuple(normalized_candidates)
+
+
+def _resolve_mastering_sample_rate(input_sample_rate: int) -> int:
+    if int(input_sample_rate) >= 48000:
+        return 48000
+    return 44100
+
+
+def build_mastering_separator_plan(
+    input_sample_rate: int,
+    *,
+    quality_flags: Sequence[str] = (),
+    model_name: str = "mastering",
+) -> MasteringSeparatorPlan:
+    resolved_quality_flags = tuple(
+        dict.fromkeys(
+            str(flag).strip()
+            for flag in quality_flags
+            if str(flag).strip()
+        )
+    )
+    override_model_name = _normalize_optional_model_name(model_name)
+    four_stem_candidates = ["htdemucs_ft.yaml", "hdemucs_mmi.yaml"]
+    if (
+        override_model_name is not None
+        and override_model_name.lower() not in _MASTERING_RESERVED_MODEL_NAMES
+        and override_model_name.lower() not in _LEGACY_VOCAL_PAIR_MODEL_NAMES
+    ):
+        four_stem_candidates.insert(0, override_model_name)
+    elif (
+        override_model_name is not None
+        and override_model_name.lower() not in _MASTERING_RESERVED_MODEL_NAMES
+    ):
+        four_stem_candidates.insert(0, override_model_name)
+
+    preprocess_stages: tuple[SeparatorModelStage, ...] = ()
+    if any(
+        flag in {"Low-Quality", "Old-Recording"}
+        for flag in resolved_quality_flags
+    ):
+        preprocess_stages = (
+            SeparatorModelStage(
+                model_candidates=_normalize_stage_candidates(
+                    (
+                        "deverb_bs_roformer_8_384dim_10depth.ckpt",
+                        "deverb_bs_roformer_8_256dim_8depth.ckpt",
+                        "dereverb_mel_band_roformer_anvuew_sdr_19.1729.ckpt",
+                    )
+                ),
+                preferred_stems=("noreverb", "no reverb", "dry"),
+                required=False,
+            ),
+            SeparatorModelStage(
+                model_candidates=_normalize_stage_candidates(
+                    (
+                        "denoise_mel_band_roformer_aufr33_aggr_sdr_27.9768.ckpt",
+                        "denoise_mel_band_roformer_aufr33_sdr_27.9959.ckpt",
+                    )
+                ),
+                preferred_stems=("no noise", "dry"),
+                required=False,
+            ),
+        )
+
+    return MasteringSeparatorPlan(
+        target_sample_rate=_resolve_mastering_sample_rate(input_sample_rate),
+        quality_flags=resolved_quality_flags,
+        preprocess_stages=preprocess_stages,
+        reference_split_stage=SeparatorModelStage(
+            model_candidates=_normalize_stage_candidates(
+                (
+                    "MDX23C-8KFFT-InstVoc_HQ.ckpt",
+                    "bs_roformer_instrumental_resurrection_unwa.ckpt",
+                )
+            ),
+            preferred_stems=("other", "instrumental"),
+            required=False,
+        ),
+        four_stem_stage=SeparatorModelStage(
+            model_candidates=_normalize_stage_candidates(tuple(four_stem_candidates)),
+            preferred_stems=("vocals", "drums", "bass", "other"),
+            required=True,
+        ),
+        vocal_stage=SeparatorModelStage(
+            model_candidates=_normalize_stage_candidates(
+                (
+                    "MelBandRoformerSYHFTV2.5.ckpt",
+                    "MelBandRoformerSYHFT.ckpt",
+                    "vocals_mel_band_roformer.ckpt",
+                )
+            ),
+            preferred_stems=("vocals",),
+            required=True,
+        ),
+        vocal_restoration_stage=SeparatorModelStage(
+            model_candidates=_normalize_stage_candidates(
+                ("bs_roformer_vocals_resurrection_unwa.ckpt",)
+            ),
+            preferred_stems=("vocals",),
+            required=False,
+        ),
+        instrumental_cleanup_stage=SeparatorModelStage(
+            model_candidates=_normalize_stage_candidates(
+                (
+                    "mel_band_roformer_bleed_suppressor_v1.ckpt",
+                    "mel_band_roformer_instrumental_fv7z_gabox.ckpt",
+                )
+            ),
+            preferred_stems=("no bleed", "other", "instrumental"),
+            required=False,
+        ),
+    )
+
+
+def _build_vocal_pair_stage(model_name: str) -> SeparatorModelStage:
+    model_candidates: list[str] = []
+    override_model_name = _normalize_optional_model_name(model_name)
+    if (
+        override_model_name is not None
+        and override_model_name.lower() not in _LEGACY_VOCAL_PAIR_MODEL_NAMES
+    ):
+        model_candidates.append(override_model_name)
+    model_candidates.extend(
+        (
+            "bs_roformer_vocals_resurrection_unwa.ckpt",
+            "MelBandRoformerSYHFTV2.5.ckpt",
+            "MelBandRoformerSYHFT.ckpt",
+        )
+    )
+    return SeparatorModelStage(
+        model_candidates=_normalize_stage_candidates(tuple(model_candidates)),
+        preferred_stems=("vocals", "other", "instrumental"),
+        required=True,
+    )
+
+
+def _load_audio_separator_class():
+    try:
+        from audio_separator.separator import Separator
+    except Exception as error:
+        raise RuntimeError(
+            "audio-separator is required for stem separation"
+        ) from error
+    return Separator
+
+
+def _build_separator_kwargs(
+    output_dir: str,
+    target_sample_rate: int,
+) -> dict[str, object]:
+    kwargs: dict[str, object] = {
+        "output_dir": output_dir,
+        "output_format": "WAV",
+        "sample_rate": int(target_sample_rate),
+        "use_soundfile": True,
+        "log_level": 40,
+        "mdxc_params": {
+            "segment_size": 256,
+            "overlap": 4,
+        },
+    }
+    model_file_dir = os.environ.get("AUDIO_SEPARATOR_MODEL_DIR")
+    if model_file_dir:
+        kwargs["model_file_dir"] = model_file_dir
+    return kwargs
+
+
+def _prepare_stage_directory(output_dir: str) -> str:
+    delete(output_dir)
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    return output_dir
+
+
+def _resolve_output_paths(
+    output_files: Sequence[str],
+    output_dir: str,
+) -> tuple[str, ...]:
+    resolved_output_paths: list[str] = []
+    for output_file in output_files:
+        candidate_path = Path(output_file)
+        if candidate_path.is_absolute():
+            resolved_output_paths.append(str(candidate_path))
+            continue
+        output_path = Path(output_dir) / output_file
+        if not output_path.exists():
+            output_path = Path(output_dir) / candidate_path.name
+        resolved_output_paths.append(str(output_path))
+    return tuple(resolved_output_paths)
+
+
+def _canonicalize_stem_name(stem_name: str) -> str:
+    normalized_name = re.sub(r"[\s_-]+", " ", str(stem_name)).strip().lower()
+    return _STEM_NAME_ALIASES.get(normalized_name, normalized_name)
+
+
+def _extract_stem_name(output_path: str) -> str | None:
+    stem_matches = re.findall(r"_\(([^)]+)\)", Path(output_path).name)
+    if not stem_matches:
+        return None
+    return _canonicalize_stem_name(stem_matches[-1])
+
+
+def _select_stage_output(
+    output_files: Sequence[str],
+    preferred_stems: Sequence[str],
+) -> str | None:
+    resolved_preferred_stems = {
+        _canonicalize_stem_name(stem_name)
+        for stem_name in preferred_stems
+    }
+    for output_file in output_files:
+        stem_name = _extract_stem_name(output_file)
+        if stem_name in resolved_preferred_stems:
+            return output_file
+    if len(output_files) == 1:
+        return output_files[0]
+    return None
+
+
+def _run_separator_stage(
+    input_path: str,
+    stage: SeparatorModelStage,
+    output_dir: str,
+    target_sample_rate: int,
+) -> tuple[str, tuple[str, ...]]:
+    Separator = _load_audio_separator_class()
+    last_error: Exception | None = None
+    for model_candidate in stage.model_candidates:
+        _prepare_stage_directory(output_dir)
+        try:
+            separator = Separator(
+                **_build_separator_kwargs(output_dir, target_sample_rate)
+            )
+            separator.load_model(model_filename=model_candidate)
+            output_files = separator.separate(input_path)
+            resolved_output_files = _resolve_output_paths(output_files, output_dir)
+            if resolved_output_files:
+                return model_candidate, resolved_output_files
+        except Exception as error:
+            last_error = error
+    if stage.required:
+        raise RuntimeError(
+            "Audio separator stage failed"
+        ) from last_error
+    if last_error is not None:
+        _logger.warning("Skipping optional separator stage: %s", last_error)
+    return "", ()
+
+
+def _as_audio_array(audio_signal: np.ndarray) -> np.ndarray:
+    audio_array = np.asarray(audio_signal, dtype=np.float32)
+    if audio_array.ndim == 1:
+        return audio_array.reshape(1, -1)
+    if audio_array.ndim == 2 and audio_array.shape[0] <= audio_array.shape[-1]:
+        return audio_array.astype(np.float32, copy=False)
+    if audio_array.ndim == 2:
+        return audio_array.T.astype(np.float32, copy=False)
+    raise ValueError("Unsupported audio shape")
+
+
+def _resample_audio_array(
+    audio_signal: np.ndarray,
+    original_sample_rate: int,
+    target_sample_rate: int,
+) -> np.ndarray:
+    audio_array = _as_audio_array(audio_signal)
+    if int(original_sample_rate) == int(target_sample_rate):
+        return audio_array.astype(np.float32, copy=False)
+    resampled_channels = [
+        librosa.resample(
+            np.asarray(channel, dtype=np.float32),
+            orig_sr=int(original_sample_rate),
+            target_sr=int(target_sample_rate),
+        ).astype(np.float32, copy=False)
+        for channel in audio_array
+    ]
+    return np.vstack(resampled_channels).astype(np.float32, copy=False)
+
+
+def _align_audio_length(audio_signal: np.ndarray, target_length: int) -> np.ndarray:
+    audio_array = _as_audio_array(audio_signal)
+    current_length = int(audio_array.shape[-1])
+    if current_length == target_length:
+        return audio_array.astype(np.float32, copy=False)
+    if current_length > target_length:
+        return audio_array[:, :target_length].astype(np.float32, copy=False)
+    return np.pad(
+        audio_array,
+        ((0, 0), (0, target_length - current_length)),
+    ).astype(np.float32, copy=False)
+
+
+def _read_stage_signal(audio_path: str, target_sample_rate: int) -> np.ndarray:
+    sample_rate, audio_signal = read_audio(audio_path)
+    return _resample_audio_array(audio_signal, sample_rate, target_sample_rate)
+
+
+def _prepare_separator_input_audio(
+    audio_path: str,
+    output_dir: str,
+    target_sample_rate: int,
+) -> str:
+    sample_rate, audio_signal = read_audio(audio_path)
+    prepared_signal = _resample_audio_array(
+        audio_signal,
+        sample_rate,
+        target_sample_rate,
+    )
+    prepared_path = str(Path(output_dir) / "prepared_input.wav")
+    save_audio(
+        destination_path=prepared_path,
+        audio_signal=prepared_signal,
+        sample_rate=target_sample_rate,
+        bit_depth=32,
+    )
+    return prepared_path
+
+
+def _apply_stage_to_single_output(
+    source_path: str,
+    stage: SeparatorModelStage,
+    stage_name: str,
+    output_root: str,
+    target_sample_rate: int,
+) -> str:
+    _model_name, output_files = _run_separator_stage(
+        source_path,
+        stage,
+        str(Path(output_root) / stage_name),
+        target_sample_rate,
+    )
+    selected_output = _select_stage_output(output_files, stage.preferred_stems)
+    if selected_output is not None:
+        return selected_output
+    if stage.required:
+        raise FileNotFoundError("Stem separation failed")
+    return source_path
+
+
+def _write_selected_stage_outputs(
+    selected_stage_paths: dict[str, str],
+    output_root: str,
+    target_sample_rate: int,
+) -> dict[str, str]:
+    aligned_signals: dict[str, np.ndarray] = {}
+    target_length = 0
+    for stem_name, stem_path in selected_stage_paths.items():
+        stem_signal = _read_stage_signal(stem_path, target_sample_rate)
+        aligned_signals[stem_name] = stem_signal
+        target_length = max(target_length, int(stem_signal.shape[-1]))
+
+    peak = 0.0
+    for stem_name, stem_signal in tuple(aligned_signals.items()):
+        aligned_signal = _align_audio_length(stem_signal, target_length)
+        aligned_signals[stem_name] = aligned_signal
+        if aligned_signal.size:
+            peak = max(peak, float(np.max(np.abs(aligned_signal))))
+
+    if peak > 0.98:
+        scale = 0.98 / peak
+        aligned_signals = {
+            stem_name: stem_signal * scale
+            for stem_name, stem_signal in aligned_signals.items()
+        }
+
+    final_dir = Path(output_root) / "final"
+    final_dir.mkdir(parents=True, exist_ok=True)
+    written_paths: dict[str, str] = {}
+    for stem_name, stem_signal in aligned_signals.items():
+        destination_path = str(final_dir / f"{stem_name}.wav")
+        written_paths[stem_name] = save_audio(
+            destination_path=destination_path,
+            audio_signal=stem_signal,
+            sample_rate=target_sample_rate,
+            bit_depth=32,
+        )
+    return written_paths
+
+
+def _run_mastering_separator_pipeline(
+    audio_path: str,
+    output_root: str,
+    plan: MasteringSeparatorPlan,
+) -> dict[str, str]:
+    working_mix_path = _prepare_separator_input_audio(
+        audio_path,
+        output_root,
+        plan.target_sample_rate,
+    )
+    for stage_index, stage in enumerate(plan.preprocess_stages):
+        working_mix_path = _apply_stage_to_single_output(
+            working_mix_path,
+            stage,
+            f"preprocess_{stage_index}",
+            output_root,
+            plan.target_sample_rate,
+        )
+
+    instrumental_reference_path = _apply_stage_to_single_output(
+        working_mix_path,
+        plan.reference_split_stage,
+        "reference_split",
+        output_root,
+        plan.target_sample_rate,
+    )
+
+    four_stem_input_path = instrumental_reference_path or working_mix_path
+    _four_stem_model_name, four_stem_outputs = _run_separator_stage(
+        four_stem_input_path,
+        plan.four_stem_stage,
+        str(Path(output_root) / "four_stem"),
+        plan.target_sample_rate,
+    )
+    drums_path = _select_stage_output(four_stem_outputs, ("drums",))
+    bass_path = _select_stage_output(four_stem_outputs, ("bass",))
+    other_path = _select_stage_output(four_stem_outputs, ("other",))
+    if drums_path is None or bass_path is None or other_path is None:
+        raise FileNotFoundError("Mastering stem separation failed")
+
+    isolated_vocal_path = _apply_stage_to_single_output(
+        working_mix_path,
+        plan.vocal_stage,
+        "vocal_isolation",
+        output_root,
+        plan.target_sample_rate,
+    )
+    restored_vocal_path = _apply_stage_to_single_output(
+        isolated_vocal_path,
+        plan.vocal_restoration_stage,
+        "vocal_restoration",
+        output_root,
+        plan.target_sample_rate,
+    )
+    cleaned_drums_path = _apply_stage_to_single_output(
+        drums_path,
+        plan.instrumental_cleanup_stage,
+        "drums_cleanup",
+        output_root,
+        plan.target_sample_rate,
+    )
+    cleaned_bass_path = _apply_stage_to_single_output(
+        bass_path,
+        plan.instrumental_cleanup_stage,
+        "bass_cleanup",
+        output_root,
+        plan.target_sample_rate,
+    )
+    cleaned_other_path = _apply_stage_to_single_output(
+        other_path,
+        plan.instrumental_cleanup_stage,
+        "other_cleanup",
+        output_root,
+        plan.target_sample_rate,
+    )
+
+    return _write_selected_stage_outputs(
+        {
+            "vocals": restored_vocal_path,
+            "drums": cleaned_drums_path,
+            "bass": cleaned_bass_path,
+            "other": cleaned_other_path,
+        },
+        output_root,
+        plan.target_sample_rate,
+    )
+
+
+def _run_vocal_pair_separator_pipeline(
+    audio_path: str,
+    output_root: str,
+    *,
+    model_name: str,
+) -> dict[str, str]:
+    input_sample_rate, _input_signal = read_audio(audio_path)
+    target_sample_rate = _resolve_mastering_sample_rate(input_sample_rate)
+    prepared_mix_path = _prepare_separator_input_audio(
+        audio_path,
+        output_root,
+        target_sample_rate,
+    )
+    stage = _build_vocal_pair_stage(model_name)
+    _model_name, output_files = _run_separator_stage(
+        prepared_mix_path,
+        stage,
+        str(Path(output_root) / "vocal_pair"),
+        target_sample_rate,
+    )
+    vocals_path = _select_stage_output(output_files, ("vocals",))
+    instrumental_path = _select_stage_output(
+        output_files,
+        ("instrumental", "other"),
+    )
+    if vocals_path is None or instrumental_path is None:
+        raise FileNotFoundError("Stem separation failed")
+    return _write_selected_stage_outputs(
+        {
+            "vocals": vocals_path,
+            "no_vocals": instrumental_path,
+        },
+        output_root,
+        target_sample_rate,
+    )
 
 
 def separate_stem_layers(
     audio_path: str,
     *,
-    model_name: str = "htdemucs_6s",
+    model_name: str = "mastering",
     shifts: int = 2,
     two_stems: str | None = None,
     output_dir: str | None = None,
+    quality_flags: Sequence[str] = (),
 ) -> tuple[dict[str, str], str]:
-    resolved_model_name = _normalize_demucs_option(
-        model_name,
-        option_name="DEMUCS model name",
-    )
-    resolved_two_stems = (
-        None
-        if two_stems is None
-        else _normalize_demucs_option(
+    resolved_two_stems = None
+    if two_stems is not None:
+        resolved_two_stems = _normalize_model_name(
             two_stems,
-            option_name="DEMUCS two-stems value",
-        )
-    )
-    resolved_shifts = max(int(shifts), 1)
+            option_name="separator two-stems value",
+        ).lower()
     resolved_output_dir = output_dir or tmp(dir=True)
     owns_output_dir = output_dir is None
-    command = (
-        f'"{sys.executable}" -m demucs.separate -n {resolved_model_name} '
-        f"--shifts={resolved_shifts}"
-    )
-    if resolved_two_stems is not None:
-        command += f" --two-stems={resolved_two_stems}"
-    command += f' -o "{resolved_output_dir}" "{audio_path}"'
 
     try:
-        run(command)
-        separated_dir = (
-            Path(resolved_output_dir)
-            / resolved_model_name
-            / Path(audio_path).stem
+        if resolved_two_stems is not None:
+            if resolved_two_stems != "vocals":
+                raise ValueError(f"Unsupported two-stems value: {two_stems}")
+            stem_paths = _run_vocal_pair_separator_pipeline(
+                audio_path,
+                resolved_output_dir,
+                model_name=model_name,
+            )
+            return stem_paths, str(resolved_output_dir)
+
+        input_sample_rate, _input_signal = read_audio(audio_path)
+        plan = build_mastering_separator_plan(
+            input_sample_rate,
+            quality_flags=quality_flags,
+            model_name=model_name,
         )
-        stem_paths = {
-            stem_path.stem.lower(): str(stem_path)
-            for stem_path in sorted(separated_dir.glob("*.wav"))
-        }
-        if not stem_paths:
-            raise FileNotFoundError("Stem separation failed")
+        stem_paths = _run_mastering_separator_pipeline(
+            audio_path,
+            resolved_output_dir,
+            plan,
+        )
         return stem_paths, str(resolved_output_dir)
     except Exception:
         if owns_output_dir:
@@ -89,7 +672,7 @@ def separate_stems(
     try:
         stem_paths, _resolved_output_dir = separate_stem_layers(
             audio_path,
-            model_name="hdemucs_mmi",
+            model_name="mastering",
             shifts=2,
             two_stems="vocals",
             output_dir=output_dir,
@@ -107,14 +690,18 @@ def separate_stems(
 
     def export_stem(chosen_stem_path, suffix):
         sr, sound = read_audio(chosen_stem_path)
+        normalized_format = (
+            str(format_choice).strip().lower().lstrip(".") or "wav"
+        )
         output_stem = str(
-            Path(audio_path).with_name(Path(audio_path).stem + suffix)
+            Path(audio_path)
+            .with_name(Path(audio_path).stem + suffix)
+            .with_suffix(f".{normalized_format}")
         )
         return save_audio(
             audio_signal=sound,
             destination_path=output_stem,
             sample_rate=sr,
-            output_format=format_choice,
         )
 
     if separation_type == "acapella":
@@ -184,11 +771,13 @@ def stem_mixer(files, format_choice):
     temp_wav_path = tmp(".wav", keep=False)
     write_wav(temp_wav_path, target_sr, (mixed_y * 32767).astype(np.int16))
     sound = pydub.AudioSegment.from_file(temp_wav_path)
-    output_stem = Path(temp_wav_path).with_name(f"stem_mix_{random_string()}")
+    normalized_format = str(format_choice).strip().lower().lstrip(".") or "wav"
+    output_stem = Path(temp_wav_path).with_name(
+        f"stem_mix_{random_string()}.{normalized_format}"
+    )
     output_path = save_audio(
         audio_signal=sound,
         destination_path=output_stem,
-        output_format=format_choice,
     )
     delete(temp_wav_path)
     _logger.info("Success! Mix saved to: %s", output_path)

@@ -66,6 +66,20 @@ def test_resolve_stem_mastering_plan_scales_roles_differently():
     assert drums.overrides["target_lufs"] < base.target_lufs
 
 
+def test_resolve_stem_mastering_plan_clips_exciter_mix_and_staggers_drive():
+    base = CONFIG_MODULE.SmartMasteringConfig.balanced()
+
+    drums = MASTERING_STEMS_MODULE.resolve_stem_mastering_plan("drums", base)
+    vocals = MASTERING_STEMS_MODULE.resolve_stem_mastering_plan("vocals", base)
+    piano = MASTERING_STEMS_MODULE.resolve_stem_mastering_plan("piano", base)
+
+    assert drums.overrides["exciter_mix"] <= 1.0
+    assert vocals.overrides["exciter_mix"] <= 1.0
+    assert piano.overrides["exciter_mix"] <= 1.0
+    assert vocals.overrides["exciter_max_drive"] < drums.overrides["exciter_max_drive"]
+    assert "exciter_max_drive" not in piano.overrides
+
+
 def test_mix_stem_layers_aligns_sample_rates_and_applies_headroom():
     stems = {
         "drums": (
@@ -104,7 +118,7 @@ def test_process_stem_layers_processes_each_stem_and_cleans_temp_dir(tmp_path: P
             processed_calls.append((sample_rate, dict(mastering_kwargs)))
             or (sample_rate, np.array(signal, copy=True) * 0.5)
         ),
-        separate_stems_fn=lambda audio_path, model_name, shifts: (
+        separate_stems_fn=lambda audio_path, model_name, shifts, quality_flags=(): (
             {
                 "drums": "drums.wav",
                 "vocals": "vocals.wav",
@@ -174,7 +188,7 @@ def test_process_stem_layers_preserves_output_order_when_threads_finish_out_of_o
         base_config=base,
         base_mastering_kwargs={"preset": "balanced"},
         process_stem_fn=process_stem,
-        separate_stems_fn=lambda audio_path, model_name, shifts: (
+        separate_stems_fn=lambda audio_path, model_name, shifts, quality_flags=(): (
             {
                 "drums": "drums.wav",
                 "vocals": "vocals.wav",
@@ -211,6 +225,57 @@ def test_apply_stem_mix_balance_prioritizes_drums_over_vocals():
 
     assert drums_gain_db > vocals_gain_db
     assert float(np.max(np.abs(drums))) > float(np.max(np.abs(vocals)))
+
+
+def test_process_stem_layers_forwards_quality_flags_to_separator():
+    base = CONFIG_MODULE.SmartMasteringConfig.balanced()
+    separator_calls: list[tuple[str, str, int, tuple[str, ...]]] = []
+
+    MASTERING_STEMS_MODULE.process_stem_layers(
+        "song.wav",
+        base_config=base,
+        base_mastering_kwargs={"preset": "balanced"},
+        process_stem_fn=lambda signal, sample_rate, mastering_kwargs: (
+            sample_rate,
+            np.array(signal, copy=True),
+        ),
+        separate_stems_fn=lambda audio_path, model_name, shifts, quality_flags=(): (
+            separator_calls.append(
+                (audio_path, model_name, shifts, tuple(quality_flags))
+            )
+            or {
+                "vocals": "vocals.wav",
+            },
+            "temp-demucs-dir",
+        ),
+        read_audio_fn=lambda path: (
+            8000,
+            np.full((2, 16), 0.1, dtype=np.float32),
+        ),
+        delete_fn=lambda path: None,
+        quality_flags=("Low-Quality", "Old-Recording"),
+        save_mastered_stems=False,
+    )
+
+    assert separator_calls == [
+        ("song.wav", "mastering", 2, ("Low-Quality", "Old-Recording"))
+    ]
+
+
+def test_apply_stem_mix_balance_gives_drums_a_clear_level_lead():
+    drums, drums_gain_db = MASTERING_STEMS_MODULE._apply_stem_mix_balance(
+        np.full((2, 256), 0.18, dtype=np.float32),
+        "drums",
+        1.35,
+    )
+    vocals, vocals_gain_db = MASTERING_STEMS_MODULE._apply_stem_mix_balance(
+        np.full((2, 256), 0.18, dtype=np.float32),
+        "vocals",
+        -0.3,
+    )
+
+    assert drums_gain_db - vocals_gain_db > 3.0
+    assert float(np.max(np.abs(drums))) > float(np.max(np.abs(vocals))) * 1.4
 
 
 def test_apply_stem_tone_enrichment_adds_default_octave_layers_to_vocals():

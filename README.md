@@ -293,7 +293,20 @@ print(report.post_clamp_true_peak_dbfs)
 
 Available mastering presets are `balanced`, `edm`, and `vocal`. When `preset` is omitted, `master()` auto-selects the default preset from the input audio; if you want to override that decision, pass `preset` explicitly.
 
-`balanced` leans brighter and denser with drum weight, cymbal and snare presence, and wide upper-band motion. `edm` pushes the loudest and most saturated finish with the heaviest low-end impact, while `vocal` stays the most open and dynamic while still adding thicker presence and more top-end shine.
+`balanced` stays neutral, `edm` pushes the loudest and heaviest finish, and `vocal` keeps more openness, motion, and top-end air.
+
+If you need to customize a preset, prefer the three macro mastering controls instead of low-level thresholds and timings. `SmartMasteringConfig` and the mastering kwargs expose `bass`, `volume`, and `effects`, each on a `0.0` to `1.0` scale. Higher `bass` means more bass weight and less treble emphasis, higher `volume` means a louder and denser master, and higher `effects` means more stereo motion, spatial polish, and dynamic finishing. The detailed compressor, stereo, delivery, and finishing parameters are derived automatically at access time from those three values.
+
+```python
+from definers.audio import master
+
+output_path, report = master(
+    "./mix.wav",
+    output_path="./mix-mastered.wav",
+    preset="balanced",
+    effects=0.7,
+)
+```
 
 The mastering path also adapts its repair intensity automatically for weak or legacy material: when a source is unusually dull, air-starved, almost mono, or closed and bass-loaded, it now rebalances more selectively by opening the upper bands, calming low-end compression pressure, and preserving more perceived air without requiring a separate preset.
 

@@ -2,6 +2,7 @@ import importlib.util
 import json
 import sys
 import types
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -212,8 +213,8 @@ def test_config_presets_span_density_and_stereo_motion_profiles():
     )
     assert edm.bass_boost_db_per_oct > balanced.bass_boost_db_per_oct
     assert balanced.bass_boost_db_per_oct > vocal.bass_boost_db_per_oct
-    assert balanced.treble_boost_db_per_oct > vocal.treble_boost_db_per_oct
-    assert vocal.treble_boost_db_per_oct > edm.treble_boost_db_per_oct
+    assert vocal.treble_boost_db_per_oct > balanced.treble_boost_db_per_oct
+    assert balanced.treble_boost_db_per_oct > edm.treble_boost_db_per_oct
     assert vocal.micro_dynamics_strength > balanced.micro_dynamics_strength
     assert balanced.micro_dynamics_strength > edm.micro_dynamics_strength
     assert balanced.stereo_tone_variation_db > edm.stereo_tone_variation_db
@@ -230,6 +231,80 @@ def test_config_presets_span_density_and_stereo_motion_profiles():
     assert vocal.mono_bass_hz < balanced.mono_bass_hz < edm.mono_bass_hz
     assert edm.limiter_recovery_style == "tight"
     assert vocal.codec_headroom_margin_db > balanced.codec_headroom_margin_db
+
+
+def test_preset_name_constructor_derives_matching_preset_profile():
+    edm = CONFIG_MODULE.SmartMasteringConfig.edm()
+    derived = CONFIG_MODULE.SmartMasteringConfig(preset_name="edm")
+
+    assert derived.preset_name == "edm"
+    assert derived.intensity == pytest.approx(edm.intensity)
+    assert derived.target_lufs == pytest.approx(edm.target_lufs)
+    assert derived.drive_db == pytest.approx(edm.drive_db)
+    assert derived.bass_ratio == pytest.approx(edm.bass_ratio)
+    assert derived.limiter_recovery_style == edm.limiter_recovery_style
+
+
+def test_macro_controls_derive_low_level_parameters():
+    balanced = CONFIG_MODULE.SmartMasteringConfig.balanced()
+    config = CONFIG_MODULE.SmartMasteringConfig(
+        bass=0.25,
+        volume=0.8,
+        effects=0.2,
+    )
+
+    assert config.target_lufs > balanced.target_lufs
+    assert config.bass_ratio > balanced.bass_ratio
+    assert config.stereo_width < balanced.stereo_width
+    assert config.treble_boost_db_per_oct < balanced.treble_boost_db_per_oct
+    assert config.limiter_recovery_style == "tight"
+    assert config.low_end_mono_tightening == "balanced"
+    assert config.delivery_decoded_true_peak_dbfs is None
+
+    base_bass_boost = config.bass_boost_db_per_oct
+    base_treble_boost = config.treble_boost_db_per_oct
+    config.bass = 1.0
+    assert config.bass_boost_db_per_oct > base_bass_boost
+    assert config.treble_boost_db_per_oct < base_treble_boost
+
+    base_stereo_width = config.stereo_width
+    base_micro_dynamics = config.micro_dynamics_strength
+    config.effects = 1.0
+    assert config.stereo_width > base_stereo_width
+    assert config.micro_dynamics_strength > base_micro_dynamics
+
+    base_drive = config.drive_db
+    base_target_lufs = config.target_lufs
+    config.volume = 1.0
+    assert config.drive_db > base_drive
+    assert config.target_lufs > base_target_lufs
+
+
+def test_low_level_overrides_take_precedence_over_macro_derivation():
+    config = CONFIG_MODULE.SmartMasteringConfig(
+        volume=1.0,
+        bass_ratio=9.0,
+        treb_threshold_db=-31.0,
+    )
+
+    assert config.bass_ratio == pytest.approx(9.0)
+    assert config.treb_threshold_db == pytest.approx(-31.0)
+    assert config.treb_ratio == pytest.approx(
+        CONFIG_MODULE.SmartMasteringConfig(volume=1.0).treb_ratio
+    )
+
+
+def test_dataclass_replace_preserves_low_level_overrides():
+    config = CONFIG_MODULE.SmartMasteringConfig(
+        volume=1.0,
+        bass_ratio=9.0,
+    )
+
+    updated = replace(config, effects=1.0)
+
+    assert updated.effects == pytest.approx(1.0)
+    assert updated.bass_ratio == pytest.approx(9.0)
+    assert updated.stereo_width > config.stereo_width
 
 
 def test_smart_mastering_defaults_to_balanced_preset():
@@ -475,6 +550,42 @@ def test_resolve_mastering_kwargs_for_input_preserves_explicit_preset_override(
     assert explicit == {"preset": "edm"}
     assert automatic == {"preset": "vocal"}
     assert called == ["auto"]
+
+
+def test_analyze_mastering_input_flags_legacy_and_low_quality(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr(
+        MASTERING_MODULE,
+        "_collect_mastering_input_metrics",
+        lambda signal, sample_rate: MASTERING_MODULE.MasteringInputMetrics(
+            integrated_lufs=-18.5,
+            crest_factor_db=12.8,
+            stereo_width_ratio=0.1,
+            low_end_mono_ratio=0.95,
+            spectral_tilt=-11.0,
+            transient_density=0.025,
+            stereo_motion=0.01,
+            bass_share=0.28,
+            low_mid_share=0.48,
+            presence_share=0.06,
+            air_share=0.02,
+        ),
+    )
+    monkeypatch.setattr(
+        MASTERING_MODULE,
+        "_select_mastering_preset",
+        lambda signal, sample_rate: "vocal",
+    )
+
+    analysis = MASTERING_MODULE._analyze_mastering_input(
+        np.zeros((2, 64), dtype=np.float32),
+        22050,
+    )
+
+    assert analysis.preset_name == "vocal"
+    assert analysis.quality_flags == ("Old-Recording", "Low-Quality")
+    assert analysis.target_sample_rate == 44100
 
 
 def test_mastering_facade_keeps_public_exports_stable():
@@ -2495,7 +2606,7 @@ def test_master_stems_forces_stem_mastering(monkeypatch: pytest.MonkeyPatch):
     }
 
 
-def test_master_routes_stem_mastering_through_demucs_pipeline(
+def test_master_routes_stem_mastering_through_audio_separator_pipeline(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ):
     report_path = tmp_path / "stem-mastering-report.json"
@@ -2511,7 +2622,9 @@ def test_master_routes_stem_mastering_through_demucs_pipeline(
         mastering_stems_module_name
     )
     processed_inputs: list[np.ndarray] = []
-    helper_calls: list[tuple[str, str, int, float, dict[str, object]]] = []
+    helper_calls: list[
+        tuple[str, str, int, tuple[str, ...], float, dict[str, object], bool, str | None, str]
+    ] = []
     mixed_signal = np.full((2, 8), 0.25, dtype=np.float32)
 
     fake_report = types.SimpleNamespace(
@@ -2559,6 +2672,7 @@ def test_master_routes_stem_mastering_through_demucs_pipeline(
         delete_fn,
         model_name,
         shifts,
+        quality_flags=(),
         mix_headroom_db,
         resample_fn=None,
         save_mastered_stems=True,
@@ -2574,6 +2688,7 @@ def test_master_routes_stem_mastering_through_demucs_pipeline(
                 audio_path,
                 model_name,
                 shifts,
+                tuple(quality_flags),
                 mix_headroom_db,
                 dict(base_mastering_kwargs),
                 save_mastered_stems,
@@ -2603,6 +2718,16 @@ def test_master_routes_stem_mastering_through_demucs_pipeline(
             ),
         )
         monkeypatch.setattr(MASTERING_MODULE, "SmartMastering", FakeMastering)
+        monkeypatch.setattr(
+            MASTERING_MODULE,
+            "_analyze_mastering_input",
+            lambda signal, sample_rate: MASTERING_MODULE.MasteringInputAnalysis(
+                preset_name="balanced",
+                quality_flags=("Low-Quality",),
+                target_sample_rate=48000,
+                metrics=None,
+            ),
+        )
         monkeypatch.setattr(
             MASTERING_MODULE,
             "save_verified_audio",
@@ -2646,8 +2771,9 @@ def test_master_routes_stem_mastering_through_demucs_pipeline(
             "input.wav",
             "htdemucs_6s",
             4,
+            ("Low-Quality",),
             7.0,
-            {"preset": "balanced"},
+            {"preset": "balanced", "resampling_target": 48000},
             True,
             str(output_path.with_suffix("")) + "_stems",
             "wav",
@@ -2709,6 +2835,7 @@ def test_master_auto_selects_preset_before_stem_mastering_helper(
         delete_fn,
         model_name,
         shifts,
+        quality_flags=(),
         mix_headroom_db,
         resample_fn=None,
         save_mastered_stems=True,
@@ -2722,6 +2849,7 @@ def test_master_auto_selects_preset_before_stem_mastering_helper(
         helper_calls.append(
             {
                 **dict(base_mastering_kwargs),
+                "quality_flags": tuple(quality_flags),
                 "save_mastered_stems": save_mastered_stems,
                 "mastered_stems_output_dir": mastered_stems_output_dir,
                 "mastered_stems_format": mastered_stems_format,
@@ -2753,6 +2881,16 @@ def test_master_auto_selects_preset_before_stem_mastering_helper(
             MASTERING_MODULE,
             "_select_mastering_preset",
             lambda signal, sample_rate: "vocal",
+        )
+        monkeypatch.setattr(
+            MASTERING_MODULE,
+            "_analyze_mastering_input",
+            lambda signal, sample_rate: MASTERING_MODULE.MasteringInputAnalysis(
+                preset_name="vocal",
+                quality_flags=("Old-Recording",),
+                target_sample_rate=48000,
+                metrics=None,
+            ),
         )
         monkeypatch.setattr(
             MASTERING_MODULE,
@@ -2798,6 +2936,8 @@ def test_master_auto_selects_preset_before_stem_mastering_helper(
     assert helper_calls == [
         {
             "preset": "vocal",
+            "resampling_target": 48000,
+            "quality_flags": ("Old-Recording",),
             "save_mastered_stems": True,
             "mastered_stems_output_dir": str(output_path.with_suffix(""))
             + "_stems",

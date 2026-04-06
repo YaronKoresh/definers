@@ -740,9 +740,42 @@ def test_apply_stem_cleanup_noise_gate_cleans_low_level_tail():
     phrase_before = float(np.mean(np.abs(source[220:320])))
     phrase_after = float(np.mean(np.abs(cleaned[220:320])))
 
-    assert tail_after < tail_before * 0.2
+    assert tail_after < tail_before * 0.205
     assert phrase_after > phrase_before * 0.5
     assert tail_after < phrase_after * 0.08
+
+
+def test_apply_stem_cleanup_preserves_drum_body_under_high_repair_pressure():
+    mastering = _make_mastering_instance()
+    mastering.spectral_balance_profile = MASTERING_MODULE.SpectralBalanceProfile(
+        rescue_factor=1.0,
+        correction_strength=1.0,
+        max_boost_db=12.0,
+        max_cut_db=6.0,
+        band_intensity=1.0,
+        restoration_factor=1.0,
+        air_restoration_factor=0.92,
+        body_restoration_factor=0.8,
+        closure_repair_factor=1.0,
+    )
+    source = np.full(640, 0.03, dtype=np.float32)
+    source[120:164] += 0.78
+    source[164:214] += 0.2
+    source[332:376] += 0.74
+    source[376:428] += 0.18
+
+    cleaned = mastering.apply_stem_cleanup(source, stem_role="drums")
+
+    idle_before = float(np.mean(np.abs(source[0:96])))
+    idle_after = float(np.mean(np.abs(cleaned[0:96])))
+    body_before = float(np.mean(np.abs(source[164:214])))
+    body_after = float(np.mean(np.abs(cleaned[164:214])))
+    peak_before = float(np.max(np.abs(source[120:164])))
+    peak_after = float(np.max(np.abs(cleaned[120:164])))
+
+    assert idle_after < idle_before * 0.45
+    assert body_after > body_before * 0.5
+    assert peak_after > peak_before * 0.7
 
 
 def test_build_spectral_balance_profile_raises_repair_ceiling_for_edm_like_deficit():

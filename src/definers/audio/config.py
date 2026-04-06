@@ -1,108 +1,711 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any, ClassVar
 
 import numpy as np
+
+
+_PRESET_MACRO_DEFAULTS: dict[str, dict[str, float]] = {
+    "balanced": {
+        "bass": 0.5,
+        "volume": 0.5,
+        "effects": 1.0,
+    },
+    "edm": {
+        "bass": 1.0,
+        "volume": 1.0,
+        "effects": 1.0,
+    },
+    "vocal": {
+        "bass": 0.25,
+        "volume": 0.25,
+        "effects": 1.0,
+    },
+}
+
+_LEGACY_MACRO_ALIASES: dict[str, tuple[str, ...]] = {
+    "bass": ("tone",),
+    "volume": ("loudness", "compression"),
+    "effects": ("space", "detail", "control"),
+}
+
+_DERIVED_FIELD_SPECS: dict[str, dict[str, Any]] = {
+    "intensity": {
+        "base": 1.0,
+        "coeffs": {
+            "bass": 0.03,
+            "volume": 0.1,
+            "effects": -0.005,
+        },
+        "clip": (0.25, 2.5),
+    },
+    "delivery_lufs_tolerance_db": {
+        "base": 0.6,
+        "coeffs": {"volume": -0.15, "effects": 0.1},
+        "clip": (0.2, 1.5),
+    },
+    "delivery_bitrate": {
+        "base": 320,
+        "kind": "int",
+        "clip": (32, 640),
+    },
+    "contract_target_lufs_tolerance_db": {
+        "base": 0.55,
+        "coeffs": {"volume": -0.1, "effects": 0.08},
+        "clip": (0.2, 1.5),
+    },
+    "contract_max_short_term_lufs": {
+        "base": -6.1,
+        "coeffs": {"volume": 1.6, "effects": -0.2},
+        "clip": (-12.0, -3.0),
+    },
+    "contract_max_momentary_lufs": {
+        "base": -4.7,
+        "coeffs": {"volume": 1.5, "effects": -0.25},
+        "clip": (-10.0, -2.0),
+    },
+    "contract_min_crest_factor_db": {
+        "base": 5.0,
+        "coeffs": {"volume": -0.7, "effects": 0.5},
+        "clip": (2.0, 10.0),
+    },
+    "contract_max_crest_factor_db": {
+        "base": 12.5,
+        "coeffs": {"volume": -1.5, "effects": 1.5},
+        "clip": (5.0, 18.0),
+    },
+    "contract_max_stereo_width_ratio": {
+        "base": 0.68,
+        "coeffs": {
+            "bass": -0.01,
+            "volume": -0.02,
+            "effects": 0.06,
+        },
+        "clip": (0.45, 0.85),
+    },
+    "contract_min_low_end_mono_ratio": {
+        "base": 0.84,
+        "coeffs": {
+            "bass": 0.03,
+            "volume": 0.02,
+            "effects": -0.02,
+        },
+        "clip": (0.7, 1.0),
+    },
+    "contract_low_end_mono_cutoff_hz": {
+        "base": 145.0,
+        "coeffs": {
+            "bass": 8.0,
+            "volume": 2.0,
+            "effects": -4.0,
+        },
+        "clip": (80.0, 220.0),
+    },
+    "bass_knee_db": {
+        "base": 10.0,
+        "coeffs": {
+            "bass": 0.2,
+            "volume": 0.5,
+            "effects": -0.1,
+        },
+        "clip": (1.0, 18.0),
+    },
+    "treb_knee_db": {
+        "base": 2.0,
+        "coeffs": {
+            "bass": -0.1,
+            "volume": 0.12,
+            "effects": -0.05,
+        },
+        "clip": (0.5, 6.0),
+    },
+    "bass_ratio": {
+        "base": 3.0,
+        "coeffs": {
+            "bass": 0.25,
+            "volume": 0.5,
+            "effects": -0.15,
+        },
+        "clip": (1.2, 6.0),
+    },
+    "bass_attack_ms": {
+        "base": 36.0,
+        "coeffs": {
+            "bass": 2.0,
+            "volume": -4.0,
+            "effects": 1.0,
+        },
+        "clip": (1.0, 80.0),
+    },
+    "bass_release_ms": {
+        "base": 155.0,
+        "coeffs": {
+            "bass": 6.0,
+            "volume": -18.0,
+            "effects": 3.0,
+        },
+        "clip": (20.0, 260.0),
+    },
+    "bass_threshold_db": {
+        "base": -18.5,
+        "coeffs": {
+            "bass": -0.4,
+            "volume": -1.0,
+            "effects": 0.2,
+        },
+        "clip": (-40.0, -6.0),
+    },
+    "treb_ratio": {
+        "base": 1.95,
+        "coeffs": {
+            "bass": -0.08,
+            "volume": 0.28,
+            "effects": -0.3,
+        },
+        "clip": (1.0, 4.0),
+    },
+    "treb_attack_ms": {
+        "base": 6.5,
+        "coeffs": {
+            "bass": -0.2,
+            "volume": -0.8,
+            "effects": 0.6,
+        },
+        "clip": (1.0, 20.0),
+    },
+    "treb_release_ms": {
+        "base": 115.0,
+        "coeffs": {
+            "bass": -2.0,
+            "volume": -9.0,
+            "effects": 6.0,
+        },
+        "clip": (40.0, 200.0),
+    },
+    "treb_threshold_db": {
+        "base": -27.5,
+        "coeffs": {
+            "bass": 0.8,
+            "volume": -1.0,
+            "effects": 0.2,
+        },
+        "clip": (-40.0, -12.0),
+    },
+    "target_lufs": {
+        "base": -9.0,
+        "coeffs": {"volume": 3.0, "effects": 0.2},
+        "clip": (-14.0, -4.5),
+    },
+    "stop_bass_boost_hz": {
+        "base": 145.0,
+        "coeffs": {
+            "bass": 12.0,
+            "volume": 3.0,
+            "effects": -4.0,
+        },
+        "clip": (90.0, 220.0),
+    },
+    "start_treble_boost_hz": {
+        "base": 3650.0,
+        "coeffs": {
+            "bass": 450.0,
+            "volume": 50.0,
+            "effects": -200.0,
+        },
+        "clip": (2200.0, 5500.0),
+    },
+    "bass_boost_db_per_oct": {
+        "base": 1.18,
+        "coeffs": {
+            "bass": 0.22,
+            "volume": 0.06,
+            "effects": -0.04,
+        },
+        "clip": (0.4, 1.8),
+    },
+    "mid_slope": {
+        "base": -0.82,
+        "coeffs": {
+            "bass": -0.18,
+            "volume": -0.08,
+            "effects": 0.08,
+        },
+        "clip": (-1.6, 0.2),
+    },
+    "treble_boost_db_per_oct": {
+        "base": 1.16,
+        "coeffs": {
+            "bass": -0.12,
+            "volume": -0.04,
+            "effects": 0.08,
+        },
+        "clip": (0.5, 1.6),
+    },
+    "anchor_curve_strength": {
+        "base": 0.5,
+        "coeffs": {
+            "bass": 0.05,
+            "volume": 0.08,
+            "effects": -0.1,
+        },
+        "clip": (0.1, 0.8),
+    },
+    "drive_db": {
+        "base": 1.35,
+        "coeffs": {
+            "bass": 0.1,
+            "volume": 0.9,
+            "effects": -0.05,
+        },
+        "clip": (0.0, 3.5),
+    },
+    "ceil_db": {
+        "base": -0.3,
+        "coeffs": {"volume": 0.18, "effects": -0.05},
+        "clip": (-1.2, -0.1),
+    },
+    "max_spectrum_boost_db": {
+        "base": 6.0,
+        "coeffs": {
+            "bass": -0.1,
+            "volume": 0.4,
+            "effects": 0.2,
+        },
+        "clip": (3.0, 8.0),
+    },
+    "max_spectrum_cut_db": {
+        "base": 6.0,
+        "coeffs": {"volume": 0.4, "effects": -0.1},
+        "clip": (3.0, 8.0),
+    },
+    "spectral_rescue_strength": {
+        "base": 1.0,
+        "coeffs": {
+            "bass": 0.05,
+            "volume": -0.45,
+            "effects": -0.35,
+        },
+        "clip": (0.0, 1.5),
+    },
+    "spectral_rescue_boost_db": {
+        "base": 2.3,
+        "coeffs": {"volume": 0.25, "effects": -0.1},
+        "clip": (0.5, 4.0),
+    },
+    "spectral_rescue_cut_db": {
+        "base": 1.0,
+        "coeffs": {"volume": 0.12, "effects": -0.08},
+        "clip": (0.2, 2.0),
+    },
+    "spectral_rescue_band_intensity": {
+        "base": 1.0,
+        "coeffs": {"volume": -0.2, "effects": -0.2},
+        "clip": (0.2, 1.6),
+    },
+    "spectral_drive_bias_db": {
+        "base": 1.05,
+        "coeffs": {
+            "bass": 0.05,
+            "volume": 0.35,
+            "effects": -0.15,
+        },
+        "clip": (0.0, 2.0),
+    },
+    "exciter_mix": {
+        "base": 0.86,
+        "coeffs": {"volume": -0.03, "effects": 0.12},
+        "clip": (0.0, 1.0),
+    },
+    "exciter_cutoff_hz": {"base": None},
+    "exciter_max_drive": {
+        "base": 3.4,
+        "coeffs": {
+            "bass": -0.15,
+            "volume": 0.45,
+            "effects": -0.1,
+        },
+        "clip": (0.5, 5.0),
+    },
+    "exciter_high_frequency_cutoff_hz": {
+        "base": 6800.0,
+        "coeffs": {
+            "bass": -500.0,
+            "volume": -250.0,
+            "effects": 350.0,
+        },
+        "clip": (3500.0, 9000.0),
+    },
+    "stereo_width": {
+        "base": 1.36,
+        "coeffs": {
+            "bass": -0.04,
+            "volume": -0.02,
+            "effects": 0.09,
+        },
+        "clip": (0.8, 1.6),
+    },
+    "mono_bass_hz": {
+        "base": 120.0,
+        "coeffs": {
+            "bass": 16.0,
+            "volume": 2.0,
+            "effects": -6.0,
+        },
+        "clip": (80.0, 170.0),
+    },
+    "stereo_tone_variation_db": {
+        "base": 1.28,
+        "coeffs": {
+            "bass": -0.04,
+            "volume": -0.06,
+            "effects": 0.16,
+        },
+        "clip": (0.0, 1.5),
+    },
+    "stereo_tone_variation_cutoff_hz": {
+        "base": 1375.0,
+        "coeffs": {
+            "bass": 90.0,
+            "volume": 40.0,
+            "effects": -100.0,
+        },
+        "clip": (800.0, 1800.0),
+    },
+    "stereo_tone_variation_smoothing_ms": {
+        "base": 128.0,
+        "coeffs": {"volume": 18.0, "effects": -16.0},
+        "clip": (20.0, 220.0),
+    },
+    "stereo_motion_mid_amount": {
+        "base": 1.12,
+        "coeffs": {"volume": -0.03, "effects": 0.12},
+        "clip": (0.0, 1.6),
+    },
+    "stereo_motion_high_amount": {
+        "base": 1.4,
+        "coeffs": {
+            "bass": -0.02,
+            "volume": -0.05,
+            "effects": 0.15,
+        },
+        "clip": (0.0, 1.7),
+    },
+    "stereo_motion_correlation_guard": {
+        "base": 0.84,
+        "coeffs": {
+            "bass": 0.01,
+            "volume": 0.06,
+            "effects": -0.06,
+        },
+        "clip": (0.5, 1.1),
+    },
+    "stereo_motion_max_side_boost": {
+        "base": 0.28,
+        "coeffs": {"volume": -0.03, "effects": 0.03},
+        "clip": (0.0, 0.3),
+    },
+    "final_lufs_tolerance": {
+        "base": 0.25,
+        "coeffs": {"volume": -0.02, "effects": 0.03},
+        "clip": (0.1, 0.5),
+    },
+    "max_final_boost_db": {
+        "base": 3.5,
+        "coeffs": {"volume": 0.9, "effects": -0.1},
+        "clip": (1.0, 5.0),
+    },
+    "max_follow_up_passes": {
+        "base": 2,
+        "kind": "int",
+        "clip": (1, 4),
+    },
+    "follow_up_soft_clip_ratio_step": {
+        "base": 0.015,
+        "coeffs": {"volume": 0.004},
+        "clip": (0.005, 0.03),
+    },
+    "limiter_oversample_factor": {
+        "base": 8,
+        "kind": "int",
+        "clip": (1, 16),
+    },
+    "limiter_soft_clip_ratio": {
+        "base": 0.18,
+        "coeffs": {"volume": 0.08, "effects": -0.01},
+        "clip": (0.0, 0.5),
+    },
+    "true_peak_oversample_factor": {
+        "base": 8,
+        "kind": "int",
+        "clip": (1, 16),
+    },
+    "pre_limiter_saturation_ratio": {
+        "base": 0.06,
+        "coeffs": {
+            "bass": 0.01,
+            "volume": 0.06,
+            "effects": -0.015,
+        },
+        "clip": (0.0, 0.25),
+    },
+    "low_end_mono_tightening_amount": {
+        "base": 0.76,
+        "coeffs": {
+            "bass": 0.06,
+            "volume": 0.1,
+            "effects": -0.05,
+        },
+        "clip": (0.0, 1.0),
+    },
+    "codec_headroom_margin_db": {
+        "base": 0.1,
+        "coeffs": {"volume": -0.03, "effects": 0.04},
+        "clip": (0.0, 0.3),
+    },
+    "stem_noise_gate_enabled": {"base": True, "kind": "bool"},
+    "stem_noise_gate_strength": {
+        "base": 1.0,
+        "coeffs": {"volume": 0.05, "effects": -0.02},
+        "clip": (0.0, 1.5),
+    },
+    "stem_tone_enrichment_enabled": {"base": True, "kind": "bool"},
+    "stem_tone_enrichment_mix": {
+        "base": 0.14,
+        "coeffs": {"volume": -0.01, "effects": 0.02},
+        "clip": (0.0, 0.3),
+    },
+    "reference_match_amount": {
+        "base": 0.44,
+        "coeffs": {"volume": -0.04, "effects": 0.1},
+        "clip": (0.0, 1.0),
+    },
+    "micro_dynamics_strength": {
+        "base": 0.1,
+        "coeffs": {"volume": -0.04, "effects": 0.05},
+        "clip": (0.0, 0.3),
+    },
+    "micro_dynamics_fast_window_ms": {
+        "base": 8.0,
+        "coeffs": {
+            "bass": 0.2,
+            "volume": -0.6,
+            "effects": 2.0,
+        },
+        "clip": (1.0, 20.0),
+    },
+    "micro_dynamics_slow_window_ms": {
+        "base": 58.0,
+        "coeffs": {
+            "bass": 2.0,
+            "volume": -10.0,
+            "effects": 12.0,
+        },
+        "clip": (10.0, 120.0),
+    },
+    "micro_dynamics_transient_bias": {
+        "base": 0.73,
+        "coeffs": {"volume": -0.03, "effects": 0.07},
+        "clip": (0.0, 1.0),
+    },
+}
+
+_DERIVED_FIELDS: set[str] = set(_DERIVED_FIELD_SPECS) | {
+    "delivery_decoded_true_peak_dbfs",
+    "limiter_recovery_style",
+    "low_end_mono_tightening",
+}
+
+
+def _normalize_macro_value(value: float) -> float:
+    return float(np.clip(float(value), 0.0, 1.0))
+
+
+def _coerce_direct_macro(
+    value: float | None,
+    default: float,
+) -> float:
+    if value is None:
+        return default
+    return _normalize_macro_value(value)
+
+
+def _coerce_legacy_macro(value: float) -> float:
+    return float((np.clip(float(value), -1.0, 1.0) + 1.0) * 0.5)
+
+
+def _signed_macro_value(value: float) -> float:
+    return float(_normalize_macro_value(value) * 2.0 - 1.0)
+
+
+def _apply_numeric_spec(
+    spec: dict[str, Any],
+    bass: float,
+    volume: float,
+    effects: float,
+) -> Any:
+    kind = str(spec.get("kind", "float"))
+    base_value = spec["base"]
+    if kind == "bool":
+        return bool(base_value)
+    if base_value is None:
+        return None
+
+    coeffs = spec.get("coeffs", {})
+    resolved = float(base_value)
+    resolved += bass * float(coeffs.get("bass", 0.0))
+    resolved += volume * float(coeffs.get("volume", 0.0))
+    resolved += effects * float(coeffs.get("effects", 0.0))
+
+    clip_range = spec.get("clip")
+    if clip_range is not None:
+        resolved = float(np.clip(resolved, clip_range[0], clip_range[1]))
+
+    if kind == "int":
+        return int(round(resolved))
+    return resolved
 
 
 @dataclass
 class SmartMasteringConfig:
     num_bands: int = 6
-    intensity: float = 1.0
     preset_name: str | None = "balanced"
     delivery_profile: str | None = "lossless"
-    delivery_decoded_true_peak_dbfs: float | None = None
-    delivery_lufs_tolerance_db: float = 0.6
-    delivery_bitrate: int | None = 320
-    contract_target_lufs_tolerance_db: float = 0.55
-    contract_max_short_term_lufs: float | None = -6.1
-    contract_max_momentary_lufs: float | None = -4.7
-    contract_min_crest_factor_db: float | None = 5.0
-    contract_max_crest_factor_db: float | None = 12.5
-    contract_max_stereo_width_ratio: float | None = 0.68
-    contract_min_low_end_mono_ratio: float | None = 0.84
-    contract_low_end_mono_cutoff_hz: float = 145.0
-
-    bass_knee_db: float = 10.0
-    treb_knee_db: float = 2.0
-
-    bass_ratio: float = 3.0
-    bass_attack_ms: float = 36.0
-    bass_release_ms: float = 155.0
-    bass_threshold_db: float = -18.5
-
-    treb_ratio: float = 1.95
-    treb_attack_ms: float = 6.5
-    treb_release_ms: float = 115.0
-    treb_threshold_db: float = -27.5
-
     resampling_target: int = 44100
-
-    target_lufs: float = -9.0
-
-    stop_bass_boost_hz: float = 145.0
-    start_treble_boost_hz: float = 3650.0
-
-    bass_boost_db_per_oct: float = 1.18
-    mid_slope: float = -0.82
-    treble_boost_db_per_oct: float = 1.16
-    anchor_curve_strength: float = 0.5
-
     smoothing_fraction: float | None = 0.2
-
     correction_strength: float = 1.0
-
     analysis_low_hz: float = 10.0
     low_cut: float | None = None
     high_cut: float | None = None
+    bass: float = 0.5
+    volume: float = 0.5
+    effects: float = 0.5
+    _detail_overrides: dict[str, Any] = field(
+        default_factory=dict,
+        repr=False,
+        compare=False,
+    )
+    _band_intensity_override: float | None = field(
+        default=None,
+        repr=False,
+        compare=False,
+    )
 
-    drive_db: float = 1.35
-    ceil_db: float = -0.3
+    _preset_macro_defaults: ClassVar[dict[str, dict[str, float]]] = (
+        _PRESET_MACRO_DEFAULTS
+    )
+    _legacy_macro_aliases: ClassVar[dict[str, tuple[str, ...]]] = (
+        _LEGACY_MACRO_ALIASES
+    )
+    _derived_field_specs: ClassVar[dict[str, dict[str, Any]]] = (
+        _DERIVED_FIELD_SPECS
+    )
+    _derived_fields: ClassVar[set[str]] = _DERIVED_FIELDS
 
-    max_spectrum_boost_db: float = 6.0
-    max_spectrum_cut_db: float = 6.0
-    spectral_rescue_strength: float = 1.0
-    spectral_rescue_boost_db: float = 2.3
-    spectral_rescue_cut_db: float = 1.0
-    spectral_rescue_band_intensity: float = 1.0
-    spectral_drive_bias_db: float = 1.05
-    exciter_mix: float = 1.0
-    exciter_cutoff_hz: float | None = None
-    exciter_max_drive: float = 3.4
-    exciter_high_frequency_cutoff_hz: float | None = 6800.0
+    def __init__(
+        self,
+        num_bands: int = 6,
+        preset_name: str | None = "balanced",
+        delivery_profile: str | None = "lossless",
+        resampling_target: int = 44100,
+        smoothing_fraction: float | None = 0.2,
+        correction_strength: float = 1.0,
+        analysis_low_hz: float = 10.0,
+        low_cut: float | None = None,
+        high_cut: float | None = None,
+        bass: float | None = None,
+        volume: float | None = None,
+        effects: float | None = None,
+        _detail_overrides: dict[str, Any] | None = None,
+        _band_intensity_override: float | None = None,
+        **legacy_overrides: Any,
+    ) -> None:
+        normalized_preset = self._normalize_preset_name(preset_name)
+        preset_defaults = self._preset_macro_defaults[normalized_preset]
+        direct_macros = {
+            "bass": bass,
+            "volume": volume,
+            "effects": effects,
+        }
+        resolved_macros = {
+            macro_name: self._resolve_macro_value(
+                macro_name,
+                direct_value=direct_macros[macro_name],
+                default_value=preset_defaults[macro_name],
+                legacy_overrides=legacy_overrides,
+            )
+            for macro_name in ("bass", "volume", "effects")
+        }
 
-    stereo_width: float = 1.36
-    mono_bass_hz: float = 120.0
-    stereo_tone_variation_db: float = 1.28
-    stereo_tone_variation_cutoff_hz: float = 1375.0
-    stereo_tone_variation_smoothing_ms: float = 128.0
-    stereo_motion_mid_amount: float = 1.12
-    stereo_motion_high_amount: float = 1.4
-    stereo_motion_correlation_guard: float = 0.84
-    stereo_motion_max_side_boost: float = 0.28
+        object.__setattr__(self, "num_bands", int(num_bands))
+        object.__setattr__(self, "preset_name", normalized_preset)
+        object.__setattr__(self, "delivery_profile", delivery_profile)
+        object.__setattr__(self, "resampling_target", int(resampling_target))
+        object.__setattr__(self, "smoothing_fraction", smoothing_fraction)
+        object.__setattr__(self, "correction_strength", float(correction_strength))
+        object.__setattr__(self, "analysis_low_hz", float(analysis_low_hz))
+        object.__setattr__(
+            self,
+            "low_cut",
+            None if low_cut is None else float(low_cut),
+        )
+        object.__setattr__(
+            self,
+            "high_cut",
+            None if high_cut is None else float(high_cut),
+        )
+        object.__setattr__(
+            self,
+            "bass",
+            resolved_macros["bass"],
+        )
+        object.__setattr__(self, "volume", resolved_macros["volume"])
+        object.__setattr__(self, "effects", resolved_macros["effects"])
+        object.__setattr__(
+            self,
+            "_detail_overrides",
+            {} if _detail_overrides is None else dict(_detail_overrides),
+        )
+        object.__setattr__(
+            self,
+            "_band_intensity_override",
+            None
+            if _band_intensity_override is None
+            else float(_band_intensity_override),
+        )
 
-    final_lufs_tolerance: float = 0.25
-    max_final_boost_db: float = 3.5
-    max_follow_up_passes: int = 2
-    follow_up_soft_clip_ratio_step: float = 0.015
+        for key, value in legacy_overrides.items():
+            if key in self._iter_legacy_macro_aliases():
+                continue
+            if key not in self._derived_fields:
+                raise TypeError(
+                    f"SmartMasteringConfig.__init__() got an unexpected keyword argument '{key}'"
+                )
+            self._detail_overrides[key] = value
 
-    limiter_oversample_factor: int = 8
-    limiter_soft_clip_ratio: float = 0.18
-    limiter_recovery_style: str = "balanced"
-    true_peak_oversample_factor: int = 8
-    pre_limiter_saturation_ratio: float = 0.06
-    low_end_mono_tightening: str = "balanced"
-    low_end_mono_tightening_amount: float = 0.76
-    codec_headroom_margin_db: float = 0.1
-    stem_noise_gate_enabled: bool = True
-    stem_noise_gate_strength: float = 1.0
-    stem_tone_enrichment_enabled: bool = True
-    stem_tone_enrichment_mix: float = 0.14
-    reference_match_amount: float = 0.44
-    micro_dynamics_strength: float = 0.1
-    micro_dynamics_fast_window_ms: float = 8.0
-    micro_dynamics_slow_window_ms: float = 58.0
-    micro_dynamics_transient_bias: float = 0.73
+    def __getattr__(self, name: str) -> Any:
+        if name in self._iter_legacy_macro_aliases():
+            return self._legacy_macro_value(name)
+        if name in self._derived_fields:
+            if name in self._detail_overrides:
+                return self._detail_overrides[name]
+            return self._resolve_derived_value(name)
+        raise AttributeError(name)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name.startswith("_") or "_detail_overrides" not in self.__dict__:
+            object.__setattr__(self, name, value)
+            return
+        if name in self._derived_fields:
+            self._detail_overrides[name] = value
+            return
+        if name in self._iter_legacy_macro_aliases():
+            self._set_legacy_macro_value(name, value)
+            return
+        if name in {"bass", "volume", "effects"}:
+            object.__setattr__(self, name, _normalize_macro_value(value))
+            return
+        object.__setattr__(self, name, value)
 
     @classmethod
     def preset_names(cls) -> tuple[str, ...]:
@@ -114,166 +717,19 @@ class SmartMasteringConfig:
 
     @classmethod
     def balanced(cls) -> SmartMasteringConfig:
-        return cls()
+        return cls(preset_name="balanced")
 
     @classmethod
     def edm(cls) -> SmartMasteringConfig:
-        return cls(
-            preset_name="edm",
-            intensity=1.12,
-            delivery_profile="lossless",
-            delivery_decoded_true_peak_dbfs=-0.15,
-            delivery_lufs_tolerance_db=0.4,
-            delivery_bitrate=320,
-            contract_target_lufs_tolerance_db=0.4,
-            contract_max_short_term_lufs=-4.4,
-            contract_max_momentary_lufs=-3.2,
-            contract_min_crest_factor_db=4.0,
-            contract_max_crest_factor_db=9.5,
-            contract_max_stereo_width_ratio=0.62,
-            contract_min_low_end_mono_ratio=0.86,
-            contract_low_end_mono_cutoff_hz=150.0,
-            target_lufs=-6.0,
-            bass_ratio=3.6,
-            bass_attack_ms=32.0,
-            bass_release_ms=135.0,
-            bass_threshold_db=-19.3,
-            treb_ratio=2.15,
-            treb_threshold_db=-26.2,
-            treb_attack_ms=5.5,
-            treb_release_ms=105.0,
-            stop_bass_boost_hz=150.0,
-            start_treble_boost_hz=4350.0,
-            bass_boost_db_per_oct=1.36,
-            mid_slope=-1.02,
-            treble_boost_db_per_oct=1.0,
-            anchor_curve_strength=0.58,
-            correction_strength=1.0,
-            drive_db=2.25,
-            ceil_db=-0.18,
-            max_spectrum_boost_db=6.3,
-            max_spectrum_cut_db=6.4,
-            spectral_rescue_strength=0.28,
-            spectral_rescue_boost_db=2.6,
-            spectral_rescue_cut_db=1.1,
-            spectral_rescue_band_intensity=0.76,
-            spectral_drive_bias_db=1.45,
-            exciter_mix=1.0,
-            exciter_max_drive=3.9,
-            exciter_high_frequency_cutoff_hz=6400.0,
-            stereo_width=1.33,
-            mono_bass_hz=128.0,
-            stereo_tone_variation_db=1.08,
-            stereo_tone_variation_cutoff_hz=1460.0,
-            stereo_tone_variation_smoothing_ms=160.0,
-            stereo_motion_mid_amount=1.0,
-            stereo_motion_high_amount=1.24,
-            stereo_motion_correlation_guard=0.94,
-            stereo_motion_max_side_boost=0.24,
-            max_final_boost_db=4.8,
-            max_follow_up_passes=2,
-            follow_up_soft_clip_ratio_step=0.02,
-            limiter_soft_clip_ratio=0.28,
-            limiter_recovery_style="tight",
-            pre_limiter_saturation_ratio=0.12,
-            low_end_mono_tightening="balanced",
-            low_end_mono_tightening_amount=0.92,
-            codec_headroom_margin_db=0.05,
-            reference_match_amount=0.36,
-            micro_dynamics_strength=0.05,
-            micro_dynamics_fast_window_ms=7.5,
-            micro_dynamics_slow_window_ms=40.0,
-            micro_dynamics_transient_bias=0.7,
-            true_peak_oversample_factor=8,
-        )
+        return cls(preset_name="edm")
 
     @classmethod
     def vocal(cls) -> SmartMasteringConfig:
-        return cls(
-            preset_name="vocal",
-            intensity=0.94,
-            delivery_profile="lossless",
-            delivery_decoded_true_peak_dbfs=None,
-            delivery_lufs_tolerance_db=0.8,
-            delivery_bitrate=320,
-            contract_target_lufs_tolerance_db=0.6,
-            contract_max_short_term_lufs=-7.4,
-            contract_max_momentary_lufs=-6.0,
-            contract_min_crest_factor_db=6.2,
-            contract_max_crest_factor_db=14.5,
-            contract_max_stereo_width_ratio=0.72,
-            contract_min_low_end_mono_ratio=0.82,
-            contract_low_end_mono_cutoff_hz=140.0,
-            target_lufs=-11.0,
-            bass_ratio=2.3,
-            bass_attack_ms=42.0,
-            bass_release_ms=175.0,
-            bass_threshold_db=-17.0,
-            treb_ratio=1.6,
-            treb_attack_ms=8.0,
-            treb_release_ms=135.0,
-            treb_threshold_db=-24.6,
-            stop_bass_boost_hz=128.0,
-            start_treble_boost_hz=3400.0,
-            bass_boost_db_per_oct=0.88,
-            mid_slope=-0.5,
-            treble_boost_db_per_oct=1.06,
-            anchor_curve_strength=0.34,
-            correction_strength=1.0,
-            drive_db=0.9,
-            ceil_db=-0.65,
-            max_spectrum_boost_db=5.0,
-            max_spectrum_cut_db=5.7,
-            spectral_rescue_strength=0.19,
-            spectral_rescue_boost_db=1.7,
-            spectral_rescue_cut_db=0.8,
-            spectral_rescue_band_intensity=0.58,
-            spectral_drive_bias_db=0.65,
-            exciter_mix=1.0,
-            exciter_max_drive=2.6,
-            exciter_high_frequency_cutoff_hz=7600.0,
-            stereo_width=1.42,
-            mono_bass_hz=102.0,
-            stereo_tone_variation_db=1.42,
-            stereo_tone_variation_cutoff_hz=1280.0,
-            stereo_tone_variation_smoothing_ms=112.0,
-            stereo_motion_mid_amount=1.22,
-            stereo_motion_high_amount=1.46,
-            stereo_motion_correlation_guard=0.78,
-            stereo_motion_max_side_boost=0.29,
-            final_lufs_tolerance=0.3,
-            max_final_boost_db=3.0,
-            max_follow_up_passes=2,
-            follow_up_soft_clip_ratio_step=0.015,
-            limiter_soft_clip_ratio=0.16,
-            limiter_recovery_style="glue",
-            pre_limiter_saturation_ratio=0.04,
-            low_end_mono_tightening="gentle",
-            low_end_mono_tightening_amount=0.86,
-            codec_headroom_margin_db=0.15,
-            reference_match_amount=0.52,
-            micro_dynamics_strength=0.14,
-            micro_dynamics_fast_window_ms=10.0,
-            micro_dynamics_slow_window_ms=64.0,
-            micro_dynamics_transient_bias=0.79,
-            true_peak_oversample_factor=8,
-        )
+        return cls(preset_name="vocal")
 
     @classmethod
     def from_preset(cls, name: str | None) -> SmartMasteringConfig:
-        if name is None:
-            return cls.balanced()
-
-        normalized = str(name).strip().lower()
-        presets = {
-            "balanced": cls.balanced,
-            "edm": cls.edm,
-            "vocal": cls.vocal,
-        }
-        preset_factory = presets.get(normalized)
-        if preset_factory is None:
-            raise ValueError(f"Unknown mastering preset: {name}")
-        return preset_factory()
+        return cls(preset_name=cls._normalize_preset_name(name))
 
     @classmethod
     def make_bands_from_fcs(
@@ -349,3 +805,117 @@ class SmartMasteringConfig:
             }
             for i in range(len(fcs_arr))
         ]
+
+    @classmethod
+    def _normalize_preset_name(cls, name: str | None) -> str:
+        if name is None:
+            return "balanced"
+        normalized = str(name).strip().lower()
+        if not normalized or normalized == "auto":
+            return "balanced"
+        if normalized not in cls._preset_macro_defaults:
+            raise ValueError(f"Unknown mastering preset: {name}")
+        return normalized
+
+    @classmethod
+    def _iter_legacy_macro_aliases(cls) -> set[str]:
+        aliases: set[str] = set()
+        for values in cls._legacy_macro_aliases.values():
+            aliases.update(values)
+        return aliases
+
+    @classmethod
+    def _resolve_macro_value(
+        cls,
+        macro_name: str,
+        *,
+        direct_value: float | None,
+        default_value: float,
+        legacy_overrides: dict[str, Any],
+    ) -> float:
+        if direct_value is not None:
+            return _coerce_direct_macro(direct_value, default_value)
+
+        alias_values = [
+            _coerce_legacy_macro(legacy_overrides[alias_name])
+            for alias_name in cls._legacy_macro_aliases[macro_name]
+            if alias_name in legacy_overrides
+        ]
+        if alias_values:
+            return float(np.mean(alias_values, dtype=np.float64))
+        return default_value
+
+    def _macro_vector(self) -> tuple[float, float, float]:
+        return (
+            _signed_macro_value(self.bass),
+            _signed_macro_value(self.volume),
+            _signed_macro_value(self.effects),
+        )
+
+    def _legacy_macro_value(self, alias_name: str) -> float:
+        if alias_name == "tone":
+            return _signed_macro_value(self.bass)
+        if alias_name in {"loudness", "compression"}:
+            return _signed_macro_value(self.volume)
+        return _signed_macro_value(self.effects)
+
+    def _set_legacy_macro_value(self, alias_name: str, value: Any) -> None:
+        normalized = _coerce_legacy_macro(value)
+        if alias_name == "tone":
+            object.__setattr__(self, "bass", normalized)
+            return
+        if alias_name in {"loudness", "compression"}:
+            object.__setattr__(self, "volume", normalized)
+            return
+        object.__setattr__(self, "effects", normalized)
+
+    def _resolve_derived_value(self, field_name: str) -> Any:
+        if field_name == "delivery_decoded_true_peak_dbfs":
+            return self._resolve_delivery_decoded_true_peak_dbfs()
+        if field_name == "limiter_recovery_style":
+            return self._resolve_limiter_recovery_style()
+        if field_name == "low_end_mono_tightening":
+            return self._resolve_low_end_mono_tightening()
+
+        spec = self._derived_field_specs[field_name]
+        if field_name == "intensity" and self._band_intensity_override is not None:
+            return float(np.clip(self._band_intensity_override, 0.25, 2.5))
+
+        bass, volume, effects = self._macro_vector()
+        return _apply_numeric_spec(spec, bass, volume, effects)
+
+    def _resolve_delivery_decoded_true_peak_dbfs(self) -> float | None:
+        if (
+            self.volume < 0.9
+            or self.effects > 0.3
+            or self.bass < 0.75
+        ):
+            return None
+        loudness_pressure = float(np.clip((self.volume - 0.9) / 0.1, 0.0, 1.0))
+        bass_pressure = float(
+            np.clip((self.bass - 0.75) / 0.25, 0.0, 1.0)
+        )
+        effect_restraint = float(
+            np.clip((0.3 - self.effects) / 0.3, 0.0, 1.0)
+        )
+        resolved = -0.3 - loudness_pressure * 0.45
+        resolved -= bass_pressure * 0.1 + effect_restraint * 0.15
+        return float(np.clip(resolved, -1.0, -0.3))
+
+    def _resolve_limiter_recovery_style(self) -> str:
+        volume = _signed_macro_value(self.volume)
+        effects = _signed_macro_value(self.effects)
+        if volume >= 0.45:
+            return "tight"
+        if effects >= 0.35 and volume <= 0.0:
+            return "glue"
+        return "balanced"
+
+    def _resolve_low_end_mono_tightening(self) -> str:
+        bass, volume, effects = self._macro_vector()
+        pressure = volume * 0.7 + bass * 0.4 - effects * 0.3
+        if pressure >= 0.75:
+            return "firm"
+        if pressure <= -0.25:
+            return "gentle"
+        return "balanced"

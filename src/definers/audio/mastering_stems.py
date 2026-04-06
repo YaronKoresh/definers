@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 import os
 from pathlib import Path
-from typing import Callable, Mapping
+from typing import Callable, Mapping, Sequence
 
 import numpy as np
 
@@ -52,16 +52,33 @@ def _match_signal_length(signal: np.ndarray, target_length: int) -> np.ndarray:
 def _resolve_stem_mix_target_dbfs(stem_name: str) -> float:
     normalized_name = str(stem_name).strip().lower() or "other"
     if normalized_name == "drums":
-        return -13.8
+        return -12.8
     if normalized_name == "bass":
-        return -15.2
+        return -15.0
     if normalized_name == "vocals":
-        return -17.0
+        return -17.6
     if normalized_name == "guitar":
-        return -18.0
+        return -18.6
     if normalized_name == "piano":
-        return -18.4
-    return -19.4
+        return -18.9
+    return -19.8
+
+
+def _resolve_stem_mix_balance_profile(
+    stem_name: str,
+) -> tuple[float, float, float]:
+    normalized_name = str(stem_name).strip().lower() or "other"
+    if normalized_name == "drums":
+        return 0.78, -4.0, 4.6
+    if normalized_name == "bass":
+        return 0.64, -4.4, 3.8
+    if normalized_name == "vocals":
+        return 0.52, -4.5, 2.6
+    if normalized_name == "guitar":
+        return 0.56, -4.5, 2.8
+    if normalized_name == "piano":
+        return 0.54, -4.5, 2.8
+    return 0.58, -4.5, 3.0
 
 
 def _measure_active_stem_level_dbfs(signal: np.ndarray) -> float:
@@ -100,9 +117,16 @@ def _apply_stem_mix_balance(
     stereo_signal = _as_stereo(signal)
     measured_dbfs = _measure_active_stem_level_dbfs(stereo_signal)
     target_dbfs = _resolve_stem_mix_target_dbfs(stem_name)
+    correction_weight, minimum_gain_db, maximum_gain_db = (
+        _resolve_stem_mix_balance_profile(stem_name)
+    )
     corrective_gain_db = float(np.clip(target_dbfs - measured_dbfs, -4.0, 4.0))
     applied_gain_db = float(
-        np.clip(base_mix_gain_db + corrective_gain_db * 0.6, -4.5, 3.5)
+        np.clip(
+            base_mix_gain_db + corrective_gain_db * correction_weight,
+            minimum_gain_db,
+            maximum_gain_db,
+        )
     )
     balanced_signal = stereo_signal * _stem_mix_gain_linear(applied_gain_db)
 
@@ -212,7 +236,7 @@ def _resolve_stem_tone_layers(
         return ()
 
     mix_amount = float(
-        np.clip(getattr(base_config, "stem_tone_enrichment_mix", 0.14), 0.0, 0.4)
+        np.clip(getattr(base_config, "stem_tone_enrichment_mix", 0.08), 0.0, 0.24)
     )
     if mix_amount <= 0.0:
         return ()
@@ -222,35 +246,35 @@ def _resolve_stem_tone_layers(
         return ()
     if normalized_name == "bass":
         return (
-            (-0.07, mix_amount * 0.12),
-            (12.0, mix_amount * 0.46),
+            (-0.07, mix_amount * 0.08),
+            (12.0, mix_amount * 0.28),
         )
     if normalized_name == "vocals":
         return (
-            (-12.0, mix_amount * 0.58),
-            (-0.18, mix_amount * 0.26),
-            (0.18, mix_amount * 0.22),
-            (12.0, mix_amount * 0.4),
+            (-12.0, mix_amount * 0.24),
+            (-0.18, mix_amount * 0.16),
+            (0.18, mix_amount * 0.14),
+            (12.0, mix_amount * 0.18),
         )
     if normalized_name == "guitar":
         return (
-            (-12.0, mix_amount * 0.34),
-            (-0.12, mix_amount * 0.22),
-            (0.12, mix_amount * 0.18),
-            (12.0, mix_amount * 0.28),
+            (-12.0, mix_amount * 0.2),
+            (-0.12, mix_amount * 0.12),
+            (0.12, mix_amount * 0.1),
+            (12.0, mix_amount * 0.16),
         )
     if normalized_name == "piano":
         return (
-            (-12.0, mix_amount * 0.24),
-            (-0.08, mix_amount * 0.18),
-            (0.08, mix_amount * 0.16),
-            (12.0, mix_amount * 0.34),
+            (-12.0, mix_amount * 0.16),
+            (-0.08, mix_amount * 0.1),
+            (0.08, mix_amount * 0.1),
+            (12.0, mix_amount * 0.18),
         )
     return (
-        (-12.0, mix_amount * 0.3),
-        (-0.1, mix_amount * 0.18),
-        (0.1, mix_amount * 0.16),
-        (12.0, mix_amount * 0.26),
+        (-12.0, mix_amount * 0.18),
+        (-0.1, mix_amount * 0.1),
+        (0.1, mix_amount * 0.09),
+        (12.0, mix_amount * 0.15),
     )
 
 
@@ -258,7 +282,7 @@ def _resolve_parallel_stem_workers(stem_count: int) -> int:
     if stem_count <= 1:
         return 1
     cpu_count = os.cpu_count() or 1
-    return max(1, min(stem_count, cpu_count, 4))
+    return max(1, min(stem_count, cpu_count, 3))
 
 
 def _load_pitch_shift_fn() -> Callable[[np.ndarray, int, float], np.ndarray] | None:
@@ -358,7 +382,7 @@ def resolve_stem_mastering_plan(
     }
 
     if normalized_name == "drums":
-        shared_mix_gain_db = 0.95
+        shared_mix_gain_db = 1.35
         shared_overrides.update(
             {
                 "drive_db": shared_drive_db + 0.35,
@@ -400,7 +424,7 @@ def resolve_stem_mastering_plan(
             }
         )
     elif normalized_name == "vocals":
-        shared_mix_gain_db = -0.12
+        shared_mix_gain_db = -0.3
         shared_overrides.update(
             {
                 "drive_db": shared_drive_db + 0.08,
@@ -418,7 +442,7 @@ def resolve_stem_mastering_plan(
             }
         )
     elif normalized_name == "guitar":
-        shared_mix_gain_db = -0.08
+        shared_mix_gain_db = -0.18
         shared_overrides.update(
             {
                 "drive_db": shared_drive_db + 0.05,
@@ -433,7 +457,7 @@ def resolve_stem_mastering_plan(
             }
         )
     elif normalized_name == "piano":
-        shared_mix_gain_db = -0.12
+        shared_mix_gain_db = -0.22
         shared_overrides.update(
             {
                 "drive_db": shared_drive_db + 0.03,
@@ -448,7 +472,7 @@ def resolve_stem_mastering_plan(
             }
         )
     else:
-        shared_mix_gain_db = -0.4
+        shared_mix_gain_db = -0.48
         shared_overrides.update(
             {
                 "drive_db": shared_drive_db + 0.05,
@@ -496,8 +520,9 @@ def process_stem_layers(
     separate_stems_fn: Callable[..., tuple[dict[str, str], str]],
     read_audio_fn: Callable[[str], tuple[int, np.ndarray]],
     delete_fn: Callable[[str], object],
-    model_name: str = "htdemucs_6s",
+    model_name: str = "mastering",
     shifts: int = 2,
+    quality_flags: Sequence[str] = (),
     mix_headroom_db: float = 6.0,
     resample_fn: Callable[[np.ndarray, int, int], np.ndarray] | None = None,
     pitch_shift_fn: Callable[[np.ndarray, int, float], np.ndarray] | None = None,
@@ -547,9 +572,14 @@ def process_stem_layers(
             audio_path,
             model_name=model_name,
             shifts=shifts,
+            quality_flags=tuple(
+                str(flag).strip()
+                for flag in quality_flags
+                if str(flag).strip()
+            ),
         )
         if not stem_paths:
-            raise ValueError("No DEMUCS stems were produced")
+            raise ValueError("No mastering stems were produced")
 
         mastered_layers: dict[str, tuple[int, np.ndarray]] = {}
         worker_count = _resolve_parallel_stem_workers(len(stem_paths))

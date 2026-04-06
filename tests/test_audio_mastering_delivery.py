@@ -147,7 +147,15 @@ def test_save_verified_audio_retries_with_attenuation_until_profile_passes():
 
     assert final_path == "track.mp3"
     assert len(saved_signals) == 2
-    assert np.max(np.abs(saved_signals[1])) < np.max(np.abs(saved_signals[0]))
+    export_ceiling_linear = float(10.0 ** (-1.0 / 20.0))
+    assert np.max(np.abs(saved_signals[0])) == pytest.approx(
+        export_ceiling_linear,
+        abs=1e-6,
+    )
+    assert np.max(np.abs(saved_signals[1])) == pytest.approx(
+        export_ceiling_linear,
+        abs=1e-6,
+    )
     assert np.max(np.abs(final_signal)) == pytest.approx(
         np.max(np.abs(saved_signals[-1]))
     )
@@ -188,8 +196,10 @@ def test_save_verified_audio_preserves_signal_without_remastering(
 
     assert final_path == "track.wav"
     assert len(saved_signals) == 1
-    assert np.allclose(saved_signals[0], source)
-    assert np.allclose(final_signal, source)
+    expected_scale = float((10.0 ** (-0.1 / 20.0)) / np.max(np.abs(source)))
+    expected_signal = source * expected_scale
+    assert np.allclose(saved_signals[0], expected_signal)
+    assert np.allclose(final_signal, expected_signal)
     assert verification.report.output_metrics is not None
 
 

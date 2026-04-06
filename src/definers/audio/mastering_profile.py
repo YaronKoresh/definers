@@ -123,7 +123,10 @@ def update_bands(self, intensity: float | None = None) -> None:
     band_config = (
         self.config
         if intensity is None
-        else replace(self.config, intensity=float(intensity))
+        else replace(
+            self.config,
+            _band_intensity_override=float(intensity),
+        )
     )
     self.bands = band_config.build_bands_from_fcs(
         fcs, self.low_cut, self.high_cut
