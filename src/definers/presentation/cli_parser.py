@@ -5,6 +5,8 @@ from definers.application_shell.request_coercer import CliRequestCoercer
 
 
 class CliParserService:
+    BUILTIN_COMMANDS = frozenset({"install"})
+
     @staticmethod
     def build_parser(version, *, command_registry):
         import argparse
@@ -19,6 +21,29 @@ class CliParserService:
         )
         start_parser.add_argument(
             "project", nargs="?", default="chat", help="project to launch"
+        )
+
+        install_parser = subparsers.add_parser(
+            "install", help="install optional runtime dependencies"
+        )
+        install_parser.add_argument(
+            "install_target",
+            nargs="?",
+            default="",
+            help="group, task, or module target to install",
+        )
+        install_parser.add_argument(
+            "--type",
+            choices=["group", "task", "module"],
+            default="group",
+            dest="install_kind",
+            help="target kind for the install command",
+        )
+        install_parser.add_argument(
+            "--list",
+            action="store_true",
+            dest="install_list",
+            help="list available install targets",
         )
 
         for name, definition in command_registry.items():
@@ -64,6 +89,8 @@ class CliParserService:
         if not argv:
             return None
         first = normalize_gui_project_name(argv[0])
+        if first in CliParserService.BUILTIN_COMMANDS:
+            return None
         if first in CliCommandRegistry.get_known_cli_names(
             command_registry
         ) or first.startswith("-"):

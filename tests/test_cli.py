@@ -63,6 +63,74 @@ def test_version():
     assert __version__ in out
 
 
+def test_install_list_outputs_known_targets():
+    code, out = run_cli(["install", "--list"])
+
+    assert code == 0
+    assert "available install groups:" in out
+    assert "audio" in out
+    assert "translate" in out
+    assert "gradio" in out
+    assert "fairseq" not in out
+
+
+def test_install_group_dispatch(monkeypatch):
+    import definers.presentation.cli_install as cli_install
+
+    called = {}
+
+    def fake_install(target, *, target_kind, list_only, output):
+        called["target"] = target
+        called["target_kind"] = target_kind
+        called["list_only"] = list_only
+        output("installed audio")
+        return 0
+
+    monkeypatch.setattr(
+        cli_install,
+        "run_optional_install_command",
+        fake_install,
+    )
+
+    code, out = run_cli(["install", "audio"])
+
+    assert code == 0
+    assert out == "installed audio"
+    assert called == {
+        "target": "audio",
+        "target_kind": "group",
+        "list_only": False,
+    }
+
+
+def test_install_task_dispatch(monkeypatch):
+    import definers.presentation.cli_install as cli_install
+
+    called = {}
+
+    def fake_install(target, *, target_kind, list_only, output):
+        called["target"] = target
+        called["target_kind"] = target_kind
+        called["list_only"] = list_only
+        return 0
+
+    monkeypatch.setattr(
+        cli_install,
+        "run_optional_install_command",
+        fake_install,
+    )
+
+    code, out = run_cli(["install", "translate", "--type", "task"])
+
+    assert code == 0
+    assert out == ""
+    assert called == {
+        "target": "translate",
+        "target_kind": "task",
+        "list_only": False,
+    }
+
+
 def test_start_dispatch(monkeypatch, tmp_path):
 
     import definers.presentation.gui_entrypoints as gui_entrypoints
@@ -128,6 +196,23 @@ def test_unknown_command():
     code, out = run_cli(["nope"])
     assert code != 0
     assert "unknown command" in out.lower()
+
+
+def test_install_without_target_requires_argument_or_list():
+    code, out = run_cli(["install"])
+
+    assert code == 1
+    assert out == "install target is required unless --list is used"
+
+
+def test_install_removed_fairseq_module_is_rejected():
+    code, out = run_cli(["install", "fairseq", "--type", "module"])
+
+    assert code == 1
+    assert (
+        out
+        == "unknown module target fairseq; run 'definers install --list' to inspect available targets"
+    )
 
 
 def test_start_dispatch_uses_registry_resolution(monkeypatch):

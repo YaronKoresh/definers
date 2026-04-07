@@ -11,6 +11,7 @@ from definers.presentation.cli_runtime import (
     resolve_cli_handlers,
     resolve_cli_runtime_state,
     resolve_gui_registry,
+    resolve_optional_install_handler,
 )
 
 
@@ -22,6 +23,9 @@ class CliDispatchService:
     read_lyrics_text = staticmethod(read_lyrics_text)
     build_cli_request = staticmethod(build_cli_request)
     resolve_cli_handlers = staticmethod(resolve_cli_handlers)
+    resolve_optional_install_handler = staticmethod(
+        resolve_optional_install_handler
+    )
 
     @staticmethod
     def dispatch_request(
@@ -31,6 +35,7 @@ class CliDispatchService:
         start,
         music_video,
         lyric_video,
+        install,
         output,
     ):
         command = CliCommandParser.parse_cli_command(
@@ -43,6 +48,7 @@ class CliDispatchService:
             start=start,
             music_video=music_video,
             lyric_video=lyric_video,
+            install=install,
             output=output,
         )
 
@@ -68,12 +74,14 @@ class CliDispatchService:
         start, music_video, lyric_video = (
             CliDispatchService.resolve_cli_handlers()
         )
+        install = CliDispatchService.resolve_optional_install_handler()
         return CliDispatchService.dispatch_request(
             request,
             command_registry=command_registry,
             start=start,
             music_video=music_video,
             lyric_video=lyric_video,
+            install=install,
             output=print,
         )
 
@@ -85,5 +93,8 @@ find_unknown_command = CliDispatchService.find_unknown_command
 read_lyrics_text = CliDispatchService.read_lyrics_text
 build_cli_request = CliDispatchService.build_cli_request
 resolve_cli_handlers = CliDispatchService.resolve_cli_handlers
+resolve_optional_install_handler = (
+    CliDispatchService.resolve_optional_install_handler
+)
 dispatch_request = CliDispatchService.dispatch_request
 run_cli = CliDispatchService.run_cli

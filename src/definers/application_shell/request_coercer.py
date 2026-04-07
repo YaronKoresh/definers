@@ -9,6 +9,9 @@ class CliRequestCoercer:
         return CliRequest(
             command=getattr(source, "command", None),
             project=getattr(source, "project", "chat"),
+            install_target=getattr(source, "install_target", ""),
+            install_kind=getattr(source, "install_kind", "group"),
+            install_list=getattr(source, "install_list", False),
             audio=getattr(source, "audio", ""),
             width=getattr(source, "width", 0),
             height=getattr(source, "height", 0),

@@ -155,6 +155,14 @@ pip install ".[audio,ml,web]"
 
 You can still preinstall targeted extras for reproducible cold starts, but the runtime doesn't require the entire optional graph up front.
 
+For runtime-managed environments, you can also preinstall optional targets without relying on extras metadata:
+
+```bash
+definers install --list
+definers install audio
+definers install translate --type task
+```
+
 ### Development Install
 
 ```bash
@@ -612,6 +620,7 @@ poe check
 
 ```bash
 poe test
+poe coverage
 poe lint
 poe format
 poe build
@@ -620,6 +629,8 @@ poe cli-health
 poe answer-simulations
 poe ml-health
 ```
+
+`poe coverage` runs the full test suite with branch coverage and a terminal missing-lines report, then removes the temporary coverage data file so the workspace stays clean.
 
 When iterating on multimodal answer behavior, prefer a focused regression pass before the full suite.
 

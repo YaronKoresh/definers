@@ -64,9 +64,20 @@ class CliRuntimeService:
 
         return start, music_video, lyric_video
 
+    @staticmethod
+    def resolve_optional_install_handler():
+        from definers.presentation.cli_install import (
+            run_optional_install_command,
+        )
+
+        return run_optional_install_command
+
 
 resolve_gui_registry = CliRuntimeService.resolve_gui_registry
 build_cli_command_registry = CliRuntimeService.build_cli_command_registry
 resolve_cli_runtime_state = CliRuntimeService.resolve_cli_runtime_state
 resolve_cli_command_registry = CliRuntimeService.resolve_cli_command_registry
 resolve_cli_handlers = CliRuntimeService.resolve_cli_handlers
+resolve_optional_install_handler = (
+    CliRuntimeService.resolve_optional_install_handler
+)

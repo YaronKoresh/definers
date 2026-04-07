@@ -15,13 +15,8 @@ MODULE_PACKAGE_SPECS: dict[str, tuple[str, ...]] = {
     "aiofiles": ("aiofiles",),
     "aiohttp": ("aiohttp",),
     "audio_separator": ("audio-separator>=0.30.0",),
-    "basic_pitch": (
-        "basic-pitch @ git+https://github.com/YaronKoresh/basic-pitch.git",
-    ),
-    "bs4": ("beautifulsoup4>=4.12.0",),
-    "chatterbox": (
-        "chatterbox-tts @ git+https://github.com/YaronKoresh/chatterbox.git",
-    ),
+    "basic_pitch": ("basic-pitch>=0.4.0",),
+    "chatterbox": ("chatterbox-tts>=0.1.4",),
     "cssselect": ("cssselect>=1.2.0",),
     "cv2": ("opencv-contrib-python-headless>=4.8.0",),
     "datasets": ("datasets>=2.14.0",),
@@ -34,11 +29,9 @@ MODULE_PACKAGE_SPECS: dict[str, tuple[str, ...]] = {
     ),
     "edlib": ("edlib",),
     "faiss": ("faiss-cpu>=1.7.4",),
+    "fastapi": ("fastapi>=0.100.0",),
     "googledrivedownloader": ("googledrivedownloader>=1.1.0",),
-    "gradio": (
-        "gradio>=6.9.0",
-        "gradio-client>=2.3.0",
-    ),
+    "gradio": ("gradio>=6.9.0",),
     "huggingface_hub": ("huggingface-hub>=0.20.0",),
     "imageio": ("imageio>=2.30.0",),
     "imageio_ffmpeg": ("imageio-ffmpeg>=0.4.0",),
@@ -46,16 +39,14 @@ MODULE_PACKAGE_SPECS: dict[str, tuple[str, ...]] = {
     "librosa": (
         "librosa>=0.10.0",
         "numba>=0.57.0",
-        "resampy>=0.4.2,<0.5",
+        "resampy>=0.4.2",
         "soundfile>=0.12.0",
     ),
     "lxml": (
         "lxml[html_clean]>=5.2.0",
         "cssselect>=1.2.0",
     ),
-    "madmom": (
-        "madmom @ git+https://github.com/CPJKU/madmom@0551aa8f48d71a367d92b5d3a347a0cf7cd97cc9",
-    ),
+    "madmom": ("madmom>=0.16.1",),
     "matplotlib": ("matplotlib>=3.7.0",),
     "midi2audio": ("midi2audio",),
     "moviepy": (
@@ -69,19 +60,21 @@ MODULE_PACKAGE_SPECS: dict[str, tuple[str, ...]] = {
     "pillow_heif": ("pillow-heif>=0.13.0",),
     "playwright": ("playwright>=1.40.0",),
     "pydub": ("pydub>=0.25.1",),
-    "refiners": (
-        "refiners @ git+https://github.com/finegrain-ai/refiners@d288e94fa8eed1386bd28cd0d5ceb8109c3ff398",
-    ),
+    "refiners": ("refiners>=0.4.0",),
     "sacremoses": ("sacremoses>=0.0.53",),
     "safetensors": ("safetensors>=0.4.0",),
+    "sklearn": ("scikit-learn>=1.3.0",),
     "skimage": ("scikit-image>=0.21.0",),
     "soundfile": ("soundfile>=0.12.0",),
     "sox": ("sox>=1.4.1",),
     "sentencepiece": ("sentencepiece>=0.1.99",),
     "stable_whisper": (
-        "stable-ts @ git+https://github.com/jianfch/stable-ts@d89c6250fd4745115b44b83a8a3f7ebfd0e2a1f1",
+        "stable-ts>=2.19.1",
         "torch>=2.1.0",
     ),
+    "stopes": ("stopes>=2.2.1",),
+    "tensorflow": ("tensorflow>=2.15.0",),
+    "tf_keras": ("tf-keras>=2.15.0",),
     "tokenizers": ("tokenizers>=0.15.0",),
     "torch": ("torch>=2.1.0",),
     "torchaudio": (
@@ -97,6 +90,67 @@ MODULE_PACKAGE_SPECS: dict[str, tuple[str, ...]] = {
         "tokenizers>=0.15.0",
         "sentencepiece>=0.1.99",
         "torch>=2.1.0",
+    ),
+}
+
+OPTIONAL_DEPENDENCY_GROUP_MODULES: dict[str, tuple[str, ...]] = {
+    "audio": (
+        "audio_separator",
+        "librosa",
+        "midi2audio",
+        "pydub",
+        "soundfile",
+        "sox",
+        "torchaudio",
+        "basic_pitch",
+        "chatterbox",
+        "madmom",
+        "stable_whisper",
+    ),
+    "image": (
+        "imageio",
+        "imageio_ffmpeg",
+        "cv2",
+        "pillow_heif",
+        "skimage",
+        "refiners",
+    ),
+    "video": (
+        "edlib",
+        "imageio",
+        "imageio_ffmpeg",
+        "moviepy",
+        "cv2",
+        "skimage",
+    ),
+    "ml": (
+        "diffusers",
+        "datasets",
+        "faiss",
+        "huggingface_hub",
+        "onnx",
+        "safetensors",
+        "sklearn",
+        "sentencepiece",
+        "tensorflow",
+        "tf_keras",
+        "tokenizers",
+        "torchvision",
+        "transformers",
+    ),
+    "nlp": (
+        "langdetect",
+        "nltk",
+        "sacremoses",
+        "stopes",
+    ),
+    "web": (
+        "fastapi",
+        "googledrivedownloader",
+        "gradio",
+        "lxml",
+        "matplotlib",
+        "playwright",
     ),
 }
 
@@ -142,13 +196,67 @@ def package_specs_for_module(module_name: str | None) -> tuple[str, ...]:
     return MODULE_PACKAGE_SPECS.get(normalized_name, ())
 
 
-def package_specs_for_task(task: str) -> tuple[str, ...]:
+def package_specs_for_modules(
+    module_names: Iterable[str],
+) -> tuple[str, ...]:
     specs: list[str] = []
-    for module_name in ML_TASK_MODULES.get(str(task).strip(), ()):
+    for module_name in module_names:
         for spec in package_specs_for_module(module_name):
             if spec not in specs:
                 specs.append(spec)
     return tuple(specs)
+
+
+def package_specs_for_group(group: str) -> tuple[str, ...]:
+    normalized_group = str(group or "").strip().lower()
+    if normalized_group == "all":
+        return package_specs_for_modules(
+            module_name
+            for group_modules in OPTIONAL_DEPENDENCY_GROUP_MODULES.values()
+            for module_name in group_modules
+        )
+    return package_specs_for_modules(
+        OPTIONAL_DEPENDENCY_GROUP_MODULES.get(normalized_group, ())
+    )
+
+
+def package_specs_for_task(task: str) -> tuple[str, ...]:
+    return package_specs_for_modules(ML_TASK_MODULES.get(str(task).strip(), ()))
+
+
+def group_target_names() -> tuple[str, ...]:
+    return (*OPTIONAL_DEPENDENCY_GROUP_MODULES.keys(), "all")
+
+
+def task_target_names() -> tuple[str, ...]:
+    return tuple(ML_TASK_MODULES.keys())
+
+
+def module_target_names() -> tuple[str, ...]:
+    return tuple(sorted(MODULE_PACKAGE_SPECS))
+
+
+def optional_runtime_targets() -> dict[str, tuple[str, ...]]:
+    return {
+        "groups": group_target_names(),
+        "tasks": task_target_names(),
+        "modules": module_target_names(),
+    }
+
+
+def package_specs_for_target(
+    target: str,
+    *,
+    kind: str = "group",
+) -> tuple[str, ...]:
+    normalized_kind = str(kind or "group").strip().lower()
+    if normalized_kind == "group":
+        return package_specs_for_group(target)
+    if normalized_kind == "task":
+        return package_specs_for_task(str(target or "").strip())
+    if normalized_kind == "module":
+        return package_specs_for_module(target)
+    return ()
 
 
 def _set_install_active(value: bool) -> None:
@@ -229,6 +337,29 @@ def ensure_ml_task_runtime(
 ) -> bool:
     return install_package_specs(
         package_specs_for_task(task),
+        installer=installer,
+    )
+
+
+def ensure_group_runtime(
+    group: str,
+    *,
+    installer: Callable[[tuple[str, ...]], None] | None = None,
+) -> bool:
+    return install_package_specs(
+        package_specs_for_group(group),
+        installer=installer,
+    )
+
+
+def install_optional_target(
+    target: str,
+    *,
+    kind: str = "group",
+    installer: Callable[[tuple[str, ...]], None] | None = None,
+) -> bool:
+    return install_package_specs(
+        package_specs_for_target(target, kind=kind),
         installer=installer,
     )
 
@@ -335,13 +466,23 @@ __all__ = [
     "AUTO_INSTALL_ENV_VAR",
     "MODULE_PACKAGE_SPECS",
     "ML_TASK_MODULES",
+    "OPTIONAL_DEPENDENCY_GROUP_MODULES",
     "auto_install_enabled",
+    "ensure_group_runtime",
     "ensure_ml_task_runtime",
     "ensure_module_runtime",
+    "group_target_names",
     "import_optional_module",
+    "install_optional_target",
     "install_import_hook",
     "install_package_specs",
+    "module_target_names",
     "normalize_module_name",
+    "optional_runtime_targets",
+    "package_specs_for_group",
     "package_specs_for_module",
+    "package_specs_for_modules",
     "package_specs_for_task",
+    "package_specs_for_target",
+    "task_target_names",
 ]
