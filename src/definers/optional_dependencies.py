@@ -118,6 +118,7 @@ ML_TASK_MODULES: dict[str, tuple[str, ...]] = {
 }
 
 _ORIGINAL_IMPORT = builtins.__import__
+_HOOK_IMPORT = builtins.__import__
 _INSTALL_LOCK = threading.RLock()
 _HOOK_INSTALLED = False
 _ACTIVE_STATE = threading.local()
@@ -269,7 +270,8 @@ def import_optional_module(
                 raise
 
 
-def _auto_install_import(
+def _import_with_auto_install(
+    importer: Callable[..., Any],
     name: str,
     globals: dict[str, Any] | None = None,
     locals: dict[str, Any] | None = None,
@@ -277,21 +279,55 @@ def _auto_install_import(
     level: int = 0,
 ):
     try:
-        return _ORIGINAL_IMPORT(name, globals, locals, fromlist, level)
+        return importer(name, globals, locals, fromlist, level)
     except (ImportError, ModuleNotFoundError) as error:
         if level != 0 or _install_active() or not auto_install_enabled():
             raise
         for candidate_name in _candidate_module_names(name, error):
             if ensure_module_runtime(candidate_name):
-                return _ORIGINAL_IMPORT(name, globals, locals, fromlist, level)
+                return importer(name, globals, locals, fromlist, level)
         raise
+
+
+def _auto_install_import(
+    name: str,
+    globals: dict[str, Any] | None = None,
+    locals: dict[str, Any] | None = None,
+    fromlist: tuple[str, ...] = (),
+    level: int = 0,
+):
+    return _import_with_auto_install(
+        _ORIGINAL_IMPORT,
+        name,
+        globals,
+        locals,
+        fromlist,
+        level,
+    )
+
+
+def _hooked_auto_install_import(
+    name: str,
+    globals: dict[str, Any] | None = None,
+    locals: dict[str, Any] | None = None,
+    fromlist: tuple[str, ...] = (),
+    level: int = 0,
+):
+    return _import_with_auto_install(
+        _HOOK_IMPORT,
+        name,
+        globals,
+        locals,
+        fromlist,
+        level,
+    )
 
 
 def install_import_hook() -> None:
     global _HOOK_INSTALLED
     if _HOOK_INSTALLED:
         return
-    builtins.__import__ = _auto_install_import
+    builtins.__import__ = _hooked_auto_install_import
     _HOOK_INSTALLED = True
 
 
