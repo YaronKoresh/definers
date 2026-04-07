@@ -639,7 +639,7 @@ def build_train_app():
                                 answer_output = gr.Textbox(
                                     label="Answer Output",
                                     lines=10,
-                                    show_copy_button=True,
+                                    buttons=["copy"],
                                 )
                         answer_button.click(
                             fn=handle_answer,
@@ -698,7 +698,7 @@ def build_train_app():
                                 reconstructed_text = gr.Textbox(
                                     label="Reconstructed Text",
                                     lines=8,
-                                    show_copy_button=True,
+                                    buttons=["copy"],
                                 )
                         reconstruct_button.click(
                             fn=handle_features_to_text,

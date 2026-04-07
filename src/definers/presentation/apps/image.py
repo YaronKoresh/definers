@@ -76,9 +76,8 @@ class ImageApp:
                         interactive=False,
                         label="Result",
                         type="filepath",
-                        show_share_button=False,
+                        buttons=["download"],
                         container=True,
-                        show_download_button=True,
                     )
                     generate_image = gr.Button("Generate")
                     upscale_now = gr.Button("Upscale")
