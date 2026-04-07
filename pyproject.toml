@@ -53,7 +53,6 @@ audio = [
     "resampy>=0.4.2",
     "basic-pitch>=0.4.0",
     "chatterbox-tts>=0.1.4",
-    "madmom>=0.16.1",
     "stable-ts>=2.19.1",
 ]
 image = [

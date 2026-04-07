@@ -39,6 +39,14 @@ def test_runtime_specs_for_pypi_optional_modules_omit_vcs_links():
         assert all("git+" not in spec for spec in specs)
 
 
+def test_install_specs_for_madmom_use_pinned_github_commit():
+    specs = optional_dependencies.install_specs_for_module("madmom")
+
+    assert specs == (
+        "madmom @ https://github.com/CPJKU/madmom/archive/27f032e8947204902c675e5e341a3faf5dc86dae.tar.gz",
+    )
+
+
 def test_unsupported_fairseq_is_not_exposed_as_runtime_target():
     targets = optional_dependencies.optional_runtime_targets()
 
@@ -69,6 +77,23 @@ def test_install_optional_target_installs_group_specs(monkeypatch):
     ]
 
 
+def test_install_optional_target_uses_madmom_install_override():
+    installed = []
+
+    result = optional_dependencies.install_optional_target(
+        "madmom",
+        kind="module",
+        installer=lambda package_specs: installed.append(package_specs),
+    )
+
+    assert result is True
+    assert installed == [
+        (
+            "madmom @ https://github.com/CPJKU/madmom/archive/27f032e8947204902c675e5e341a3faf5dc86dae.tar.gz",
+        )
+    ]
+
+
 def test_runtime_specs_trim_redundant_web_and_ml_packages():
     assert optional_dependencies.package_specs_for_module("bs4") == ()
     assert optional_dependencies.package_specs_for_module("hydra") == ()
@@ -94,6 +119,14 @@ def test_runtime_groups_omit_vcs_links():
 
         assert specs
         assert all("git+" not in spec for spec in specs)
+
+
+def test_audio_group_leaves_madmom_as_explicit_module_install():
+    audio_specs = optional_dependencies.package_specs_for_group("audio")
+    madmom_specs = optional_dependencies.package_specs_for_module("madmom")
+
+    assert "madmom>=0.16.1" not in audio_specs
+    assert madmom_specs == ("madmom>=0.16.1",)
 
 
 def test_auto_install_import_retries_known_module(monkeypatch):

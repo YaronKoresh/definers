@@ -92,6 +92,7 @@ def test_optional_dependency_groups_omit_trimmed_packages():
     assert "beautifulsoup4>=4.12.0" not in optional_dependencies_table["web"]
     assert "gradio-client>=2.3.0" not in optional_dependencies_table["web"]
     assert "hydra-core>=1.3.0" not in optional_dependencies_table["ml"]
+    assert "madmom>=0.16.1" not in optional_dependencies_table["audio"]
     assert "torchvision>=0.16.0" in optional_dependencies_table["ml"]
     assert "cssselect>=1.2.0" not in optional_dependencies_table["dev"]
     assert "resampy>=0.4.2" in optional_dependencies_table["audio"]

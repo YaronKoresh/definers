@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from definers.optional_dependencies import (
     install_optional_target,
+    install_specs_for_target,
     optional_runtime_targets,
-    package_specs_for_target,
 )
 
 
@@ -35,7 +35,7 @@ class CliInstallService:
         if not normalized_target:
             output("install target is required unless --list is used")
             return 1
-        specs = package_specs_for_target(normalized_target, kind=target_kind)
+        specs = install_specs_for_target(normalized_target, kind=target_kind)
         if not specs:
             output(
                 f"unknown {target_kind} target {normalized_target}; run 'definers install --list' to inspect available targets"

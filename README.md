@@ -155,6 +155,12 @@ pip install ".[audio,ml,web]"
 
 You can still preinstall targeted extras for reproducible cold starts, but the runtime doesn't require the entire optional graph up front.
 
+`madmom` stays out of the published extras because the reliable install path is a pinned GitHub commit rather than a PyPI-safe requirement string. The runtime installer and CLI installer still support it explicitly:
+
+```bash
+definers install madmom --type module
+```
+
 For runtime-managed environments, you can also preinstall optional targets without relying on extras metadata:
 
 ```bash

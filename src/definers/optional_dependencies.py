@@ -10,6 +10,10 @@ from collections.abc import Callable, Iterable
 from typing import Any
 
 AUTO_INSTALL_ENV_VAR = "DEFINERS_AUTO_INSTALL_OPTIONAL"
+MADMOM_GITHUB_COMMIT = "27f032e8947204902c675e5e341a3faf5dc86dae"
+MADMOM_GITHUB_ARCHIVE_URL = (
+    f"https://github.com/CPJKU/madmom/archive/{MADMOM_GITHUB_COMMIT}.tar.gz"
+)
 
 MODULE_PACKAGE_SPECS: dict[str, tuple[str, ...]] = {
     "aiofiles": ("aiofiles",),
@@ -93,6 +97,10 @@ MODULE_PACKAGE_SPECS: dict[str, tuple[str, ...]] = {
     ),
 }
 
+MODULE_INSTALL_SPEC_OVERRIDES: dict[str, tuple[str, ...]] = {
+    "madmom": (f"madmom @ {MADMOM_GITHUB_ARCHIVE_URL}",),
+}
+
 OPTIONAL_DEPENDENCY_GROUP_MODULES: dict[str, tuple[str, ...]] = {
     "audio": (
         "audio_separator",
@@ -104,7 +112,6 @@ OPTIONAL_DEPENDENCY_GROUP_MODULES: dict[str, tuple[str, ...]] = {
         "torchaudio",
         "basic_pitch",
         "chatterbox",
-        "madmom",
         "stable_whisper",
     ),
     "image": (
@@ -196,12 +203,30 @@ def package_specs_for_module(module_name: str | None) -> tuple[str, ...]:
     return MODULE_PACKAGE_SPECS.get(normalized_name, ())
 
 
+def install_specs_for_module(module_name: str | None) -> tuple[str, ...]:
+    normalized_name = normalize_module_name(module_name)
+    if normalized_name in MODULE_INSTALL_SPEC_OVERRIDES:
+        return MODULE_INSTALL_SPEC_OVERRIDES[normalized_name]
+    return MODULE_PACKAGE_SPECS.get(normalized_name, ())
+
+
 def package_specs_for_modules(
     module_names: Iterable[str],
 ) -> tuple[str, ...]:
     specs: list[str] = []
     for module_name in module_names:
         for spec in package_specs_for_module(module_name):
+            if spec not in specs:
+                specs.append(spec)
+    return tuple(specs)
+
+
+def install_specs_for_modules(
+    module_names: Iterable[str],
+) -> tuple[str, ...]:
+    specs: list[str] = []
+    for module_name in module_names:
+        for spec in install_specs_for_module(module_name):
             if spec not in specs:
                 specs.append(spec)
     return tuple(specs)
@@ -220,8 +245,25 @@ def package_specs_for_group(group: str) -> tuple[str, ...]:
     )
 
 
+def install_specs_for_group(group: str) -> tuple[str, ...]:
+    normalized_group = str(group or "").strip().lower()
+    if normalized_group == "all":
+        return install_specs_for_modules(
+            module_name
+            for group_modules in OPTIONAL_DEPENDENCY_GROUP_MODULES.values()
+            for module_name in group_modules
+        )
+    return install_specs_for_modules(
+        OPTIONAL_DEPENDENCY_GROUP_MODULES.get(normalized_group, ())
+    )
+
+
 def package_specs_for_task(task: str) -> tuple[str, ...]:
     return package_specs_for_modules(ML_TASK_MODULES.get(str(task).strip(), ()))
+
+
+def install_specs_for_task(task: str) -> tuple[str, ...]:
+    return install_specs_for_modules(ML_TASK_MODULES.get(str(task).strip(), ()))
 
 
 def group_target_names() -> tuple[str, ...]:
@@ -256,6 +298,21 @@ def package_specs_for_target(
         return package_specs_for_task(str(target or "").strip())
     if normalized_kind == "module":
         return package_specs_for_module(target)
+    return ()
+
+
+def install_specs_for_target(
+    target: str,
+    *,
+    kind: str = "group",
+) -> tuple[str, ...]:
+    normalized_kind = str(kind or "group").strip().lower()
+    if normalized_kind == "group":
+        return install_specs_for_group(target)
+    if normalized_kind == "task":
+        return install_specs_for_task(str(target or "").strip())
+    if normalized_kind == "module":
+        return install_specs_for_module(target)
     return ()
 
 
@@ -325,7 +382,7 @@ def ensure_module_runtime(
     installer: Callable[[tuple[str, ...]], None] | None = None,
 ) -> bool:
     return install_package_specs(
-        package_specs_for_module(module_name),
+        install_specs_for_module(module_name),
         installer=installer,
     )
 
@@ -336,7 +393,7 @@ def ensure_ml_task_runtime(
     installer: Callable[[tuple[str, ...]], None] | None = None,
 ) -> bool:
     return install_package_specs(
-        package_specs_for_task(task),
+        install_specs_for_task(task),
         installer=installer,
     )
 
@@ -347,7 +404,7 @@ def ensure_group_runtime(
     installer: Callable[[tuple[str, ...]], None] | None = None,
 ) -> bool:
     return install_package_specs(
-        package_specs_for_group(group),
+        install_specs_for_group(group),
         installer=installer,
     )
 
@@ -359,7 +416,7 @@ def install_optional_target(
     installer: Callable[[tuple[str, ...]], None] | None = None,
 ) -> bool:
     return install_package_specs(
-        package_specs_for_target(target, kind=kind),
+        install_specs_for_target(target, kind=kind),
         installer=installer,
     )
 
@@ -464,6 +521,9 @@ def install_import_hook() -> None:
 
 __all__ = [
     "AUTO_INSTALL_ENV_VAR",
+    "MADMOM_GITHUB_ARCHIVE_URL",
+    "MADMOM_GITHUB_COMMIT",
+    "MODULE_INSTALL_SPEC_OVERRIDES",
     "MODULE_PACKAGE_SPECS",
     "ML_TASK_MODULES",
     "OPTIONAL_DEPENDENCY_GROUP_MODULES",
@@ -473,6 +533,11 @@ __all__ = [
     "ensure_module_runtime",
     "group_target_names",
     "import_optional_module",
+    "install_specs_for_group",
+    "install_specs_for_module",
+    "install_specs_for_modules",
+    "install_specs_for_target",
+    "install_specs_for_task",
     "install_optional_target",
     "install_import_hook",
     "install_package_specs",
