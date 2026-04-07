@@ -7,7 +7,6 @@ const {
   LABEL_DEFINITIONS,
   RELEASE_RELEVANT_LABELS,
   SECONDARY_LABELS,
-  URGENT_SYNC_LABELS,
   VERSION_BUMP_BY_LABEL,
   VERSION_LABEL_ALIASES,
   VERSION_SENSITIVE_LABELS
@@ -86,24 +85,6 @@ function bumpForLabels(labels) {
   }, "none");
 }
 
-function mergeSyncLabels(previousLabels, predictedLabels) {
-  const stableLabels = [...new Set(previousLabels.map(normalizeLabelName).filter((label) => VALID_LABELS.has(label)))];
-  let currentBump = bumpForLabels(stableLabels);
-  const predictedSet = new Set(predictedLabels.map(normalizeLabelName).filter((label) => VALID_LABELS.has(label)));
-
-  for (const label of VERSION_SENSITIVE_LABELS) {
-    if (!predictedSet.has(label) || stableLabels.includes(label)) continue;
-    const nextBump = VERSION_BUMP_BY_LABEL[label] || "none";
-    const raisesVersionSeverity = BUMP_ORDER[nextBump] > BUMP_ORDER[currentBump];
-    const isUrgent = URGENT_SYNC_LABELS.includes(label);
-    if (!raisesVersionSeverity && !isUrgent) continue;
-    stableLabels.push(label);
-    currentBump = maxBump(currentBump, nextBump);
-  }
-
-  return trimLowSignalLabels(stableLabels).slice(0, MAX_AI_LABELS);
-}
-
 function computeTargetVersion(baseVersion, bumpType) {
   const parsed = parseVersionTag(baseVersion);
   if (bumpType === "major") return formatVersionTag({ major: parsed.major + 1, minor: 0, patch: 0 });
@@ -153,6 +134,34 @@ function parseAILabels(raw) {
     return [...new Set(lines)];
   }
   return [];
+}
+
+function resolvePrLabelDelta({ action, previousBotLabels, aiLabelsRaw }) {
+  const previousLabels = uniqueValidLabels(previousBotLabels);
+  const rawAiLabels = String(aiLabelsRaw || "").trim();
+  const parsedAiLabels = trimLowSignalLabels(parseAILabels(rawAiLabels)).slice(0, MAX_AI_LABELS);
+  const hasFreshPrLabelResult = rawAiLabels !== "";
+
+  let nextAiLabels = [];
+  if (hasFreshPrLabelResult) {
+    nextAiLabels = parsedAiLabels;
+  } else if (action === "synchronize" && previousLabels.length > 0) {
+    nextAiLabels = previousLabels;
+  }
+
+  const labelsToRemove = hasFreshPrLabelResult
+    ? previousLabels.filter((label) => !nextAiLabels.includes(label))
+    : [];
+  const labelsToAdd = nextAiLabels.filter((label) => !previousLabels.includes(label));
+
+  return {
+    hasFreshPrLabelResult,
+    labelsToAdd,
+    labelsToRemove,
+    nextAiLabels,
+    parsedAiLabels,
+    previousBotLabels: previousLabels
+  };
 }
 
 function labelNamesFromIssue(issue) {
@@ -447,7 +456,8 @@ async function prepareProjectState({ github, owner, repo, context, issueNumber, 
   const aiSummaryForComment = String(aiSummary || "").replace(/\nEND_OF_REPORT\s*$/m, "").trim();
   const payloadIssue = payload.issue || {};
   const existingIssueLabels = labelNamesFromIssue(payloadIssue);
-  const parsedAiLabels = trimLowSignalLabels(parseAILabels(aiLabelsRaw)).slice(0, MAX_AI_LABELS);
+  const rawAiLabels = String(aiLabelsRaw || "").trim();
+  const parsedAiLabels = trimLowSignalLabels(parseAILabels(rawAiLabels)).slice(0, MAX_AI_LABELS);
 
   let issueLabelsToAdd = [];
   let previousBotLabels = [];
@@ -466,19 +476,17 @@ async function prepareProjectState({ github, owner, repo, context, issueNumber, 
 
   const existingBotComment = isPR ? await getExistingBotComment({ github, owner, repo, issueNumber }) : null;
   previousBotLabels = existingBotComment ? (extractBotMetadata(existingBotComment.body).aiLabels || []).map(normalizeLabelName) : [];
-  const hasFreshPrLabels = isPR && parsedAiLabels.length > 0;
-  if (hasFreshPrLabels) {
-    const predictedLabels = parsedAiLabels;
-    if (payload.action === "synchronize" && previousBotLabels.length > 0) {
-      nextAiLabels = mergeSyncLabels(previousBotLabels, predictedLabels);
-    } else {
-      nextAiLabels = predictedLabels;
-    }
-  } else if (isPR && payload.action === "synchronize" && previousBotLabels.length > 0) {
-    nextAiLabels = previousBotLabels;
+  if (isPR) {
+    const prLabelDelta = resolvePrLabelDelta({
+      action: payload.action,
+      previousBotLabels,
+      aiLabelsRaw: rawAiLabels
+    });
+    previousBotLabels = prLabelDelta.previousBotLabels;
+    nextAiLabels = prLabelDelta.nextAiLabels;
+    labelsToRemove = prLabelDelta.labelsToRemove;
+    labelsToAdd = prLabelDelta.labelsToAdd;
   }
-  labelsToRemove = isPR && hasFreshPrLabels ? previousBotLabels.filter((label) => !nextAiLabels.includes(label)) : [];
-  labelsToAdd = isPR ? nextAiLabels.filter((label) => !previousBotLabels.includes(label)) : [];
 
   if (isPR && aiSummaryForComment) {
     commentBody = buildPrCommentBody({
@@ -678,6 +686,7 @@ module.exports = {
   normalizeLabelName,
   prepareProjectState,
   buildPrCommentBody,
+  resolvePrLabelDelta,
   syncPreparedProjectState,
   syncProjectMilestone
 };

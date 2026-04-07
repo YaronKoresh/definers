@@ -303,27 +303,21 @@ def test_final_summary_prompt_preserves_classification_signals() -> None:
     )
 
 
-def test_synchronize_without_previous_bot_comment_keeps_predicted_labels() -> (
-    None
-):
+def test_synchronize_with_fresh_analysis_replaces_previous_bot_labels() -> None:
     helper = read_project_manager_helper()
 
     assert (
-        "const hasFreshPrLabels = isPR && parsedAiLabels.length > 0;" in helper
-    )
-    assert (
-        'if (payload.action === "synchronize" && previousBotLabels.length > 0) {'
+        "function resolvePrLabelDelta({ action, previousBotLabels, aiLabelsRaw }) {"
         in helper
     )
-    assert "nextAiLabels = predictedLabels;" in helper
+    assert 'const hasFreshPrLabelResult = rawAiLabels !== "";' in helper
+    assert "if (hasFreshPrLabelResult) {" in helper
+    assert "nextAiLabels = parsedAiLabels;" in helper
     assert (
-        '} else if (isPR && payload.action === "synchronize" && previousBotLabels.length > 0) {'
+        '} else if (action === "synchronize" && previousLabels.length > 0) {'
         in helper
     )
-    assert (
-        "labelsToRemove = isPR && hasFreshPrLabels ? previousBotLabels.filter((label) => !nextAiLabels.includes(label)) : [];"
-        in helper
-    )
+    assert "const labelsToRemove = hasFreshPrLabelResult" in helper
 
 
 def test_issue_label_fallback_uses_reduced_default_label_set() -> None:
@@ -465,6 +459,67 @@ def test_pr_comment_body_uses_neutral_cooldown_notice() -> None:
     assert "GitHub Models returned temporary throttling" in result
     assert "scraping GitHub" not in result
     assert "Terms of Service" not in result
+
+
+def test_pr_label_delta_replaces_stale_labels_on_synchronize() -> None:
+    result = run_js_helper_function(
+        PROJECT_MANAGER_HELPER,
+        "resolvePrLabelDelta",
+        {
+            "action": "synchronize",
+            "previousBotLabels": [
+                "breaking-change",
+                "security",
+                "api",
+                "database",
+                "schema",
+                "compatibility",
+            ],
+            "aiLabelsRaw": json.dumps(
+                ["api", "ui", "workflow", "automation", "github"]
+            ),
+        },
+    )
+
+    assert set(result["nextAiLabels"]) == {
+        "api",
+        "ui",
+        "workflow",
+        "automation",
+        "github",
+    }
+    assert result["labelsToRemove"] == [
+        "breaking-change",
+        "security",
+        "database",
+        "schema",
+        "compatibility",
+    ]
+    assert set(result["labelsToAdd"]) == {
+        "ui",
+        "workflow",
+        "automation",
+        "github",
+    }
+
+
+def test_pr_label_delta_clears_previous_labels_when_fresh_result_is_empty() -> (
+    None
+):
+    result = run_js_helper_function(
+        PROJECT_MANAGER_HELPER,
+        "resolvePrLabelDelta",
+        {
+            "action": "synchronize",
+            "previousBotLabels": ["breaking-change", "security", "api"],
+            "aiLabelsRaw": "[]",
+        },
+    )
+
+    assert result["hasFreshPrLabelResult"] is True
+    assert result["nextAiLabels"] == []
+    assert result["labelsToRemove"] == ["breaking-change", "security", "api"]
+    assert result["labelsToAdd"] == []
 
 
 def test_issue_fallback_labels_keep_feature_requests_conservative() -> None:
