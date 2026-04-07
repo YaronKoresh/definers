@@ -109,6 +109,13 @@ function matchesWorkflowScriptPath(normalizedPath) {
     && /\b(workflow|pipeline|orchestr|release|triage|autobot|ci)\b/.test(normalizedPath.replace(/[/._-]+/g, " "));
 }
 
+function isAutobotClassificationInfrastructure(normalizedPath) {
+  return /^\.github\/scripts\/autobot[^/]*\.js$/.test(normalizedPath)
+    && normalizedPath !== ".github/scripts/autobot_ai.js"
+    || normalizedPath === ".github/workflows/autobot.yml"
+    || normalizedPath === "tests/test_autobot_workflow.py";
+}
+
 function hasWorkflowTextEvidence(text) {
   return /workflow_dispatch|schedule:|cron:|jobs:|steps:|runs-on:|uses:\s*actions\/|pull_request:|push:|pipeline|orchestrat/.test(text);
 }
@@ -274,6 +281,7 @@ function deriveSignals(file) {
   const patch = String(file.patch || "").toLowerCase();
   const text = `${normalizedPath}\n${patch}`;
   const signals = new Set();
+  const autobotClassificationInfrastructure = isAutobotClassificationInfrastructure(normalizedPath);
   const workflowSignal = matchesWorkflowFilePath(normalizedPath)
     || matchesWorkflowScriptPath(normalizedPath) && hasWorkflowTextEvidence(text);
 
@@ -288,6 +296,9 @@ function deriveSignals(file) {
   }
   if (/^\.github\//.test(normalizedPath)) {
     signals.add("github");
+  }
+  if (autobotClassificationInfrastructure) {
+    return [...signals];
   }
   if (matchesUiPath(normalizedPath) || hasUiTextEvidence(text)) {
     signals.add("ui");

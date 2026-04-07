@@ -676,3 +676,63 @@ def test_pr_analysis_ignores_runtime_words_in_documentation_only_changes() -> (
 
     assert deterministic_labels == {"documentation"}
     assert "runtime" not in candidate_labels
+
+
+def test_pr_analysis_ignores_version_critical_label_words_inside_autobot_infrastructure() -> (
+    None
+):
+    result = run_pr_analysis(
+        build_snapshot(
+            title="Refine autobot fallback labeling",
+            files=[
+                build_snapshot_file(
+                    ".github/scripts/autobot_prompts.js",
+                    """
++const supportedSignals = ["breaking-change", "compatibility", "migration", "api", "database", "schema", "runtime", "security"];
++const reminder = "Preserve explicit breaking-change, compatibility, migration, API, database, schema, runtime, security, UI, workflow, tooling, test, and documentation signals when they are supported.";
+""".strip(),
+                ),
+                build_snapshot_file(
+                    ".github/workflows/autobot.yml",
+                    """
++permissions:
++  contents: write
++  pull-requests: write
++  issues: write
++  models: read
+""".strip(),
+                ),
+                build_snapshot_file(
+                    "tests/test_autobot_workflow.py",
+                    """
++assert "breaking-change" not in deterministic_labels
++assert "database" not in deterministic_labels
++assert "schema" not in deterministic_labels
+""".strip(),
+                ),
+            ],
+        )
+    )
+
+    deterministic_labels = parse_result_labels(
+        result, "deterministic_labels_json"
+    )
+    candidate_labels = parse_result_labels(result, "candidate_labels_json")
+    forbidden_labels = {
+        "breaking-change",
+        "security",
+        "api",
+        "database",
+        "schema",
+        "compatibility",
+        "migration",
+        "runtime",
+        "performance",
+        "feature-flag",
+    }
+
+    assert forbidden_labels.isdisjoint(deterministic_labels)
+    assert forbidden_labels.isdisjoint(candidate_labels)
+    assert "github" in deterministic_labels
+    assert "workflow" in deterministic_labels
+    assert "test" in candidate_labels
