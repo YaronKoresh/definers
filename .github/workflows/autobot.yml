@@ -10,6 +10,9 @@ permissions:
   issues: write
   pull-requests: write
   models: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.issue.number || github.ref }}
+  cancel-in-progress: true
 jobs:
   project-manager:
     runs-on: ubuntu-latest
@@ -17,7 +20,24 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-      - name: Collect PR Changes
+      - name: Collect PR File Snapshot
+        if: >-
+          github.event_name == 'pull_request' &&
+          github.event.action != 'closed'
+        id: collect-pr-snapshot
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const helperPath = `${process.env.GITHUB_WORKSPACE || process.cwd()}/.github/scripts/autobot_pr_analysis.js`;
+            const { collectPullRequestSnapshot } = require(helperPath);
+            const { owner, repo } = context.repo;
+            await collectPullRequestSnapshot({
+              github,
+              owner,
+              repo,
+              pullRequest: context.payload.pull_request
+            });
+      - name: Analyze PR Changes
         if: >-
           github.event_name == 'pull_request' &&
           github.event.action != 'closed'
@@ -25,531 +45,132 @@ jobs:
         uses: actions/github-script@v8
         with:
           script: |
-            const fs = require("fs");
-            const { owner, repo } = context.repo;
-            const pr = context.payload.pull_request;
-            const files = await github.paginate(github.rest.pulls.listFiles, { owner, repo, pull_number: pr.number, per_page: 100 });
-            const MAX_FILES_PER_WINDOW = 20;
-            const MAX_PATCH_CHARS_PER_WINDOW = 7000;
-            const MAX_PATCH_CHARS_PER_FILE = 700;
-            const MAX_HIGHLIGHTED_FILES_PER_WINDOW = 6;
-            const MAX_PATCH_SNIPPETS_PER_WINDOW = 4;
-            const MAX_SUMMARY_BATCHES = 10;
-            const MAX_SUMMARY_BATCH_CONTENT_CHARS = 7200;
-            const WINDOW_SEPARATOR = "\n\n═══════════════════════════════════════════\n\n";
-            const totalAdditions = files.reduce((sum, file) => sum + file.additions, 0);
-            const totalDeletions = files.reduce((sum, file) => sum + file.deletions, 0);
-
-            function topDirectoryForFile(filename) {
-              const parts = filename.split("/");
-              parts.pop();
-              return parts.length > 0 ? parts.slice(0, 2).join("/") : "(root)";
+            const helperPath = `${process.env.GITHUB_WORKSPACE || process.cwd()}/.github/scripts/autobot_pr_analysis.js`;
+            const { analyzePullRequestSnapshot } = require(helperPath);
+            const outputs = analyzePullRequestSnapshot();
+            for (const [name, value] of Object.entries(outputs)) {
+              core.setOutput(name, value);
             }
-
-            function normalizePatch(patch) {
-              if (!patch) {
-                return "[patch unavailable: binary, generated, or too large for the API]";
-              }
-              if (patch.length <= MAX_PATCH_CHARS_PER_FILE) {
-                return patch;
-              }
-              return patch.substring(0, MAX_PATCH_CHARS_PER_FILE) + "\n[...patch truncated for prompt budget...]";
-            }
-
-            function scoreFile(file) {
-              const changeVolume = file.additions + file.deletions;
-              const patchWeight = file.patch ? Math.min(file.patch.length, 4000) : 0;
-              const structuralWeight = file.status === "renamed" || file.status === "removed" ? 800 : 0;
-              return changeVolume * 5 + patchWeight + structuralWeight;
-            }
-
-            const windows = [];
-            let currentWindow = [];
-            let currentWindowPatchChars = 0;
-
-            for (const file of files) {
-              const normalizedPatch = normalizePatch(file.patch);
-              const patchSize = normalizedPatch.length;
-              const shouldStartNewWindow = currentWindow.length > 0 && (
-                currentWindow.length >= MAX_FILES_PER_WINDOW ||
-                currentWindowPatchChars + patchSize > MAX_PATCH_CHARS_PER_WINDOW
-              );
-
-              if (shouldStartNewWindow) {
-                windows.push(currentWindow);
-                currentWindow = [];
-                currentWindowPatchChars = 0;
-              }
-
-              currentWindow.push({
-                filename: file.filename,
-                status: file.status,
-                additions: file.additions,
-                deletions: file.deletions,
-                patch: normalizedPatch,
-                rawPatchAvailable: Boolean(file.patch),
-                score: scoreFile(file)
-              });
-              currentWindowPatchChars += patchSize;
-            }
-
-            if (currentWindow.length > 0) {
-              windows.push(currentWindow);
-            }
-
-            function formatWindow(windowFiles, index, options = {}) {
-              const highlightedFileLimit = options.highlightedFileLimit ?? MAX_HIGHLIGHTED_FILES_PER_WINDOW;
-              const patchSnippetLimit = options.patchSnippetLimit ?? MAX_PATCH_SNIPPETS_PER_WINDOW;
-              const coverageLevel = options.coverageLevel ?? (patchSnippetLimit > 0 ? "full" : "compact");
-              const highlightedFiles = [...windowFiles]
-                .sort((left, right) => right.score - left.score || left.filename.localeCompare(right.filename))
-                .slice(0, highlightedFileLimit);
-              const detailedPatchFiles = patchSnippetLimit > 0
-                ? highlightedFiles.filter((file) => file.rawPatchAvailable).slice(0, patchSnippetLimit)
-                : [];
-              const omittedFileCount = Math.max(windowFiles.length - highlightedFiles.length, 0);
-
-              return [
-                `WINDOW ${index + 1}/${windows.length}`,
-                `Coverage level: ${coverageLevel}`,
-                `Files in window: ${windowFiles.length}`,
-                `Highlighted files:`,
-                highlightedFiles.map((file) => `- ${file.filename} [${file.status.toUpperCase()}] (+${file.additions} -${file.deletions})${file.rawPatchAvailable ? "" : " [patch unavailable]"}`).join("\n"),
-                omittedFileCount > 0 ? `Additional lower-signal files not expanded in this window: ${omittedFileCount}` : "All files in this window are highlighted.",
-                detailedPatchFiles.length > 0 ? "Detailed patch snippets:" : "Detailed patch snippets: none available in this window.",
-                detailedPatchFiles.map((file) => [
-                  `FILE: ${file.filename}`,
-                  `STATUS: ${file.status.toUpperCase()} (+${file.additions} -${file.deletions})`,
-                  file.patch
-                ].join("\n")).join("\n\n")
-              ].filter(Boolean).join("\n\n");
-            }
-
-            function formatMinimalWindow(windowFiles, index) {
-              const topFiles = [...windowFiles]
-                .sort((left, right) => right.score - left.score || left.filename.localeCompare(right.filename))
-                .slice(0, 3);
-              const windowDirs = [...new Set(windowFiles.map((file) => topDirectoryForFile(file.filename)))].slice(0, 4);
-
-              return [
-                `WINDOW ${index + 1}/${windows.length}`,
-                "Coverage level: minimal",
-                `Files in window: ${windowFiles.length}`,
-                `Top directories: ${windowDirs.join(", ") || "(none)"}`,
-                `Top files: ${topFiles.map((file) => `${file.filename} [${file.status.toUpperCase()}] (+${file.additions} -${file.deletions})`).join("; ") || "(none)"}`
-              ].join("\n");
-            }
-
-            const windowCandidates = windows.map((windowFiles, index) => ({
-              index,
-              files: windowFiles,
-              score: windowFiles.reduce((sum, file) => sum + file.score, 0),
-              full: formatWindow(windowFiles, index, { coverageLevel: "full" }),
-              compact: formatWindow(windowFiles, index, { highlightedFileLimit: 4, patchSnippetLimit: 0, coverageLevel: "compact" }),
-              minimal: formatMinimalWindow(windowFiles, index)
-            }));
-            const windowEntries = windowCandidates.map((candidate) => ({
-              ...candidate,
-              selectedVariant: "full",
-              selectedContent: candidate.full
-            }));
-
-            function buildSummaryBatches(entries) {
-              const batches = [];
-              let currentBatch = [];
-              let currentBatchChars = 0;
-
-              for (const entry of [...entries].sort((left, right) => left.index - right.index)) {
-                const separatorLength = currentBatch.length > 0 ? WINDOW_SEPARATOR.length : 0;
-                const wouldOverflow = currentBatch.length > 0 && currentBatchChars + separatorLength + entry.selectedContent.length > MAX_SUMMARY_BATCH_CONTENT_CHARS;
-
-                if (wouldOverflow) {
-                  batches.push(currentBatch);
-                  currentBatch = [];
-                  currentBatchChars = 0;
-                }
-
-                currentBatch.push(entry);
-                currentBatchChars += (currentBatch.length > 1 ? WINDOW_SEPARATOR.length : 0) + entry.selectedContent.length;
-              }
-
-              if (currentBatch.length > 0) {
-                batches.push(currentBatch);
-              }
-
-              return batches;
-            }
-
-            function downgradeWindowCoverage(entries) {
-              const candidates = entries
-                .map((entry, index) => {
-                  if (entry.selectedVariant === "full") {
-                    return { index, nextVariant: "compact", nextContent: entry.compact, savings: entry.full.length - entry.compact.length, score: entry.score };
-                  }
-                  if (entry.selectedVariant === "compact") {
-                    return { index, nextVariant: "minimal", nextContent: entry.minimal, savings: entry.compact.length - entry.minimal.length, score: entry.score };
-                  }
-                  return null;
-                })
-                .filter(Boolean)
-                .sort((left, right) => right.savings - left.savings || left.score - right.score || left.index - right.index);
-
-              const candidate = candidates[0];
-              if (!candidate || candidate.savings <= 0) {
-                return false;
-              }
-
-              entries[candidate.index].selectedVariant = candidate.nextVariant;
-              entries[candidate.index].selectedContent = candidate.nextContent;
-              return true;
-            }
-
-            function buildOverflowWindow(entries) {
-              const overflowFiles = entries.flatMap((entry) => entry.files);
-              const topOverflowFiles = overflowFiles
-                .slice()
-                .sort((left, right) => scoreFile(right) - scoreFile(left) || left.filename.localeCompare(right.filename))
-                .slice(0, 8);
-              const overflowDirs = [...new Set(overflowFiles.map((file) => topDirectoryForFile(file.filename)))].slice(0, 8);
-
-              return {
-                index: entries[0]?.index ?? windows.length,
-                files: overflowFiles,
-                score: 0,
-                selectedVariant: "minimal",
-                selectedContent: [
-                  "WINDOW OVERFLOW",
-                  "Coverage level: minimal",
-                  `Overflow windows: ${entries.length}`,
-                  `Top directories: ${overflowDirs.join(", ") || "(none)"}`,
-                  `Top files: ${topOverflowFiles.map((file) => `${file.filename} [${file.status.toUpperCase()}] (+${file.additions} -${file.deletions})`).join("; ") || "(none)"}`
-                ].join("\n")
-              };
-            }
-
-            function summarizeCoverage(entries) {
-              return entries.reduce((counts, entry) => {
-                counts[entry.selectedVariant] = (counts[entry.selectedVariant] || 0) + 1;
-                return counts;
-              }, { full: 0, compact: 0, minimal: 0 });
-            }
-
-            function buildSummaryBatchPrompt(batchEntries, batchIndex, batchCount) {
-              const coverageCounts = summarizeCoverage(batchEntries);
-
-              return [
-                "You are a principal software engineer analyzing one batch of rolling windows from a large pull request.",
-                "Each batch contains windows in full, compact, or minimal form to stay within prompt budget.",
-                "Use only the evidence shown in this batch. Compact and minimal windows are only partially analyzed.",
-                "Do not invent hidden behavior, missing files, or unsupported motivations.",
-                "",
-                "OUTPUT REQUIREMENTS:",
-                "- Output MUST be valid Markdown.",
-                "- Do NOT wrap the report in triple backticks.",
-                "- Keep the result between 900 and 2400 characters.",
-                "- Preserve explicit signals related to breaking changes, compatibility, migration, api, runtime, database, schema, security, performance, workflow, tooling, tests, and documentation when supported.",
-                "- End your response with the exact final line: END_OF_REPORT",
-                "",
-                "Use EXACTLY this structure:",
-                "",
-                "## Window Batch Analysis",
-                "",
-                "### Batch Scope",
-                "2-4 sentences.",
-                "",
-                "### Release Signals",
-                "2-5 bullets.",
-                "",
-                "### Risks And Checks",
-                "2-5 bullets.",
-                "",
-                "### Classification Signals",
-                "2-6 bullets listing direct technical signals useful for downstream label selection.",
-                "",
-                "BATCH METRICS",
-                `Batch number: ${batchIndex + 1}`,
-                `Total batches: ${batchCount}`,
-                `Windows in batch: ${batchEntries.length}`,
-                `Coverage mix: full=${coverageCounts.full || 0}, compact=${coverageCounts.compact || 0}, minimal=${coverageCounts.minimal || 0}`,
-                "",
-                "WINDOWS",
-                batchEntries.map((entry) => entry.selectedContent).join(WINDOW_SEPARATOR)
-              ].join("\n");
-            }
-
-            let summaryBatches = buildSummaryBatches(windowEntries);
-            while (summaryBatches.length > MAX_SUMMARY_BATCHES && downgradeWindowCoverage(windowEntries)) {
-              summaryBatches = buildSummaryBatches(windowEntries);
-            }
-
-            if (summaryBatches.length > MAX_SUMMARY_BATCHES) {
-              const overflowEntries = summaryBatches.slice(MAX_SUMMARY_BATCHES - 1).flat();
-              summaryBatches = [
-                ...summaryBatches.slice(0, MAX_SUMMARY_BATCHES - 1),
-                [buildOverflowWindow(overflowEntries)]
-              ];
-            }
-
-            for (const [batchIndex, batchEntries] of summaryBatches.entries()) {
-              const prompt = buildSummaryBatchPrompt(batchEntries, batchIndex, summaryBatches.length);
-              fs.writeFileSync(`/tmp/summary_batch_${batchIndex + 1}.txt`, prompt);
-            }
-
-            const totalSelectedWindowChars = windowEntries.reduce((sum, entry) => sum + entry.selectedContent.length, 0);
-            core.setOutput("has_changes", files.length > 0 ? "true" : "false");
-            core.setOutput("files_changed", String(files.length));
-            core.setOutput("additions", String(totalAdditions));
-            core.setOutput("deletions", String(totalDeletions));
-            core.setOutput("windows_count", String(windows.length));
-            core.setOutput("windows_included", String(windowEntries.length));
-            core.setOutput("windows_omitted", "0");
-            core.setOutput("summary_batch_count", String(summaryBatches.length));
-            core.setOutput("summary_prompt_chars", String(totalSelectedWindowChars));
       - name: AI — Generate Batch Summary 1
-        if: github.event_name == 'pull_request' && github.event.action != 'closed' && fromJSON(steps.collect.outputs.summary_batch_count || '0') >= 1
+        if: github.event_name == 'pull_request' && github.event.action != 'closed' && steps.collect.outputs.summary_tier == 'capped_batch_ai' && fromJSON(steps.collect.outputs.summary_batch_count || '0') >= 1
         id: ai-summary-batch-1
-        uses: actions/ai-inference@v2
-        with:
-          model: openai/gpt-4o
-          prompt-file: /tmp/summary_batch_1.txt
-          max-completion-tokens: 1200
-      - name: AI — Generate Batch Summary 2
-        if: github.event_name == 'pull_request' && github.event.action != 'closed' && fromJSON(steps.collect.outputs.summary_batch_count || '0') >= 2
-        id: ai-summary-batch-2
-        uses: actions/ai-inference@v2
-        with:
-          model: openai/gpt-4o
-          prompt-file: /tmp/summary_batch_2.txt
-          max-completion-tokens: 1200
-      - name: AI — Generate Batch Summary 3
-        if: github.event_name == 'pull_request' && github.event.action != 'closed' && fromJSON(steps.collect.outputs.summary_batch_count || '0') >= 3
-        id: ai-summary-batch-3
-        uses: actions/ai-inference@v2
-        with:
-          model: openai/gpt-4o
-          prompt-file: /tmp/summary_batch_3.txt
-          max-completion-tokens: 1200
-      - name: AI — Generate Batch Summary 4
-        if: github.event_name == 'pull_request' && github.event.action != 'closed' && fromJSON(steps.collect.outputs.summary_batch_count || '0') >= 4
-        id: ai-summary-batch-4
-        uses: actions/ai-inference@v2
-        with:
-          model: openai/gpt-4o
-          prompt-file: /tmp/summary_batch_4.txt
-          max-completion-tokens: 1200
-      - name: AI — Generate Batch Summary 5
-        if: github.event_name == 'pull_request' && github.event.action != 'closed' && fromJSON(steps.collect.outputs.summary_batch_count || '0') >= 5
-        id: ai-summary-batch-5
-        uses: actions/ai-inference@v2
-        with:
-          model: openai/gpt-4o
-          prompt-file: /tmp/summary_batch_5.txt
-          max-completion-tokens: 1200
-      - name: AI — Generate Batch Summary 6
-        if: github.event_name == 'pull_request' && github.event.action != 'closed' && fromJSON(steps.collect.outputs.summary_batch_count || '0') >= 6
-        id: ai-summary-batch-6
-        uses: actions/ai-inference@v2
-        with:
-          model: openai/gpt-4o
-          prompt-file: /tmp/summary_batch_6.txt
-          max-completion-tokens: 1200
-      - name: AI — Generate Batch Summary 7
-        if: github.event_name == 'pull_request' && github.event.action != 'closed' && fromJSON(steps.collect.outputs.summary_batch_count || '0') >= 7
-        id: ai-summary-batch-7
-        uses: actions/ai-inference@v2
-        with:
-          model: openai/gpt-4o
-          prompt-file: /tmp/summary_batch_7.txt
-          max-completion-tokens: 1200
-      - name: AI — Generate Batch Summary 8
-        if: github.event_name == 'pull_request' && github.event.action != 'closed' && fromJSON(steps.collect.outputs.summary_batch_count || '0') >= 8
-        id: ai-summary-batch-8
-        uses: actions/ai-inference@v2
-        with:
-          model: openai/gpt-4o
-          prompt-file: /tmp/summary_batch_8.txt
-          max-completion-tokens: 1200
-      - name: AI — Generate Batch Summary 9
-        if: github.event_name == 'pull_request' && github.event.action != 'closed' && fromJSON(steps.collect.outputs.summary_batch_count || '0') >= 9
-        id: ai-summary-batch-9
-        uses: actions/ai-inference@v2
-        with:
-          model: openai/gpt-4o
-          prompt-file: /tmp/summary_batch_9.txt
-          max-completion-tokens: 1200
-      - name: AI — Generate Batch Summary 10
-        if: github.event_name == 'pull_request' && github.event.action != 'closed' && fromJSON(steps.collect.outputs.summary_batch_count || '0') >= 10
-        id: ai-summary-batch-10
-        uses: actions/ai-inference@v2
-        with:
-          model: openai/gpt-4o
-          prompt-file: /tmp/summary_batch_10.txt
-          max-completion-tokens: 1200
-      - name: Build Aggregated Summary Prompt
-        if: github.event_name == 'pull_request' && github.event.action != 'closed' && fromJSON(steps.collect.outputs.summary_batch_count || '0') >= 1
-        id: aggregate-summary-prompt
         env:
+          GITHUB_TOKEN: ${{ github.token }}
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const helperPath = `${process.env.GITHUB_WORKSPACE || process.cwd()}/.github/scripts/autobot_ai.js`;
+            const { runManagedInference } = require(helperPath);
+            const { owner, repo } = context.repo;
+            const result = await runManagedInference({
+              github,
+              owner,
+              repo,
+              token: process.env.GITHUB_TOKEN,
+              promptFile: "/tmp/summary_batch_1.txt",
+              model: "openai/gpt-4o",
+              maxTokens: 800,
+              source: "batch-summary-1"
+            });
+            core.setOutput("response", result.content || "");
+            core.setOutput("status", String(result.status || 0));
+            core.setOutput("rate_limited", result.rateLimited ? "true" : "false");
+            core.setOutput("cooldown_until", result.cooldownUntil || "");
+            core.setOutput("error_message", result.errorMessage || "");
+      - name: AI — Generate Batch Summary 2
+        if: github.event_name == 'pull_request' && github.event.action != 'closed' && steps.collect.outputs.summary_tier == 'capped_batch_ai' && fromJSON(steps.collect.outputs.summary_batch_count || '0') >= 2
+        id: ai-summary-batch-2
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const helperPath = `${process.env.GITHUB_WORKSPACE || process.cwd()}/.github/scripts/autobot_ai.js`;
+            const { runManagedInference } = require(helperPath);
+            const { owner, repo } = context.repo;
+            const result = await runManagedInference({
+              github,
+              owner,
+              repo,
+              token: process.env.GITHUB_TOKEN,
+              promptFile: "/tmp/summary_batch_2.txt",
+              model: "openai/gpt-4o",
+              maxTokens: 800,
+              source: "batch-summary-2"
+            });
+            core.setOutput("response", result.content || "");
+            core.setOutput("status", String(result.status || 0));
+            core.setOutput("rate_limited", result.rateLimited ? "true" : "false");
+            core.setOutput("cooldown_until", result.cooldownUntil || "");
+            core.setOutput("error_message", result.errorMessage || "");
+      - name: Build Final PR Summary Prompt
+        if: >-
+          github.event_name == 'pull_request' &&
+          github.event.action != 'closed' &&
+          steps.collect.outputs.has_changes == 'true' &&
+          steps.collect.outputs.summary_tier != 'zero_ai'
+        id: final-pr-summary-prompt
+        env:
+          SUMMARY_TIER: ${{ steps.collect.outputs.summary_tier }}
+          CANDIDATE_LABELS: ${{ steps.collect.outputs.candidate_labels_json }}
           AI_BATCH_SUMMARY_1: ${{ steps.ai-summary-batch-1.outputs.response }}
           AI_BATCH_SUMMARY_2: ${{ steps.ai-summary-batch-2.outputs.response }}
-          AI_BATCH_SUMMARY_3: ${{ steps.ai-summary-batch-3.outputs.response }}
-          AI_BATCH_SUMMARY_4: ${{ steps.ai-summary-batch-4.outputs.response }}
-          AI_BATCH_SUMMARY_5: ${{ steps.ai-summary-batch-5.outputs.response }}
-          AI_BATCH_SUMMARY_6: ${{ steps.ai-summary-batch-6.outputs.response }}
-          AI_BATCH_SUMMARY_7: ${{ steps.ai-summary-batch-7.outputs.response }}
-          AI_BATCH_SUMMARY_8: ${{ steps.ai-summary-batch-8.outputs.response }}
-          AI_BATCH_SUMMARY_9: ${{ steps.ai-summary-batch-9.outputs.response }}
-          AI_BATCH_SUMMARY_10: ${{ steps.ai-summary-batch-10.outputs.response }}
-          FILES_CHANGED: ${{ steps.collect.outputs.files_changed }}
-          ADDITIONS: ${{ steps.collect.outputs.additions }}
-          DELETIONS: ${{ steps.collect.outputs.deletions }}
-          WINDOWS_COUNT: ${{ steps.collect.outputs.windows_count }}
-          WINDOWS_INCLUDED: ${{ steps.collect.outputs.windows_included }}
         uses: actions/github-script@v8
         with:
           script: |
-            const fs = require("fs");
-
-            function stripEndMarker(text) {
-              return String(text || "").replace(/\nEND_OF_REPORT\s*$/m, "").trim();
+            const helperPath = `${process.env.GITHUB_WORKSPACE || process.cwd()}/.github/scripts/autobot_prompts.js`;
+            const { buildFinalPrSummaryPrompt } = require(helperPath);
+            const outputs = buildFinalPrSummaryPrompt({
+              summaryTier: process.env.SUMMARY_TIER,
+              candidateLabelsRaw: process.env.CANDIDATE_LABELS,
+              batchSummaries: [
+                process.env.AI_BATCH_SUMMARY_1,
+                process.env.AI_BATCH_SUMMARY_2
+              ]
+            });
+            for (const [name, value] of Object.entries(outputs)) {
+              core.setOutput(name, value);
             }
-
-            const batchSummaries = [
-              process.env.AI_BATCH_SUMMARY_1,
-              process.env.AI_BATCH_SUMMARY_2,
-              process.env.AI_BATCH_SUMMARY_3,
-              process.env.AI_BATCH_SUMMARY_4,
-              process.env.AI_BATCH_SUMMARY_5,
-              process.env.AI_BATCH_SUMMARY_6,
-              process.env.AI_BATCH_SUMMARY_7,
-              process.env.AI_BATCH_SUMMARY_8,
-              process.env.AI_BATCH_SUMMARY_9,
-              process.env.AI_BATCH_SUMMARY_10
-            ].map(stripEndMarker).filter(Boolean);
-
-            const summaryPrompt = [
-              "You are a principal software engineer synthesizing hierarchical analyses of a pull request.",
-              "Each batch analysis was generated from a disjoint subset of rolling diff windows.",
-              "Use only the evidence in the batch analyses below.",
-              "Do not invent product behavior, hidden files, or motivations that are not supported by the prompt.",
-              "",
-              "OUTPUT REQUIREMENTS:",
-              "- Output MUST be valid Markdown.",
-              "- Do NOT wrap the report in triple backticks.",
-              "- Keep the report concise and review-oriented.",
-              "- Output MUST be BETWEEN 1800 and 5000 characters total.",
-              "- Focus on the most important change clusters, release relevance, risks, and testing implications.",
-              "- Call out any files or areas that were only partially analyzed because the upstream windows were compact or minimal.",
-              "- End your response with the exact final line: END_OF_REPORT",
-              "",
-              "Generate Markdown using EXACTLY this structure:",
-              "",
-              "## Pull Request Analysis",
-              "",
-              "### Executive Summary",
-              "3-4 sentences that summarize the main scope.",
-              "",
-              "### Major Change Areas",
-              "Group the key change clusters and explain why they matter.",
-              "",
-              "### Release Relevance",
-              "State whether the PR appears release-relevant and explain the strongest signals.",
-              "",
-              "### Risks",
-              "List the highest-value regression, compatibility, rollout, or operational risks.",
-              "",
-              "### Testing Focus",
-              "List the most important checks reviewers should run.",
-              "",
-              "### Coverage Notes",
-              "State what was fully analyzed versus partially analyzed.",
-              "",
-              "GLOBAL METRICS",
-              `Total files: ${process.env.FILES_CHANGED || "0"}`,
-              `Total additions: ${process.env.ADDITIONS || "0"}`,
-              `Total deletions: ${process.env.DELETIONS || "0"}`,
-              `Window count: ${process.env.WINDOWS_COUNT || "0"}`,
-              `Windows represented: ${process.env.WINDOWS_INCLUDED || "0"}`,
-              `Batch summaries: ${batchSummaries.length}`,
-              "",
-              "BATCH SUMMARIES",
-              batchSummaries.map((summary, index) => [`BATCH ${index + 1}/${batchSummaries.length}`, summary].join("\n")).join("\n\n═══════════════════════════════════════════\n\n")
-            ].join("\n");
-
-            fs.writeFileSync("/tmp/summary_prompt.txt", summaryPrompt);
-            core.setOutput("prompt_chars", String(summaryPrompt.length));
-            core.setOutput("ready", batchSummaries.length > 0 ? "true" : "false");
-      - name: AI — Generate Change Summary
-        if: steps.aggregate-summary-prompt.outputs.ready == 'true'
-        id: ai-summary
-        uses: actions/ai-inference@v2
-        with:
-          model: openai/gpt-4o
-          prompt-file: /tmp/summary_prompt.txt
-          max-completion-tokens: 1400
-      - name: Build Compact Summary Prompt
-        if: steps.collect.outputs.has_changes == 'true'
-        id: compact-prompt
+      - name: AI — Generate Final PR Summary
+        if: steps.final-pr-summary-prompt.outputs.ready == 'true'
+        id: ai-pr-summary
         env:
-          AI_DETAILED_SUMMARY: ${{ steps.ai-summary.outputs.response }}
-          FILES_CHANGED: ${{ steps.collect.outputs.files_changed }}
-          ADDITIONS: ${{ steps.collect.outputs.additions }}
-          DELETIONS: ${{ steps.collect.outputs.deletions }}
-          WINDOWS_COUNT: ${{ steps.collect.outputs.windows_count }}
+          GITHUB_TOKEN: ${{ github.token }}
         uses: actions/github-script@v8
         with:
           script: |
-            const fs = require("fs");
-            const detailedSummary = (process.env.AI_DETAILED_SUMMARY || "").replace(/\nEND_OF_REPORT\s*$/m, "").trim();
-            const compactPrompt = [
-              "You are compressing a PR analysis that was generated from rolling windows of a large pull request.",
-              "Keep the final summary concise, stable across repeated updates, and useful for reviewers deciding release relevance and label classification.",
-              "",
-              "OUTPUT REQUIREMENTS:",
-              "- Output MUST be valid Markdown.",
-              "- Keep the result between 900 and 2200 characters.",
-              "- Preserve the strongest technical signals and remove repetition.",
-              "- Preserve explicit breaking-change, compatibility, migration, API, database, schema, runtime, security, workflow, tooling, test, and documentation signals when they are supported.",
-              "- If the evidence implies incompatible behavior or a major version impact, say that explicitly.",
-              "- Do not mention labels directly unless they are clearly supported by the summary.",
-              "- End your response with the exact final line: END_OF_REPORT",
-              "",
-              "Use EXACTLY this structure:",
-              "",
-              "## Autobot Summary",
-              "",
-              "### What Changed",
-              "2-4 sentences.",
-              "",
-              "### Release Relevance",
-              "1-3 bullets.",
-              "",
-              "### Risks And Testing",
-              "2-5 bullets covering the top risks and checks.",
-              "",
-              "### Classification Signals",
-              "2-6 bullets listing direct, compact technical signals that are most relevant for label selection.",
-              "",
-              "PR METRICS",
-              `Files changed: ${process.env.FILES_CHANGED || "0"}`,
-              `Additions: ${process.env.ADDITIONS || "0"}`,
-              `Deletions: ${process.env.DELETIONS || "0"}`,
-              `Rolling windows analyzed: ${process.env.WINDOWS_COUNT || "0"}`,
-              "",
-              "DETAILED SUMMARY",
-              detailedSummary
-            ].join("\n");
-
-            fs.writeFileSync("/tmp/compact_summary_prompt.txt", compactPrompt);
-            core.setOutput("prompt_chars", String(compactPrompt.length));
-            core.setOutput("ready", "true");
-      - name: AI — Compact Change Summary
-        if: steps.compact-prompt.outputs.ready == 'true'
-        id: ai-compact
-        uses: actions/ai-inference@v2
+            const helperPath = `${process.env.GITHUB_WORKSPACE || process.cwd()}/.github/scripts/autobot_ai.js`;
+            const { runManagedInference } = require(helperPath);
+            const { owner, repo } = context.repo;
+            const result = await runManagedInference({
+              github,
+              owner,
+              repo,
+              token: process.env.GITHUB_TOKEN,
+              promptFile: "/tmp/final_pr_summary_prompt.txt",
+              model: "openai/gpt-4o",
+              maxTokens: 1100,
+              source: "final-pr-summary"
+            });
+            core.setOutput("response", result.content || "");
+            core.setOutput("status", String(result.status || 0));
+            core.setOutput("rate_limited", result.rateLimited ? "true" : "false");
+            core.setOutput("cooldown_until", result.cooldownUntil || "");
+            core.setOutput("error_message", result.errorMessage || "");
+      - name: Parse Final PR Summary
+        if: steps.final-pr-summary-prompt.outputs.ready == 'true'
+        id: parse-pr-summary
+        env:
+          AI_PR_SUMMARY_RAW: ${{ steps.ai-pr-summary.outputs.response }}
+        uses: actions/github-script@v8
         with:
-          model: openai/gpt-4o
-          prompt-file: /tmp/compact_summary_prompt.txt
-          max-completion-tokens: 1200
+          script: |
+            const helperPath = `${process.env.GITHUB_WORKSPACE || process.cwd()}/.github/scripts/autobot_prompts.js`;
+            const { parseFinalPrSummary } = require(helperPath);
+            const outputs = parseFinalPrSummary(process.env.AI_PR_SUMMARY_RAW || "");
+            core.setOutput("summary_body", outputs.summaryBody);
+            core.setOutput("label_hints", outputs.labelHints);
+            core.setOutput("label_hints_ready", outputs.labelHintsReady);
       - name: Build Issue Summary Prompt
         if: >-
           github.event_name == 'issues' &&
@@ -558,854 +179,171 @@ jobs:
         uses: actions/github-script@v8
         with:
           script: |
-            const fs = require("fs");
-            const issue = context.payload.issue;
-            const MAX_ISSUE_BODY_CHARS = 12000;
-            const existingLabels = (issue.labels || [])
-              .map((label) => typeof label === "string" ? label : label.name)
-              .filter(Boolean);
-
-            function clampForPrompt(text, maxChars) {
-              if (text.length <= maxChars) {
-                return text;
-              }
-              if (maxChars <= 0) {
-                return "";
-              }
-              const suffix = "\n[...truncated for prompt budget...]";
-              const trimmedLength = Math.max(maxChars - suffix.length, 0);
-              return text.slice(0, trimmedLength) + suffix;
-            }
-
-            const prompt = [
-              "You are a principal software engineer triaging one GitHub issue.",
-              "Analyze the issue as an intake artifact, not as implemented code.",
-              "Use only the evidence in the title, body, and existing labels.",
-              "Do not invent missing repro steps, architecture, or hidden product behavior.",
-              "",
-              "OUTPUT REQUIREMENTS:",
-              "- Output MUST be valid Markdown.",
-              "- Do NOT wrap the report in triple backticks.",
-              "- Keep the result between 900 and 2400 characters.",
-              "- Make the summary precise enough to support high-quality label classification.",
-              "- Distinguish between confirmed defects, enhancement requests, proposals, documentation problems, and operational/runtime concerns.",
-              "- End your response with the exact final line: END_OF_REPORT",
-              "",
-              "Use EXACTLY this structure:",
-              "",
-              "## Issue Analysis",
-              "",
-              "### Intake Summary",
-              "2-4 sentences describing the core request or problem.",
-              "",
-              "### Evidence Signals",
-              "2-5 bullets citing the strongest concrete signals from the issue text.",
-              "",
-              "### Likely Classification",
-              "2-5 bullets naming the strongest candidate label families and why.",
-              "",
-              "### Risks Or Unknowns",
-              "1-4 bullets covering ambiguity, missing information, or notable impact areas.",
-              "",
-              "### Release Relevance",
-              "State whether the issue looks release-relevant and why.",
-              "",
-              "ISSUE METRICS",
-              `Issue number: ${issue.number}`,
-              `State: ${issue.state}`,
-              `Existing labels: ${existingLabels.join(", ") || "(none)"}`,
-              `Author association: ${issue.author_association || "UNKNOWN"}`,
-              "",
-              "ISSUE TITLE",
-              String(issue.title || ""),
-              "",
-              "ISSUE BODY",
-              clampForPrompt(String(issue.body || ""), MAX_ISSUE_BODY_CHARS)
-            ].join("\n");
-
-            fs.writeFileSync("/tmp/issue_summary_prompt.txt", prompt);
-            core.setOutput("ready", "true");
+            const helperPath = `${process.env.GITHUB_WORKSPACE || process.cwd()}/.github/scripts/autobot_prompts.js`;
+            const { buildIssueSummaryArtifacts } = require(helperPath);
+            const outputs = buildIssueSummaryArtifacts({ issue: context.payload.issue });
+            core.setOutput("fallback_summary", outputs.fallbackSummary);
+            core.setOutput("ready", outputs.ready);
       - name: AI — Generate Issue Summary
         if: steps.issue-summary-prompt.outputs.ready == 'true'
         id: ai-issue-summary
-        uses: actions/ai-inference@v2
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        uses: actions/github-script@v8
         with:
-          model: openai/gpt-4o
-          prompt-file: /tmp/issue_summary_prompt.txt
-          max-completion-tokens: 1400
+          script: |
+            const helperPath = `${process.env.GITHUB_WORKSPACE || process.cwd()}/.github/scripts/autobot_ai.js`;
+            const { runManagedInference } = require(helperPath);
+            const { owner, repo } = context.repo;
+            const result = await runManagedInference({
+              github,
+              owner,
+              repo,
+              token: process.env.GITHUB_TOKEN,
+              promptFile: "/tmp/issue_summary_prompt.txt",
+              model: "openai/gpt-4o",
+              maxTokens: 1400,
+              source: "issue-summary"
+            });
+            core.setOutput("response", result.content || "");
+            core.setOutput("status", String(result.status || 0));
+            core.setOutput("rate_limited", result.rateLimited ? "true" : "false");
+            core.setOutput("cooldown_until", result.cooldownUntil || "");
+            core.setOutput("error_message", result.errorMessage || "");
       - name: Build Label Prompt
         if: >-
-          steps.collect.outputs.has_changes == 'true' ||
-          steps.issue-summary-prompt.outputs.ready == 'true'
+          steps.issue-summary-prompt.outputs.ready == 'true' ||
+          (
+            github.event_name == 'pull_request' &&
+            github.event.action != 'closed' &&
+            steps.collect.outputs.summary_tier != 'zero_ai' &&
+            steps.parse-pr-summary.outputs.summary_body != '' &&
+            steps.parse-pr-summary.outputs.label_hints_ready != 'true'
+          )
         id: label-prompt
         env:
-          AI_COMPACT_SUMMARY: ${{ steps.ai-compact.outputs.response }}
-          AI_ISSUE_SUMMARY: ${{ steps.ai-issue-summary.outputs.response }}
+          AI_PR_SUMMARY: ${{ steps.parse-pr-summary.outputs.summary_body }}
+          AI_ISSUE_SUMMARY: ${{ steps.ai-issue-summary.outputs.response || steps.issue-summary-prompt.outputs.fallback_summary }}
+          CANDIDATE_LABELS: ${{ steps.collect.outputs.candidate_labels_json }}
           EVENT_KIND: ${{ github.event_name }}
         uses: actions/github-script@v8
         with:
           script: |
-            const fs = require("fs");
-            const eventKind = process.env.EVENT_KIND === "issues" ? "issue" : "pull request";
-            const sourceLabel = eventKind === "issue" ? "AI-GENERATED ISSUE ANALYSIS" : "AI-GENERATED CHANGE SUMMARY";
-            const MAX_AI_LABELS = 6;
-            const MAX_COMPACT_SUMMARY_CHARS = 2200;
-
-            function stripEndMarker(text) {
-              return String(text || "").replace(/\nEND_OF_REPORT\s*$/m, "").trim();
-            }
-
-            function clampForPrompt(text, maxChars) {
-              if (text.length <= maxChars) {
-                return text;
-              }
-              if (maxChars <= 0) {
-                return "";
-              }
-              const suffix = "\n[...truncated for label prompt budget...]";
-              const trimmedLength = Math.max(maxChars - suffix.length, 0);
-              return text.slice(0, trimmedLength) + suffix;
-            }
-
-            const compactSummary = stripEndMarker(process.env.AI_COMPACT_SUMMARY || "");
-            const issueSummary = stripEndMarker(process.env.AI_ISSUE_SUMMARY || "");
-            const summarySections = eventKind === "issue"
-              ? [{ heading: sourceLabel, body: clampForPrompt(issueSummary, MAX_COMPACT_SUMMARY_CHARS) }]
-              : [{ heading: "COMPACT SUMMARY", body: clampForPrompt(compactSummary, MAX_COMPACT_SUMMARY_CHARS) }].filter((section) => section.body);
-            const prompt = [
-              "You are an expert issue and pull request classifier.",
-              eventKind === "issue"
-                ? "You will receive an AI-generated structured analysis of one GitHub issue."
-                : "You will receive an AI-generated compact technical summary of code changes.",
-              `Based ONLY on the evidence below, select up to ${MAX_AI_LABELS} of the most relevant labels from the allowed list.`,
-              "",
-              "RULES:",
-              `- Return at most ${MAX_AI_LABELS} labels, ordered from most to least relevant.`,
-              "- Return all directly supported labels up to the limit. Returning 2-6 labels is normal for multi-area pull requests or issues; return a single label only when the evidence is genuinely narrow.",
-              "- Use only direct evidence from the summary. Do not infer labels from weak hints.",
-              "- If a label is only loosely related, omit it.",
-              "- Prefer the more specific label over a broader overlapping label.",
-              "- Include support labels only when the summary independently supports them after higher-signal labels are chosen.",
-              "- Do not add secondary labels just because they often appear with the primary label.",
-              "- Keep release-relevant labels when clearly supported even if the PR also includes testing, CI, docs, or refactor work.",
-              "- For issues, classify the reported problem or requested work, not the future implementation details that are not yet evidenced.",
-              "- Return ONLY a valid JSON array of label name strings. No markdown, no explanation, no extra text.",
-              "- Return label names exactly as provided in ALLOWED LABELS (lowercase).",
-              "- If nothing fits, return an empty array: []",
-              "",
-              "PREFERENCE RULES:",
-              "- Version-critical labels must be prioritized first when evidence exists: breaking-change, enhancement, security, bug, performance, api, database, schema, compatibility, migration, feature-flag, runtime.",
-              "- If both broad maintenance labels and version-critical labels apply, put version-critical labels first.",
-              "- If the evidence explicitly mentions a breaking change, a major version bump, incompatibility, required migration, or consumer adaptation, include breaking-change and rank it first.",
-              "- For issues, prefer improvement and proposal when the item is primarily a request, idea, or opportunity rather than a confirmed implemented feature change.",
-              "- For GitHub Actions, bots, repo automation, labeling, issue management, or release workflow changes, strongly prefer workflow, automation, github, ci, config, or release only when the summary clearly supports them.",
-              "- Do not apply performance unless the summary explicitly describes speed, caching, efficiency, latency, memory, or throughput improvements.",
-              "- Do not apply cleanup unless the summary explicitly says code, files, or logic were removed as obsolete or unused.",
-              "- Do not apply quality unless the summary explicitly emphasizes maintainability or readability improvements beyond the main functional change.",
-              "- Do not apply refactor unless the summary explicitly indicates structural rework without intended behavior change.",
-              "- Prefer workflow over ci when the summary is mainly about GitHub workflow logic or orchestration rather than generic pipeline execution.",
-              "- Prefer automation over workflow when the summary is mainly about bots, repo management, or autonomous maintenance behavior.",
-              "- Prefer stability over bug when the change hardens reliability or reduces flakiness without a clearly described incorrect behavior fix.",
-              "- Prefer quality over refactor when the main value is maintainability or readability rather than structural code movement.",
-              "- Use logging for emitted log behavior, monitoring for dashboards or alerts, and observability for broader metrics, tracing, or system visibility changes.",
-              "- Prefer tooling for tools, scripts, generators, and editor setup; use dx when the main outcome is a smoother developer workflow.",
-              "- Prefer feature-flag only for rollout toggles; use config for broader settings or environment configuration changes.",
-              "- Only apply release, release-notes, versioning, or packaging when the summary clearly supports those exact release mechanics.",
-              "",
-              "ALLOWED LABELS (name → when to apply):",
-              "",
-              "bug → Use when the summary clearly says incorrect behavior, a regression, a crash, a failure, or a broken path was fixed. Do not use for general hardening, refactoring, or new capability work unless a specific bug is explicitly described.",
-              "enhancement → Use when the change adds a new feature, expands capability, or materially improves behavior from a user or product perspective. Do not use for internal cleanup, refactoring, or maintenance-only work with no meaningful capability gain.",
-              "improvement → Use mainly for issues that request a meaningful improvement or describe a gap, limitation, or opportunity without proving a concrete defect. Prefer enhancement for implemented PR changes and bug for confirmed incorrect behavior.",
-              "proposal → Use mainly for issues that outline a suggested direction, plan, or concept for future work. Prefer enhancement when the change is already implemented or clearly framed as delivered capability.",
-              "documentation → Use when the main work is changing READMEs, guides, docs, comments, or explanatory material. Do not use just because a code change includes tiny incidental wording updates.",
-              "breaking-change → Use when consumers must adapt because of incompatible API, contract, config, or behavior changes. Do not use for additive changes or internal restructuring that preserves compatibility.",
-              "ui → Use when visible interface layout, styling, interaction flow, or presentation changes are part of the actual work. Do not use for backend-only or hidden implementation changes.",
-              "performance → Use only when the summary explicitly mentions speed, latency, throughput, memory, caching, bundle size, or runtime efficiency improvements. Do not use just because code was simplified or reorganized.",
-              "security → Use when the change affects auth, authorization, secrets, sanitization, permissions, exploit mitigation, or other security controls. Do not use for generic validation or stability work unless the security angle is explicit.",
-              "refactor → Use when code structure is reorganized without intending to change external behavior. Do not use when the main story is a bug fix, feature addition, or maintainability improvement better captured by another more specific label.",
-              "test → Use when tests, fixtures, mocks, snapshots, or test harnesses are added, changed, or repaired. Do not use for production-only code changes that merely require testing.",
-              "ci → Use when CI execution, validation jobs, pipeline commands, or test/build steps in automation systems are changed. Do not use when the more precise label is workflow, automation, docker, kubernetes, or tooling.",
-              "dependencies → Use when libraries, packages, modules, or dependency versions are added, removed, or updated. Do not use for ordinary source edits that happen to import existing dependencies.",
-              "database → Use when schemas, migrations, ORM models, indexes, seeds, queries, or DB configuration materially change. Do not use for general data handling unless the database layer itself changed.",
-              "build → Use when compilers, bundlers, transpilers, artifact generation, or build system behavior changes. Do not use for generic repository tooling unless it directly affects build outputs or build execution.",
-              "accessibility → Use when the summary explicitly covers keyboard navigation, ARIA, semantics, contrast, focus management, or assistive technology support. Do not use for general UI polish without an accessibility-specific improvement.",
-              "localization → Use when translations, locale files, i18n config, formatting rules, or localized assets change. Do not use for generic text edits that are not part of localization support.",
-              "api → Use when endpoints, handlers, schemas, request or response contracts, or API middleware change. Do not use for internal helper logic unless it directly changes an API-facing contract.",
-              "infrastructure → Use when cloud resources, networking, provisioning, IaC, deployment environment topology, or platform infrastructure changes. Do not use for application config or workflow-only changes that do not alter infrastructure.",
-              "config → Use when settings files, runtime config, environment variables, or general configuration behavior changes. Do not use when the change is specifically a feature rollout toggle, release mechanism, or dependency update and a more specific label fits better.",
-              "types → Use when type declarations, interfaces, schemas, or type-only contracts change in a meaningful way. Do not use for incidental type edits bundled into a larger feature unless types are a substantial part of the change.",
-              "logging → Use when log messages, log fields, structured logging content, or logging call sites change. Do not use for dashboards, tracing, or alerting unless emitted logs themselves are the core change.",
-              "deprecation → Use when a feature, endpoint, or API is explicitly marked as deprecated or scheduled for retirement. Do not use for outright removal unless the summary emphasizes deprecation and migration guidance.",
-              "chore → Use only as a fallback for small maintenance changes that do not fit a stronger label. Do not use when any meaningful functional, operational, or domain-specific label is clearly supported.",
-              "dx → Use when the main impact is smoother local development, setup, debugging, scripts, or contributor ergonomics. Do not use when the change is primarily tooling internals and tooling is the better label.",
-              "release → Use when release flow, release automation, release gating, release creation, or release management behavior changes. Do not use for version bumps or release notes alone when those more precise labels fit better.",
-              "observability → Use when the change adds or adjusts metrics, traces, instrumentation, or broad system visibility. Do not use when the change is only logs, only alerts, or only dashboards and a narrower label fits better.",
-              "docs-site → Use when a docs website, docs app, docs publishing surface, or static documentation site changes. Do not use for ordinary markdown or README edits.",
-              "runtime → Use when runtime compatibility, execution environment support, language runtime requirements, or platform execution behavior changes. Do not use for ordinary config or dependency changes unless runtime support itself is impacted.",
-              "cleanup → Use when obsolete code, dead files, unused exports, or redundant logic are intentionally removed. Do not use just because a change is tidy or because a refactor reduced duplication incidentally.",
-              "style → Use for formatting-only changes with no intended behavioral effect. Do not use when logic, behavior, or configuration changed alongside formatting.",
-              "lint → Use when lint rules, lint config, lint tooling, or lint-fix-only changes are the main story. Do not use for general formatting or broader code-quality changes unless linting is central.",
-              "formatting → Use for pure code formatting changes that are distinct from lint-rule work. Do not use when behavior, structure, or tooling semantics changed.",
-              "tooling → Use when developer tools, scripts, generators, repo tooling, or editor setup materially change. Do not use when the main effect is better developer ergonomics and dx is the more accurate summary.",
-              "release-notes → Use when changelog text, release notes, or generated release summaries change. Do not use for general release automation unless the notes themselves are the main artifact changed.",
-              "versioning → Use when the app, package, or project version itself changes. Do not use for dependency version bumps, which belong under dependencies.",
-              "packaging → Use when package publish metadata, artifact contents, distribution layout, or packaging config changes. Do not use for general build logic unless packaging outputs are directly affected.",
-              "workflow → Use when GitHub Actions or repository workflow logic, job orchestration, approvals, conditions, or automation flow changes. Do not use for bot behavior when automation is more precise, or for generic CI step changes when ci is sufficient.",
-              "automation → Use when bots, scheduled repo tasks, auto-labeling, auto-triage, or autonomous maintenance behavior changes. Do not use for ordinary workflow job wiring unless bot-like automation behavior is central.",
-              "quality → Use when maintainability, readability, consistency, or codebase quality is materially improved and that is a core purpose of the change. Do not use as filler when a stronger functional or structural label already explains the change.",
-              "stability → Use when retries, resilience, fault tolerance, flake reduction, or operational robustness are explicitly improved. Do not use for a straightforward bug fix unless the summary emphasizes reliability hardening rather than correcting one defect.",
-              "error-handling → Use when failure detection, exception paths, retries, fallbacks, or explicit error reporting behavior changes. Do not use for general bugs unless the error-path handling itself is the main change.",
-              "validation → Use when guards, schema checks, input validation, or defensive data constraints are added or changed. Do not use for security by default unless the security intent is explicitly called out.",
-              "feature-flag → Use when rollout toggles, kill switches, gated behavior, or feature flag configuration changes. Do not use for broader configuration unless rollout gating is the main purpose.",
-              "migration → Use when upgrade steps, migration guides, migration scripts, or compatibility transition logic changes. Do not use for any database change automatically unless the migration path is itself central.",
-              "compatibility → Use when backward compatibility, forward compatibility, shims, adapters, or interoperability behavior improves or changes. Do not use for runtime or version support changes unless compatibility with other systems is the focus.",
-              "monitoring → Use when dashboards, alerts, monitors, or monitoring rules change. Do not use for generic logs or broad instrumentation unless operational monitoring outputs are the main thing affected.",
-              "telemetry → Use when analytics events, usage tracking, or product telemetry instrumentation changes. Do not use for infrastructure metrics or tracing unless user or product telemetry is the direct focus.",
-              "logging-verbosity → Use when log levels, amount of log output, or logging detail volume changes. Do not use when log content changes without a meaningful verbosity change.",
-              "docs-api → Use when API-focused documentation such as OpenAPI, Swagger, endpoint docs, or schema docs changes. Do not use for general documentation that is not specifically API-facing.",
-              "examples → Use when examples, demos, sample apps, or example integrations change. Do not use for tests or production features unless example code itself changed.",
-              "devcontainer → Use when devcontainer definitions or containerized local development environment setup changes. Do not use for general Docker or infrastructure edits unless they are specifically for the dev environment.",
-              "docker → Use when Dockerfiles, compose files, image build definitions, or container build behavior changes. Do not use for devcontainer-only work or broader infrastructure changes when another label is more exact.",
-              "kubernetes → Use when Kubernetes manifests, operators, Kustomize, Helm-based deployment behavior, or cluster deployment config changes. Do not use for generic infrastructure changes unless Kubernetes artifacts are directly involved.",
-              "terraform → Use when Terraform modules, providers, resources, or Terraform-managed infrastructure changes. Do not use for generic infrastructure edits outside Terraform.",
-              "helm → Use when Helm chart templates, values, packaging, or chart release config changes. Do not use for general Kubernetes work unless Helm artifacts specifically changed.",
-              "github → Use when GitHub-specific repository settings, templates, forms, CODEOWNERS, issue forms, or repo metadata changes. Do not use for GitHub Actions logic unless workflow or automation is more accurate.",
-              "policy → Use when governance, support policy, security policy, contribution policy, or other formal policy documents and rules change. Do not use for general docs or config changes.",
-              "license → Use when license files, licensing text, or legal license metadata changes. Do not use for broader policy or documentation changes.",
-              "supply-chain → Use when provenance, signing, artifact trust, SBOM, or dependency trust hardening changes. Do not use for ordinary dependency updates unless supply-chain assurance is the explicit purpose.",
-              "codegen → Use when generation config, generation templates, or generated code behavior changes because of code generation systems. Do not use for handwritten source changes unless generation logic is central.",
-              "schema → Use when shared schemas such as GraphQL schema, JSON Schema, or Proto definitions change. Do not use for runtime validation alone unless the schema artifact itself changed.",
-              "serialization → Use when data encoding, decoding, wire format handling, or serialization and deserialization behavior changes. Do not use for generic API or schema work unless format transformation is the core change.",
-              "",
-              "══════════════════════════════════════════",
-              "SUMMARY EVIDENCE:",
-              "══════════════════════════════════════════",
-              summarySections.map((section) => [section.heading + ":", section.body].join("\n")).join("\n\n══════════════════════════════════════════\n\n") || "(none)"
-            ].join("\n");
-            fs.writeFileSync("/tmp/label_prompt.txt", prompt);
-            core.setOutput("prompt_chars", String(prompt.length));
-            core.setOutput("ready", "true");
+            const helperPath = `${process.env.GITHUB_WORKSPACE || process.cwd()}/.github/scripts/autobot_prompts.js`;
+            const { buildLabelPrompt } = require(helperPath);
+            const outputs = buildLabelPrompt({
+              eventName: process.env.EVENT_KIND,
+              prSummary: process.env.AI_PR_SUMMARY,
+              issueSummary: process.env.AI_ISSUE_SUMMARY,
+              candidateLabelsRaw: process.env.CANDIDATE_LABELS
+            });
+            core.setOutput("prompt_chars", outputs.promptChars);
+            core.setOutput("ready", outputs.ready);
       - name: AI — Classify Labels
         if: steps.label-prompt.outputs.ready == 'true'
         id: ai-labels
-        uses: actions/ai-inference@v2
-        with:
-          model: openai/gpt-4o
-          prompt-file: /tmp/label_prompt.txt
-          max-completion-tokens: 600
-      - name: Manage Project
         env:
-          AI_SUMMARY: ${{ steps.ai-compact.outputs.response || steps.ai-issue-summary.outputs.response }}
-          AI_LABELS_RAW: ${{ steps.ai-labels.outputs.response }}
+          GITHUB_TOKEN: ${{ github.token }}
         uses: actions/github-script@v8
         with:
           script: |
+            const helperPath = `${process.env.GITHUB_WORKSPACE || process.cwd()}/.github/scripts/autobot_ai.js`;
+            const { runManagedInference } = require(helperPath);
             const { owner, repo } = context.repo;
-            const payload = context.payload;
-            const issueNumber = context.issue.number;
-            const isPR = context.eventName === 'pull_request';
-            const MIN_RELEASE_SIZE = 3;
-            const MAX_AI_LABELS = 6;
-            const URGENT_SYNC_LABELS = ['breaking-change', 'security'];
-            const VERSION_SENSITIVE_LABELS = ['breaking-change', 'enhancement', 'security', 'bug', 'performance', 'api', 'database', 'schema', 'compatibility', 'migration', 'feature-flag', 'runtime'];
-            const VERSION_LABEL_ALIASES = { 'breaking-changes': 'breaking-change', 'breaking_change': 'breaking-change' };
-            const FORCE_RELEASE_TYPES = ['enhancement', 'breaking-change', 'security'];
-            const RELEASE_RELEVANT_LABELS = ['api', 'breaking-change', 'bug', 'compatibility', 'database', 'enhancement', 'feature-flag', 'migration', 'performance', 'runtime', 'schema', 'security'];
-            const SECONDARY_LABELS = ['chore', 'ci', 'cleanup', 'config', 'dependencies', 'documentation', 'dx', 'formatting', 'github', 'lint', 'quality', 'refactor', 'style', 'test', 'tooling', 'workflow'];
-            const BOT_COMMENT_SIGNATURE = '<!-- autobot-ai-summary -->';
-            const MILESTONE_COMMENT_SIGNATURE = '<!-- autobot-milestone-update -->';
-            const labelDefinitions = {
-              'bug': { color: 'd73a4a', description: "Something isn't working" },
-              'enhancement': { color: 'a2eeef', description: "New feature or request" },
-              'improvement': { color: 'a2eeef', description: "Improvement request or capability expansion" },
-              'proposal': { color: 'bfd4f2', description: "Proposed future work or product change" },
-              'documentation': { color: '0075ca', description: "Improvements or additions to documentation" },
-              'breaking-change': { color: 'b60205', description: "Incompatible API changes" },
-              'ui': { color: 'd4c5f9', description: "Visual or UI/UX improvements" },
-              'performance': { color: '5319e7', description: "Performance improvements" },
-              'security': { color: 'e30c0c', description: "Security fixes and updates" },
-              'refactor': { color: 'f29513', description: "Code change that neither fixes a bug nor adds a feature" },
-              'test': { color: 'cc317c', description: "Adding, missing, or correcting tests" },
-              'ci': { color: '006b75', description: "CI/CD and workflow updates" },
-              'dependencies': { color: '0366d6', description: "Dependency updates" },
-              'database': { color: 'fbca04', description: "Database migrations or schema changes" },
-              'build': { color: '89590b', description: "Build system and tooling updates" },
-              'accessibility': { color: 'c2e0c6', description: "Accessibility (a11y) improvements" },
-              'localization': { color: '91d674', description: "Localization (i18n) and translation" },
-              'api': { color: '1d76db', description: "API endpoint or schema changes" },
-              'infrastructure': { color: '5e4a80', description: "Cloud infrastructure and IaC changes" },
-              'config': { color: 'c5def5', description: "Configuration and environment changes" },
-              'types': { color: '2b67c6', description: "Type definitions and schema changes" },
-              'logging': { color: 'bfdadc', description: "Logging, monitoring, and observability" },
-              'deprecation': { color: 'ffa500', description: "Deprecated features with migration paths" },
-              'chore': { color: 'ededed', description: "Maintenance tasks and cleanup" },
-              'dx': { color: '0e8a16', description: "Developer experience improvements" },
-              'release': { color: '1d76db', description: "Release/versioning/packaging changes" },
-              'observability': { color: 'bfe5bf', description: "Metrics/tracing/alerts/monitoring setup" },
-              'docs-site': { color: 'bfd4f2', description: "Documentation site changes" },
-              'runtime': { color: '7057ff', description: "Runtime/platform compatibility changes" },
-              'cleanup': { color: 'cfd3d7', description: "Dead code removal and cleanup" },
-              'style': { color: 'fef2c0', description: "Formatting-only changes" },
-              'lint': { color: 'fbca04', description: "Lint-only changes (rules/config/fixes)" },
-              'formatting': { color: 'fef2c0', description: "Formatting changes" },
-              'tooling': { color: 'c5def5', description: "Tooling/scripts/editor configuration changes" },
-              'release-notes': { color: '1d76db', description: "Changelog/release notes updates" },
-              'versioning': { color: '1d76db', description: "Version bumps of the project itself" },
-              'packaging': { color: '1d76db', description: "Packaging/publishing configuration" },
-              'workflow': { color: '006b75', description: "Workflow logic changes beyond basic CI" },
-              'automation': { color: '006b75', description: "Automation/bots/scripts for repo management" },
-              'quality': { color: 'd4c5f9', description: "Maintainability/readability improvements" },
-              'stability': { color: 'd73a4a', description: "Reliability/flakiness reductions/hardening" },
-              'error-handling': { color: 'd73a4a', description: "Error handling improvements" },
-              'validation': { color: 'e99695', description: "Validation/schema/guard changes" },
-              'feature-flag': { color: 'c2e0c6', description: "Feature flags/rollout toggles" },
-              'migration': { color: 'fbca04', description: "Migrations/upgrade steps" },
-              'compatibility': { color: '7057ff', description: "Compatibility work, shims, polyfills" },
-              'monitoring': { color: 'bfe5bf', description: "Monitoring/alerting/dashboards" },
-              'telemetry': { color: 'bfe5bf', description: "Analytics/telemetry instrumentation" },
-              'logging-verbosity': { color: 'bfdadc', description: "Log level/volume/fields changes" },
-              'docs-api': { color: '0075ca', description: "API documentation changes" },
-              'examples': { color: 'bfd4f2', description: "Examples/sample code changes" },
-              'devcontainer': { color: 'c5def5', description: "Devcontainer/local env changes" },
-              'docker': { color: 'c5def5', description: "Docker/container changes" },
-              'kubernetes': { color: 'c5def5', description: "Kubernetes/Helm/Kustomize changes" },
-              'terraform': { color: 'c5def5', description: "Terraform changes" },
-              'helm': { color: 'c5def5', description: "Helm chart changes" },
-              'github': { color: '0366d6', description: "GitHub templates/settings/codeowners changes" },
-              'policy': { color: '0366d6', description: "Policy/governance/support/security policy changes" },
-              'license': { color: '0366d6', description: "License/legal changes" },
-              'supply-chain': { color: 'e30c0c', description: "Supply chain hardening (SBOM/signing/provenance)" },
-              'codegen': { color: 'c5def5', description: "Code generation templates/config/output" },
-              'schema': { color: '2b67c6', description: "Schema changes (proto/graphql/jsonschema)" },
-              'serialization': { color: '2b67c6', description: "Serialization format changes" }
-            };
-            const VALID_LABELS = new Set(Object.keys(labelDefinitions));
-            const VERSION_BUMP_BY_LABEL = {
-              'breaking-change': 'major',
-              'enhancement': 'minor',
-              'security': 'patch',
-              'bug': 'patch',
-              'performance': 'patch',
-              'api': 'patch',
-              'database': 'patch',
-              'schema': 'patch',
-              'compatibility': 'patch',
-              'migration': 'patch',
-              'feature-flag': 'patch',
-              'runtime': 'patch'
-            };
-            const BUMP_ORDER = { none: 0, patch: 1, minor: 2, major: 3 };
-            function normalizeLabelName(label) {
-              const normalized = String(label || '').trim().toLowerCase();
-              return VERSION_LABEL_ALIASES[normalized] || normalized;
-            }
-            function hasLabelName(labels, expectedLabel) {
-              return (labels || []).some((label) => {
-                const labelName = typeof label === 'string' ? label : label?.name;
-                return normalizeLabelName(labelName) === expectedLabel;
-              });
-            }
-            function hasReleaseRelevantLabel(labels) {
-              return RELEASE_RELEVANT_LABELS.some((label) => hasLabelName(labels, label));
-            }
-            function uniqueValidLabels(labels) {
-              return [...new Set((labels || []).map((label) => normalizeLabelName(label)).filter((label) => VALID_LABELS.has(label)))];
-            }
-            function trimLowSignalLabels(labels) {
-              if (labels.length <= 3) return labels;
-              const uniqueLabels = uniqueValidLabels(labels);
-              const versionCritical = VERSION_SENSITIVE_LABELS.filter(label => uniqueLabels.includes(label));
-              const primary = uniqueLabels.filter(label => !SECONDARY_LABELS.includes(label) && !versionCritical.includes(label));
-              const secondary = uniqueLabels.filter(label => SECONDARY_LABELS.includes(label));
-              const cappedPrimary = [...versionCritical, ...primary].slice(0, MAX_AI_LABELS);
-              const remainingSlots = Math.max(MAX_AI_LABELS - cappedPrimary.length, 0);
-              const cappedSecondary = secondary.slice(0, remainingSlots);
-              return [...cappedPrimary, ...cappedSecondary].slice(0, MAX_AI_LABELS);
-            }
-            function parseVersionTag(rawVersion) {
-              const match = String(rawVersion || '').trim().match(/^v?(\d+)\.(\d+)\.(\d+)$/);
-              if (!match) return { major: 0, minor: 0, patch: 1 };
-              return { major: Number(match[1]), minor: Number(match[2]), patch: Number(match[3]) };
-            }
-            function isVersionTag(rawVersion) {
-              return /^v?\d+\.\d+\.\d+$/.test(String(rawVersion || '').trim());
-            }
-            function formatVersionTag(version) {
-              return `v${version.major}.${version.minor}.${version.patch}`;
-            }
-            function maxBump(current, next) {
-              return BUMP_ORDER[next] > BUMP_ORDER[current] ? next : current;
-            }
-            function bumpForLabels(labels) {
-              return labels.reduce((bump, label) => {
-                const normalized = normalizeLabelName(label);
-                const next = VERSION_BUMP_BY_LABEL[normalized] || 'none';
-                return maxBump(bump, next);
-              }, 'none');
-            }
-            function mergeSyncLabels(previousLabels, predictedLabels) {
-              const stableLabels = [...new Set(previousLabels.map(normalizeLabelName).filter((label) => VALID_LABELS.has(label)))];
-              let currentBump = bumpForLabels(stableLabels);
-              const predictedSet = new Set(predictedLabels.map(normalizeLabelName).filter((label) => VALID_LABELS.has(label)));
-
-              for (const label of VERSION_SENSITIVE_LABELS) {
-                if (!predictedSet.has(label) || stableLabels.includes(label)) continue;
-                const nextBump = VERSION_BUMP_BY_LABEL[label] || 'none';
-                const raisesVersionSeverity = BUMP_ORDER[nextBump] > BUMP_ORDER[currentBump];
-                const isUrgent = URGENT_SYNC_LABELS.includes(label);
-                if (!raisesVersionSeverity && !isUrgent) continue;
-                stableLabels.push(label);
-                currentBump = maxBump(currentBump, nextBump);
-              }
-
-              return trimLowSignalLabels(stableLabels).slice(0, MAX_AI_LABELS);
-            }
-            function computeTargetVersion(baseVersion, bumpType) {
-              const parsed = parseVersionTag(baseVersion);
-              if (bumpType === 'major') return formatVersionTag({ major: parsed.major + 1, minor: 0, patch: 0 });
-              if (bumpType === 'minor') return formatVersionTag({ major: parsed.major, minor: parsed.minor + 1, patch: 0 });
-              if (bumpType === 'patch') return formatVersionTag({ major: parsed.major, minor: parsed.minor, patch: parsed.patch + 1 });
-              return formatVersionTag(parsed);
-            }
-            function compareVersions(left, right) {
-              const a = parseVersionTag(left);
-              const b = parseVersionTag(right);
-              if (a.major !== b.major) return a.major > b.major ? 1 : -1;
-              if (a.minor !== b.minor) return a.minor > b.minor ? 1 : -1;
-              if (a.patch !== b.patch) return a.patch > b.patch ? 1 : -1;
-              return 0;
-            }
-            function parseMilestoneMetadata(description) {
-              const text = String(description || '');
-              const baseMatch = text.match(/autobot-base:(v\d+\.\d+\.\d+)/i);
-              const managedMatch = text.match(/autobot-managed-title:(v\d+\.\d+\.\d+)/i);
-              return {
-                baseVersion: baseMatch ? baseMatch[1] : null,
-                managedTitle: managedMatch ? managedMatch[1] : null
-              };
-            }
-            function buildMilestoneMetadataDescription(description, baseVersion, managedTitle) {
-              const rows = String(description || '')
-                .split(/\r?\n/)
-                .filter((line) => !/^autobot-base:v\d+\.\d+\.\d+$/i.test(line.trim()) && !/^autobot-managed-title:v\d+\.\d+\.\d+$/i.test(line.trim()));
-              if (baseVersion) rows.push(`autobot-base:${baseVersion}`);
-              if (managedTitle) rows.push(`autobot-managed-title:${managedTitle}`);
-              return rows.join('\n').trim();
-            }
-            async function getLatestPublishedVersion() {
-              try {
-                const releases = await github.paginate(github.rest.repos.listReleases, { owner, repo, per_page: 100 });
-                const published = releases
-                  .filter((release) => !release.draft && !release.prerelease)
-                  .map((release) => String(release.tag_name || '').trim())
-                  .filter((tag) => /^v?\d+\.\d+\.\d+$/.test(tag));
-                if (published.length === 0) return null;
-                return published.reduce((maxTag, currentTag) => compareVersions(currentTag, maxTag) > 0 ? currentTag : maxTag, published[0]);
-              } catch (e) {
-                return null;
-              }
-            }
-            async function ensureMilestoneBaseVersion(milestone) {
-              const description = String(milestone.description || '');
-              const metadata = parseMilestoneMetadata(description);
-              const latestPublished = await getLatestPublishedVersion();
-              const baseVersion = metadata.baseVersion
-                ? metadata.baseVersion
-                : (latestPublished ? formatVersionTag(parseVersionTag(latestPublished)) : formatVersionTag(parseVersionTag(milestone.title)));
-              const managedTitle = metadata.managedTitle || formatVersionTag(parseVersionTag(milestone.title));
-              const manualTitleLocked = Boolean(metadata.managedTitle && compareVersions(formatVersionTag(parseVersionTag(milestone.title)), metadata.managedTitle) !== 0);
-              const nextDescription = buildMilestoneMetadataDescription(description, baseVersion, managedTitle);
-              if (nextDescription === description.trim()) {
-                return { baseVersion, managedTitle, manualTitleLocked, hadManagedMarker: Boolean(metadata.managedTitle), milestone };
-              }
-              const updated = await github.rest.issues.updateMilestone({ owner, repo, milestone_number: milestone.number, description: nextDescription });
-              return { baseVersion, managedTitle, manualTitleLocked, hadManagedMarker: Boolean(metadata.managedTitle), milestone: updated.data };
-            }
-            async function ensureLabelExists(name) {
-              try { await github.rest.issues.getLabel({ owner, repo, name }); }
-              catch (e) {
-                if (e.status === 404) {
-                  const def = labelDefinitions[name] || { color: 'ededed', description: '' };
-                  await github.rest.issues.createLabel({ owner, repo, name, color: def.color, description: def.description });
-                } else { throw e; }
-              }
-            }
-            async function getOrCreateMilestone() {
-              const milestones = await github.rest.issues.listMilestones({ owner, repo, state: 'open', sort: 'due_on', direction: 'asc' });
-              const versionedMilestones = milestones.data.filter((milestone) => isVersionTag(milestone.title));
-              if (versionedMilestones.length > 0) {
-                return versionedMilestones.reduce((selected, current) => {
-                  if (!selected) return current;
-                  return compareVersions(current.title, selected.title) > 0 ? current : selected;
-                }, null);
-              }
-              let nextVersion = 'v0.0.1';
-              try {
-                const releases = await github.rest.repos.listReleases({ owner, repo });
-                const latest = releases.data[0];
-                if (latest) {
-                  const parts = latest.tag_name.replace('v', '').split('.').map(Number);
-                  parts[2] += 1;
-                  nextVersion = `v${parts.join('.')}`;
-                }
-              } catch (e) {}
-              const created = await github.rest.issues.createMilestone({ owner, repo, title: nextVersion });
-              return created.data;
-            }
-            async function getOrCreateMilestoneByTitle(title) {
-              const milestones = await github.rest.issues.listMilestones({ owner, repo, state: 'open', sort: 'due_on', direction: 'asc' });
-              const existing = milestones.data.find((milestone) => String(milestone.title || '').trim() === title);
-              if (existing) return existing;
-              const created = await github.rest.issues.createMilestone({ owner, repo, title });
-              return created.data;
-            }
-            async function seedMilestoneMetadata(milestone, baseVersion, managedTitle) {
-              const nextDescription = buildMilestoneMetadataDescription(milestone.description || '', baseVersion, managedTitle);
-              if (nextDescription === String(milestone.description || '').trim()) return milestone;
-              const updated = await github.rest.issues.updateMilestone({ owner, repo, milestone_number: milestone.number, description: nextDescription });
-              return updated.data;
-            }
-            async function listManagedSemverMilestones(targetMilestone) {
-              if (!isVersionTag(targetMilestone.title)) return [targetMilestone];
-              const milestones = await github.rest.issues.listMilestones({ owner, repo, state: 'open', sort: 'due_on', direction: 'asc' });
-              return milestones.data.filter((milestone) => isVersionTag(milestone.title) && compareVersions(milestone.title, targetMilestone.title) <= 0);
-            }
-            async function listReleaseItemsForMilestones(milestones) {
-              const releaseItems = [];
-              for (const milestone of milestones) {
-                const milestoneItems = await github.paginate(github.rest.issues.listForRepo, { owner, repo, milestone: milestone.number, state: 'all' });
-                releaseItems.push(...milestoneItems.filter((item) => item.pull_request && hasReleaseRelevantLabel(item.labels)));
-              }
-              return releaseItems;
-            }
-            function getItemLabelNames(item) {
-              return (item.labels || []).map((label) => normalizeLabelName(label.name));
-            }
-            function resolveRequiredBump(releaseItems, currentLabelNames) {
-              const releaseBump = releaseItems.reduce((bump, item) => {
-                const itemLabels = getItemLabelNames(item);
-                const itemBump = bumpForLabels(itemLabels);
-                return maxBump(bump, itemBump);
-              }, bumpForLabels(currentLabelNames));
-              return releaseBump === 'none' ? 'patch' : releaseBump;
-            }
-            function parseAILabels(raw) {
-              if (!raw) return [];
-              try {
-                const cleaned = raw.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim();
-                const parsed = JSON.parse(cleaned);
-                if (Array.isArray(parsed)) {
-                  return [...new Set(parsed.map(l => normalizeLabelName(l)).filter(l => VALID_LABELS.has(l)))];
-                }
-              } catch (e) {
-                const lines = raw.replace(/[\[\]"'`]/g, '').split(/[,\n]/).map(l => normalizeLabelName(l)).filter(l => VALID_LABELS.has(l));
-                return [...new Set(lines)];
-              }
-              return [];
-            }
-            function labelNamesFromIssue(issue) {
-              return uniqueValidLabels((issue?.labels || []).map((label) => typeof label === 'string' ? label : label.name));
-            }
-            function inferIssueLabels(issue) {
-              const title = String(issue?.title || '').toLowerCase();
-              const body = String(issue?.body || '').toLowerCase();
-              const text = `${title}\n${body}`;
-              const inferred = [];
-              const addLabel = (label) => {
-                const normalized = normalizeLabelName(label);
-                if (VALID_LABELS.has(normalized) && !inferred.includes(normalized)) inferred.push(normalized);
-              };
-              const hasMarker = (markers) => markers.some((marker) => text.includes(marker));
-
-              if (
-                hasMarker([
-                  'documentation issue report',
-                  'link(s) to the affected documentation',
-                  'detailed description of the problem',
-                  'proposed solution (optional)'
-                ]) || /\b(docs?|documentation|readme)\b/.test(title)
-              ) {
-                addLabel('documentation');
-              }
-
-              if (
-                hasMarker([
-                  'proposing an improvement or enhancement',
-                  'current situation and problem/opportunity',
-                  'proposed improvement/enhancement',
-                  'potential costs, challenges, and considerations',
-                  'alternatives considered (optional)',
-                  'proposed steps or implementation plan (optional)'
-                ]) || /\b(feature request|enhancement|proposal|improvement)\b/.test(title)
-              ) {
-                addLabel('enhancement');
-                addLabel('improvement');
-                addLabel('proposal');
-              }
-
-              if (
-                hasMarker([
-                  'thank you for helping us squash this bug',
-                  'detailed steps to reproduce',
-                  'potential causes / workarounds / related issues (optional)',
-                  'custom modifications / configuration'
-                ]) || /\b(bug|crash|error|failure|broken|regression)\b/.test(title)
-              ) {
-                addLabel('bug');
-              }
-
-              return inferred;
-            }
-            function issueFallbackSupportLabels(issue) {
-              return inferIssueLabels(issue).filter((label) => ['improvement', 'proposal'].includes(label));
-            }
-            function extractBotMetadata(body) {
-              const match = body.match(/<!-- autobot-metadata:(.+?) -->/s);
-              if (!match) return {};
-              try {
-                return JSON.parse(match[1].trim());
-              } catch (e) {
-                return {};
-              }
-            }
-            async function getExistingBotComment() {
-              const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: issueNumber });
-              return comments.find(comment => comment.user.type === 'Bot' && comment.body.includes(BOT_COMMENT_SIGNATURE));
-            }
-            async function getExistingBotCommentForIssue(targetIssueNumber) {
-              const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: targetIssueNumber });
-              return comments.find((comment) => comment.user.type === 'Bot' && comment.body.includes(BOT_COMMENT_SIGNATURE));
-            }
-            async function getExistingMilestoneComment() {
-              const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: issueNumber });
-              return comments.find(comment => comment.user.type === 'Bot' && comment.body.includes(MILESTONE_COMMENT_SIGNATURE));
-            }
-            async function getExistingMajorAlertComment() {
-              const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: issueNumber });
-              return comments.find((comment) => comment.user.type === 'Bot' && comment.body.includes('MAJOR RELEASE ALERT'));
-            }
-            async function upsertBotComment(body, metadata) {
-              const existing = await getExistingBotComment();
-              const MAX_COMMENT_CHARS = 60000;
-              let safeBody = body;
-              if (safeBody.length > MAX_COMMENT_CHARS) safeBody = safeBody.slice(0, MAX_COMMENT_CHARS - 200) + '\n\n---\n\n_(Autobot note: comment truncated to fit GitHub size limits.)_';
-              const fullBody = BOT_COMMENT_SIGNATURE + '\n' + `<!-- autobot-metadata:${JSON.stringify(metadata || {})} -->` + '\n' + safeBody;
-              if (existing) await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body: fullBody });
-              else await github.rest.issues.createComment({ owner, repo, issue_number: issueNumber, body: fullBody });
-            }
-            async function upsertMilestoneComment(body, metadata) {
-              const existing = await getExistingMilestoneComment();
-              const fullBody = MILESTONE_COMMENT_SIGNATURE + '\n' + `<!-- autobot-metadata:${JSON.stringify(metadata || {})} -->` + '\n' + body;
-              if (existing) await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body: fullBody });
-              else await github.rest.issues.createComment({ owner, repo, issue_number: issueNumber, body: fullBody });
-            }
-            async function selectivelyConsolidateSupersededMilestones(targetMilestone, targetBump, currentIssueNumber) {
-              if (!isVersionTag(targetMilestone.title)) {
-                return { milestone: targetMilestone, consolidatedMilestones: [], migratedPullRequests: [], retainedMilestones: [] };
-              }
-              const milestones = await github.rest.issues.listMilestones({ owner, repo, state: 'open', sort: 'due_on', direction: 'asc' });
-              const supersededMilestones = milestones.data.filter((milestone) => {
-                if (milestone.number === targetMilestone.number) return false;
-                if (!isVersionTag(milestone.title)) return false;
-                return compareVersions(milestone.title, targetMilestone.title) <= 0;
-              });
-              const consolidatedMilestones = [];
-              const migratedPullRequests = [];
-              const retainedMilestones = [];
-
-              for (const milestone of supersededMilestones) {
-                const milestoneItems = await github.paginate(github.rest.issues.listForRepo, { owner, repo, milestone: milestone.number, state: 'all' });
-                let movableOpenPrCount = 0;
-                for (const item of milestoneItems) {
-                  if (!item.pull_request) continue;
-                  if (item.state !== 'open') continue;
-                  if (item.number === currentIssueNumber) continue;
-                  const itemLabels = getItemLabelNames(item);
-                  if (!hasReleaseRelevantLabel(itemLabels)) continue;
-                  const itemBump = bumpForLabels(itemLabels);
-                  if (BUMP_ORDER[itemBump] > BUMP_ORDER[targetBump]) continue;
-                  const existingBotCommentForItem = await getExistingBotCommentForIssue(item.number);
-                  if (!existingBotCommentForItem) continue;
-                  await github.rest.issues.update({ owner, repo, issue_number: item.number, milestone: targetMilestone.number });
-                  migratedPullRequests.push({ number: item.number, title: item.title, fromMilestone: milestone.title });
-                  movableOpenPrCount += 1;
-                }
-
-                const remainingItems = await github.paginate(github.rest.issues.listForRepo, { owner, repo, milestone: milestone.number, state: 'all' });
-                if (remainingItems.length === 0) {
-                  await github.rest.issues.updateMilestone({ owner, repo, milestone_number: milestone.number, state: 'closed' });
-                  consolidatedMilestones.push(milestone.title);
-                } else {
-                  retainedMilestones.push({ title: milestone.title, remainingCount: remainingItems.length, migratedPullRequestCount: movableOpenPrCount });
-                }
-              }
-
-              const refreshed = await github.rest.issues.getMilestone({ owner, repo, milestone_number: targetMilestone.number });
-              return { milestone: refreshed.data, consolidatedMilestones, migratedPullRequests, retainedMilestones };
-            }
-            if (['opened', 'synchronize', 'reopened'].includes(payload.action)) {
-              const aiSummary = (process.env.AI_SUMMARY || '').replace(/\nEND_OF_REPORT\s*$/m, '').trim();
-              const aiLabelsRaw = process.env.AI_LABELS_RAW || '';
-              const aiSummaryForComment = aiSummary.replace(/\nEND_OF_REPORT\s*$/m, '').trim();
-              const payloadIssue = payload.issue || {};
-              const existingIssueLabels = labelNamesFromIssue(payloadIssue);
-              const parsedAiLabels = trimLowSignalLabels(parseAILabels(aiLabelsRaw)).slice(0, MAX_AI_LABELS);
-              if (!isPR) {
-                const fallbackSupportLabels = issueFallbackSupportLabels(payloadIssue);
-                const inferredIssueLabels = parsedAiLabels.length > 0
-                  ? uniqueValidLabels([...existingIssueLabels, ...parsedAiLabels, ...fallbackSupportLabels])
-                  : uniqueValidLabels([...existingIssueLabels, ...inferIssueLabels(payloadIssue)]);
-                const issueLabelsToAdd = inferredIssueLabels.filter((label) => !existingIssueLabels.includes(label));
-                if (issueLabelsToAdd.length > 0) {
-                  for (const label of issueLabelsToAdd) await ensureLabelExists(label);
-                  await github.rest.issues.addLabels({ owner, repo, issue_number: issueNumber, labels: issueLabelsToAdd });
-                }
-              }
-              const existingBotComment = isPR ? await getExistingBotComment() : null;
-              const previousBotLabels = existingBotComment ? (extractBotMetadata(existingBotComment.body).aiLabels || []).map(normalizeLabelName) : [];
-              let nextAiLabels = [];
-              if (isPR && aiLabelsRaw) {
-                const predictedLabels = parsedAiLabels;
-                if (payload.action === 'synchronize' && previousBotLabels.length > 0) {
-                  nextAiLabels = mergeSyncLabels(previousBotLabels, predictedLabels);
-                } else {
-                  nextAiLabels = predictedLabels;
-                }
-              }
-              const labelsToRemove = isPR ? previousBotLabels.filter(label => !nextAiLabels.includes(label)) : [];
-              const labelsToAdd = isPR ? nextAiLabels.filter(label => !previousBotLabels.includes(label)) : [];
-              for (const label of labelsToRemove) {
-                try {
-                  await github.rest.issues.removeLabel({ owner, repo, issue_number: issueNumber, name: label });
-                } catch (e) {
-                  if (e.status !== 404) throw e;
-                }
-              }
-              if (labelsToAdd.length > 0) {
-                for (const label of labelsToAdd) await ensureLabelExists(label);
-                await github.rest.issues.addLabels({ owner, repo, issue_number: issueNumber, labels: labelsToAdd });
-              }
-              if (isPR && aiSummaryForComment) {
-                const pr = payload.pull_request;
-                const appliedLabels = nextAiLabels.map(l => `\`${l}\``).join(' ') || '_none_';
-                const commentBody = [`# Autobot — Changes Analysis`, ``, `> **PR #${pr.number}** · ${pr.head.ref} → ${pr.base.ref} · ${new Date().toISOString().split('T')[0]}`, ``, `---`, ``, aiSummaryForComment, ``, `---`, ``, `<details>`, `<summary><strong>🏷️ AI Label Classification</strong></summary>`, ``, `**Applied labels:** ${appliedLabels}`, ``, `Labels were determined by AI analysis of the code diff — not the PR title or description.`, ``, `</details>`].join('\n');
-                await upsertBotComment(commentBody, { aiLabels: nextAiLabels, maxAiLabels: MAX_AI_LABELS });
-              }
-              const freshIssue = await github.rest.issues.get({ owner, repo, issue_number: issueNumber });
-              const currentLabelNames = freshIssue.data.labels.map(l => normalizeLabelName(l.name));
-              const releaseRelevant = hasReleaseRelevantLabel(currentLabelNames);
-              if (!isPR) {
-                if (freshIssue.data.milestone && !releaseRelevant) {
-                  await github.rest.issues.update({ owner, repo, issue_number: issueNumber, milestone: null });
-                }
-                return;
-              }
-              if (!releaseRelevant) {
-                if (freshIssue.data.milestone) {
-                  await github.rest.issues.update({ owner, repo, issue_number: issueNumber, milestone: null });
-                }
-                return;
-              }
-              const issueHadMilestoneBeforeAutobot = Boolean(freshIssue.data.milestone);
-              const existingMilestone = freshIssue.data.milestone
-                ? (await github.rest.issues.getMilestone({ owner, repo, milestone_number: freshIssue.data.milestone.number })).data
-                : null;
-              if (existingMilestone && !isVersionTag(existingMilestone.title)) {
-                return;
-              }
-              const highestOpenVersionMilestone = await getOrCreateMilestone();
-              let milestone = existingMilestone || highestOpenVersionMilestone;
-              if (isVersionTag(highestOpenVersionMilestone.title) && (!existingMilestone || isVersionTag(milestone.title) && compareVersions(highestOpenVersionMilestone.title, milestone.title) > 0)) {
-                milestone = highestOpenVersionMilestone;
-              }
-              const previewMilestoneWithBase = await ensureMilestoneBaseVersion(milestone);
-              const currentIssueLabels = freshIssue.data.labels.map(label => normalizeLabelName(label.name));
-              const previewManagedMilestones = await listManagedSemverMilestones(previewMilestoneWithBase.milestone);
-              const previewReleaseItems = await listReleaseItemsForMilestones(previewManagedMilestones);
-              const previewRequiredBump = resolveRequiredBump(previewReleaseItems, currentIssueLabels);
-              const targetVersion = computeTargetVersion(previewMilestoneWithBase.baseVersion, previewRequiredBump);
-              if (isVersionTag(targetVersion) && compareVersions(targetVersion, milestone.title) > 0) {
-                milestone = await getOrCreateMilestoneByTitle(targetVersion);
-                milestone = await seedMilestoneMetadata(milestone, previewMilestoneWithBase.baseVersion, targetVersion);
-              }
-              const consolidation = await selectivelyConsolidateSupersededMilestones(milestone, previewRequiredBump, issueNumber);
-              milestone = consolidation.milestone;
-              const milestoneChanged = !freshIssue.data.milestone || freshIssue.data.milestone.number !== milestone.number;
-              if (milestoneChanged) await github.rest.issues.update({ owner, repo, issue_number: issueNumber, milestone: milestone.number });
-              const items = await github.paginate(github.rest.issues.listForRepo, { owner, repo, milestone: milestone.number, state: 'all' });
-              const releaseItems = items.filter(item => item.pull_request && hasReleaseRelevantLabel(item.labels));
-              const currentPrIsBreaking = currentIssueLabels.includes('breaking-change');
-              const existingMajorAlertComment = isPR ? await getExistingMajorAlertComment() : null;
-              if (currentPrIsBreaking && isPR) {
-                if (!existingMajorAlertComment) await github.rest.issues.createComment({ owner, repo, issue_number: issueNumber, body: `🚨 **MAJOR RELEASE ALERT** 🚨\n\n@${owner} This PR triggers a **major** version bump due to breaking changes detected by AI analysis.` });
-              } else if (existingMajorAlertComment) {
-                await github.rest.issues.deleteComment({ owner, repo, comment_id: existingMajorAlertComment.id });
-              }
-              const milestoneWithBase = await ensureMilestoneBaseVersion(milestone);
-              const shouldRespectManualMilestone = milestoneWithBase.manualTitleLocked || (issueHadMilestoneBeforeAutobot && !milestoneWithBase.hadManagedMarker && !isVersionTag(milestoneWithBase.milestone.title));
-              if (shouldRespectManualMilestone) return;
-              const requiredBump = resolveRequiredBump(releaseItems, currentIssueLabels);
-              const computedTitle = computeTargetVersion(milestoneWithBase.baseVersion, requiredBump);
-              const newTitle = compareVersions(computedTitle, milestoneWithBase.milestone.title) > 0 ? computedTitle : milestoneWithBase.milestone.title;
-              if (newTitle !== milestoneWithBase.milestone.title) {
-                const metadataDescription = buildMilestoneMetadataDescription(milestoneWithBase.milestone.description || milestone.description || '', milestoneWithBase.baseVersion, newTitle);
-                await github.rest.issues.updateMilestone({ owner, repo, milestone_number: milestone.number, title: newTitle, description: metadataDescription });
-              }
-              if (isPR && (milestoneChanged || consolidation.consolidatedMilestones.length > 0 || consolidation.migratedPullRequests.length > 0 || consolidation.retainedMilestones.length > 0 || newTitle !== milestoneWithBase.milestone.title)) {
-                const previousMilestoneTitle = existingMilestone ? existingMilestone.title : null;
-                const finalMilestoneTitle = newTitle;
-                const noteLines = [
-                  "# Autobot — Milestone Update",
-                  "",
-                  milestoneChanged || newTitle !== milestoneWithBase.milestone.title
-                    ? `This PR was moved ${previousMilestoneTitle ? `from **${previousMilestoneTitle}** ` : ""}to **${finalMilestoneTitle}** based on the current semantic-version impact of the PR and the canonical open release milestone.`
-                    : `Autobot kept this PR on **${finalMilestoneTitle}** and selectively consolidated compatible lower semantic-version PRs into it.`,
-                  ""
-                ];
-                if (consolidation.migratedPullRequests.length > 0) {
-                  noteLines.push(`Moved compatible PRs: ${consolidation.migratedPullRequests.map((item) => `#${item.number}`).join(", ")}`);
-                  noteLines.push("");
-                }
-                if (consolidation.consolidatedMilestones.length > 0) {
-                  noteLines.push(`Closed empty older milestones: ${consolidation.consolidatedMilestones.map((title) => `**${title}**`).join(", ")}`);
-                  noteLines.push("");
-                }
-                if (consolidation.retainedMilestones.length > 0) {
-                  noteLines.push(`Retained older milestones for manual review: ${consolidation.retainedMilestones.map((item) => `**${item.title}** (${item.remainingCount} remaining)`).join(", ")}`);
-                  noteLines.push("");
-                }
-                noteLines.push("This only moves compatible open AI-managed PRs. Issues, closed items, manual milestones, and incompatible PRs stay where they are.");
-                await upsertMilestoneComment(noteLines.join('\n'), { milestone: finalMilestoneTitle, previousMilestone: previousMilestoneTitle, consolidatedMilestones: consolidation.consolidatedMilestones, migratedPullRequests: consolidation.migratedPullRequests.map((item) => item.number), retainedMilestones: consolidation.retainedMilestones, targetVersion: finalMilestoneTitle, requiredBump });
-              }
-            }
-            if (payload.action === 'closed') {
-              if (!payload.pull_request || !payload.pull_request.merged) return;
-              const mData = payload.pull_request.milestone;
-              if (!mData) return;
-              const freshMilestone = await github.rest.issues.getMilestone({ owner, repo, milestone_number: mData.number });
-              if (freshMilestone.data.open_issues === 0 && freshMilestone.data.state === 'open' && freshMilestone.data.closed_issues > 0) {
-                const closedItems = await github.paginate(github.rest.issues.listForRepo, { owner, repo, milestone: freshMilestone.data.number, state: 'closed' });
-                const closedReleaseItems = closedItems.filter(item => item.pull_request && hasReleaseRelevantLabel(item.labels));
-                const hasBreaking = closedReleaseItems.some(item => hasLabelName(item.labels, 'breaking-change'));
-                const hasForcedType = closedReleaseItems.some(item => item.labels.some(label => FORCE_RELEASE_TYPES.includes(normalizeLabelName(label.name))));
-                if (closedReleaseItems.length < MIN_RELEASE_SIZE && !hasForcedType && !hasBreaking) return;
-                let targetVersion = freshMilestone.data.title;
-                const releases = await github.rest.repos.listReleases({ owner, repo });
-                const latestRelease = releases.data[0];
-                if (latestRelease && latestRelease.draft) {
-                  const v1 = targetVersion.replace('v', '').split('.').map(Number);
-                  const v2 = latestRelease.tag_name.replace('v', '').split('.').map(Number);
-                  const isV2Larger = v2[0] > v1[0] || (v2[0] === v1[0] && v2[1] > v1[1]) || (v2[0] === v1[0] && v2[1] === v1[1] && v2[2] > v1[2]);
-                  if (isV2Larger) targetVersion = latestRelease.tag_name;
-                  await github.rest.repos.deleteRelease({ owner, repo, release_id: latestRelease.id });
-                  try { await github.rest.git.deleteRef({ owner, repo, ref: `tags/${latestRelease.tag_name}` }); } catch (e) {}
-                }
-                await github.rest.issues.updateMilestone({ owner, repo, milestone_number: freshMilestone.data.number, state: 'closed' });
-                await github.rest.repos.createRelease({ owner, repo, tag_name: targetVersion, name: targetVersion, generate_release_notes: true, draft: true });
-                const parts = targetVersion.replace('v', '').split('.').map(Number);
-                parts[2] += 1;
-                const nextVersion = `v${parts.join('.')}`;
-                await github.rest.issues.createMilestone({ owner, repo, title: nextVersion });
-              }
-            }
+            const result = await runManagedInference({
+              github,
+              owner,
+              repo,
+              token: process.env.GITHUB_TOKEN,
+              promptFile: "/tmp/label_prompt.txt",
+              model: "openai/gpt-4o",
+              maxTokens: 300,
+              source: "label-classifier"
+            });
+            core.setOutput("response", result.content || "");
+            core.setOutput("status", String(result.status || 0));
+            core.setOutput("rate_limited", result.rateLimited ? "true" : "false");
+            core.setOutput("cooldown_until", result.cooldownUntil || "");
+            core.setOutput("error_message", result.errorMessage || "");
+      - name: Resolve AI Cooldown State
+        if: github.event.action != 'closed'
+        id: ai-cooldown-state
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const helperPath = `${process.env.GITHUB_WORKSPACE || process.cwd()}/.github/scripts/autobot_ai.js`;
+            const { getCooldownState } = require(helperPath);
+            const { owner, repo } = context.repo;
+            const cooldown = await getCooldownState({ github, owner, repo, clearExpired: true });
+            core.setOutput("active", cooldown.active ? "true" : "false");
+            core.setOutput("until", cooldown.until || "");
+            core.setOutput("message", cooldown.message || "");
+      - name: Prepare Project State
+        if: github.event.action != 'closed'
+        env:
+          PROJECT_STATE_FILE: /tmp/autobot_project_state.json
+          AI_SUMMARY: ${{ steps.parse-pr-summary.outputs.summary_body || steps.collect.outputs.deterministic_summary || steps.ai-issue-summary.outputs.response || steps.issue-summary-prompt.outputs.fallback_summary }}
+          AI_LABELS_RAW: ${{ steps.parse-pr-summary.outputs.label_hints || steps.collect.outputs.deterministic_labels_json || steps.ai-labels.outputs.response }}
+          AI_COOLDOWN_ACTIVE: ${{ steps.ai-cooldown-state.outputs.active }}
+          AI_COOLDOWN_UNTIL: ${{ steps.ai-cooldown-state.outputs.until }}
+          PR_SUMMARY_TIER: ${{ steps.collect.outputs.summary_tier }}
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const helperPath = `${process.env.GITHUB_WORKSPACE || process.cwd()}/.github/scripts/autobot_project_manager.js`;
+            const { prepareProjectState } = require(helperPath);
+            const { owner, repo } = context.repo;
+            await prepareProjectState({
+              github,
+              owner,
+              repo,
+              context,
+              issueNumber: context.issue.number,
+              aiSummary: process.env.AI_SUMMARY,
+              aiLabelsRaw: process.env.AI_LABELS_RAW,
+              aiCooldownActive: String(process.env.AI_COOLDOWN_ACTIVE || "") === "true",
+              aiCooldownUntil: process.env.AI_COOLDOWN_UNTIL,
+              prSummaryTier: process.env.PR_SUMMARY_TIER,
+              stateFile: process.env.PROJECT_STATE_FILE
+            });
+      - name: Sync Prepared Project State
+        if: github.event.action != 'closed'
+        env:
+          PROJECT_STATE_FILE: /tmp/autobot_project_state.json
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const helperPath = `${process.env.GITHUB_WORKSPACE || process.cwd()}/.github/scripts/autobot_project_manager.js`;
+            const { syncPreparedProjectState } = require(helperPath);
+            const { owner, repo } = context.repo;
+            await syncPreparedProjectState({
+              github,
+              owner,
+              repo,
+              issueNumber: context.issue.number,
+              stateFile: process.env.PROJECT_STATE_FILE
+            });
+      - name: Sync Project Milestone
+        if: github.event.action != 'closed'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const helperPath = `${process.env.GITHUB_WORKSPACE || process.cwd()}/.github/scripts/autobot_project_manager.js`;
+            const { syncProjectMilestone } = require(helperPath);
+            const { owner, repo } = context.repo;
+            await syncProjectMilestone({
+              github,
+              owner,
+              repo,
+              context,
+              issueNumber: context.issue.number
+            });
+      - name: Finalize Closed Pull Request Release
+        if: github.event_name == 'pull_request' && github.event.action == 'closed'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const helperPath = `${process.env.GITHUB_WORKSPACE || process.cwd()}/.github/scripts/autobot_project_manager.js`;
+            const { finalizeClosedPullRequestRelease } = require(helperPath);
+            const { owner, repo } = context.repo;
+            await finalizeClosedPullRequestRelease({ github, owner, repo, context });

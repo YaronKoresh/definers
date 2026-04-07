@@ -28,6 +28,11 @@ def launch_audio_app():
         convert_vocal_rvc,
     )
     from definers.presentation.apps.audio_app_services import (
+        MASTERING_PROFILE_CHOICES,
+        STEM_MODEL_STRATEGY_CHOICES,
+        describe_stem_model_choice,
+        get_mastering_profile_ui_state,
+        is_custom_stem_model_strategy,
         run_audio_analysis_tool,
         run_audio_preview_tool,
         run_autotune_song_tool,
@@ -53,10 +58,16 @@ def launch_audio_app():
 
     format_choices = AUDIO_FORMAT_CHOICES
     language_choices = get_audio_language_choices(language_codes)
+    initial_mastering_state = get_mastering_profile_ui_state(
+        MASTERING_PROFILE_CHOICES[0]
+    )
+    initial_stem_strategy_note = describe_stem_model_choice(
+        STEM_MODEL_STRATEGY_CHOICES[0]
+    )
 
     with gr.Blocks(title="Definers Audio") as app:
         gr.HTML(
-            """<div id=\"header\"><h1>Definers Audio</h1><p>Audio creation, transformation, analysis, and media tools in one workspace.</p></div>"""
+            """<div id=\"header\" class=\"audio-hero\"><p class=\"eyebrow\">Production Workspace</p><h1>Definers Audio</h1><p>Master, clean, split, generate, and publish audio from one focused workspace.</p></div>"""
         )
 
         tool_map = AUDIO_TOOL_MAP
@@ -86,61 +97,98 @@ def launch_audio_app():
                                 value="WAV",
                             )
                             enhancer_preset = gr.Dropdown(
-                                ["auto", "balanced", "edm", "vocal"],
-                                label="Preset",
-                                value="auto",
+                                MASTERING_PROFILE_CHOICES,
+                                label="Mastering Strategy",
+                                value=str(initial_mastering_state["label"]),
+                            )
+                            enhancer_profile_note = gr.Markdown(
+                                value=str(
+                                    initial_mastering_state["description"]
+                                )
                             )
                             enhancer_stem_mastering = gr.Checkbox(
-                                label="Stem-aware mastering",
+                                label="Use stem-aware mastering",
                                 value=True,
                             )
                             with gr.Accordion("Macro Controls", open=True):
+                                enhancer_macro_note = gr.Markdown(
+                                    value=str(
+                                        initial_mastering_state["macro_note"]
+                                    )
+                                )
                                 enhancer_bass = gr.Slider(
                                     0.0,
                                     1.0,
-                                    0.5,
+                                    float(initial_mastering_state["bass"]),
                                     step=0.05,
                                     label="Bass",
+                                    interactive=bool(
+                                        initial_mastering_state[
+                                            "controls_enabled"
+                                        ]
+                                    ),
                                 )
                                 enhancer_volume = gr.Slider(
                                     0.0,
                                     1.0,
-                                    0.5,
+                                    float(initial_mastering_state["volume"]),
                                     step=0.05,
                                     label="Volume",
+                                    interactive=bool(
+                                        initial_mastering_state[
+                                            "controls_enabled"
+                                        ]
+                                    ),
                                 )
                                 enhancer_effects = gr.Slider(
                                     0.0,
                                     1.0,
-                                    0.5,
+                                    float(initial_mastering_state["effects"]),
                                     step=0.05,
                                     label="Effects",
+                                    interactive=bool(
+                                        initial_mastering_state[
+                                            "controls_enabled"
+                                        ]
+                                    ),
                                 )
-                            with gr.Accordion("Advanced Mastering", open=False):
-                                enhancer_stem_model = gr.Textbox(
-                                    label="Stem Model",
-                                    value="mastering",
-                                )
-                                enhancer_stem_shifts = gr.Slider(
-                                    1,
-                                    8,
-                                    2,
-                                    step=1,
-                                    label="Stem Shifts",
-                                )
-                                enhancer_stem_mix_headroom = gr.Slider(
-                                    3.0,
-                                    12.0,
-                                    6.0,
-                                    step=0.5,
-                                    label="Stem Mix Headroom (dB)",
-                                )
-                                enhancer_save_mastered_stems = gr.Checkbox(
-                                    label="Save mastered stems",
-                                    value=True,
-                                )
+                            with gr.Accordion("Stem-Aware Path", open=False):
+                                with gr.Group(
+                                    visible=True
+                                ) as enhancer_stem_settings:
+                                    enhancer_stem_strategy = gr.Dropdown(
+                                        STEM_MODEL_STRATEGY_CHOICES,
+                                        label="Stem Separation Strategy",
+                                        value=STEM_MODEL_STRATEGY_CHOICES[0],
+                                    )
+                                    enhancer_custom_stem_model = gr.Textbox(
+                                        label="Custom separator checkpoint",
+                                        placeholder="Example: htdemucs_6s or custom_model.yaml",
+                                        visible=False,
+                                    )
+                                    enhancer_stem_strategy_note = gr.Markdown(
+                                        value=initial_stem_strategy_note
+                                    )
+                                    enhancer_stem_shifts = gr.Slider(
+                                        1,
+                                        8,
+                                        2,
+                                        step=1,
+                                        label="Stem Separation Shifts",
+                                    )
+                                    enhancer_stem_mix_headroom = gr.Slider(
+                                        3.0,
+                                        12.0,
+                                        6.0,
+                                        step=0.5,
+                                        label="Stem Mix Headroom (dB)",
+                                    )
+                                    enhancer_save_mastered_stems = gr.Checkbox(
+                                        label="Save mastered stems",
+                                        value=True,
+                                    )
                             gr.Markdown(
-                                "Auto preset chooses balanced, edm, or vocal from the input. Legacy or low-quality material may trigger extra restoration stages."
+                                "Auto Analyze chooses a mastering profile after reading the mix. Named profiles lock macro controls to avoid conflict, and Custom Macro Blend unlocks manual shaping."
                             )
                             with gr.Row():
                                 enhancer_btn = gr.Button(
@@ -154,7 +202,7 @@ def launch_audio_app():
                                 enhancer_output = gr.Audio(
                                     label="Mastered Audio",
                                     interactive=False,
-                                    show_download_button=True,
+                                    buttons=["download"],
                                 )
                                 enhancer_report = gr.File(
                                     label="Mastering Report",
@@ -233,7 +281,7 @@ def launch_audio_app():
                                         autotune_output = gr.Audio(
                                             label="AutoTuned Song",
                                             interactive=False,
-                                            show_download_button=True,
+                                            buttons=["download"],
                                         )
                                         autotune_share_links = gr.Markdown()
                         with gr.TabItem("Humanize Vocals"):
@@ -271,7 +319,7 @@ def launch_audio_app():
                                         humanize_output = gr.Audio(
                                             label="Humanized Vocals",
                                             interactive=False,
-                                            show_download_button=True,
+                                            buttons=["download"],
                                         )
                                         humanize_share_links = gr.Markdown()
                 with gr.Group(
@@ -306,7 +354,7 @@ def launch_audio_app():
                                         silence_output = gr.Audio(
                                             label="Silence-Reduced Audio",
                                             interactive=False,
-                                            show_download_button=True,
+                                            buttons=["download"],
                                         )
                                         silence_share_links = gr.Markdown()
                         with gr.TabItem("Compact Audio"):
@@ -339,7 +387,7 @@ def launch_audio_app():
                                         compact_output = gr.Audio(
                                             label="Compacted Audio",
                                             interactive=False,
-                                            show_download_button=True,
+                                            buttons=["download"],
                                         )
                                         compact_share_links = gr.Markdown()
                 with gr.Group(
@@ -381,7 +429,7 @@ def launch_audio_app():
                                         preview_output = gr.Audio(
                                             label="Preview Clip",
                                             interactive=False,
-                                            show_download_button=True,
+                                            buttons=["download"],
                                         )
                                         preview_summary = gr.Markdown()
                                         preview_share_links = gr.Markdown()
@@ -434,7 +482,7 @@ def launch_audio_app():
                                         split_preview_output = gr.Audio(
                                             label="First Chunk Preview",
                                             interactive=False,
-                                            show_download_button=True,
+                                            buttons=["download"],
                                         )
                                         split_files_output = gr.File(
                                             label="Chunk Files",
@@ -496,7 +544,7 @@ def launch_audio_app():
                                         m2a_output = gr.Audio(
                                             label="Output Audio",
                                             interactive=False,
-                                            show_download_button=True,
+                                            buttons=["download"],
                                         )
                                         m2a_share_links = gr.Markdown()
                 with gr.Group(
@@ -532,7 +580,7 @@ def launch_audio_app():
                                 extender_output = gr.Audio(
                                     label="Extended Audio",
                                     interactive=False,
-                                    show_download_button=True,
+                                    buttons=["download"],
                                 )
                                 extender_share_links = gr.Markdown()
                 with gr.Group(
@@ -565,7 +613,7 @@ def launch_audio_app():
                                 stem_mixer_output = gr.Audio(
                                     label="Mixed Track",
                                     interactive=False,
-                                    show_download_button=True,
+                                    buttons=["download"],
                                 )
                                 stem_mixer_share_links = gr.Markdown()
                 with gr.Group(
@@ -629,7 +677,7 @@ def launch_audio_app():
                                 video_gen_output = gr.Video(
                                     label="Generated Clip",
                                     interactive=False,
-                                    show_download_button=True,
+                                    buttons=["download"],
                                 )
                                 video_gen_share_links = gr.Markdown()
                 with gr.Group(
@@ -669,7 +717,7 @@ def launch_audio_app():
                                 speed_output = gr.Audio(
                                     label="Modified Audio",
                                     interactive=False,
-                                    show_download_button=True,
+                                    buttons=["download"],
                                 )
                                 speed_share_links = gr.Markdown()
                 with gr.Group(
@@ -696,17 +744,33 @@ def launch_audio_app():
                                 label="Output Format",
                                 value="WAV",
                             )
-                            stem_model_name = gr.Textbox(
-                                label="Layer Separation Model",
-                                value="mastering",
+                            stem_mode_note = gr.Markdown(
+                                value="**Layer Controls:** Layer strategy settings appear only in Mastering Layers mode. Use Vocals + Karaoke when you only need the vocal and instrumental pair."
                             )
-                            stem_shifts = gr.Slider(
-                                1,
-                                8,
-                                2,
-                                step=1,
-                                label="Layer Separation Shifts",
-                            )
+                            with gr.Accordion("Layer Controls", open=False):
+                                with gr.Group(
+                                    visible=False
+                                ) as stem_layer_settings:
+                                    stem_model_name = gr.Dropdown(
+                                        STEM_MODEL_STRATEGY_CHOICES,
+                                        label="Layer Separation Strategy",
+                                        value=STEM_MODEL_STRATEGY_CHOICES[0],
+                                    )
+                                    stem_custom_model_name = gr.Textbox(
+                                        label="Custom layer checkpoint",
+                                        placeholder="Example: htdemucs_6s or custom_model.yaml",
+                                        visible=False,
+                                    )
+                                    stem_layer_strategy_note = gr.Markdown(
+                                        value=initial_stem_strategy_note
+                                    )
+                                    stem_shifts = gr.Slider(
+                                        1,
+                                        8,
+                                        2,
+                                        step=1,
+                                        label="Layer Separation Shifts",
+                                    )
                             with gr.Row():
                                 stem_btn = gr.Button(
                                     "Separate Stems", variant="primary"
@@ -719,7 +783,7 @@ def launch_audio_app():
                                 stem_output = gr.Audio(
                                     label="Primary Stem Preview",
                                     interactive=False,
-                                    show_download_button=True,
+                                    buttons=["download"],
                                 )
                                 stem_files_output = gr.File(
                                     label="Stem Files",
@@ -761,7 +825,7 @@ def launch_audio_app():
                                 vps_output = gr.Audio(
                                     label="Pitch Shifted Song",
                                     interactive=False,
-                                    show_download_button=True,
+                                    buttons=["download"],
                                 )
                                 vps_share_links = gr.Markdown()
                 with gr.Group(
@@ -841,7 +905,7 @@ def launch_audio_app():
                                 dj_output = gr.Audio(
                                     label="Final DJ Mix",
                                     interactive=False,
-                                    show_download_button=True,
+                                    buttons=["download"],
                                 )
                                 dj_share_links = gr.Markdown()
                 with gr.Group(
@@ -881,7 +945,7 @@ def launch_audio_app():
                                 gen_output = gr.Audio(
                                     label="Generated Music",
                                     interactive=False,
-                                    show_download_button=True,
+                                    buttons=["download"],
                                 )
                                 gen_share_links = gr.Markdown()
                 with gr.Group(
@@ -918,7 +982,7 @@ def launch_audio_app():
                                 vg_output = gr.Audio(
                                     label="Generated Voice Audio",
                                     interactive=False,
-                                    show_download_button=True,
+                                    buttons=["download"],
                                 )
                                 vg_share_links = gr.Markdown()
                 with gr.Group(
@@ -1056,7 +1120,8 @@ def launch_audio_app():
                                 )
                     with gr.Group(visible=False) as vis_output_box:
                         vis_output = gr.Video(
-                            label="Visualizer Output", show_download_button=True
+                            label="Visualizer Output",
+                            buttons=["download"],
                         )
                         vis_share_links = gr.Markdown()
                 with gr.Group(
@@ -1101,7 +1166,7 @@ def launch_audio_app():
                     with gr.Group(visible=False) as lyric_output_box:
                         lyric_output = gr.Video(
                             label="Lyric Video Output",
-                            show_download_button=True,
+                            buttons=["download"],
                         )
                         lyric_share_links = gr.Markdown()
                 with gr.Group(
@@ -1185,10 +1250,180 @@ def launch_audio_app():
                 outputs=[btn, out_box, out_el, out_share],
             )
 
+        def update_mastering_profile_ui(
+            profile_name,
+            bass,
+            volume,
+            effects,
+        ):
+            state = get_mastering_profile_ui_state(
+                profile_name,
+                bass,
+                volume,
+                effects,
+            )
+            return (
+                gr.update(
+                    value=float(state["bass"]),
+                    interactive=bool(state["controls_enabled"]),
+                ),
+                gr.update(
+                    value=float(state["volume"]),
+                    interactive=bool(state["controls_enabled"]),
+                ),
+                gr.update(
+                    value=float(state["effects"]),
+                    interactive=bool(state["controls_enabled"]),
+                ),
+                gr.update(value=str(state["description"])),
+                gr.update(value=str(state["macro_note"])),
+            )
+
+        def update_mastering_stem_ui(
+            stem_mastering_enabled,
+            model_selection,
+            model_override,
+        ):
+            enabled = bool(stem_mastering_enabled)
+            strategy_note = (
+                describe_stem_model_choice(model_selection, model_override)
+                if enabled
+                else "**Stem Strategy:** Stem-aware mastering is off. The track will be processed as a single stereo master."
+            )
+            return (
+                gr.update(visible=enabled),
+                gr.update(
+                    visible=enabled
+                    and is_custom_stem_model_strategy(model_selection)
+                ),
+                gr.update(value=str(strategy_note)),
+            )
+
+        def update_stem_layer_ui(
+            separation_mode,
+            model_selection,
+            model_override,
+        ):
+            uses_layer_controls = (
+                separation_mode
+                == "Mastering Layers (Vocals / Drums / Bass / Other)"
+            )
+            mode_note = (
+                "**Layer Controls:** Mastering Layers exports vocals, drums, bass, and other as separate files. Choose the separator strategy that best matches the source."
+                if uses_layer_controls
+                else "**Layer Controls:** These settings are used only in Mastering Layers mode. Use Vocals + Karaoke when you only need the vocal and instrumental pair."
+            )
+            return (
+                gr.update(value=mode_note),
+                gr.update(visible=uses_layer_controls),
+                gr.update(
+                    visible=uses_layer_controls
+                    and is_custom_stem_model_strategy(model_selection)
+                ),
+                gr.update(
+                    value=describe_stem_model_choice(
+                        model_selection,
+                        model_override,
+                    )
+                ),
+            )
+
+        enhancer_preset.change(
+            update_mastering_profile_ui,
+            [
+                enhancer_preset,
+                enhancer_bass,
+                enhancer_volume,
+                enhancer_effects,
+            ],
+            [
+                enhancer_bass,
+                enhancer_volume,
+                enhancer_effects,
+                enhancer_profile_note,
+                enhancer_macro_note,
+            ],
+        )
+
+        enhancer_stem_mastering.change(
+            update_mastering_stem_ui,
+            [
+                enhancer_stem_mastering,
+                enhancer_stem_strategy,
+                enhancer_custom_stem_model,
+            ],
+            [
+                enhancer_stem_settings,
+                enhancer_custom_stem_model,
+                enhancer_stem_strategy_note,
+            ],
+        )
+
+        enhancer_stem_strategy.change(
+            update_mastering_stem_ui,
+            [
+                enhancer_stem_mastering,
+                enhancer_stem_strategy,
+                enhancer_custom_stem_model,
+            ],
+            [
+                enhancer_stem_settings,
+                enhancer_custom_stem_model,
+                enhancer_stem_strategy_note,
+            ],
+        )
+
+        enhancer_custom_stem_model.change(
+            update_mastering_stem_ui,
+            [
+                enhancer_stem_mastering,
+                enhancer_stem_strategy,
+                enhancer_custom_stem_model,
+            ],
+            [
+                enhancer_stem_settings,
+                enhancer_custom_stem_model,
+                enhancer_stem_strategy_note,
+            ],
+        )
+
+        stem_mode.change(
+            update_stem_layer_ui,
+            [stem_mode, stem_model_name, stem_custom_model_name],
+            [
+                stem_mode_note,
+                stem_layer_settings,
+                stem_custom_model_name,
+                stem_layer_strategy_note,
+            ],
+        )
+
+        stem_model_name.change(
+            update_stem_layer_ui,
+            [stem_mode, stem_model_name, stem_custom_model_name],
+            [
+                stem_mode_note,
+                stem_layer_settings,
+                stem_custom_model_name,
+                stem_layer_strategy_note,
+            ],
+        )
+
+        stem_custom_model_name.change(
+            update_stem_layer_ui,
+            [stem_mode, stem_model_name, stem_custom_model_name],
+            [
+                stem_mode_note,
+                stem_layer_settings,
+                stem_custom_model_name,
+                stem_layer_strategy_note,
+            ],
+        )
+
         def mastering_ui(
             audio_path,
             output_format,
-            preset_name,
+            profile_name,
             bass,
             volume,
             effects,
@@ -1197,6 +1432,7 @@ def launch_audio_app():
             stem_shifts_value,
             stem_mix_headroom_value,
             save_mastered_stems_value,
+            stem_model_override,
         ):
             yield {
                 enhancer_btn: gr.update(
@@ -1218,7 +1454,7 @@ def launch_audio_app():
                 ) = run_mastering_tool(
                     audio_path,
                     output_format,
-                    preset_name,
+                    profile_name,
                     bass,
                     volume,
                     effects,
@@ -1227,6 +1463,7 @@ def launch_audio_app():
                     stem_shifts_value,
                     stem_mix_headroom_value,
                     save_mastered_stems_value,
+                    stem_model_override,
                 )
                 yield {
                     enhancer_btn: gr.update(
@@ -1269,10 +1506,11 @@ def launch_audio_app():
                 enhancer_volume,
                 enhancer_effects,
                 enhancer_stem_mastering,
-                enhancer_stem_model,
+                enhancer_stem_strategy,
                 enhancer_stem_shifts,
                 enhancer_stem_mix_headroom,
                 enhancer_save_mastered_stems,
+                enhancer_custom_stem_model,
             ],
             [
                 enhancer_btn,
@@ -1499,6 +1737,7 @@ def launch_audio_app():
             output_format,
             model_name,
             shifts_value,
+            model_override,
         ):
             mode_map = {
                 "Acapella (Vocals Only)": "acapella",
@@ -1523,6 +1762,7 @@ def launch_audio_app():
                         output_format,
                         model_name,
                         shifts_value,
+                        model_override,
                     )
                 )
                 yield {
@@ -1556,6 +1796,7 @@ def launch_audio_app():
                 stem_format,
                 stem_model_name,
                 stem_shifts,
+                stem_custom_model_name,
             ],
             [
                 stem_btn,

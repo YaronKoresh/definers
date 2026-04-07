@@ -72,6 +72,28 @@ def cwd(dir_path: str | None = None) -> Generator[str, None, None]:
             pass
 
 
+def _resolve_tmp_suffix(suffix: str | None) -> str:
+    normalized_suffix = suffix
+    if not isinstance(normalized_suffix, str) or not normalized_suffix.strip():
+        normalized_suffix = "data"
+    normalized_suffix = str(normalized_suffix).strip().strip(".").lower()
+
+    from definers.constants import SAFE_EXTENSIONS
+
+    allowed_suffixes = {
+        str(extension).strip().strip(".").lower(): "."
+        + str(extension).strip().strip(".").lower()
+        for extension in SAFE_EXTENSIONS
+    }
+    resolved_suffix = allowed_suffixes.get(normalized_suffix)
+    if resolved_suffix is None:
+        raise ValueError(
+            "Invalid suffix for tmp file. Allowed extensions are: "
+            + ", ".join(SAFE_EXTENSIONS)
+        )
+    return resolved_suffix
+
+
 def tmp(suffix: str | None = None, keep: bool = True, dir: bool = False):
     if dir:
         directory_path = tempfile.mkdtemp()
@@ -85,21 +107,10 @@ def tmp(suffix: str | None = None, keep: bool = True, dir: bool = False):
                     pass
         return directory_path
 
-    normalized_suffix = suffix
-    if not isinstance(normalized_suffix, str) or not normalized_suffix.strip():
-        normalized_suffix = "data"
-    normalized_suffix = str(normalized_suffix).strip().strip(".").lower()
-
-    from definers.constants import SAFE_EXTENSIONS
-
-    if normalized_suffix not in SAFE_EXTENSIONS:
-        raise ValueError(
-            "Invalid suffix for tmp file. Allowed extensions are: "
-            + ", ".join(SAFE_EXTENSIONS)
-        )
+    resolved_suffix = _resolve_tmp_suffix(suffix)
 
     with tempfile.NamedTemporaryFile(
-        suffix=f".{normalized_suffix}", delete=False
+        suffix=resolved_suffix, delete=False
     ) as temporary_file:
         temporary_name = temporary_file.name
 

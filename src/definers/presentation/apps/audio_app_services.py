@@ -3,6 +3,293 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+MASTERING_PROFILE_CHOICES = (
+    "Auto Analyze",
+    "Balanced",
+    "EDM",
+    "Vocal Focus",
+    "Custom Macro Blend",
+)
+
+STEM_MODEL_STRATEGY_CHOICES = (
+    "Automatic mastering stack",
+    "Demucs fine-tuned 4-stem",
+    "HDemucs MMI 4-stem",
+    "Custom checkpoint override",
+)
+
+_MASTERING_PROFILE_METADATA = {
+    "auto": {
+        "label": "Auto Analyze",
+        "description": "Analyzes the mix first and chooses the most appropriate mastering preset automatically.",
+        "macro_note": "Bass, Volume, and Effects are locked in Auto Analyze so the engine does not receive conflicting instructions.",
+    },
+    "balanced": {
+        "label": "Balanced",
+        "description": "Uses the neutral all-round mastering profile for mixed-genre material.",
+        "macro_note": "Bass, Volume, and Effects are locked to the Balanced preset defaults. Switch to Custom Macro Blend for manual shaping.",
+    },
+    "edm": {
+        "label": "EDM",
+        "description": "Uses a louder low-end and excitement-focused profile for electronic and club-forward material.",
+        "macro_note": "Bass, Volume, and Effects are locked to the EDM preset defaults. Switch to Custom Macro Blend for manual shaping.",
+    },
+    "vocal": {
+        "label": "Vocal Focus",
+        "description": "Uses a restrained low-end and clearer midrange profile for vocal-led material.",
+        "macro_note": "Bass, Volume, and Effects are locked to the Vocal Focus preset defaults. Switch to Custom Macro Blend for manual shaping.",
+    },
+    "custom": {
+        "label": "Custom Macro Blend",
+        "description": "Starts from a neutral mastering base and unlocks Bass, Volume, and Effects for manual tuning.",
+        "macro_note": "Bass, Volume, and Effects are active in Custom Macro Blend. The mastering engine uses a balanced base and then applies your manual macro values.",
+    },
+}
+
+_MASTERING_PROFILE_ALIASES = {
+    "auto": "auto",
+    "auto analyze": "auto",
+    "balanced": "balanced",
+    "balanced preset": "balanced",
+    "edm": "edm",
+    "edm preset": "edm",
+    "vocal": "vocal",
+    "vocal focus": "vocal",
+    "vocal focus preset": "vocal",
+    "custom": "custom",
+    "custom macro blend": "custom",
+}
+
+_STEM_MODEL_STRATEGY_METADATA = {
+    "Automatic mastering stack": {
+        "model_name": "mastering",
+        "description": "Uses the built-in multi-stage separator chain tuned for vocals, drums, bass, and other mastering layers.",
+    },
+    "Demucs fine-tuned 4-stem": {
+        "model_name": "htdemucs_ft.yaml",
+        "description": "Forces the Demucs fine-tuned 4-stem separator for a direct modern layer split.",
+    },
+    "HDemucs MMI 4-stem": {
+        "model_name": "hdemucs_mmi.yaml",
+        "description": "Forces the HDemucs MMI 4-stem separator, often steadier on dense stereo mixes.",
+    },
+    "Custom checkpoint override": {
+        "model_name": "__custom__",
+        "description": "Lets you provide an exact separator checkpoint or YAML name manually.",
+    },
+}
+
+_STEM_MODEL_STRATEGY_LABEL_BY_VALUE = {
+    str(spec["model_name"]).lower(): label
+    for label, spec in _STEM_MODEL_STRATEGY_METADATA.items()
+    if str(spec["model_name"]).strip() != "__custom__"
+}
+
+
+def normalize_mastering_profile_selection(profile_name: str | None) -> str:
+    normalized = str(profile_name or "").strip().lower()
+    if normalized in _MASTERING_PROFILE_METADATA:
+        return normalized
+    return _MASTERING_PROFILE_ALIASES.get(normalized, "auto")
+
+
+def _mastering_profile_defaults(profile_name: str) -> dict[str, float]:
+    normalized = normalize_mastering_profile_selection(profile_name)
+    if normalized == "custom":
+        return {"bass": 0.5, "volume": 0.5, "effects": 0.5}
+
+    from definers.audio.config import SmartMasteringConfig
+
+    baseline = "balanced" if normalized == "auto" else normalized
+    config = SmartMasteringConfig.from_preset(baseline)
+    return {
+        "bass": float(config.bass),
+        "volume": float(config.volume),
+        "effects": float(config.effects),
+    }
+
+
+def _coerce_macro_value(value: object, default_value: float) -> float:
+    try:
+        return float(value)
+    except Exception:
+        return float(default_value)
+
+
+def get_mastering_profile_ui_state(
+    profile_name: str | None,
+    bass: object = None,
+    volume: object = None,
+    effects: object = None,
+) -> dict[str, object]:
+    normalized = normalize_mastering_profile_selection(profile_name)
+    metadata = _MASTERING_PROFILE_METADATA[normalized]
+    defaults = _mastering_profile_defaults(normalized)
+    controls_enabled = normalized == "custom"
+
+    if controls_enabled:
+        bass_value = _coerce_macro_value(bass, defaults["bass"])
+        volume_value = _coerce_macro_value(volume, defaults["volume"])
+        effects_value = _coerce_macro_value(effects, defaults["effects"])
+    else:
+        bass_value = defaults["bass"]
+        volume_value = defaults["volume"]
+        effects_value = defaults["effects"]
+
+    return {
+        "selection": normalized,
+        "label": metadata["label"],
+        "description": f"**{metadata['label']}:** {metadata['description']}",
+        "macro_note": metadata["macro_note"],
+        "controls_enabled": controls_enabled,
+        "bass": bass_value,
+        "volume": volume_value,
+        "effects": effects_value,
+    }
+
+
+def resolve_mastering_request(
+    profile_name: str | None,
+    bass: object,
+    volume: object,
+    effects: object,
+) -> tuple[str, dict[str, object]]:
+    state = get_mastering_profile_ui_state(
+        profile_name,
+        bass,
+        volume,
+        effects,
+    )
+    normalized = str(state["selection"])
+    request_kwargs: dict[str, object] = {}
+
+    if normalized == "custom":
+        request_kwargs.update(
+            {
+                "preset": "balanced",
+                "bass": float(state["bass"]),
+                "volume": float(state["volume"]),
+                "effects": float(state["effects"]),
+            }
+        )
+    elif normalized in {"balanced", "edm", "vocal"}:
+        request_kwargs["preset"] = normalized
+
+    return str(state["label"]), request_kwargs
+
+
+def _normalized_stem_model_strategy_label(value: str | None) -> str:
+    normalized = str(value or "").strip()
+    if not normalized:
+        return STEM_MODEL_STRATEGY_CHOICES[0]
+
+    normalized_lower = normalized.lower()
+    for label in STEM_MODEL_STRATEGY_CHOICES:
+        if normalized_lower == label.lower():
+            return label
+    mapped_label = _STEM_MODEL_STRATEGY_LABEL_BY_VALUE.get(normalized_lower)
+    if mapped_label is not None:
+        return mapped_label
+    return STEM_MODEL_STRATEGY_CHOICES[-1]
+
+
+def is_custom_stem_model_strategy(value: str | None) -> bool:
+    return (
+        _normalized_stem_model_strategy_label(value)
+        == "Custom checkpoint override"
+    )
+
+
+def resolve_stem_model_name(
+    model_selection: str | None,
+    model_override: str | None = None,
+) -> str:
+    override = str(model_override or "").strip()
+    if override:
+        return override
+
+    normalized = str(model_selection or "").strip()
+    if not normalized:
+        return "mastering"
+
+    normalized_lower = normalized.lower()
+    mapped_label = _STEM_MODEL_STRATEGY_LABEL_BY_VALUE.get(normalized_lower)
+    if mapped_label is not None:
+        return str(_STEM_MODEL_STRATEGY_METADATA[mapped_label]["model_name"])
+    if normalized_lower not in {
+        label.lower() for label in STEM_MODEL_STRATEGY_CHOICES
+    }:
+        return normalized
+
+    strategy_label = _normalized_stem_model_strategy_label(normalized)
+    strategy_value = str(
+        _STEM_MODEL_STRATEGY_METADATA[strategy_label]["model_name"]
+    )
+    if strategy_value == "__custom__":
+        return "mastering"
+    if normalized_lower == strategy_label.lower():
+        return strategy_value
+    return normalized
+
+
+def stem_model_choice_label(
+    model_selection: str | None,
+    model_override: str | None = None,
+) -> str:
+    override = str(model_override or "").strip()
+    if override:
+        return f"Custom checkpoint override ({override})"
+
+    normalized = str(model_selection or "").strip()
+    if not normalized:
+        return STEM_MODEL_STRATEGY_CHOICES[0]
+
+    normalized_lower = normalized.lower()
+    if normalized_lower in _STEM_MODEL_STRATEGY_LABEL_BY_VALUE:
+        return _STEM_MODEL_STRATEGY_LABEL_BY_VALUE[normalized_lower]
+
+    strategy_label = _normalized_stem_model_strategy_label(normalized)
+    if strategy_label == "Custom checkpoint override":
+        return f"Custom checkpoint override ({normalized})"
+    return strategy_label
+
+
+def describe_stem_model_choice(
+    model_selection: str | None,
+    model_override: str | None = None,
+) -> str:
+    override = str(model_override or "").strip()
+    if override:
+        return (
+            "**Stem Strategy:** Custom checkpoint override. "
+            f"Running `{override}`."
+        )
+
+    normalized = str(model_selection or "").strip()
+    if (
+        normalized
+        and normalized.lower()
+        not in {label.lower() for label in STEM_MODEL_STRATEGY_CHOICES}
+        and normalized.lower() not in _STEM_MODEL_STRATEGY_LABEL_BY_VALUE
+    ):
+        return (
+            "**Stem Strategy:** Custom checkpoint override. "
+            f"Running `{normalized}`."
+        )
+
+    strategy_label = _normalized_stem_model_strategy_label(normalized)
+    strategy = _STEM_MODEL_STRATEGY_METADATA[strategy_label]
+    if str(strategy["model_name"]) == "__custom__":
+        return (
+            "**Stem Strategy:** Custom checkpoint override. "
+            "Enter an exact separator checkpoint or YAML name below."
+        )
+    return (
+        f"**Stem Strategy:** {strategy_label}. "
+        f"{strategy['description']} "
+        f"(`{strategy['model_name']}`)"
+    )
+
 
 def normalize_audio_format_choice(format_choice: str) -> str:
     return str(format_choice).strip().lower().lstrip(".") or "wav"
@@ -88,7 +375,9 @@ def _metric_attr(metric: object, attribute_name: str) -> object:
 def format_mastering_summary(
     report: object | None,
     *,
+    control_mode: str | None = None,
     stem_mastering: bool,
+    stem_strategy: str | None = None,
     stem_files: list[str],
 ) -> str:
     if report is None:
@@ -97,23 +386,30 @@ def format_mastering_summary(
     output_metrics = getattr(report, "output_metrics", None)
     input_metrics = getattr(report, "input_metrics", None)
     delivery_issues = tuple(getattr(report, "delivery_issues", ()) or ())
-    summary_lines = [
-        f"**Preset:** {getattr(report, 'preset_name', 'n/a')}",
-        f"**Delivery Profile:** {getattr(report, 'delivery_profile_name', 'n/a')}",
-        f"**Stem-aware Path:** {'On' if stem_mastering else 'Off'}",
-        f"**Input LUFS:** {_format_metric_value(_metric_attr(input_metrics, 'integrated_lufs'), ' LUFS')}",
-        f"**Output LUFS:** {_format_metric_value(_metric_attr(output_metrics, 'integrated_lufs'), ' LUFS')}",
-        f"**True Peak:** {_format_metric_value(_metric_attr(output_metrics, 'true_peak_dbfs'), ' dBFS')}",
-        f"**Crest Factor:** {_format_metric_value(_metric_attr(output_metrics, 'crest_factor_db'), ' dB')}",
-        f"**Stereo Width:** {_format_metric_value(_metric_attr(output_metrics, 'stereo_width_ratio'))}",
-        f"**Headroom Recovery:** {getattr(report, 'headroom_recovery_mode', 'n/a')}",
-        f"**Recovered Gain:** {_format_metric_value(getattr(report, 'headroom_recovery_gain_db', None), ' dB')}",
-        f"**Post-spatial Motion:** {_format_metric_value(getattr(report, 'post_spatial_stereo_motion', None))}",
-        f"**Post-clamp Peak:** {_format_metric_value(getattr(report, 'post_clamp_true_peak_dbfs', None), ' dBFS')}",
-    ]
+    summary_lines = []
+    if control_mode:
+        summary_lines.append(f"**Control Mode:** {control_mode}")
+    if stem_mastering and stem_strategy:
+        summary_lines.append(f"**Stem Strategy:** {stem_strategy}")
+    summary_lines.extend(
+        [
+            f"**Preset:** {getattr(report, 'preset_name', 'n/a')}",
+            f"**Delivery Profile:** {getattr(report, 'delivery_profile_name', 'n/a')}",
+            f"**Stem-aware Path:** {'On' if stem_mastering else 'Off'}",
+            f"**Input LUFS:** {_format_metric_value(_metric_attr(input_metrics, 'integrated_lufs'), ' LUFS')}",
+            f"**Output LUFS:** {_format_metric_value(_metric_attr(output_metrics, 'integrated_lufs'), ' LUFS')}",
+            f"**True Peak:** {_format_metric_value(_metric_attr(output_metrics, 'true_peak_dbfs'), ' dBFS')}",
+            f"**Crest Factor:** {_format_metric_value(_metric_attr(output_metrics, 'crest_factor_db'), ' dB')}",
+            f"**Stereo Width:** {_format_metric_value(_metric_attr(output_metrics, 'stereo_width_ratio'))}",
+            f"**Headroom Recovery:** {getattr(report, 'headroom_recovery_mode', 'n/a')}",
+            f"**Recovered Gain:** {_format_metric_value(getattr(report, 'headroom_recovery_gain_db', None), ' dB')}",
+            f"**Post-spatial Motion:** {_format_metric_value(getattr(report, 'post_spatial_stereo_motion', None))}",
+            f"**Post-clamp Peak:** {_format_metric_value(getattr(report, 'post_clamp_true_peak_dbfs', None), ' dBFS')}",
+        ]
+    )
     if delivery_issues:
         summary_lines.append(
-            "**Delivery Issues:** "
+            "**Additional Information:** "
             + ", ".join(str(issue) for issue in delivery_issues)
         )
     if stem_files:
@@ -124,7 +420,7 @@ def format_mastering_summary(
 def run_mastering_tool(
     audio_path: str,
     format_choice: str,
-    preset_name: str,
+    profile_name: str,
     bass: float,
     volume: float,
     effects: float,
@@ -133,25 +429,31 @@ def run_mastering_tool(
     stem_shifts: int,
     stem_mix_headroom_db: float,
     save_mastered_stems: bool,
+    stem_model_override: str | None = None,
 ) -> tuple[str, str | None, str, list[str]]:
     from definers.audio import master
 
     output_path = _temp_audio_output_path(format_choice)
     report_path = _write_json_payload({"status": "pending"})
+    control_mode, profile_kwargs = resolve_mastering_request(
+        profile_name,
+        bass,
+        volume,
+        effects,
+    )
+    resolved_stem_model_name = resolve_stem_model_name(
+        stem_model_name,
+        stem_model_override,
+    )
     mastering_kwargs: dict[str, object] = {
         "report_path": report_path,
-        "bass": float(bass),
-        "volume": float(volume),
-        "effects": float(effects),
         "stem_mastering": bool(stem_mastering),
-        "stem_model_name": str(stem_model_name).strip() or "mastering",
+        "stem_model_name": resolved_stem_model_name,
         "stem_shifts": max(int(stem_shifts), 1),
         "stem_mix_headroom_db": float(stem_mix_headroom_db),
         "save_mastered_stems": bool(save_mastered_stems),
     }
-    normalized_preset = str(preset_name).strip().lower()
-    if normalized_preset and normalized_preset != "auto":
-        mastering_kwargs["preset"] = normalized_preset
+    mastering_kwargs.update(profile_kwargs)
 
     mastered_path, report = master(
         audio_path,
@@ -178,7 +480,12 @@ def run_mastering_tool(
         resolved_report_path,
         format_mastering_summary(
             report,
+            control_mode=control_mode,
             stem_mastering=bool(stem_mastering),
+            stem_strategy=stem_model_choice_label(
+                stem_model_name,
+                stem_model_override,
+            ),
             stem_files=stem_files,
         ),
         stem_files,
@@ -191,6 +498,7 @@ def run_stem_separation_tool(
     format_choice: str,
     model_name: str,
     shifts: int,
+    model_override: str | None = None,
 ) -> tuple[str | None, list[str], str]:
     from definers.audio import separate_stem_layers, separate_stems
 
@@ -198,9 +506,13 @@ def run_stem_separation_tool(
     normalized_mode = str(separation_mode).strip().lower()
 
     if normalized_mode == "mastering_layers":
+        resolved_model_name = resolve_stem_model_name(
+            model_name,
+            model_override,
+        )
         stem_paths, _output_dir = separate_stem_layers(
             audio_path,
-            model_name=str(model_name).strip() or "mastering",
+            model_name=resolved_model_name,
             shifts=max(int(shifts), 1),
         )
         ordered_names = ["vocals", "drums", "bass", "other", "guitar", "piano"]
@@ -213,8 +525,11 @@ def run_stem_separation_tool(
             if stem_name not in ordered_names
         )
         outputs = _convert_audio_outputs(outputs, normalized_format)
-        summary = "Separated mastering layers: " + ", ".join(
-            Path(output_path).stem for output_path in outputs
+        summary = (
+            "Separated mastering layers with "
+            + stem_model_choice_label(model_name, model_override)
+            + ": "
+            + ", ".join(Path(output_path).stem for output_path in outputs)
         )
         return (outputs[0] if outputs else None, outputs, summary)
 
@@ -416,8 +731,16 @@ def run_audio_analysis_tool(
 
 
 __all__ = (
+    "MASTERING_PROFILE_CHOICES",
+    "STEM_MODEL_STRATEGY_CHOICES",
+    "describe_stem_model_choice",
     "format_mastering_summary",
+    "get_mastering_profile_ui_state",
+    "is_custom_stem_model_strategy",
     "normalize_audio_format_choice",
+    "normalize_mastering_profile_selection",
+    "resolve_mastering_request",
+    "resolve_stem_model_name",
     "run_audio_analysis_tool",
     "run_audio_preview_tool",
     "run_autotune_song_tool",

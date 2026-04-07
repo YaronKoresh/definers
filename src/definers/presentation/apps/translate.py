@@ -50,7 +50,7 @@ class TranslateApp:
                         container=True,
                         value="",
                         lines=6,
-                        show_copy_button=True,
+                        buttons=["copy"],
                     )
             btn = gr.Button(value="Translate")
             btn.click(

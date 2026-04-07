@@ -21,6 +21,7 @@ def _patch_audio_symbol(
 
 
 def test_run_mastering_tool_returns_report_and_stems(monkeypatch):
+    captured = {}
     fake_report = types.SimpleNamespace(
         preset_name="vocal",
         delivery_profile_name="lossless",
@@ -40,6 +41,7 @@ def test_run_mastering_tool_returns_report_and_stems(monkeypatch):
     )
 
     def fake_master(audio_path, output_path=None, **kwargs):
+        captured.update(kwargs)
         resolved_output_path = Path(str(output_path))
         resolved_output_path.write_text("audio", encoding="utf-8")
         report_path = Path(str(kwargs["report_path"]))
@@ -81,8 +83,88 @@ def test_run_mastering_tool_returns_report_and_stems(monkeypatch):
     assert report_path is not None
     assert Path(report_path).exists()
     assert len(stem_files) == 2
+    assert captured["preset"] == "vocal"
+    assert "bass" not in captured
+    assert "volume" not in captured
+    assert "effects" not in captured
+    assert captured["stem_model_name"] == "mastering"
+    assert "**Control Mode:** Vocal Focus" in summary_text
     assert "**Preset:** vocal" in summary_text
     assert "**Mastered Stems:** 2 files" in summary_text
+
+
+def test_get_mastering_profile_ui_state_locks_named_profiles():
+    state = services.get_mastering_profile_ui_state("EDM", 0.2, 0.3, 0.4)
+
+    assert state["controls_enabled"] is False
+    assert state["bass"] == 1.0
+    assert state["volume"] == 1.0
+    assert state["effects"] == 1.0
+
+
+def test_get_mastering_profile_ui_state_custom_keeps_manual_macros():
+    state = services.get_mastering_profile_ui_state(
+        "Custom Macro Blend",
+        0.2,
+        0.3,
+        0.4,
+    )
+
+    assert state["controls_enabled"] is True
+    assert state["bass"] == 0.2
+    assert state["volume"] == 0.3
+    assert state["effects"] == 0.4
+
+
+def test_run_mastering_tool_custom_profile_sends_manual_macros(monkeypatch):
+    captured = {}
+    fake_report = types.SimpleNamespace(
+        preset_name="balanced",
+        delivery_profile_name="lossless",
+        input_metrics=None,
+        output_metrics=None,
+        headroom_recovery_mode="adaptive",
+        headroom_recovery_gain_db=0.0,
+        post_spatial_stereo_motion=0.0,
+        post_clamp_true_peak_dbfs=-1.0,
+        delivery_issues=(),
+        to_dict=lambda: {"preset_name": "balanced"},
+    )
+
+    def fake_master(audio_path, output_path=None, **kwargs):
+        captured.update(kwargs)
+        resolved_output_path = Path(str(output_path))
+        resolved_output_path.write_text("audio", encoding="utf-8")
+        report_path = Path(str(kwargs["report_path"]))
+        report_path.write_text("{}", encoding="utf-8")
+        return str(resolved_output_path), fake_report
+
+    _patch_audio_symbol(
+        monkeypatch,
+        "master",
+        "definers.audio.mastering",
+        fake_master,
+    )
+
+    _, _, summary_text, _ = services.run_mastering_tool(
+        "song.wav",
+        "WAV",
+        "Custom Macro Blend",
+        0.25,
+        0.35,
+        0.45,
+        False,
+        "mastering",
+        2,
+        6.0,
+        False,
+    )
+
+    assert captured["preset"] == "balanced"
+    assert captured["bass"] == 0.25
+    assert captured["volume"] == 0.35
+    assert captured["effects"] == 0.45
+    assert "**Control Mode:** Custom Macro Blend" in summary_text
 
 
 def test_run_stem_separation_tool_supports_mastering_layers(monkeypatch):
@@ -136,6 +218,21 @@ def test_run_stem_separation_tool_supports_mastering_layers(monkeypatch):
         "model_name": "htdemucs_6s",
         "shifts": 4,
     }
+
+
+def test_resolve_stem_model_name_supports_labels_and_custom_override():
+    assert (
+        services.resolve_stem_model_name("Demucs fine-tuned 4-stem")
+        == "htdemucs_ft.yaml"
+    )
+    assert (
+        services.resolve_stem_model_name(
+            "Custom checkpoint override",
+            "htdemucs_6s",
+        )
+        == "htdemucs_6s"
+    )
+    assert services.is_custom_stem_model_strategy("Custom checkpoint override")
 
 
 def test_run_audio_analysis_tool_writes_json_summary(monkeypatch):
