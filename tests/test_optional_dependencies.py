@@ -29,7 +29,7 @@ def test_runtime_specs_for_pypi_optional_modules_omit_vcs_links():
         "madmom": "madmom>=0.16.1",
         "refiners": "refiners>=0.4.0",
         "stable_whisper": "stable-ts>=2.19.1",
-        "stopes": "stopes>=2.2.1",
+        "stopes": 'stopes>=2.2.1; sys_platform != "win32"',
     }
 
     for module_name, expected_spec in expected_specs.items():
@@ -45,6 +45,18 @@ def test_install_specs_for_madmom_use_pinned_github_commit():
     assert specs == (
         "madmom @ https://github.com/CPJKU/madmom/archive/27f032e8947204902c675e5e341a3faf5dc86dae.tar.gz",
     )
+
+
+def test_install_specs_for_basic_pitch_use_pinned_github_commit():
+    specs = optional_dependencies.install_specs_for_module("basic_pitch")
+
+    assert specs == (
+        "basic-pitch @ https://github.com/YaronKoresh/basic-pitch/archive/830590229b32e30faebf1626f046bb9d0b80def7.tar.gz",
+    )
+
+
+def test_install_specs_for_stopes_disable_unsupported_runtime():
+    assert optional_dependencies.install_specs_for_module("stopes") == ()
 
 
 def test_unsupported_fairseq_is_not_exposed_as_runtime_target():
@@ -92,6 +104,36 @@ def test_install_optional_target_uses_madmom_install_override():
             "madmom @ https://github.com/CPJKU/madmom/archive/27f032e8947204902c675e5e341a3faf5dc86dae.tar.gz",
         )
     ]
+
+
+def test_audio_group_install_includes_runtime_github_modules():
+    audio_package_specs = optional_dependencies.package_specs_for_group("audio")
+    audio_install_specs = optional_dependencies.install_specs_for_group("audio")
+
+    assert "basic-pitch>=0.4.0" not in audio_package_specs
+    assert "madmom>=0.16.1" not in audio_package_specs
+    assert (
+        "basic-pitch @ https://github.com/YaronKoresh/basic-pitch/archive/830590229b32e30faebf1626f046bb9d0b80def7.tar.gz"
+        in audio_install_specs
+    )
+    assert (
+        "madmom @ https://github.com/CPJKU/madmom/archive/27f032e8947204902c675e5e341a3faf5dc86dae.tar.gz"
+        in audio_install_specs
+    )
+
+
+def test_install_specs_for_stopes_use_plain_spec_when_supported(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        optional_dependencies,
+        "_supports_stopes_runtime_install",
+        lambda: True,
+    )
+
+    assert optional_dependencies.install_specs_for_module("stopes") == (
+        "stopes>=2.2.1",
+    )
 
 
 def test_runtime_specs_trim_redundant_web_and_ml_packages():

@@ -27,6 +27,12 @@ jobs:
       - name: Install Dev Tools
         run: python -m pip install -e ".[dev,all]"
 
+      - name: Install Madmom
+        run: python -m definers install madmom --type module
+
+      - name: Install Basic Pitch (Fork)
+        run: python -m definers install basic-pitch --type module
+
       - name: Execute Checks And Fixes
         run: poe check
 

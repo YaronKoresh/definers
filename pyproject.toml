@@ -51,7 +51,6 @@ audio = [
     "torch>=2.1.0",
     "torchaudio>=2.1.0",
     "resampy>=0.4.2",
-    "basic-pitch>=0.4.0",
     "chatterbox-tts>=0.1.4",
     "stable-ts>=2.19.1",
 ]
@@ -92,7 +91,7 @@ nlp = [
     "langdetect>=1.0.9",
     "nltk>=3.8.0",
     "sacremoses>=0.0.53",
-    "stopes>=2.2.1",
+    "stopes>=2.2.1; sys_platform != \"win32\"",
 ]
 web = [
     "cssselect>=1.2.0",

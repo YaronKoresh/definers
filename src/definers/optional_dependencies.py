@@ -10,16 +10,40 @@ from collections.abc import Callable, Iterable
 from typing import Any
 
 AUTO_INSTALL_ENV_VAR = "DEFINERS_AUTO_INSTALL_OPTIONAL"
-MADMOM_GITHUB_COMMIT = "27f032e8947204902c675e5e341a3faf5dc86dae"
-MADMOM_GITHUB_ARCHIVE_URL = (
-    f"https://github.com/CPJKU/madmom/archive/{MADMOM_GITHUB_COMMIT}.tar.gz"
-)
+BASIC_PITCH_PACKAGE_SPEC = "basic-pitch>=0.4.0"
+STOPES_PACKAGE_SPEC = 'stopes>=2.2.1; sys_platform != "win32"'
+STOPES_INSTALL_SPEC = "stopes>=2.2.1"
+GITHUB_ARCHIVE_PACKAGE_SOURCES: dict[str, tuple[str, str, str]] = {
+    "basic_pitch": (
+        "basic-pitch",
+        "YaronKoresh/basic-pitch",
+        "830590229b32e30faebf1626f046bb9d0b80def7",
+    ),
+    "madmom": (
+        "madmom",
+        "CPJKU/madmom",
+        "27f032e8947204902c675e5e341a3faf5dc86dae",
+    ),
+}
+
+
+def _github_archive_url(repository: str, commit: str) -> str:
+    return f"https://github.com/{repository}/archive/{commit}.tar.gz"
+
+
+def _github_archive_install_spec(
+    package_name: str,
+    repository: str,
+    commit: str,
+) -> str:
+    return f"{package_name} @ {_github_archive_url(repository, commit)}"
+
 
 MODULE_PACKAGE_SPECS: dict[str, tuple[str, ...]] = {
     "aiofiles": ("aiofiles",),
     "aiohttp": ("aiohttp",),
     "audio_separator": ("audio-separator>=0.30.0",),
-    "basic_pitch": ("basic-pitch>=0.4.0",),
+    "basic_pitch": (BASIC_PITCH_PACKAGE_SPEC,),
     "chatterbox": ("chatterbox-tts>=0.1.4",),
     "cssselect": ("cssselect>=1.2.0",),
     "cv2": ("opencv-contrib-python-headless>=4.8.0",),
@@ -76,7 +100,7 @@ MODULE_PACKAGE_SPECS: dict[str, tuple[str, ...]] = {
         "stable-ts>=2.19.1",
         "torch>=2.1.0",
     ),
-    "stopes": ("stopes>=2.2.1",),
+    "stopes": (STOPES_PACKAGE_SPEC,),
     "tensorflow": ("tensorflow>=2.15.0",),
     "tf_keras": ("tf-keras>=2.15.0",),
     "tokenizers": ("tokenizers>=0.15.0",),
@@ -98,7 +122,21 @@ MODULE_PACKAGE_SPECS: dict[str, tuple[str, ...]] = {
 }
 
 MODULE_INSTALL_SPEC_OVERRIDES: dict[str, tuple[str, ...]] = {
-    "madmom": (f"madmom @ {MADMOM_GITHUB_ARCHIVE_URL}",),
+    module_name: (
+        _github_archive_install_spec(package_name, repository, commit),
+    )
+    for module_name, (
+        package_name,
+        repository,
+        commit,
+    ) in GITHUB_ARCHIVE_PACKAGE_SOURCES.items()
+}
+
+GROUP_RUNTIME_INSTALL_EXTRA_MODULES: dict[str, tuple[str, ...]] = {
+    "audio": (
+        "basic_pitch",
+        "madmom",
+    ),
 }
 
 OPTIONAL_DEPENDENCY_GROUP_MODULES: dict[str, tuple[str, ...]] = {
@@ -110,7 +148,6 @@ OPTIONAL_DEPENDENCY_GROUP_MODULES: dict[str, tuple[str, ...]] = {
         "soundfile",
         "sox",
         "torchaudio",
-        "basic_pitch",
         "chatterbox",
         "stable_whisper",
     ),
@@ -203,8 +240,16 @@ def package_specs_for_module(module_name: str | None) -> tuple[str, ...]:
     return MODULE_PACKAGE_SPECS.get(normalized_name, ())
 
 
+def _supports_stopes_runtime_install() -> bool:
+    return sys.platform != "win32"
+
+
 def install_specs_for_module(module_name: str | None) -> tuple[str, ...]:
     normalized_name = normalize_module_name(module_name)
+    if normalized_name == "stopes":
+        if not _supports_stopes_runtime_install():
+            return ()
+        return (STOPES_INSTALL_SPEC,)
     if normalized_name in MODULE_INSTALL_SPEC_OVERRIDES:
         return MODULE_INSTALL_SPEC_OVERRIDES[normalized_name]
     return MODULE_PACKAGE_SPECS.get(normalized_name, ())
@@ -232,29 +277,41 @@ def install_specs_for_modules(
     return tuple(specs)
 
 
-def package_specs_for_group(group: str) -> tuple[str, ...]:
+def _group_module_names(
+    group: str,
+    *,
+    include_runtime_install_extras: bool,
+) -> tuple[str, ...]:
     normalized_group = str(group or "").strip().lower()
     if normalized_group == "all":
-        return package_specs_for_modules(
-            module_name
-            for group_modules in OPTIONAL_DEPENDENCY_GROUP_MODULES.values()
-            for module_name in group_modules
-        )
+        group_names = tuple(OPTIONAL_DEPENDENCY_GROUP_MODULES)
+    elif normalized_group in OPTIONAL_DEPENDENCY_GROUP_MODULES:
+        group_names = (normalized_group,)
+    else:
+        return ()
+    modules: list[str] = []
+    for group_name in group_names:
+        for module_name in OPTIONAL_DEPENDENCY_GROUP_MODULES[group_name]:
+            if module_name not in modules:
+                modules.append(module_name)
+        if include_runtime_install_extras:
+            for module_name in GROUP_RUNTIME_INSTALL_EXTRA_MODULES.get(
+                group_name, ()
+            ):
+                if module_name not in modules:
+                    modules.append(module_name)
+    return tuple(modules)
+
+
+def package_specs_for_group(group: str) -> tuple[str, ...]:
     return package_specs_for_modules(
-        OPTIONAL_DEPENDENCY_GROUP_MODULES.get(normalized_group, ())
+        _group_module_names(group, include_runtime_install_extras=False)
     )
 
 
 def install_specs_for_group(group: str) -> tuple[str, ...]:
-    normalized_group = str(group or "").strip().lower()
-    if normalized_group == "all":
-        return install_specs_for_modules(
-            module_name
-            for group_modules in OPTIONAL_DEPENDENCY_GROUP_MODULES.values()
-            for module_name in group_modules
-        )
     return install_specs_for_modules(
-        OPTIONAL_DEPENDENCY_GROUP_MODULES.get(normalized_group, ())
+        _group_module_names(group, include_runtime_install_extras=True)
     )
 
 
@@ -521,8 +578,8 @@ def install_import_hook() -> None:
 
 __all__ = [
     "AUTO_INSTALL_ENV_VAR",
-    "MADMOM_GITHUB_ARCHIVE_URL",
-    "MADMOM_GITHUB_COMMIT",
+    "GITHUB_ARCHIVE_PACKAGE_SOURCES",
+    "GROUP_RUNTIME_INSTALL_EXTRA_MODULES",
     "MODULE_INSTALL_SPEC_OVERRIDES",
     "MODULE_PACKAGE_SPECS",
     "ML_TASK_MODULES",

@@ -89,6 +89,11 @@ def test_optional_dependency_groups_omit_trimmed_packages():
         "optional-dependencies"
     ]
 
+    assert (
+        'stopes>=2.2.1; sys_platform != "win32"'
+        in optional_dependencies_table["nlp"]
+    )
+    assert "basic-pitch>=0.4.0" not in optional_dependencies_table["audio"]
     assert "beautifulsoup4>=4.12.0" not in optional_dependencies_table["web"]
     assert "gradio-client>=2.3.0" not in optional_dependencies_table["web"]
     assert "hydra-core>=1.3.0" not in optional_dependencies_table["ml"]

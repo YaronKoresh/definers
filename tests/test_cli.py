@@ -154,6 +154,29 @@ def test_install_module_reports_pinned_madmom_source(monkeypatch):
     assert "27f032e8947204902c675e5e341a3faf5dc86dae" in output_lines[0]
 
 
+def test_install_module_reports_pinned_basic_pitch_source(monkeypatch):
+    import definers.presentation.cli_install as cli_install
+
+    monkeypatch.setattr(
+        cli_install,
+        "install_optional_target",
+        lambda target, *, kind: target == "basic_pitch" and kind == "module",
+    )
+
+    output_lines = []
+    code = cli_install.run_optional_install_command(
+        "basic_pitch",
+        target_kind="module",
+        list_only=False,
+        output=output_lines.append,
+    )
+
+    assert code == 0
+    assert len(output_lines) == 1
+    assert "installed module basic_pitch:" in output_lines[0]
+    assert "830590229b32e30faebf1626f046bb9d0b80def7" in output_lines[0]
+
+
 def test_start_dispatch(monkeypatch, tmp_path):
 
     import definers.presentation.gui_entrypoints as gui_entrypoints
