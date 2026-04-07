@@ -1,5 +1,7 @@
 const fs = require("fs");
 
+const { analyzeIssueIntake } = require("./autobot_issue_intake");
+
 const { DEFAULT_ISSUE_LABELS, LABEL_GUIDANCE } = require("./autobot_labels");
 
 function writeText(filePath, content) {
@@ -52,7 +54,7 @@ function buildFinalPrSummaryPrompt({ summaryTier, candidateLabelsRaw, batchSumma
     "OUTPUT REQUIREMENTS:",
     "- Output MUST be valid Markdown.",
     "- Keep the result between 900 and 2200 characters.",
-    "- Preserve explicit breaking-change, compatibility, migration, API, database, schema, runtime, security, workflow, tooling, test, and documentation signals when they are supported.",
+    "- Preserve explicit breaking-change, compatibility, migration, API, database, schema, runtime, security, UI, workflow, tooling, test, and documentation signals when they are supported.",
     "- If the evidence implies incompatible behavior or a major version impact, say that explicitly.",
     "- Use EXACTLY this structure:",
     "",
@@ -94,6 +96,16 @@ function buildFinalPrSummaryPrompt({ summaryTier, candidateLabelsRaw, batchSumma
 
 function parseFinalPrSummary(raw) {
   const normalizedRaw = String(raw || "").trim();
+  const hasExpectedStructure = normalizedRaw.includes("## Autobot Summary")
+    && normalizedRaw.includes("### What Changed")
+    && /\nEND_OF_REPORT\s*$/m.test(normalizedRaw);
+  if (!hasExpectedStructure) {
+    return {
+      summaryBody: "",
+      labelHints: "",
+      labelHintsReady: "false"
+    };
+  }
   const labelHintsMatch = normalizedRaw.match(/^AUTOBOT_LABEL_HINTS:\s*(\[[^\n]*\])$/m);
   const labelHints = labelHintsMatch ? labelHintsMatch[1].trim() : "";
   const summaryBody = normalizedRaw
@@ -116,36 +128,20 @@ function buildIssueSummaryArtifacts({ issue, outputPath = "/tmp/issue_summary_pr
   const existingLabels = (issue.labels || [])
     .map((label) => typeof label === "string" ? label : label.name)
     .filter(Boolean);
-  const issueText = `${String(issue.title || "")}\n${String(issue.body || "")}`.toLowerCase();
-  const evidenceSignals = [];
-  if (/\b(bug|crash|error|failure|broken|regression)\b/.test(issueText)) {
-    evidenceSignals.push("The issue text uses bug or failure language.");
-  }
-  if (/\b(feature request|enhancement|improvement|proposal|suggestion)\b/.test(issueText)) {
-    evidenceSignals.push("The issue text reads like a request for new or improved behavior.");
-  }
-  if (/\b(docs|documentation|readme)\b/.test(issueText)) {
-    evidenceSignals.push("The issue text directly references documentation.");
-  }
-  if (/\b(runtime|windows|linux|macos|cuda|python)\b/.test(issueText)) {
-    evidenceSignals.push("The issue text mentions runtime or platform context.");
-  }
+  const issueAnalysis = analyzeIssueIntake(issue);
+  const evidenceSignals = [...issueAnalysis.evidenceSignals];
   if (existingLabels.length > 0) {
     evidenceSignals.push(`Existing labels: ${existingLabels.join(", ")}.`);
   }
 
-  const likelyClassification = [];
-  if (/\b(docs|documentation|readme)\b/.test(issueText)) likelyClassification.push("documentation");
-  if (/\b(bug|crash|error|failure|broken|regression)\b/.test(issueText)) likelyClassification.push("bug");
-  if (/\b(feature request|enhancement)\b/.test(issueText)) likelyClassification.push("enhancement");
-  if (/\b(improvement|proposal|suggestion)\b/.test(issueText)) likelyClassification.push("improvement or proposal");
-  if (/\b(runtime|windows|linux|macos|cuda|python)\b/.test(issueText)) likelyClassification.push("runtime");
+  const likelyClassification = [...issueAnalysis.likelyClassification];
+  if (issueAnalysis.releaseRelevant) likelyClassification.push("release-relevant context");
 
   const risksOrUnknowns = [];
   if (!String(issue.body || "").trim()) {
     risksOrUnknowns.push("The issue body is empty, so the intake signal is narrow.");
   }
-  if (!/repro|steps to reproduce|expected|actual|current situation/.test(issueText)) {
+  if (!/repro|steps to reproduce|expected|actual|current situation/.test(issueAnalysis.text)) {
     risksOrUnknowns.push("Reproduction detail or acceptance criteria may still be missing.");
   }
 
@@ -165,7 +161,7 @@ function buildIssueSummaryArtifacts({ issue, outputPath = "/tmp/issue_summary_pr
     formatBulletLines(risksOrUnknowns.slice(0, 4), "Use maintainer triage to confirm severity and scope."),
     "",
     "### Release Relevance",
-    /\b(bug|regression|security|runtime|breaking|migration|database|schema|api)\b/.test(issueText)
+    issueAnalysis.releaseRelevant
       ? "This issue appears potentially release-relevant because the intake text references a runtime, compatibility, or defect signal."
       : "This issue does not show a strong deterministic release signal from the intake text alone."
   ].join("\n");

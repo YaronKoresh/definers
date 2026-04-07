@@ -1,5 +1,7 @@
 const fs = require("fs");
 
+const { analyzeIssueIntake } = require("./autobot_issue_intake");
+
 const {
   FORCE_RELEASE_TYPES,
   LABEL_DEFINITIONS,
@@ -158,54 +160,10 @@ function labelNamesFromIssue(issue) {
 }
 
 function inferIssueLabels(issue) {
-  const title = String(issue?.title || "").toLowerCase();
-  const body = String(issue?.body || "").toLowerCase();
-  const text = `${title}\n${body}`;
-  const inferred = [];
-  const addLabel = (label) => {
-    const normalized = normalizeLabelName(label);
-    if (VALID_LABELS.has(normalized) && !inferred.includes(normalized)) inferred.push(normalized);
-  };
-  const hasMarker = (markers) => markers.some((marker) => text.includes(marker));
-
-  if (
-    hasMarker([
-      "documentation issue report",
-      "link(s) to the affected documentation",
-      "detailed description of the problem",
-      "proposed solution (optional)"
-    ]) || /\b(docs?|documentation|readme)\b/.test(title)
-  ) {
-    addLabel("documentation");
-  }
-
-  if (
-    hasMarker([
-      "proposing an improvement or enhancement",
-      "current situation and problem/opportunity",
-      "proposed improvement/enhancement",
-      "potential costs, challenges, and considerations",
-      "alternatives considered (optional)",
-      "proposed steps or implementation plan (optional)"
-    ]) || /\b(feature request|enhancement|proposal|improvement)\b/.test(title)
-  ) {
-    addLabel("enhancement");
-    addLabel("improvement");
-    addLabel("proposal");
-  }
-
-  if (
-    hasMarker([
-      "thank you for helping us squash this bug",
-      "detailed steps to reproduce",
-      "potential causes / workarounds / related issues (optional)",
-      "custom modifications / configuration"
-    ]) || /\b(bug|crash|error|failure|broken|regression)\b/.test(title)
-  ) {
-    addLabel("bug");
-  }
-
-  return inferred;
+  return analyzeIssueIntake(issue)
+    .labels
+    .map((label) => normalizeLabelName(label))
+    .filter((label) => VALID_LABELS.has(label));
 }
 
 function issueFallbackSupportLabels(issue) {
@@ -382,12 +340,12 @@ function resolveRequiredBump(releaseItems, currentLabelNames) {
   return releaseBump === "none" ? "patch" : releaseBump;
 }
 
-function buildPrCommentBody({ aiSummaryForComment, pullRequest, nextAiLabels, aiCooldownActive, aiCooldownMessage, aiCooldownUntil, prSummaryTier }) {
+function buildPrCommentBody({ aiSummaryForComment, pullRequest, nextAiLabels, aiCooldownActive, aiCooldownUntil, prSummaryTier }) {
   const appliedLabels = nextAiLabels.map((label) => `\`${label}\``).join(" ") || "_none_";
   const cooldownNotice = aiCooldownActive && prSummaryTier && prSummaryTier !== "zero_ai"
     ? [
-        `> ${aiCooldownMessage || `AI inference is paused until ${aiCooldownUntil}. Try again after that time.`}`,
-        `> Autobot used deterministic evidence for this run. If this PR needs richer AI synthesis, try again after ${aiCooldownUntil || "the cooldown expires"}.`
+        "> Autobot skipped optional AI synthesis for this run because GitHub Models returned temporary throttling.",
+        `> The analysis below comes from deterministic code-diff evidence only. Richer AI synthesis can resume after ${aiCooldownUntil || "the cooldown expires"}.`
       ]
     : [];
   return [
@@ -483,7 +441,7 @@ function buildMilestoneComment({ milestoneChanged, previousMilestoneTitle, final
   return noteLines.join("\n");
 }
 
-async function prepareProjectState({ github, owner, repo, context, issueNumber, aiSummary, aiLabelsRaw, aiCooldownActive, aiCooldownUntil, aiCooldownMessage, prSummaryTier, stateFile }) {
+async function prepareProjectState({ github, owner, repo, context, issueNumber, aiSummary, aiLabelsRaw, aiCooldownActive, aiCooldownUntil, prSummaryTier, stateFile }) {
   const payload = context.payload;
   const isPR = context.eventName === "pull_request";
   const aiSummaryForComment = String(aiSummary || "").replace(/\nEND_OF_REPORT\s*$/m, "").trim();
@@ -528,7 +486,6 @@ async function prepareProjectState({ github, owner, repo, context, issueNumber, 
       pullRequest: payload.pull_request,
       nextAiLabels,
       aiCooldownActive,
-      aiCooldownMessage,
       aiCooldownUntil,
       prSummaryTier
     });
@@ -717,8 +674,10 @@ async function finalizeClosedPullRequestRelease({ github, owner, repo, context }
 module.exports = {
   finalizeClosedPullRequestRelease,
   hasReleaseRelevantLabel,
+  inferIssueLabels,
   normalizeLabelName,
   prepareProjectState,
+  buildPrCommentBody,
   syncPreparedProjectState,
   syncProjectMilestone
 };

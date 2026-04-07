@@ -286,7 +286,6 @@ jobs:
           AI_LABELS_RAW: ${{ steps.parse-pr-summary.outputs.label_hints || steps.collect.outputs.deterministic_labels_json || steps.ai-labels.outputs.response }}
           AI_COOLDOWN_ACTIVE: ${{ steps.ai-cooldown-state.outputs.active }}
           AI_COOLDOWN_UNTIL: ${{ steps.ai-cooldown-state.outputs.until }}
-          AI_COOLDOWN_MESSAGE: ${{ steps.ai-cooldown-state.outputs.message }}
           PR_SUMMARY_TIER: ${{ steps.collect.outputs.summary_tier }}
         uses: actions/github-script@v8
         with:
@@ -304,7 +303,6 @@ jobs:
               aiLabelsRaw: process.env.AI_LABELS_RAW,
               aiCooldownActive: String(process.env.AI_COOLDOWN_ACTIVE || "") === "true",
               aiCooldownUntil: process.env.AI_COOLDOWN_UNTIL,
-              aiCooldownMessage: process.env.AI_COOLDOWN_MESSAGE,
               prSummaryTier: process.env.PR_SUMMARY_TIER,
               stateFile: process.env.PROJECT_STATE_FILE
             });

@@ -32,6 +32,10 @@ def run_ffmpeg(command: list[str]):
 
 
 def read_audio(audio_file: str) -> tuple[int, np.ndarray]:
+    audio_file = full_path(audio_file)
+    if not exist(audio_file):
+        raise FileNotFoundError(audio_file)
+
     import pydub
 
     from definers.system import install_ffmpeg

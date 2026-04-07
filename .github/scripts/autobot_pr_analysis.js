@@ -30,6 +30,7 @@ const LABEL_ORDER = [
   "performance",
   "bug",
   "enhancement",
+  "ui",
   "documentation",
   "test",
   "workflow",
@@ -93,13 +94,125 @@ function formatBulletLines(items, fallback) {
   return items.length > 0 ? items.map((item) => `- ${item}`).join("\n") : `- ${fallback}`;
 }
 
+function matchesWorkflowFilePath(normalizedPath) {
+  return /^\.github\/workflows\/.+\.ya?ml$/.test(normalizedPath)
+    || /^\.circleci\/config\.ya?ml$/.test(normalizedPath)
+    || /^\.gitlab-ci\.ya?ml$/.test(normalizedPath)
+    || /^\.buildkite\/.+\.ya?ml$/.test(normalizedPath)
+    || /(^|\/)azure-pipelines\.ya?ml$/.test(normalizedPath)
+    || /(^|\/)jenkinsfile$/.test(normalizedPath)
+    || /^\.github\/actions\//.test(normalizedPath);
+}
+
+function matchesWorkflowScriptPath(normalizedPath) {
+  return /^scripts\/.+\.(js|ts|py|sh|ps1|bat)$/.test(normalizedPath)
+    && /\b(workflow|pipeline|orchestr|release|triage|autobot|ci)\b/.test(normalizedPath.replace(/[/._-]+/g, " "));
+}
+
+function hasWorkflowTextEvidence(text) {
+  return /workflow_dispatch|schedule:|cron:|jobs:|steps:|runs-on:|uses:\s*actions\/|pull_request:|push:|pipeline|orchestrat/.test(text);
+}
+
+function matchesUiPath(normalizedPath) {
+  return /(^|\/)(components?|ui|views?|templates|static|styles?|themes?|frontend)(\/|$)/.test(normalizedPath)
+    || /(^|\/)presentation\/apps\//.test(normalizedPath)
+    || /(^|\/)(gui_[^/]+|[^/]+_gui)\.py$/.test(normalizedPath)
+    || /\.(css|scss|sass|less|tsx|jsx|vue|svelte|html)$/.test(normalizedPath);
+}
+
+function hasUiTextEvidence(text) {
+  return /\bgr\.(blocks|button|textbox|dropdown|accordion|slider|checkbox|row|column|tabs?|html|markdown)\b/.test(text)
+    || /<(button|form|input|select|dialog|label)\b/.test(text)
+    || /\bclassname=/.test(text);
+}
+
+function hasApiPathEvidence(normalizedPath) {
+  return /(^|\/)(api|apis|routes?|controllers?|webhooks?)(\/|$)/.test(normalizedPath)
+    || /(^|\/)(openapi|swagger)(\.[^/]+)?$/.test(normalizedPath);
+}
+
+function hasApiPatchEvidence(patch) {
+  return /https:\/\/models\.github\.ai\/inference\//.test(patch)
+    || /\b(rest api|graphql api|github api|webhook)\b/.test(patch)
+    || /\b(router|app)\.(get|post|put|patch|delete)\b/.test(patch);
+}
+
+function hasRuntimePathEvidence(normalizedPath) {
+  return /^docker\//.test(normalizedPath)
+    || /(^|\/)(dockerfile|compose\.ya?ml)$/.test(normalizedPath)
+    || /(^|\/)(platform|runtime|system|cuda)(\/|$)/.test(normalizedPath)
+    || /(^|\/)(pyproject\.toml|tox\.ini|setup\.(cfg|py))$/.test(normalizedPath)
+    || matchesWorkflowFilePath(normalizedPath);
+}
+
+function hasRuntimePatchEvidence(patch) {
+  return /\brequires-python\b/.test(patch)
+    || /\bpython 3\.\d+\b/.test(patch)
+    || /\bcuda\b/.test(patch)
+    || /\bffmpeg\b/.test(patch)
+    || /\bubuntu\b|\bwindows\b|\blinux\b|\bmacos\b/.test(patch)
+    || /\bplatform_system\b/.test(patch)
+    || /\bapt-get\b|\bdnf\b|\bpacman\b/.test(patch)
+    || /\bnvidia\b/.test(patch);
+}
+
+function hasSchemaEvidence(normalizedPath, patch) {
+  return /(^|\/)(schema|schemas|openapi|swagger|graphql|protos?)(\/|$)/.test(normalizedPath)
+    || /(^|\/)(openapi|swagger|graphql|schema)(\.[^/]+)?$/.test(normalizedPath)
+    || /\.(proto|graphql|gql)$/.test(normalizedPath)
+    || /\b(json schema|graphql schema|openapi|swagger)\b/.test(patch)
+    || /syntax\s*=\s*"proto"/.test(patch);
+}
+
+function hasMigrationEvidence(normalizedPath, patch) {
+  return /(^|\/)(migrations?|alembic)(\/|$)/.test(normalizedPath)
+    || /\.sql$/.test(normalizedPath)
+    || /\bmigrations?\b|\balembic\b|upgrade\s*\(|downgrade\s*\(/.test(patch);
+}
+
+function hasDatabaseEvidence(normalizedPath, patch) {
+  const pathEvidence = /(^|\/)(database|databases|db|sql)(\/|$)/.test(normalizedPath)
+    || /\.sql$/.test(normalizedPath);
+  const patchEvidence = /\b(database|sql|sqlite|postgres(?:ql)?|mysql|orm)\b/.test(patch)
+    || /\b(create|alter|drop)\s+table\b/.test(patch)
+    || /\b(insert\s+into|delete\s+from)\b/.test(patch);
+  return /\.sql$/.test(normalizedPath) || pathEvidence && patchEvidence || /\b(create|alter|drop)\s+table\b/.test(patch);
+}
+
+function hasApiEvidence(normalizedPath, patch) {
+  return hasApiPathEvidence(normalizedPath) || hasApiPatchEvidence(patch);
+}
+
+function hasSecurityEvidence(normalizedPath, patch) {
+  return /(^|\/)(security|auth|policy)(\/|$)/.test(normalizedPath)
+    || /(^|\/)(codeql|dependabot|security)(\.[^/]+)?$/.test(normalizedPath)
+    || /authorization:\s*bearer/.test(patch)
+    || /permissions:\s*(\{|\n)/.test(patch)
+    || /\b(access token|bearer token|secret|secrets|credential|sanitize|sanitiz|csrf|xss|auth(?:entication|orization)?|least privilege|permissions?)\b/.test(patch);
+}
+
+function hasBreakingChangeEvidence(patch) {
+  return /\bbreaking[\s-]?change\b|\bbackward[\s-]?incompatible\b|\bincompatible api\b|\bconsumer adaptation\b|\brequires migration\b|\bmust update (callers|consumers)\b/.test(patch);
+}
+
+function deriveTitleSignals(prSignalText) {
+  const bug = /\b(bug|fix|fixes|fixed|regression|hotfix|error|broken|failure|repair)\b/.test(prSignalText);
+  const enhancement = !bug && /(^|\s)(feat|feature|enhancement)(:|\b)/.test(prSignalText);
+  const documentation = /\b(doc|docs|documentation|readme)\b/.test(prSignalText);
+  const ui = /\b(ui|ux|gradio|frontend)\b/.test(prSignalText);
+  return {
+    bug,
+    enhancement,
+    documentation,
+    ui
+  };
+}
+
 function classifyFile(filename) {
   const normalized = String(filename || "").toLowerCase();
   const categories = new Set();
-  if (/^\.github\/workflows\/.+\.ya?ml$/.test(normalized)) {
+  if (matchesWorkflowFilePath(normalized) || matchesWorkflowScriptPath(normalized)) {
     categories.add("workflow");
-    categories.add("github");
-    return [...categories];
   }
   if (/^\.github\//.test(normalized)) {
     categories.add("github");
@@ -117,6 +230,9 @@ function classifyFile(filename) {
     /\.(spec|test)\.(js|jsx|ts|tsx|py)$/.test(normalized)
   ) {
     categories.add("test");
+  }
+  if (matchesUiPath(normalized)) {
+    categories.add("ui");
   }
   if (
     /^docker\//.test(normalized) ||
@@ -158,49 +274,57 @@ function deriveSignals(file) {
   const patch = String(file.patch || "").toLowerCase();
   const text = `${normalizedPath}\n${patch}`;
   const signals = new Set();
+  const workflowSignal = matchesWorkflowFilePath(normalizedPath)
+    || matchesWorkflowScriptPath(normalizedPath) && hasWorkflowTextEvidence(text);
 
-  if (/^\.github\/workflows\//.test(normalizedPath)) {
+  if (workflowSignal) {
     signals.add("workflow");
-    signals.add("github");
-    if (/schedule|workflow_dispatch|pull_request|issues|uses:\s*actions\/|jobs:|runs-on:/.test(text)) {
+    if (/schedule:|workflow_dispatch|pull_request:|issues:|uses:\s*actions\/|jobs:|steps:|runs-on:|push:/.test(text)) {
       signals.add("ci");
     }
     if (/autobot|automation|label|triage|milestone|release/.test(text)) {
       signals.add("automation");
     }
   }
+  if (/^\.github\//.test(normalizedPath)) {
+    signals.add("github");
+  }
+  if (matchesUiPath(normalizedPath) || hasUiTextEvidence(text)) {
+    signals.add("ui");
+  }
   if (/^docker\//.test(normalizedPath) || /(^|\/)dockerfile$/.test(normalizedPath) || /compose\.ya?ml/.test(normalizedPath)) {
     signals.add("docker");
     signals.add("runtime");
   }
-  if (/schema|graphql|proto|openapi|swagger/.test(text)) {
+  if (hasSchemaEvidence(normalizedPath, patch)) {
     signals.add("schema");
   }
-  if (/migrations?|alembic|upgrade\s*\(|downgrade\s*\(|migration/.test(text)) {
+  if (hasMigrationEvidence(normalizedPath, patch)) {
     signals.add("migration");
   }
-  if (/database|db_|db\.|sql|sqlite|postgres|mysql|orm/.test(text)) {
+  if (hasDatabaseEvidence(normalizedPath, patch)) {
     signals.add("database");
   }
-  if (/(^|\/)(api|apis)\//.test(normalizedPath) || /routes?|router|endpoint|request|response|handler/.test(text)) {
+  if (hasApiEvidence(normalizedPath, patch)) {
     signals.add("api");
   }
-  if (/security|auth|authorize|authentication|permission|secret|token|sanitize|csrf|xss/.test(text)) {
+  if (hasSecurityEvidence(normalizedPath, patch)) {
     signals.add("security");
   }
-  if (/breaking[\s-]?change|incompatible|backward incompatible|consumer adaptation|required migration/.test(text)) {
+  if (hasBreakingChangeEvidence(patch)) {
     signals.add("breaking-change");
   }
-  if (/compatib|interop|polyfill|shim/.test(text)) {
+  if (/(^|\/)(compat|compatibility|interop|polyfill|shim)(\/|$)/.test(normalizedPath)
+    || /\b(backward compatibility|compatibility|interop|polyfill|shim)\b/.test(patch)) {
     signals.add("compatibility");
   }
   if (/feature[\s-]?flag|kill switch|rollout/.test(text)) {
     signals.add("feature-flag");
   }
-  if (/runtime|python 3\.\d|cuda|ffmpeg|platform|ubuntu|windows|linux/.test(text)) {
+  if (hasRuntimePathEvidence(normalizedPath) && hasRuntimePatchEvidence(patch)) {
     signals.add("runtime");
   }
-  if (/performance|latency|throughput|cache|memory|optimiz/.test(text)) {
+  if (/\b(performance|latency|throughput|cache|memory|optimiz)\b/.test(patch)) {
     signals.add("performance");
   }
   return [...signals];
@@ -351,7 +475,7 @@ function buildSummaryBatchPrompt({ batchEntries, batchIndex, batchCount, totalFi
     "- Output MUST be valid Markdown.",
     "- Do NOT wrap the report in triple backticks.",
     "- Keep the result between 700 and 1600 characters.",
-    "- Preserve explicit signals related to breaking changes, compatibility, migration, api, runtime, database, schema, security, performance, workflow, tooling, tests, and documentation when supported.",
+    "- Preserve explicit signals related to breaking changes, compatibility, migration, api, runtime, database, schema, security, performance, ui, workflow, tooling, tests, and documentation when supported.",
     "- End your response with the exact final line: END_OF_REPORT",
     "",
     "Use EXACTLY this structure:",
@@ -414,8 +538,8 @@ async function collectPullRequestSnapshot({ github, owner, repo, pullRequest }) 
   return snapshot;
 }
 
-function analyzePullRequestSnapshot() {
-  const snapshot = readJson(SNAPSHOT_FILE);
+function analyzePullRequestSnapshotData(snapshot, options = {}) {
+  const writeArtifacts = options.writeArtifacts !== false;
   const filesWithContext = snapshot.files.map((file) => {
     const fileWithContext = {
       filename: file.filename,
@@ -433,10 +557,8 @@ function analyzePullRequestSnapshot() {
   const totalAdditions = Number(snapshot.totals.additions || 0);
   const totalDeletions = Number(snapshot.totals.deletions || 0);
   const totalChanges = Number(snapshot.totals.totalChanges || 0);
-  const prSignalText = `${snapshot.pullRequest.title}\n${snapshot.pullRequest.body}\n${snapshot.pullRequest.headRef}`.toLowerCase();
-  const titleSuggestsBug = /\b(bug|fix|fixes|fixed|regression|hotfix|error|broken|failure|repair)\b/.test(prSignalText);
-  const titleSuggestsEnhancement = /\b(feat|feature|enhancement|add|adds|added|support|supports|supported|implement|implements|implemented|introduce|introduces|introduced)\b/.test(prSignalText);
-  const titleSuggestsDocumentation = /\b(doc|docs|documentation|readme)\b/.test(prSignalText);
+  const prSignalText = `${snapshot.pullRequest.title}`.toLowerCase();
+  const titleSignals = deriveTitleSignals(prSignalText);
   const categoryCounts = new Map();
   const directoryScores = new Map();
   const signalSet = new Set();
@@ -468,16 +590,20 @@ function analyzePullRequestSnapshot() {
     .filter(([category]) => MAINTENANCE_ONLY_CATEGORIES.has(category))
     .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
     .map(([category]) => category);
+  const hasBehavioralSurfaceChange = Boolean(
+    categoryCounts.get("source") || categoryCounts.get("ui")
+  );
   const zeroAiEligible = filesWithContext.length > 0 && [...categoryCounts.keys()].every((category) => MAINTENANCE_ONLY_CATEGORIES.has(category)) && !VERSION_CRITICAL_LABELS.some((label) => signalSet.has(label));
 
   const deterministicLabelSet = new Set();
   for (const signal of orderedSignals) {
     deterministicLabelSet.add(signal);
   }
-  if (categoryCounts.get("documentation") || titleSuggestsDocumentation) deterministicLabelSet.add("documentation");
+  if (categoryCounts.get("documentation")) deterministicLabelSet.add("documentation");
   if (categoryCounts.get("test")) deterministicLabelSet.add("test");
-  if (categoryCounts.get("workflow")) deterministicLabelSet.add("workflow");
-  if (categoryCounts.get("github")) deterministicLabelSet.add("github");
+  if (categoryCounts.get("ui") || signalSet.has("ui")) deterministicLabelSet.add("ui");
+  if (categoryCounts.get("workflow") || signalSet.has("workflow")) deterministicLabelSet.add("workflow");
+  if (categoryCounts.get("github") || signalSet.has("github")) deterministicLabelSet.add("github");
   if (signalSet.has("automation")) deterministicLabelSet.add("automation");
   if (signalSet.has("ci")) deterministicLabelSet.add("ci");
   if (categoryCounts.get("config")) deterministicLabelSet.add("config");
@@ -488,13 +614,11 @@ function analyzePullRequestSnapshot() {
     deterministicLabelSet.add("dx");
   }
   if (filesWithContext.some((file) => file.status === "removed")) deterministicLabelSet.add("cleanup");
-  if (!zeroAiEligible && titleSuggestsBug) deterministicLabelSet.add("bug");
-  if (!zeroAiEligible && titleSuggestsEnhancement) deterministicLabelSet.add("enhancement");
   if (zeroAiEligible) {
     if (categoryCounts.get("documentation")) deterministicLabelSet.add("documentation");
     if (categoryCounts.get("test")) deterministicLabelSet.add("test");
-    if (categoryCounts.get("workflow")) deterministicLabelSet.add("workflow");
-    if (categoryCounts.get("github")) deterministicLabelSet.add("github");
+    if (categoryCounts.get("workflow") || signalSet.has("workflow")) deterministicLabelSet.add("workflow");
+    if (categoryCounts.get("github") || signalSet.has("github")) deterministicLabelSet.add("github");
     if (categoryCounts.get("config")) deterministicLabelSet.add("config");
     if (categoryCounts.get("dependencies")) deterministicLabelSet.add("dependencies");
   }
@@ -505,14 +629,17 @@ function analyzePullRequestSnapshot() {
     candidateLabelSet.add(signal);
   }
   if (!zeroAiEligible) {
-    if (categoryCounts.get("source") || categoryCounts.get("docker")) {
+    if (titleSignals.bug && hasBehavioralSurfaceChange) {
       candidateLabelSet.add("bug");
+    }
+    if (titleSignals.enhancement && hasBehavioralSurfaceChange) {
       candidateLabelSet.add("enhancement");
     }
-    if (categoryCounts.get("documentation")) candidateLabelSet.add("documentation");
+    if (categoryCounts.get("documentation") || titleSignals.documentation) candidateLabelSet.add("documentation");
     if (categoryCounts.get("test")) candidateLabelSet.add("test");
-    if (categoryCounts.get("workflow")) candidateLabelSet.add("workflow");
-    if (categoryCounts.get("github")) candidateLabelSet.add("github");
+    if (categoryCounts.get("ui") || signalSet.has("ui")) candidateLabelSet.add("ui");
+    if (categoryCounts.get("workflow") || signalSet.has("workflow")) candidateLabelSet.add("workflow");
+    if (categoryCounts.get("github") || signalSet.has("github")) candidateLabelSet.add("github");
     if (signalSet.has("automation")) candidateLabelSet.add("automation");
     if (signalSet.has("ci")) candidateLabelSet.add("ci");
     if (categoryCounts.get("config")) candidateLabelSet.add("config");
@@ -591,25 +718,29 @@ function analyzePullRequestSnapshot() {
   const summaryBatchCount = summaryTier === "capped_batch_ai" ? summaryBatches.length : 0;
   const estimatedAiRequests = summaryTier === "zero_ai" ? 0 : summaryTier === "single_ai" ? 1 : summaryBatchCount + 1;
 
-  for (const [batchIndex, batchEntries] of summaryBatches.entries()) {
-    const prompt = buildSummaryBatchPrompt({
-      batchEntries,
-      batchIndex,
-      batchCount: summaryBatches.length,
-      totalFiles: filesWithContext.length,
-      totalAdditions,
-      totalDeletions,
-      topDirectories,
-      orderedSignals,
-      candidateLabels
-    });
-    writeText(`/tmp/summary_batch_${batchIndex + 1}.txt`, prompt);
+  if (writeArtifacts) {
+    for (const [batchIndex, batchEntries] of summaryBatches.entries()) {
+      const prompt = buildSummaryBatchPrompt({
+        batchEntries,
+        batchIndex,
+        batchCount: summaryBatches.length,
+        totalFiles: filesWithContext.length,
+        totalAdditions,
+        totalDeletions,
+        topDirectories,
+        orderedSignals,
+        candidateLabels
+      });
+      writeText(`/tmp/summary_batch_${batchIndex + 1}.txt`, prompt);
+    }
   }
 
   const directWindowContent = directWindowEntries.length > 0
     ? directWindowEntries.map((entry) => entry.compact).join(WINDOW_SEPARATOR)
     : "No diff windows selected.";
-  writeText("/tmp/pr_single_ai_windows.txt", directWindowContent);
+  if (writeArtifacts) {
+    writeText("/tmp/pr_single_ai_windows.txt", directWindowContent);
+  }
 
   function buildDeterministicSummary() {
     const whatChangedSentences = zeroAiEligible
@@ -649,7 +780,8 @@ function analyzePullRequestSnapshot() {
     const classificationSignals = [];
     if (categoryCounts.get("documentation")) classificationSignals.push("Documentation files are part of the changed scope.");
     if (categoryCounts.get("test")) classificationSignals.push("Tests are part of the changed scope.");
-    if (categoryCounts.get("workflow")) classificationSignals.push("GitHub workflow logic changed.");
+    if (categoryCounts.get("ui") || signalSet.has("ui")) classificationSignals.push("UI surfaces changed.");
+    if (categoryCounts.get("workflow") || signalSet.has("workflow")) classificationSignals.push("Workflow or orchestration logic changed.");
     if (categoryCounts.get("config")) classificationSignals.push("Configuration surfaces changed.");
     if (categoryCounts.get("dependencies")) classificationSignals.push("Dependency or manifest files changed.");
     if (orderedSignals.length > 0) classificationSignals.push(`Deterministic release signals: ${orderedSignals.join(", ")}.`);
@@ -690,7 +822,9 @@ function analyzePullRequestSnapshot() {
     "Top files:",
     formatBulletLines(topFiles.map((file) => `${file.filename} [${file.status.toUpperCase()}] (+${file.additions} -${file.deletions})`), "(none)")
   ].join("\n");
-  writeText("/tmp/pr_evidence.txt", evidenceScaffold);
+  if (writeArtifacts) {
+    writeText("/tmp/pr_evidence.txt", evidenceScaffold);
+  }
 
   const totalSelectedWindowChars = directWindowEntries.reduce((sum, entry) => sum + entry.compact.length, 0);
   return {
@@ -712,10 +846,15 @@ function analyzePullRequestSnapshot() {
   };
 }
 
+function analyzePullRequestSnapshot() {
+  return analyzePullRequestSnapshotData(readJson(SNAPSHOT_FILE));
+}
+
 module.exports = {
   MAX_BATCH_SUMMARY_REQUESTS,
   SNAPSHOT_FILE,
   WINDOW_SEPARATOR,
   analyzePullRequestSnapshot,
+  analyzePullRequestSnapshotData,
   collectPullRequestSnapshot
 };

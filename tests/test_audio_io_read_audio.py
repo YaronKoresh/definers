@@ -46,7 +46,10 @@ def test_read_audio_scales_using_sample_width():
     )
 
     with patch.dict(sys.modules, {"pydub": pydub_module}):
-        with patch("definers.system.install_ffmpeg", lambda: None):
+        with (
+            patch.object(IO_MODULE, "exist", lambda path: True),
+            patch("definers.system.install_ffmpeg", lambda: None),
+        ):
             sr, audio = IO_MODULE.read_audio("demo.wav")
 
     assert sr == 48000
@@ -68,10 +71,30 @@ def test_read_audio_bootstraps_ffmpeg_before_loading():
     calls = []
 
     with patch.dict(sys.modules, {"pydub": pydub_module}):
-        with patch(
-            "definers.system.install_ffmpeg",
-            lambda: calls.append("ffmpeg"),
+        with (
+            patch.object(IO_MODULE, "exist", lambda path: True),
+            patch(
+                "definers.system.install_ffmpeg",
+                lambda: calls.append("ffmpeg"),
+            ),
         ):
             IO_MODULE.read_audio("demo.wav")
 
     assert calls == ["ffmpeg"]
+
+
+def test_read_audio_missing_file_fails_before_bootstrapping_ffmpeg():
+    calls = []
+
+    with patch(
+        "definers.system.install_ffmpeg",
+        lambda: calls.append("ffmpeg"),
+    ):
+        try:
+            IO_MODULE.read_audio("definitely_missing_audio_file.wav")
+        except FileNotFoundError:
+            pass
+        else:
+            raise AssertionError("read_audio should raise FileNotFoundError")
+
+    assert calls == []

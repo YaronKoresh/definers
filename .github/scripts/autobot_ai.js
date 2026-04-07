@@ -144,6 +144,10 @@ function extractResponseContent(rawBody) {
   }
 }
 
+function visibleResponseContent(response) {
+  return response.ok ? response.content : "";
+}
+
 async function runInferenceRequest({ token, promptFile, model, maxTokens, systemPrompt, temperature = 0, topP = 1, seed = 1 }) {
   const prompt = fs.readFileSync(promptFile, "utf8");
   const messages = [];
@@ -210,6 +214,7 @@ async function runManagedInference({ github, owner, repo, token, promptFile, mod
       });
       return {
         ...response,
+        content: "",
         skipped: false,
         rateLimited: true,
         cooldownUntil: until,
@@ -220,6 +225,7 @@ async function runManagedInference({ github, owner, repo, token, promptFile, mod
 
     return {
       ...response,
+      content: visibleResponseContent(response),
       skipped: false,
       rateLimited: false,
       cooldownUntil: "",

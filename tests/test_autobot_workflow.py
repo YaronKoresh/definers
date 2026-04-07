@@ -1,4 +1,10 @@
+import json
+import shutil
+import subprocess
+import tempfile
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "autobot.yml"
@@ -33,6 +39,127 @@ def read_project_manager_helper() -> str:
 
 def read_prompts_helper() -> str:
     return PROMPTS_HELPER.read_text(encoding="utf-8")
+
+
+def build_snapshot_file(
+    filename: str,
+    patch: str,
+    *,
+    status: str = "modified",
+    additions: int = 1,
+    deletions: int = 0,
+) -> dict[str, object]:
+    return {
+        "filename": filename,
+        "status": status,
+        "additions": additions,
+        "deletions": deletions,
+        "patch": patch,
+        "rawPatchAvailable": True,
+    }
+
+
+def build_snapshot(
+    *,
+    title: str,
+    files: list[dict[str, object]],
+    body: str = "",
+    head_ref: str = "feature/autobot-test",
+) -> dict[str, object]:
+    total_additions = sum(int(file["additions"]) for file in files)
+    total_deletions = sum(int(file["deletions"]) for file in files)
+    return {
+        "pullRequest": {
+            "number": 1,
+            "title": title,
+            "body": body,
+            "headRef": head_ref,
+        },
+        "totals": {
+            "filesChanged": len(files),
+            "additions": total_additions,
+            "deletions": total_deletions,
+            "totalChanges": total_additions + total_deletions,
+        },
+        "files": files,
+    }
+
+
+def run_pr_analysis(snapshot: dict[str, object]) -> dict[str, object]:
+    node_path = shutil.which("node") or shutil.which("node.exe")
+    if node_path is None:
+        pytest.skip("node is required for autobot helper behavior tests")
+    script = """
+const fs = require("fs");
+const helper = require(process.argv[1]);
+const snapshot = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+const result = helper.analyzePullRequestSnapshotData(snapshot, { writeArtifacts: false });
+process.stdout.write(JSON.stringify(result));
+""".strip()
+    with tempfile.NamedTemporaryFile(
+        mode="w", encoding="utf-8", suffix=".json", delete=False
+    ) as handle:
+        json.dump(snapshot, handle)
+        snapshot_path = Path(handle.name)
+    try:
+        completed = subprocess.run(
+            [
+                node_path,
+                "-e",
+                script,
+                str(PR_ANALYSIS_HELPER),
+                str(snapshot_path),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        )
+    finally:
+        snapshot_path.unlink(missing_ok=True)
+    return json.loads(completed.stdout)
+
+
+def run_js_helper_function(
+    helper_path: Path, function_name: str, payload: object
+) -> object:
+    node_path = shutil.which("node") or shutil.which("node.exe")
+    if node_path is None:
+        pytest.skip("node is required for autobot helper behavior tests")
+    script = """
+const fs = require("fs");
+const helper = require(process.argv[1]);
+const payload = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+const result = helper[process.argv[3]](payload);
+process.stdout.write(JSON.stringify(result));
+""".strip()
+    with tempfile.NamedTemporaryFile(
+        mode="w", encoding="utf-8", suffix=".json", delete=False
+    ) as handle:
+        json.dump(payload, handle)
+        payload_path = Path(handle.name)
+    try:
+        completed = subprocess.run(
+            [
+                node_path,
+                "-e",
+                script,
+                str(helper_path),
+                str(payload_path),
+                function_name,
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        )
+    finally:
+        payload_path.unlink(missing_ok=True)
+    return json.loads(completed.stdout)
+
+
+def parse_result_labels(result: dict[str, object], key: str) -> set[str]:
+    return set(json.loads(str(result[key])))
 
 
 def test_major_release_alert_is_scoped_to_breaking_prs() -> None:
@@ -89,8 +216,8 @@ def test_pr_summary_uses_tiered_budget_routing() -> None:
     )
     assert "estimated_ai_requests: String(estimatedAiRequests)," in helper
     assert "deterministic_summary: deterministicSummary," in helper
-    assert "const titleSuggestsBug =" in helper
-    assert "const titleSuggestsEnhancement =" in helper
+    assert "function deriveTitleSignals(prSignalText) {" in helper
+    assert "const titleSignals = deriveTitleSignals(prSignalText);" in helper
 
 
 def test_large_pr_path_caps_batch_summaries_and_merges_final_summary() -> None:
@@ -167,7 +294,7 @@ def test_final_summary_prompt_preserves_classification_signals() -> None:
 
     assert "### Classification Signals" in helper
     assert (
-        "Preserve explicit breaking-change, compatibility, migration, API, database, schema, runtime, security, workflow, tooling, test, and documentation signals"
+        "Preserve explicit breaking-change, compatibility, migration, API, database, schema, runtime, security, UI, workflow, tooling, test, and documentation signals"
         in helper
     )
     assert (
@@ -250,7 +377,8 @@ def test_summary_comment_includes_cached_cooldown_wait_notice() -> None:
         'const cooldownNotice = aiCooldownActive && prSummaryTier && prSummaryTier !== "zero_ai"'
         in helper
     )
-    assert "Try again after that time." in helper
+    assert "GitHub Models returned temporary throttling" in helper
+    assert "deterministic code-diff evidence only" in helper
 
 
 def test_ai_helper_tracks_48_hour_rate_limit_cooldown() -> None:
@@ -300,3 +428,251 @@ def test_workflow_uses_helper_backed_prompt_steps() -> None:
     assert "buildIssueSummaryArtifacts" in workflow
     assert "buildLabelPrompt" in workflow
     assert "autobot_prompts.js" in workflow
+
+
+def test_parse_final_pr_summary_rejects_raw_ai_error_text() -> None:
+    result = run_js_helper_function(
+        PROMPTS_HELPER,
+        "parseFinalPrSummary",
+        "Too many requests. For more on scraping GitHub and how it may affect your rights, please review our Terms of Service.",
+    )
+
+    assert result == {
+        "summaryBody": "",
+        "labelHints": "",
+        "labelHintsReady": "false",
+    }
+
+
+def test_pr_comment_body_uses_neutral_cooldown_notice() -> None:
+    result = run_js_helper_function(
+        PROJECT_MANAGER_HELPER,
+        "buildPrCommentBody",
+        {
+            "aiSummaryForComment": "## Autobot Summary\n\n### What Changed\nDeterministic fallback.",
+            "pullRequest": {
+                "number": 12,
+                "head": {"ref": "feature/refine-autobot"},
+                "base": {"ref": "main"},
+            },
+            "nextAiLabels": ["workflow"],
+            "aiCooldownActive": True,
+            "aiCooldownUntil": "2026-04-09T00:00:00.000Z",
+            "prSummaryTier": "single_ai",
+        },
+    )
+
+    assert "GitHub Models returned temporary throttling" in result
+    assert "scraping GitHub" not in result
+    assert "Terms of Service" not in result
+
+
+def test_issue_fallback_labels_keep_feature_requests_conservative() -> None:
+    result = run_js_helper_function(
+        PROJECT_MANAGER_HELPER,
+        "inferIssueLabels",
+        {
+            "title": "Feature request: add guided setup wizard",
+            "body": "## Proposing an Improvement or Enhancement\n\nCurrent Situation and Problem/Opportunity\nManual setup is slow.\n\nProposed Improvement/Enhancement\nAdd a guided setup wizard.",
+        },
+    )
+
+    assert result == ["enhancement"]
+
+
+def test_issue_fallback_labels_keep_explicit_proposals_specific() -> None:
+    result = run_js_helper_function(
+        PROJECT_MANAGER_HELPER,
+        "inferIssueLabels",
+        {
+            "title": "Proposal: RFC for plugin API roadmap",
+            "body": "This proposal outlines a future design direction and requests feedback before implementation.",
+        },
+    )
+
+    assert result == ["enhancement", "proposal"]
+
+
+def test_issue_fallback_labels_keep_documentation_issues_narrow() -> None:
+    result = run_js_helper_function(
+        PROJECT_MANAGER_HELPER,
+        "inferIssueLabels",
+        {
+            "title": "Documentation issue report",
+            "body": "Link(s) to the Affected Documentation\nREADME.md\n\nDetailed Description of the Problem\nThe install instructions are outdated.",
+        },
+    )
+
+    assert result == ["documentation"]
+
+
+def test_pr_analysis_detects_ui_without_version_false_positives() -> None:
+    result = run_pr_analysis(
+        build_snapshot(
+            title="Polish chat UI layout",
+            files=[
+                build_snapshot_file(
+                    "src/definers/presentation/apps/chat_app.py",
+                    """
++with gr.Blocks() as app:
++    send_button = gr.Button(\"Send\")
++    request_handler = build_request_handler()
++    response_body_preview = \"ok\"
++    db_snapshot = {}
++    schema_name = \"chat_layout\"
++    permission_note = \"visible\"
++    breaking_change_banner = False
+""".strip(),
+                )
+            ],
+        )
+    )
+
+    deterministic_labels = parse_result_labels(
+        result, "deterministic_labels_json"
+    )
+    candidate_labels = parse_result_labels(result, "candidate_labels_json")
+
+    assert "ui" in deterministic_labels
+    assert "ui" in candidate_labels
+    assert "api" not in deterministic_labels
+    assert "database" not in deterministic_labels
+    assert "schema" not in deterministic_labels
+    assert "security" not in deterministic_labels
+    assert "breaking-change" not in deterministic_labels
+
+
+def test_pr_analysis_detects_workflow_outside_github_workflows() -> None:
+    result = run_pr_analysis(
+        build_snapshot(
+            title="Tighten autobot release pipeline",
+            files=[
+                build_snapshot_file(
+                    "scripts/autobot_release_pipeline.py",
+                    """
++WORKFLOW_DISPATCH = True
++DEFAULT_CRON = \"0 5 * * *\"
++TRIAGE_LABELS = [\"bug\", \"security\"]
+""".strip(),
+                )
+            ],
+        )
+    )
+
+    deterministic_labels = parse_result_labels(
+        result, "deterministic_labels_json"
+    )
+
+    assert "workflow" in deterministic_labels
+    assert "automation" in deterministic_labels
+    assert "ci" in deterministic_labels
+
+
+def test_pr_analysis_detects_direct_security_and_api_evidence() -> None:
+    result = run_pr_analysis(
+        build_snapshot(
+            title="Harden GitHub models API auth",
+            files=[
+                build_snapshot_file(
+                    ".github/scripts/autobot_ai.js",
+                    """
++const AI_ENDPOINT = \"https://models.github.ai/inference/chat/completions\";
++const headers = { Authorization: `Bearer ${token}` };
++const permissions = { contents: \"read\", issues: \"write\" };
+""".strip(),
+                )
+            ],
+        )
+    )
+
+    deterministic_labels = parse_result_labels(
+        result, "deterministic_labels_json"
+    )
+
+    assert "api" in deterministic_labels
+    assert "security" in deterministic_labels
+    assert "github" in deterministic_labels
+
+
+def test_pr_analysis_does_not_infer_enhancement_from_generic_action_title() -> (
+    None
+):
+    result = run_pr_analysis(
+        build_snapshot(
+            title="Implement safer logging around training flows",
+            files=[
+                build_snapshot_file(
+                    "src/definers/application_ml/answer_service.py",
+                    """
++logger.info("Collected training flow telemetry")
++return build_answer_result(payload)
+""".strip(),
+                )
+            ],
+        )
+    )
+
+    deterministic_labels = parse_result_labels(
+        result, "deterministic_labels_json"
+    )
+    candidate_labels = parse_result_labels(result, "candidate_labels_json")
+
+    assert "enhancement" not in deterministic_labels
+    assert "enhancement" not in candidate_labels
+    assert "bug" not in deterministic_labels
+    assert "bug" not in candidate_labels
+
+
+def test_pr_analysis_ignores_generic_request_response_text_outside_api_surfaces() -> (
+    None
+):
+    result = run_pr_analysis(
+        build_snapshot(
+            title="Refine chat context assembly",
+            files=[
+                build_snapshot_file(
+                    "src/definers/application_chat/request_context_assembler.py",
+                    """
++request_body = normalize_payload(raw_message)
++response_body = build_context_summary(request_body)
++return response_body
+""".strip(),
+                )
+            ],
+        )
+    )
+
+    deterministic_labels = parse_result_labels(
+        result, "deterministic_labels_json"
+    )
+    candidate_labels = parse_result_labels(result, "candidate_labels_json")
+
+    assert "api" not in deterministic_labels
+    assert "api" not in candidate_labels
+
+
+def test_pr_analysis_ignores_runtime_words_in_documentation_only_changes() -> (
+    None
+):
+    result = run_pr_analysis(
+        build_snapshot(
+            title="Clarify Linux and Windows setup docs",
+            files=[
+                build_snapshot_file(
+                    "README.md",
+                    """
++The runtime examples below were validated on Windows, Linux, and macOS.
++Python 3.11 remains the recommended baseline for local setup.
+""".strip(),
+                )
+            ],
+        )
+    )
+
+    deterministic_labels = parse_result_labels(
+        result, "deterministic_labels_json"
+    )
+    candidate_labels = parse_result_labels(result, "candidate_labels_json")
+
+    assert deterministic_labels == {"documentation"}
+    assert "runtime" not in candidate_labels
