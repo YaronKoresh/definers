@@ -136,8 +136,9 @@ function parseAILabels(raw) {
   return [];
 }
 
-function resolvePrLabelDelta({ action, previousBotLabels, aiLabelsRaw }) {
+function resolvePrLabelDelta({ action, previousBotLabels, currentPrLabels, aiLabelsRaw }) {
   const previousLabels = uniqueValidLabels(previousBotLabels);
+  const currentLabels = uniqueValidLabels(currentPrLabels);
   const rawAiLabels = String(aiLabelsRaw || "").trim();
   const parsedAiLabels = trimLowSignalLabels(parseAILabels(rawAiLabels)).slice(0, MAX_AI_LABELS);
   const hasFreshPrLabelResult = rawAiLabels !== "";
@@ -150,11 +151,12 @@ function resolvePrLabelDelta({ action, previousBotLabels, aiLabelsRaw }) {
   }
 
   const labelsToRemove = hasFreshPrLabelResult
-    ? previousLabels.filter((label) => !nextAiLabels.includes(label))
+    ? previousLabels.filter((label) => currentLabels.includes(label) && !nextAiLabels.includes(label))
     : [];
-  const labelsToAdd = nextAiLabels.filter((label) => !previousLabels.includes(label));
+  const labelsToAdd = nextAiLabels.filter((label) => !currentLabels.includes(label));
 
   return {
+    currentPrLabels: currentLabels,
     hasFreshPrLabelResult,
     labelsToAdd,
     labelsToRemove,
@@ -453,8 +455,10 @@ function buildMilestoneComment({ milestoneChanged, previousMilestoneTitle, final
 async function prepareProjectState({ github, owner, repo, context, issueNumber, aiSummary, aiLabelsRaw, aiCooldownActive, aiCooldownUntil, prSummaryTier, stateFile }) {
   const payload = context.payload;
   const isPR = context.eventName === "pull_request";
+  const livePrIssue = isPR ? await github.rest.issues.get({ owner, repo, issue_number: issueNumber }) : null;
   const aiSummaryForComment = String(aiSummary || "").replace(/\nEND_OF_REPORT\s*$/m, "").trim();
   const payloadIssue = payload.issue || {};
+  const currentPrLabels = isPR ? labelNamesFromIssue(livePrIssue?.data) : [];
   const existingIssueLabels = labelNamesFromIssue(payloadIssue);
   const rawAiLabels = String(aiLabelsRaw || "").trim();
   const parsedAiLabels = trimLowSignalLabels(parseAILabels(rawAiLabels)).slice(0, MAX_AI_LABELS);
@@ -479,6 +483,7 @@ async function prepareProjectState({ github, owner, repo, context, issueNumber, 
   if (isPR) {
     const prLabelDelta = resolvePrLabelDelta({
       action: payload.action,
+      currentPrLabels,
       previousBotLabels,
       aiLabelsRaw: rawAiLabels
     });

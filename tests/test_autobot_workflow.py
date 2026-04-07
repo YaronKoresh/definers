@@ -303,13 +303,16 @@ def test_final_summary_prompt_preserves_classification_signals() -> None:
     )
 
 
-def test_synchronize_with_fresh_analysis_replaces_previous_bot_labels() -> None:
+def test_synchronize_with_fresh_analysis_reconciles_against_live_pr_labels() -> (
+    None
+):
     helper = read_project_manager_helper()
 
     assert (
-        "function resolvePrLabelDelta({ action, previousBotLabels, aiLabelsRaw }) {"
+        "function resolvePrLabelDelta({ action, previousBotLabels, currentPrLabels, aiLabelsRaw }) {"
         in helper
     )
+    assert "const currentLabels = uniqueValidLabels(currentPrLabels);" in helper
     assert 'const hasFreshPrLabelResult = rawAiLabels !== "";' in helper
     assert "if (hasFreshPrLabelResult) {" in helper
     assert "nextAiLabels = parsedAiLabels;" in helper
@@ -318,6 +321,18 @@ def test_synchronize_with_fresh_analysis_replaces_previous_bot_labels() -> None:
         in helper
     )
     assert "const labelsToRemove = hasFreshPrLabelResult" in helper
+    assert (
+        "const labelsToAdd = nextAiLabels.filter((label) => !currentLabels.includes(label));"
+        in helper
+    )
+    assert (
+        "const livePrIssue = isPR ? await github.rest.issues.get({ owner, repo, issue_number: issueNumber }) : null;"
+        in helper
+    )
+    assert (
+        "const currentPrLabels = isPR ? labelNamesFromIssue(livePrIssue?.data) : [];"
+        in helper
+    )
 
 
 def test_issue_label_fallback_uses_reduced_default_label_set() -> None:
@@ -467,6 +482,13 @@ def test_pr_label_delta_replaces_stale_labels_on_synchronize() -> None:
         "resolvePrLabelDelta",
         {
             "action": "synchronize",
+            "currentPrLabels": [
+                "breaking-change",
+                "security",
+                "database",
+                "schema",
+                "compatibility",
+            ],
             "previousBotLabels": [
                 "breaking-change",
                 "security",
@@ -496,6 +518,7 @@ def test_pr_label_delta_replaces_stale_labels_on_synchronize() -> None:
         "compatibility",
     ]
     assert set(result["labelsToAdd"]) == {
+        "api",
         "ui",
         "workflow",
         "automation",
@@ -511,6 +534,7 @@ def test_pr_label_delta_clears_previous_labels_when_fresh_result_is_empty() -> (
         "resolvePrLabelDelta",
         {
             "action": "synchronize",
+            "currentPrLabels": ["breaking-change", "security"],
             "previousBotLabels": ["breaking-change", "security", "api"],
             "aiLabelsRaw": "[]",
         },
@@ -518,8 +542,47 @@ def test_pr_label_delta_clears_previous_labels_when_fresh_result_is_empty() -> (
 
     assert result["hasFreshPrLabelResult"] is True
     assert result["nextAiLabels"] == []
-    assert result["labelsToRemove"] == ["breaking-change", "security", "api"]
+    assert result["labelsToRemove"] == ["breaking-change", "security"]
     assert result["labelsToAdd"] == []
+
+
+def test_pr_label_delta_readds_label_missing_from_live_pr_state() -> None:
+    result = run_js_helper_function(
+        PROJECT_MANAGER_HELPER,
+        "resolvePrLabelDelta",
+        {
+            "action": "synchronize",
+            "currentPrLabels": [
+                "ui",
+                "automation",
+                "test",
+                "workflow",
+                "github",
+            ],
+            "previousBotLabels": [
+                "api",
+                "ui",
+                "automation",
+                "test",
+                "workflow",
+                "github",
+            ],
+            "aiLabelsRaw": json.dumps(
+                ["api", "ui", "automation", "test", "workflow", "github"]
+            ),
+        },
+    )
+
+    assert set(result["nextAiLabels"]) == {
+        "api",
+        "ui",
+        "automation",
+        "test",
+        "workflow",
+        "github",
+    }
+    assert result["labelsToRemove"] == []
+    assert result["labelsToAdd"] == ["api"]
 
 
 def test_issue_fallback_labels_keep_feature_requests_conservative() -> None:
