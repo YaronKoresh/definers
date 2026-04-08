@@ -2,7 +2,7 @@ import os
 import unittest
 from unittest.mock import patch
 
-from definers.platform.filesystem import exist
+from definers.system.filesystem import exist
 
 
 class TestExist(unittest.TestCase):

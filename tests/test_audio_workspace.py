@@ -1,6 +1,6 @@
 from contextlib import nullcontext
 
-from definers.presentation.apps.audio_workspace import (
+from definers.ui.apps.audio_workspace import (
     AUDIO_TOOL_MAP,
     get_audio_language_choices,
     prepare_audio_workspace,
@@ -47,7 +47,7 @@ def test_prepare_audio_workspace_defers_runtime_bootstrap(monkeypatch):
     monkeypatch.setattr("definers.system.cwd", lambda: nullcontext())
     monkeypatch.setattr("definers.system.exist", lambda path: False)
     monkeypatch.setattr(
-        "definers.presentation.lyric_video_service.init_stable_whisper",
+        "definers.ui.lyric_video_service.init_stable_whisper",
         lambda: stable_whisper_calls.append("stable-whisper"),
     )
     monkeypatch.setattr(

@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from definers.application_data.preparation import (
+from definers.data.preparation import (
     TrainingData,
     order_dataset,
     prepare_data,
@@ -86,7 +86,7 @@ class TestPrepareDataHelpers(unittest.TestCase):
 
         from unittest.mock import patch
 
-        with patch("definers.application_data.loaders.fetch_dataset") as mf:
+        with patch("definers.data.loaders.fetch_dataset") as mf:
             mf.return_value = [
                 {"x": 1, "label": 0},
                 {"x": 2, "label": 1},
@@ -121,7 +121,7 @@ class TestPrepareDataHelpers(unittest.TestCase):
             return [1, 2, 3]
 
         with patch(
-            "definers.application_data.loaders.load_source",
+            "definers.data.loaders.load_source",
             side_effect=fake_load_source,
         ):
             td1 = prepare_data(features=["a"], batch_size=1)

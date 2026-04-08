@@ -2,7 +2,7 @@ import asyncio
 
 import pytest
 
-from definers.shared_kernel.resilience import (
+from definers.resilience import (
     ExponentialBackoffDelay,
     RetryPolicy,
     execute_with_retry_async,

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import numpy as np
 
-from definers.presentation.apps import audio_app_services as services
+from definers.ui.apps import audio_app_services as services
 
 
 def _patch_audio_symbol(

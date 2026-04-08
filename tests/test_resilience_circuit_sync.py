@@ -1,6 +1,6 @@
 import pytest
 
-from definers.shared_kernel.resilience import (
+from definers.resilience import (
     CircuitBreaker,
     CircuitBreakerOpenException,
     CircuitState,

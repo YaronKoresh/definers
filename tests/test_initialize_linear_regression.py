@@ -3,7 +3,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from definers.application_ml.training import initialize_linear_regression
+from definers.ml.training import initialize_linear_regression
 from tests.torch_stubs import FakeModel, build_fake_torch
 
 

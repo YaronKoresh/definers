@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from definers.application_data.vectorizers import (
+from definers.data.vectorizers import (
     create_vectorizer,
     vectorize,
 )

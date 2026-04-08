@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import numpy as np
 
-from definers.application_ml.inference import predict_linear_regression
+from definers.ml.inference import predict_linear_regression
 from tests.torch_stubs import FakeModel, build_fake_torch
 
 
@@ -26,7 +26,7 @@ class TestPredictLinearRegression(unittest.TestCase):
         fake_torch = build_fake_torch(load_return_value=self.model_state)
         with (
             patch(
-                "definers.application_ml.inference._sanitize_prediction_path",
+                "definers.ml.inference._sanitize_prediction_path",
                 side_effect=lambda x: x,
             ),
             patch.dict(sys.modules, {"torch": fake_torch}),
@@ -48,7 +48,7 @@ class TestPredictLinearRegression(unittest.TestCase):
         )
         with (
             patch(
-                "definers.application_ml.inference._sanitize_prediction_path",
+                "definers.ml.inference._sanitize_prediction_path",
                 side_effect=lambda x: x,
             ),
             patch.dict(sys.modules, {"torch": fake_torch}),
@@ -65,7 +65,7 @@ class TestPredictLinearRegression(unittest.TestCase):
         fake_torch = build_fake_torch(load_return_value=self.model_state)
         with (
             patch(
-                "definers.application_ml.inference._sanitize_prediction_path",
+                "definers.ml.inference._sanitize_prediction_path",
                 side_effect=lambda x: x,
             ),
             patch.dict(sys.modules, {"torch": fake_torch}),
@@ -82,7 +82,7 @@ class TestPredictLinearRegression(unittest.TestCase):
         fake_torch = build_fake_torch(load_return_value=self.model_state)
         with (
             patch(
-                "definers.application_ml.inference._sanitize_prediction_path",
+                "definers.ml.inference._sanitize_prediction_path",
                 side_effect=lambda x: x,
             ),
             patch.dict(sys.modules, {"torch": fake_torch}),
@@ -100,7 +100,7 @@ class TestPredictLinearRegression(unittest.TestCase):
         fake_torch = build_fake_torch(load_return_value=self.model_state)
         with (
             patch(
-                "definers.application_ml.inference._sanitize_prediction_path",
+                "definers.ml.inference._sanitize_prediction_path",
                 side_effect=lambda x: x,
             ),
             patch.dict(sys.modules, {"torch": fake_torch}),
@@ -117,7 +117,7 @@ class TestPredictLinearRegression(unittest.TestCase):
     def test_rejected_model_path(self):
         X_new = np.array([[5.0, 6.0]], dtype=np.float32)
         with patch(
-            "definers.application_ml.inference._sanitize_prediction_path",
+            "definers.ml.inference._sanitize_prediction_path",
             return_value=None,
         ):
             predictions = predict_linear_regression(

@@ -3,11 +3,11 @@ from unittest.mock import MagicMock, patch
 
 from PIL import Image, ImageDraw, ImageFont
 
-import definers.media.image_helpers as image_helpers_module
+import definers.image.helpers as image_helpers_module
 import definers.media.web_transfer as web_transfer_module
 import definers.os_utils as os_utils
 import definers.path_utils as path_utils
-import definers.platform.filesystem as filesystem_module
+import definers.system.filesystem as filesystem_module
 
 if not hasattr(os_utils, "get_python_version"):
     os_utils.get_python_version = lambda: "3.10"

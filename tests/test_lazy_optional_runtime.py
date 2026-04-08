@@ -1,10 +1,11 @@
 import sys
 import types
 
-from definers.application_ml.answer_service import AnswerService
-from definers.application_ml.text_generation import TextGenerationService
-from definers.application_text import translation
+from definers.ml.answer_service import AnswerService
+from definers.ml.text_generation import TextGenerationService
+
 from definers.constants import MODELS, TOKENIZERS
+from definers.text import translation
 
 
 class FakeTensor:

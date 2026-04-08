@@ -5,7 +5,7 @@ import importlib
 import numpy as np
 
 from definers.logger import init_logger
-from definers.platform.paths import full_path, tmp
+from definers.system.paths import full_path, tmp
 
 _logger = init_logger()
 
@@ -19,11 +19,11 @@ def _load_audio_analysis_backend():
 
 
 def _load_array_backend():
-    return importlib.import_module("definers.application_data.arrays")
+    return importlib.import_module("definers.data.arrays")
 
 
 def _load_model_introspection_backend():
-    return importlib.import_module("definers.application_ml.introspection")
+    return importlib.import_module("definers.ml.introspection")
 
 
 def extract_audio_features(

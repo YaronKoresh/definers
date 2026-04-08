@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from definers.application_ml import repository_sync
+from definers.ml import repository_sync
 
 
 class TestRepositorySyncHelpers(unittest.TestCase):

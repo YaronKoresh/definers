@@ -3,10 +3,10 @@ from __future__ import annotations
 import numpy as np
 
 from definers.constants import MADMOM_AVAILABLE
+from definers.image.helpers import get_max_resolution
 from definers.logger import init_logger
-from definers.media.image_helpers import get_max_resolution
-from definers.platform.paths import tmp
 from definers.system import cores
+from definers.system.paths import tmp
 
 from .dependencies import librosa_module
 

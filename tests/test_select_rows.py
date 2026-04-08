@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from definers.application_data.loaders import select_rows
+from definers.data.loaders import select_rows
 from tests.optional_dependency_stubs import (
     FakeDataset,
     build_fake_datasets_module,

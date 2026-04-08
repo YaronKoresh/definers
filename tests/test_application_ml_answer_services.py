@@ -1,12 +1,12 @@
 from types import SimpleNamespace
 
-from definers.application_ml.answer_content_path_resolver import (
+from definers.ml.answer_content_path_resolver import (
     AnswerContentPathResolver,
 )
-from definers.application_ml.answer_dependency_loader import (
+from definers.ml.answer_dependency_loader import (
     AnswerDependencyLoader,
 )
-from definers.application_ml.answer_text_service import AnswerTextService
+from definers.ml.answer_text_service import AnswerTextService
 
 
 def test_answer_content_paths_ignores_entries_without_paths():

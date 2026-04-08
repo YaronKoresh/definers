@@ -73,7 +73,7 @@ def test_multiple_lazy_attributes_use_package_qualified_import_names():
     original_import_module = importlib.import_module
     sox_module = types.ModuleType("sox")
     text_module = types.ModuleType("definers.text")
-    platform_module = types.ModuleType("definers.platform")
+    platform_module = types.ModuleType("definers.system")
     imported_names: list[str] = []
 
     def fake_import_module(name: str, package: str | None = None):
@@ -82,7 +82,7 @@ def test_multiple_lazy_attributes_use_package_qualified_import_names():
             return sox_module
         if name == "definers.text":
             return text_module
-        if name == "definers.platform":
+        if name == "definers.system":
             return platform_module
         return original_import_module(name, package)
 
@@ -90,10 +90,10 @@ def test_multiple_lazy_attributes_use_package_qualified_import_names():
         import definers
 
         assert definers.text is text_module
-        assert definers.platform is platform_module
+        assert definers.system is platform_module
 
     assert imported_names.count("definers.text") == 1
-    assert imported_names.count("definers.platform") == 1
+    assert imported_names.count("definers.system") == 1
     unload_package_root()
 
 
@@ -102,12 +102,12 @@ def test_application_data_lazy_attribute_exposes_submodules():
 
     import definers
 
-    first_value = definers.application_data.arrays
-    second_value = definers.application_data.arrays
+    first_value = definers.data.arrays
+    second_value = definers.data.arrays
 
     assert first_value is second_value
-    assert first_value.__name__ == "definers.application_data.arrays"
-    assert definers.application_data.__dict__["arrays"] is first_value
+    assert first_value.__name__ == "definers.data.arrays"
+    assert definers.data.__dict__["arrays"] is first_value
     unload_package_root()
 
 
@@ -115,12 +115,12 @@ def test_application_data_patch_target_resolves_after_root_reload():
     unload_package_root()
 
     with mock.patch(
-        "definers.application_data.arrays.two_dim_numpy",
+        "definers.data.arrays.two_dim_numpy",
         return_value="patched",
     ):
         import definers
 
-        assert definers.application_data.arrays.two_dim_numpy([]) == "patched"
+        assert definers.data.arrays.two_dim_numpy([]) == "patched"
 
     unload_package_root()
 

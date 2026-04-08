@@ -2,8 +2,8 @@ import unittest
 
 import numpy as np
 
-from definers.application_data.vectorizers import create_vectorizer
-from definers.application_ml.inference import extract_text_features
+from definers.data.vectorizers import create_vectorizer
+from definers.ml.inference import extract_text_features
 
 
 class TestExtractTextFeatures(unittest.TestCase):

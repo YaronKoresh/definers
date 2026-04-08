@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from definers.persistence.database import Database
+from definers.database import Database
 
 
 class TestDatabase(unittest.TestCase):

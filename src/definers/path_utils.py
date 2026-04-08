@@ -4,7 +4,7 @@ import site
 import subprocess
 import sys
 
-from definers.platform.paths import (
+from definers.system.paths import (
     cwd,
     full_path,
     normalize_path,
@@ -12,7 +12,7 @@ from definers.platform.paths import (
     tmp,
     unique,
 )
-from definers.platform.services import get_infrastructure_services
+from definers.system.services import get_infrastructure_services
 
 
 def add_path(*p):

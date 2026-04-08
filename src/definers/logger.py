@@ -1,6 +1,6 @@
 import logging
 
-from definers.shared_kernel.observability import (
+from definers.observability import (
     MESSAGE_SCHEMA,
     init_logger as _init_logger,
 )

@@ -5,9 +5,9 @@ import os
 import numpy as np
 
 import definers.file_ops as file_ops
-from definers.platform.filesystem import exist
-from definers.platform.paths import full_path, tmp
 from definers.system import get_ext
+from definers.system.filesystem import exist
+from definers.system.paths import full_path, tmp
 
 
 def is_audio_segment(audio_signal) -> bool:

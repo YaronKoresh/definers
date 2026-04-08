@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from definers.video_gui import normalize_arr
+from definers.video.gui import normalize_arr
 
 
 class TestNormalizeArr(unittest.TestCase):

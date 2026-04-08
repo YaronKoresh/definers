@@ -67,6 +67,7 @@ class MasteringSeparatorPlan:
     target_sample_rate: int
     quality_flags: tuple[str, ...]
     preprocess_stages: tuple[SeparatorModelStage, ...]
+    vocal_pair_stage: SeparatorModelStage | None
     reference_split_stage: SeparatorModelStage
     four_stem_stage: SeparatorModelStage
     vocal_stage: SeparatorModelStage
@@ -132,6 +133,10 @@ def build_mastering_separator_plan(
         )
     )
     override_model_name = _normalize_optional_model_name(model_name)
+    use_vocal_pair_stage = (
+        override_model_name is None
+        or override_model_name.lower() in _MASTERING_RESERVED_MODEL_NAMES
+    )
     four_stem_candidates = ["htdemucs_ft.yaml", "hdemucs_mmi.yaml"]
     if (
         override_model_name is not None
@@ -174,16 +179,28 @@ def build_mastering_separator_plan(
             ),
         )
 
+    reference_split_candidates = [
+        "MDX23C-8KFFT-InstVoc_HQ.ckpt",
+        "bs_roformer_instrumental_resurrection_unwa.ckpt",
+    ]
+    if use_vocal_pair_stage:
+        reference_split_candidates = [
+            "bs_roformer_instrumental_resurrection_unwa.ckpt",
+            "MDX23C-8KFFT-InstVoc_HQ.ckpt",
+        ]
+
     return MasteringSeparatorPlan(
         target_sample_rate=_resolve_mastering_sample_rate(input_sample_rate),
         quality_flags=resolved_quality_flags,
         preprocess_stages=preprocess_stages,
+        vocal_pair_stage=(
+            _build_vocal_pair_stage("mastering")
+            if use_vocal_pair_stage
+            else None
+        ),
         reference_split_stage=SeparatorModelStage(
             model_candidates=_normalize_stage_candidates(
-                (
-                    "MDX23C-8KFFT-InstVoc_HQ.ckpt",
-                    "bs_roformer_instrumental_resurrection_unwa.ckpt",
-                )
+                tuple(reference_split_candidates)
             ),
             preferred_stems=("other", "instrumental"),
             required=False,
@@ -301,12 +318,14 @@ def _resolve_output_paths(
     for output_file in _flatten_output_files(output_files):
         candidate_path = Path(output_file)
         if candidate_path.is_absolute():
-            resolved_output_paths.append(str(candidate_path))
+            if candidate_path.exists():
+                resolved_output_paths.append(str(candidate_path))
             continue
         output_path = Path(output_dir) / output_file
         if not output_path.exists():
             output_path = Path(output_dir) / candidate_path.name
-        resolved_output_paths.append(str(output_path))
+        if output_path.exists():
+            resolved_output_paths.append(str(output_path))
     return tuple(resolved_output_paths)
 
 
@@ -619,14 +638,35 @@ def _run_mastering_separator_pipeline(
             shifts=shifts,
         )
 
-    instrumental_reference_path = _apply_stage_to_single_output(
-        working_mix_path,
-        plan.reference_split_stage,
-        "reference_split",
-        output_root,
-        plan.target_sample_rate,
-        shifts=shifts,
-    )
+    isolated_vocal_path: str | None = None
+    instrumental_reference_path: str | None = None
+    if plan.vocal_pair_stage is not None:
+        _model_name, vocal_pair_outputs = _run_separator_stage(
+            working_mix_path,
+            plan.vocal_pair_stage,
+            str(Path(output_root) / "vocal_pair"),
+            plan.target_sample_rate,
+            shifts=shifts,
+        )
+        isolated_vocal_path = _select_stage_output(
+            vocal_pair_outputs,
+            ("vocals",),
+        )
+        instrumental_reference_path = _select_stage_output(
+            vocal_pair_outputs,
+            ("instrumental", "other"),
+        )
+        if isolated_vocal_path is None or instrumental_reference_path is None:
+            raise FileNotFoundError("Mastering stem separation failed")
+    else:
+        instrumental_reference_path = _apply_stage_to_single_output(
+            working_mix_path,
+            plan.reference_split_stage,
+            "reference_split",
+            output_root,
+            plan.target_sample_rate,
+            shifts=shifts,
+        )
 
     four_stem_input_path = instrumental_reference_path or working_mix_path
     _four_stem_model_name, four_stem_outputs = _run_separator_stage(
@@ -642,14 +682,15 @@ def _run_mastering_separator_pipeline(
     if drums_path is None or bass_path is None or other_path is None:
         raise FileNotFoundError("Mastering stem separation failed")
 
-    isolated_vocal_path = _apply_stage_to_single_output(
-        working_mix_path,
-        plan.vocal_stage,
-        "vocal_isolation",
-        output_root,
-        plan.target_sample_rate,
-        shifts=shifts,
-    )
+    if isolated_vocal_path is None:
+        isolated_vocal_path = _apply_stage_to_single_output(
+            working_mix_path,
+            plan.vocal_stage,
+            "vocal_isolation",
+            output_root,
+            plan.target_sample_rate,
+            shifts=shifts,
+        )
     restored_vocal_path = _apply_stage_to_single_output(
         isolated_vocal_path,
         plan.vocal_restoration_stage,

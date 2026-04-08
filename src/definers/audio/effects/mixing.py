@@ -5,8 +5,8 @@ from pathlib import Path
 import numpy as np
 
 from definers.logger import init_logger
-from definers.platform.filesystem import delete
-from definers.platform.paths import tmp
+from definers.system.filesystem import delete
+from definers.system.paths import tmp
 
 from ..io import save_audio
 

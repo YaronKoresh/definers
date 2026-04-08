@@ -3,7 +3,7 @@ import sys
 import unittest
 from unittest.mock import MagicMock, patch
 
-import definers.platform.processes as processes
+import definers.system.processes as processes
 from definers.system import run_windows
 
 

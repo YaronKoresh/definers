@@ -1,4 +1,4 @@
-from definers.application_ml.health import (
+from definers.ml.health import (
     collect_ml_health_snapshot,
     render_ml_health_markdown,
     validate_ml_health_snapshot,

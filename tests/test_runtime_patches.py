@@ -1,6 +1,6 @@
 import unittest
 
-from definers.application_data.runtime_patches import init_cupy_numpy
+from definers.data.runtime_patches import init_cupy_numpy
 
 
 class TestRuntimePatches(unittest.TestCase):

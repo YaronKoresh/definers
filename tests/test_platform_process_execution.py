@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-import definers.platform.processes as processes
+import definers.system.processes as processes
 
 
 def test_run_command_returns_stdout_lines_and_merges_env(

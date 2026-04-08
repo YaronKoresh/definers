@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from definers.application_data.arrays import numpy_to_list
+from definers.data.arrays import numpy_to_list
 
 
 class TestNumpyToList(unittest.TestCase):

@@ -1,6 +1,10 @@
-import definers.application_text.system_messages as system_messages
-import definers.application_text.text_transforms as text_transforms
-import definers.application_text.translation as translation
+from definers.ml.text_api import map_reduce_summary, optimize_prompt_realism
+from definers.system_archives import compress, extract, get_ext, secure_path
+from definers.system_installation import apt_install, install_ffmpeg
+
+import definers.text.system_messages as system_messages
+import definers.text.text_transforms as text_transforms
+import definers.text.translation as translation
 from definers import ml as ml_facade
 from definers.audio import (
     editing,
@@ -70,11 +74,11 @@ from definers.audio.mastering_stems import (
     process_stem_layers,
     resolve_stem_mastering_plan,
 )
-from definers.ml_health import get_ml_health_snapshot, ml_health_markdown
-from definers.ml_regression import linear_regression, predict_linear_regression
-from definers.ml_text import map_reduce_summary, optimize_prompt_realism
-from definers.system_archives import compress, extract, get_ext, secure_path
-from definers.system_installation import apt_install, install_ffmpeg
+from definers.ml.health_api import get_ml_health_snapshot, ml_health_markdown
+from definers.ml.regression_api import (
+    linear_regression,
+    predict_linear_regression,
+)
 
 
 def test_audio_production_facade_reexports_specific_modules():

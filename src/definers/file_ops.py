@@ -1,7 +1,4 @@
-from definers.platform.filesystem import save
-from definers.shared_kernel.observability import catch_exception, log_message
-
-from .platform.paths import tmp
+from definers.observability import catch_exception, log_message
 
 
 def log(
@@ -23,6 +20,9 @@ def catch(
 
 
 def save_temp_text(text_content):
+    from definers.system.filesystem import save
+    from definers.system.paths import tmp
+
     if text_content is None:
         return None
     temp_path = tmp("data")

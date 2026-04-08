@@ -1,8 +1,7 @@
 from types import SimpleNamespace
 
 import pytest
-
-from definers.presentation.apps.train_handlers import (
+from definers.ui.apps.train_handlers import (
     build_training_plan_markdown,
     handle_answer,
     handle_features_to_text,
@@ -46,7 +45,7 @@ def test_build_training_plan_markdown_uses_auto_trainer_plan(monkeypatch):
     monkeypatch.setattr(ml_module, "AutoTrainer", FakeTrainer)
     monkeypatch.setattr(ml_module, "simple_text", lambda value: value)
     monkeypatch.setattr(
-        "definers.application_ml.trainer_plan.render_training_plan_markdown",
+        "definers.ml.trainer_plan.render_training_plan_markdown",
         lambda plan: f"plan:{plan.mode}:{plan.source_summary}",
     )
 
@@ -95,7 +94,7 @@ def test_handle_training_returns_model_output_and_plan(monkeypatch):
     monkeypatch.setattr(ml_module, "AutoTrainer", FakeTrainer)
     monkeypatch.setattr(ml_module, "simple_text", lambda value: value)
     monkeypatch.setattr(
-        "definers.application_ml.trainer_plan.render_training_plan_markdown",
+        "definers.ml.trainer_plan.render_training_plan_markdown",
         lambda plan: f"plan:{plan.mode}:{plan.source_summary}",
     )
 

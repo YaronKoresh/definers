@@ -3,11 +3,11 @@ import types
 import unittest
 from unittest.mock import patch
 
-import definers.presentation.chat_handlers as presentation_chat_handlers
 import definers.text as text
-from definers.application_text.validation import TextValidationError
+import definers.ui.chat_handlers as presentation_chat_handlers
 from definers.constants import MAX_CONSECUTIVE_SPACES, MAX_INPUT_LENGTH
-from definers.presentation.chat_handlers import get_chat_response
+from definers.text.validation import TextValidationError
+from definers.ui.chat_handlers import get_chat_response
 
 
 class TestChatValidation(unittest.TestCase):

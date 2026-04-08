@@ -204,7 +204,7 @@ def test_auto_install_import_retries_known_module(monkeypatch):
 
     result = optional_dependencies._auto_install_import(
         "gradio",
-        globals={"__name__": "definers.presentation.apps.chat_app"},
+        globals={"__name__": "definers.ui.apps.chat_app"},
     )
 
     assert result is sentinel
@@ -237,7 +237,7 @@ def test_auto_install_import_patch_does_not_corrupt_global_imports(
 
     result = optional_dependencies._auto_install_import(
         "gradio",
-        globals={"__name__": "definers.presentation.apps.chat_app"},
+        globals={"__name__": "definers.ui.apps.chat_app"},
     )
 
     assert result is sentinel

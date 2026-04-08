@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from definers.application_data.preparation import to_loader
+from definers.data.preparation import to_loader
 from tests.torch_stubs import build_fake_torch_modules
 
 

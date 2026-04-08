@@ -2,7 +2,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from definers.application_ml import answer
+from definers.ml import answer
 
 
 class TestAnswer(unittest.TestCase):

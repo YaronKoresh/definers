@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-import definers.platform.paths as path_module
+import definers.system.paths as path_module
 from definers.system import secure_path
 
 

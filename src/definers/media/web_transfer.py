@@ -16,7 +16,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Protocol, runtime_checkable
 
 from definers.constants import user_agents
-from definers.shared_kernel.resilience import (
+from definers.resilience import (
     CircuitBreaker,
     CircuitBreakerOpenException,
     ExponentialBackoffDelay,

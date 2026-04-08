@@ -1,5 +1,5 @@
-import definers.persistence.database as database_module
-from definers.persistence.database import Database
+import definers.database as database_module
+from definers.database import Database
 
 
 def test_history_applies_days_filter_and_returns_descending_records(

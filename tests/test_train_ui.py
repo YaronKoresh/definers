@@ -1,6 +1,6 @@
 from types import ModuleType
 
-from definers.presentation.apps import train_ui
+from definers.ui.apps import train_ui
 
 
 def test_train_studio_metadata_covers_ml_surface():

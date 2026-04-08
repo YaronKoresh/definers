@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-import definers.application_data.loaders as loaders_module
+import definers.data.loaders as loaders_module
 
 
 class TestSelectColumns(unittest.TestCase):

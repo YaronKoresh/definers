@@ -1,13 +1,13 @@
 from argparse import Namespace
 
-from definers.application_shell.cli_request import CliRequest
-from definers.application_shell.command_dispatcher import CliCommandDispatcher
-from definers.application_shell.command_parser import CliCommandParser
-from definers.application_shell.command_registry import CliCommandRegistry
-from definers.application_shell.lyric_video_command import LyricVideoCommand
-from definers.application_shell.music_video_command import MusicVideoCommand
-from definers.application_shell.start_command import StartCommand
-from definers.application_shell.unknown_command import UnknownCommand
+from definers.cli.cli_request import CliRequest
+from definers.cli.command_dispatcher import CliCommandDispatcher
+from definers.cli.command_parser import CliCommandParser
+from definers.cli.command_registry import CliCommandRegistry
+from definers.cli.lyric_video_command import LyricVideoCommand
+from definers.cli.music_video_command import MusicVideoCommand
+from definers.cli.start_command import StartCommand
+from definers.cli.unknown_command import UnknownCommand
 
 
 def test_application_shell_facade_exports_parser_and_dispatcher():

@@ -1,7 +1,7 @@
 import builtins
 import sys
 
-from definers.application_text.validation import (
+from definers.text.validation import (
     TextInputValidator,
     TextValidationError,
 )

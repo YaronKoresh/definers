@@ -5,7 +5,7 @@ from importlib import import_module
 
 def _load_modules():
     return import_module("definers.path_utils"), import_module(
-        "definers.platform.paths"
+        "definers.system.paths"
     )
 
 

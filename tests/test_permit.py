@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-import definers.platform.filesystem as filesystem
+import definers.system.filesystem as filesystem
 
 
 class TestPermit(unittest.TestCase):

@@ -161,13 +161,15 @@ def test_run_separator_stage_batch_reuses_loaded_model_for_cleanup(
                 input_paths = [input_paths]
             resolved_inputs = [str(path) for path in input_paths]
             separate_calls.append(resolved_inputs)
-            return [
-                str(
+            output_paths = []
+            for input_path in resolved_inputs:
+                output_path = (
                     Path(self.output_dir)
                     / f"{Path(input_path).stem}_(No_Bleed)_cleanup.wav"
                 )
-                for input_path in resolved_inputs
-            ]
+                output_path.write_text("cleanup", encoding="utf-8")
+                output_paths.append(str(output_path))
+            return output_paths
 
     monkeypatch.setattr(
         STEMS_MODULE,
@@ -203,3 +205,83 @@ def test_run_separator_stage_batch_reuses_loaded_model_for_cleanup(
         "overlap": 0.25,
         "segments_enabled": True,
     }
+
+
+def test_run_separator_stage_ignores_missing_output_paths(
+    tmp_path: Path,
+    monkeypatch,
+):
+    loaded_models: list[str] = []
+
+    class FakeSeparator:
+        def __init__(self, **kwargs):
+            self.output_dir = kwargs["output_dir"]
+            self.loaded_model = ""
+
+        def load_model(self, model_filename):
+            self.loaded_model = str(model_filename)
+            loaded_models.append(self.loaded_model)
+
+        def separate(self, input_path):
+            output_path = (
+                Path(self.output_dir)
+                / f"{Path(str(input_path)).stem}_(Vocals)_{self.loaded_model}.wav"
+            )
+            if self.loaded_model == "good.ckpt":
+                output_path.write_text("vocals", encoding="utf-8")
+            return [str(output_path)]
+
+    monkeypatch.setattr(
+        STEMS_MODULE,
+        "_load_audio_separator_class",
+        lambda: FakeSeparator,
+    )
+
+    model_name, output_files = STEMS_MODULE._run_separator_stage(
+        "song.wav",
+        STEMS_MODULE.SeparatorModelStage(
+            model_candidates=("ghost.ckpt", "good.ckpt"),
+            preferred_stems=("vocals",),
+            required=True,
+        ),
+        str(tmp_path / "stage"),
+        44100,
+        shifts=2,
+    )
+
+    assert loaded_models == ["ghost.ckpt", "good.ckpt"]
+    assert model_name == "good.ckpt"
+    assert output_files == (
+        str(tmp_path / "stage" / "song_(Vocals)_good.ckpt.wav"),
+    )
+
+
+def test_build_mastering_separator_plan_automatic_prefers_bs_roformer_defaults():
+    plan = STEMS_MODULE.build_mastering_separator_plan(
+        44100,
+        model_name="mastering",
+    )
+
+    assert plan.vocal_pair_stage is not None
+    assert plan.vocal_pair_stage.model_candidates[0] == (
+        "bs_roformer_vocals_resurrection_unwa.ckpt"
+    )
+    assert plan.reference_split_stage.model_candidates[0] == (
+        "bs_roformer_instrumental_resurrection_unwa.ckpt"
+    )
+    assert plan.four_stem_stage.model_candidates[:2] == (
+        "htdemucs_ft.yaml",
+        "hdemucs_mmi.yaml",
+    )
+
+
+def test_build_mastering_separator_plan_explicit_demucs_skips_vocal_pair_stage():
+    plan = STEMS_MODULE.build_mastering_separator_plan(
+        44100,
+        model_name="htdemucs_ft.yaml",
+    )
+
+    assert plan.vocal_pair_stage is None
+    assert plan.reference_split_stage.model_candidates[0] == (
+        "MDX23C-8KFFT-InstVoc_HQ.ckpt"
+    )

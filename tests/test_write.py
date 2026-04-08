@@ -3,7 +3,7 @@ import shutil
 import tempfile
 import unittest
 
-from definers.platform.filesystem import read, write
+from definers.system.filesystem import read, write
 
 
 class TestWrite(unittest.TestCase):

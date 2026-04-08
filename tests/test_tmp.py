@@ -4,12 +4,12 @@ import unittest
 from importlib import import_module
 from unittest.mock import patch
 
-import definers.platform.paths as platform_paths
+import definers.system.paths as platform_paths
 
 
 def _load_modules():
     return import_module("definers.path_utils"), import_module(
-        "definers.platform.paths"
+        "definers.system.paths"
     )
 
 

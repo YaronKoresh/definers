@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 
-from definers.application_ml.training import train_linear_regression
+from definers.ml.training import train_linear_regression
 from tests.torch_stubs import FakeModel, build_fake_torch
 
 

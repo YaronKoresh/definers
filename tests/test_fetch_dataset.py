@@ -1,11 +1,11 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from definers.application_data.loaders import fetch_dataset
+from definers.data.loaders import fetch_dataset
 
 
 class TestFetchDataset(unittest.TestCase):
-    @patch("definers.application_data.loaders._load_remote_dataset")
+    @patch("definers.data.loaders._load_remote_dataset")
     def test_successful_load(self, mock_load_remote_dataset):
         mock_dataset = MagicMock()
         mock_load_remote_dataset.return_value = mock_dataset
@@ -13,7 +13,7 @@ class TestFetchDataset(unittest.TestCase):
         self.assertEqual(dataset, mock_dataset)
         mock_load_remote_dataset.assert_called_once_with("some_dataset", None)
 
-    @patch("definers.application_data.loaders._load_remote_dataset")
+    @patch("definers.data.loaders._load_remote_dataset")
     def test_successful_load_with_revision(self, mock_load_remote_dataset):
         mock_dataset = MagicMock()
         mock_load_remote_dataset.return_value = mock_dataset
@@ -22,7 +22,7 @@ class TestFetchDataset(unittest.TestCase):
         mock_load_remote_dataset.assert_called_once_with("some_dataset", "v1.0")
 
     @patch(
-        "definers.application_data.loaders._load_remote_dataset",
+        "definers.data.loaders._load_remote_dataset",
         side_effect=FileNotFoundError,
     )
     def test_file_not_found_no_fallback(self, mock_load_remote_dataset):
@@ -33,7 +33,7 @@ class TestFetchDataset(unittest.TestCase):
         )
 
     @patch(
-        "definers.application_data.loaders._load_remote_dataset",
+        "definers.data.loaders._load_remote_dataset",
         side_effect=ConnectionError,
     )
     def test_connection_error_no_fallback(self, mock_load_remote_dataset):
@@ -43,8 +43,8 @@ class TestFetchDataset(unittest.TestCase):
             "flaky_connection_dataset", None
         )
 
-    @patch("definers.application_data.loaders._load_remote_dataset_fallback")
-    @patch("definers.application_data.loaders._load_remote_dataset")
+    @patch("definers.data.loaders._load_remote_dataset_fallback")
+    @patch("definers.data.loaders._load_remote_dataset")
     def test_fallback_on_error(
         self, mock_load_remote_dataset, mock_load_remote_dataset_fallback
     ):
@@ -58,8 +58,8 @@ class TestFetchDataset(unittest.TestCase):
             "some_url", "json", None
         )
 
-    @patch("definers.application_data.loaders._load_remote_dataset_fallback")
-    @patch("definers.application_data.loaders._load_remote_dataset")
+    @patch("definers.data.loaders._load_remote_dataset_fallback")
+    @patch("definers.data.loaders._load_remote_dataset")
     def test_fallback_with_revision(
         self, mock_load_remote_dataset, mock_load_remote_dataset_fallback
     ):
@@ -74,11 +74,11 @@ class TestFetchDataset(unittest.TestCase):
         )
 
     @patch(
-        "definers.application_data.loaders._load_remote_dataset_fallback",
+        "definers.data.loaders._load_remote_dataset_fallback",
         side_effect=FileNotFoundError,
     )
     @patch(
-        "definers.application_data.loaders._load_remote_dataset",
+        "definers.data.loaders._load_remote_dataset",
         side_effect=Exception("Initial error"),
     )
     def test_fallback_file_not_found(
@@ -92,11 +92,11 @@ class TestFetchDataset(unittest.TestCase):
         )
 
     @patch(
-        "definers.application_data.loaders._load_remote_dataset_fallback",
+        "definers.data.loaders._load_remote_dataset_fallback",
         side_effect=ConnectionError,
     )
     @patch(
-        "definers.application_data.loaders._load_remote_dataset",
+        "definers.data.loaders._load_remote_dataset",
         side_effect=Exception("Initial error"),
     )
     def test_fallback_connection_error(

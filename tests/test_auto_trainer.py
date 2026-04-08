@@ -4,8 +4,8 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 
-from definers.application_ml.trainer_plan import render_training_plan_markdown
 from definers.ml import AutoTrainer
+from definers.ml.trainer_plan import render_training_plan_markdown
 
 
 class TestAutoTrainer(unittest.TestCase):
@@ -69,23 +69,23 @@ class TestAutoTrainer(unittest.TestCase):
                 "definers.ml._training_array_adapter", return_value=MagicMock()
             ),
             patch(
-                "definers.application_data.preparation.prepare_data",
+                "definers.data.preparation.prepare_data",
                 return_value=training_data,
             ) as mock_prepare,
             patch(
-                "definers.application_data.tokenization.init_tokenizer",
+                "definers.data.tokenization.init_tokenizer",
                 return_value=object(),
             ),
             patch(
-                "definers.application_data.tokenization.tokenize_and_pad",
+                "definers.data.tokenization.tokenize_and_pad",
                 side_effect=lambda rows, tokenizer: rows,
             ),
             patch(
-                "definers.application_data.preparation.pad_sequences",
+                "definers.data.preparation.pad_sequences",
                 side_effect=lambda rows: rows,
             ),
             patch(
-                "definers.application_data.arrays.numpy_to_cupy",
+                "definers.data.arrays.numpy_to_cupy",
                 side_effect=lambda value: value,
             ),
             patch("joblib.dump") as mock_dump,

@@ -2,11 +2,11 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from definers.application_data.loaders import load_source
+from definers.data.loaders import load_source
 
 
 class TestLoadSource(unittest.TestCase):
-    @patch("definers.application_data.loaders._runtime")
+    @patch("definers.data.loaders._runtime")
     def test_load_source_uses_runtime_fetch_dataset(self, mock_runtime):
         runtime = SimpleNamespace(
             fetch_dataset=MagicMock(return_value="remote-dataset")
@@ -22,7 +22,7 @@ class TestLoadSource(unittest.TestCase):
             "dataset/name", "json", "v1"
         )
 
-    @patch("definers.application_data.loaders._runtime")
+    @patch("definers.data.loaders._runtime")
     def test_load_source_uses_runtime_files_to_dataset(self, mock_runtime):
         runtime = SimpleNamespace(
             files_to_dataset=MagicMock(return_value="tensor-dataset")

@@ -3,7 +3,7 @@ import shutil
 import unittest
 from unittest.mock import patch
 
-from definers.platform.filesystem import copy
+from definers.system.filesystem import copy
 
 
 class TestCopy(unittest.TestCase):

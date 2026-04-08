@@ -2,7 +2,7 @@ import os
 import unittest
 from unittest.mock import MagicMock, patch
 
-import definers.media.image_helpers as image_helpers_module
+import definers.image.helpers as image_helpers_module
 import definers.os_utils as os_utils
 import definers.path_utils as path_utils
 
