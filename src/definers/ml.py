@@ -1674,17 +1674,17 @@ def convert_vocal_rvc(experiment: str, path: str):
         return None
 
     try:
-        init_pretrained_model("svc")
-        from .configs.config import Config
-        from .infer.modules.vc.modules import VC
-    except ImportError as e:
-        logger.error(f"Vocal conversion feature unavailable: {e}")
-        return None
-
-    try:
         path = secure_path(path, trust=_trusted_paths_from_environment())
     except Exception as e:
         logger.error(f"Invalid audio path for conversion: {e}")
+        return None
+
+    try:
+        init_pretrained_model("svc")
+        from .configs.config import Config
+        from .infer.modules.vc.modules import VC
+    except Exception as e:
+        logger.error(f"Vocal conversion feature unavailable: {e}")
         return None
 
     path = normalize_audio_to_peak(path)
@@ -2719,8 +2719,6 @@ class AutoTrainer:
     def _predict_from_file(
         self, prediction_file: str, model_path: str | None = None
     ):
-        import imageio.v3 as iio
-
         from definers.application_ml.safe_deserialization import (
             load_serialized_model,
         )
@@ -2766,6 +2764,8 @@ class AutoTrainer:
         if output_type == "image":
             image_output = features_to_image(prediction)
             path = random_string() + ".png"
+            import imageio.v3 as iio
+
             iio.imwrite(path, cupy_to_numpy(image_output))
             return path
         return None
@@ -2798,10 +2798,6 @@ class AutoTrainer:
     def infer(
         self, data, task: str | None = None, model_type: str | None = None
     ):
-        import imageio as iio
-        import torch
-        from scipy.io import wavfile
-
         resolved_task = self._coerce_reference(
             task or self.task or self.model_path
         )
@@ -2849,6 +2845,8 @@ class AutoTrainer:
             if active_model_type in ["joblib", "pkl"]:
                 prediction = model.predict(input_numpy)
             elif active_model_type in ["pt", "pth", "safetensors"]:
+                import torch
+
                 input_tensor = torch.from_numpy(input_numpy).to(device())
                 with torch.no_grad():
                     output_tensor = model(input_tensor)
@@ -2889,11 +2887,13 @@ class AutoTrainer:
         output_filename = f"{random_string()}.{get_prediction_file_extension(prediction_type)}"
         handlers = {
             "video": lambda: write_video(prediction, 24),
-            "image": lambda: iio.imwrite(
+            "image": lambda: __import__("imageio").imwrite(
                 output_filename,
                 (prediction * 255).astype(np.uint8),
             ),
-            "audio": lambda: wavfile.write(output_filename, 32000, prediction),
+            "audio": lambda: __import__(
+                "scipy.io", fromlist=["wavfile"]
+            ).wavfile.write(output_filename, 32000, prediction),
             "text": lambda: open(output_filename, "w", encoding="utf-8").write(
                 prediction
             ),

@@ -5,6 +5,7 @@ import unittest
 
 import numpy as np
 
+from definers.application_data.vectorizers import create_vectorizer
 from definers.application_ml.regression_predictor import RegressionPredictor
 from definers.application_ml.text_feature_extractor import TextFeatureExtractor
 from definers.application_ml.text_feature_reconstructor import (
@@ -15,10 +16,7 @@ from definers.application_ml.training import LinearRegressionTorch
 
 class TestApplicationMlInferenceServices(unittest.TestCase):
     def test_text_feature_extractor_preserves_vectorizer_vocabulary(self):
-        from sklearn.feature_extraction.text import TfidfVectorizer
-
-        trained_vectorizer = TfidfVectorizer(token_pattern="(?u)\\b\\w+\\b")
-        trained_vectorizer.fit(["alpha beta", "gamma"])
+        trained_vectorizer = create_vectorizer(["alpha beta", "gamma"])
         expected_vocabulary = dict(trained_vectorizer.vocabulary_)
 
         extracted = TextFeatureExtractor.extract(

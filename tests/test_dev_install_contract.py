@@ -10,6 +10,7 @@ FORBIDDEN_TOP_LEVEL_TEST_IMPORTS = {
     "fastapi",
     "faiss",
     "gradio",
+    "imageio",
     "librosa",
     "matplotlib",
     "moviepy",
@@ -39,6 +40,18 @@ def _top_level_imports(file_path: Path) -> set[str]:
     return imported_modules
 
 
+def _all_imports(file_path: Path) -> set[str]:
+    imported_modules: set[str] = set()
+    module_ast = ast.parse(file_path.read_text(encoding="utf-8"))
+    for node in ast.walk(module_ast):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                imported_modules.add(alias.name.split(".", 1)[0])
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            imported_modules.add(node.module.split(".", 1)[0])
+    return imported_modules
+
+
 def test_ci_workflows_install_only_dev_extra():
     workflow_root = _workspace_root() / ".github" / "workflows"
     for workflow_name in ("check.yml", "quality.yml"):
@@ -60,3 +73,31 @@ def test_tests_avoid_top_level_optional_dependency_imports():
             f"{test_file.name} imports optional packages at module scope: "
             f"{', '.join(forbidden_imports)}"
         )
+
+
+def test_tests_avoid_optional_dependency_imports_anywhere():
+    tests_root = _workspace_root() / "tests"
+    for test_file in tests_root.glob("test_*.py"):
+        imported_modules = _all_imports(test_file)
+        forbidden_imports = sorted(
+            imported_modules & FORBIDDEN_TOP_LEVEL_TEST_IMPORTS
+        )
+        assert forbidden_imports == [], (
+            f"{test_file.name} imports optional packages directly: "
+            f"{', '.join(forbidden_imports)}"
+        )
+
+
+def test_contributing_documents_dependency_free_test_policy():
+    contributing_text = (_workspace_root() / "CONTRIBUTING.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert (
+        "Tests must not import optional third-party packages directly."
+        in contributing_text
+    )
+    assert (
+        "Tests must not use third-party library output as the oracle for expected results."
+        in contributing_text
+    )

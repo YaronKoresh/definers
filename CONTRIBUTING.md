@@ -145,6 +145,13 @@ The repository contains a broad Python test suite under `tests/`. When adding or
 2. add regression coverage for the specific failure mode you fixed
 3. avoid broad unrelated refactors inside the same pull request
 
+Test policy for the default suite:
+
+- Tests must validate Definers behavior with Python data, repository fixtures, and local fakes or stubs.
+- Tests must not import optional third-party packages directly.
+- Tests must not use third-party library output as the oracle for expected results.
+- If a feature is only available with an optional dependency, the default suite should validate Definers fallback or unavailable-feature behavior instead of requiring that package.
+
 ## Branch And Pull Request Guidance
 
 ### Branch Naming

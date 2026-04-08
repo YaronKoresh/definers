@@ -9,6 +9,15 @@ except Exception:
     np = importlib.import_module("numpy")
 
 
+def _ui_update(**kwargs):
+    try:
+        import gradio as gr
+
+        return gr.update(**kwargs)
+    except Exception:
+        return dict(kwargs)
+
+
 def _build_custom_element_config(
     ce_x,
     ce_y,
@@ -500,8 +509,6 @@ def generate_video_handler(
 
 
 def filter_styles(query, category):
-    import gradio as gr
-
     filtered = []
     for name, data in STYLES_DB.items():
         text_match = (
@@ -511,7 +518,10 @@ def filter_styles(query, category):
         tag_match = category == "All" or category in data["tags"]
         if text_match and tag_match:
             filtered.append(name)
-    return gr.update(choices=filtered, value=filtered[0] if filtered else None)
+    return _ui_update(
+        choices=filtered,
+        value=filtered[0] if filtered else None,
+    )
 
 
 def draw_star_of_david(frame, center, radius, angle, color, thickness):

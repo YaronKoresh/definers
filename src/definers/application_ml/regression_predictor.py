@@ -20,12 +20,12 @@ class RegressionPredictor:
 
     @classmethod
     def predict(cls, X_new, model_path: str, *, factory):
-        import torch
-
         sanitized_path = cls.sanitize_path(model_path)
         if sanitized_path is None:
             return None
         try:
+            import torch
+
             input_dim = X_new.shape[1]
             model_torch = factory(input_dim)
             model_torch.load_state_dict(

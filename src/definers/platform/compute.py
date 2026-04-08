@@ -91,12 +91,16 @@ def set_cuda_env(*, get_os_name_func, paths_func, log_func, environ):
 
 
 def free(*, catch_func, run_func, environ):
-    import torch
-
     try:
-        torch.cuda.empty_cache()
-    except Exception as error:
-        catch_func(error)
+        import torch
+    except Exception:
+        torch = None
+
+    if torch is not None:
+        try:
+            torch.cuda.empty_cache()
+        except Exception as error:
+            catch_func(error)
 
     hf_home = environ.get("HF_HOME")
     cache_dir = (

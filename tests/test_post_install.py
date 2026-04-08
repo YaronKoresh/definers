@@ -61,6 +61,5 @@ class TestPostInstall(unittest.TestCase):
 
 if __name__ == "__main__":
     import numpy
-    import torch
 
     unittest.main()

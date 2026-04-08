@@ -60,17 +60,23 @@ class PreparationService:
         if y is not None:
             tensor_dataset_cls = getattr(runtime, "TensorDataset", None)
             if tensor_dataset_cls is None:
-                from torch.utils.data import TensorDataset
+                from definers.application_data.lightweight_datasets import (
+                    resolve_tensor_dataset,
+                )
 
-                tensor_dataset_cls = TensorDataset
+                tensor_dataset_cls = resolve_tensor_dataset()
             return tensor_dataset_cls(X, y)
         return X
 
     @staticmethod
     def to_loader(dataset, batch_size=1):
-        from torch.utils.data import DataLoader
+        from definers.application_data.lightweight_datasets import (
+            resolve_data_loader,
+        )
 
-        return DataLoader(
+        data_loader_cls = resolve_data_loader()
+
+        return data_loader_cls(
             dataset,
             pin_memory=False,
             num_workers=0,
@@ -81,9 +87,13 @@ class PreparationService:
 
     @staticmethod
     def make_loader(dataset, batch_size=1, sampler=None):
-        from torch.utils.data import DataLoader
+        from definers.application_data.lightweight_datasets import (
+            resolve_data_loader,
+        )
 
-        return DataLoader(
+        data_loader_cls = resolve_data_loader()
+
+        return data_loader_cls(
             dataset,
             pin_memory=False,
             num_workers=0,
@@ -95,7 +105,11 @@ class PreparationService:
 
     @staticmethod
     def order_dataset(dataset, order_by=None):
-        from torch.utils.data import Subset
+        from definers.application_data.lightweight_datasets import (
+            resolve_subset,
+        )
+
+        subset_cls = resolve_subset()
 
         if order_by is None or order_by == "shuffle":
             return dataset
@@ -104,7 +118,7 @@ class PreparationService:
             try:
                 keys = [order_by(dataset[index]) for index in indices]
                 sorted_idx = [index for _, index in sorted(zip(keys, indices))]
-                return Subset(dataset, sorted_idx)
+                return subset_cls(dataset, sorted_idx)
             except Exception:
                 return dataset
         if isinstance(order_by, str):
@@ -128,7 +142,7 @@ class PreparationService:
                     else:
                         keys.append(0)
                 sorted_idx = [index for _, index in sorted(zip(keys, indices))]
-                return Subset(dataset, sorted_idx)
+                return subset_cls(dataset, sorted_idx)
             except Exception:
                 return dataset
         return dataset
@@ -143,8 +157,18 @@ class PreparationService:
         random_state=None,
         batch_size=1,
     ):
-        from sklearn.model_selection import train_test_split
-        from torch.utils.data import Subset
+        from definers.application_data.lightweight_datasets import (
+            resolve_subset,
+            split_indices,
+        )
+
+        subset_cls = resolve_subset()
+        try:
+            from sklearn.model_selection import (
+                train_test_split as sklearn_train_test_split,
+            )
+        except Exception:
+            sklearn_train_test_split = None
 
         indices = list(range(len(dataset)))
         labels = None
@@ -171,34 +195,45 @@ class PreparationService:
             test_idx = []
         else:
             try:
-                train_idx, rest_idx = train_test_split(
+                if sklearn_train_test_split is None:
+                    raise RuntimeError
+                train_idx, rest_idx = sklearn_train_test_split(
                     indices,
                     test_size=rest_frac,
                     stratify=labels,
                     random_state=random_state,
                 )
             except Exception:
-                train_idx = indices
-                rest_idx = []
+                train_idx, rest_idx = split_indices(
+                    indices,
+                    test_size=rest_frac,
+                    random_state=random_state,
+                    stratify=labels,
+                )
             if val_frac > 0 and test_frac > 0 and rest_idx:
                 try:
-                    val_idx, test_idx = train_test_split(
+                    if sklearn_train_test_split is None:
+                        raise RuntimeError
+                    val_idx, test_idx = sklearn_train_test_split(
                         rest_idx,
                         test_size=test_frac / rest_frac,
                         random_state=random_state,
                     )
                 except Exception:
-                    val_idx = rest_idx
-                    test_idx = []
+                    val_idx, test_idx = split_indices(
+                        rest_idx,
+                        test_size=test_frac / rest_frac,
+                        random_state=random_state,
+                    )
             elif val_frac > 0:
                 val_idx = rest_idx
                 test_idx = []
             else:
                 val_idx = []
                 test_idx = rest_idx
-        train_ds = Subset(dataset, train_idx)
-        val_ds = Subset(dataset, val_idx) if val_idx else None
-        test_ds = Subset(dataset, test_idx) if test_idx else None
+        train_ds = subset_cls(dataset, train_idx)
+        val_ds = subset_cls(dataset, val_idx) if val_idx else None
+        test_ds = subset_cls(dataset, test_idx) if test_idx else None
         train_loader = cls.make_loader(train_ds, batch_size=batch_size)
         val_loader = (
             cls.make_loader(val_ds, batch_size=batch_size) if val_ds else None
@@ -379,16 +414,35 @@ class PreparationService:
 
     @staticmethod
     def pad_sequences(X):
-        import torch
-
         runtime = _data_runtime()
+        try:
+            import torch
+        except Exception:
+            torch = None
         if X is None or hasattr(X, "__len__") and len(X) == 0:
+            if torch is None:
+                return runtime._np.array([])
             return torch.tensor([])
         try:
             X = runtime.three_dim_numpy(X)
         except Exception:
             X = X
         X = runtime.cupy_to_numpy(X)
+        if torch is None:
+            sequences = [runtime._np.asarray(seq) for seq in X]
+            if len(sequences) == 0:
+                return runtime._np.array([])
+            max_length = max(sequence.shape[0] for sequence in sequences)
+            trailing_shape = sequences[0].shape[1:]
+            padded = []
+            for sequence in sequences:
+                target = runtime._np.zeros(
+                    (max_length,) + trailing_shape,
+                    dtype=sequence.dtype,
+                )
+                target[: sequence.shape[0]] = sequence
+                padded.append(target)
+            return runtime._np.stack(padded, axis=0)
         sequences = [torch.as_tensor(seq) for seq in X]
         if len(sequences) == 0:
             return torch.tensor([])

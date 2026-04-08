@@ -230,7 +230,12 @@ def package_specs_for_module(module_name: str | None) -> tuple[str, ...]:
 
 
 def _supports_stopes_runtime_install() -> bool:
-    return sys.platform != "win32"
+    value = (
+        os.environ.get("DEFINERS_ENABLE_STOPES_RUNTIME_INSTALL", "")
+        .strip()
+        .lower()
+    )
+    return value in {"1", "true", "yes", "on"}
 
 
 def install_specs_for_module(module_name: str | None) -> tuple[str, ...]:

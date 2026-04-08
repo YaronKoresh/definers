@@ -9,8 +9,11 @@ class VectorizerService:
             create_text_vectorizer,
         )
 
+        normalized_texts = cls.normalize_texts(texts)
+        if not normalized_texts:
+            raise ValueError("texts must not be empty")
         vectorizer = create_text_vectorizer(token_pattern="(?u)\\b\\w+\\b")
-        vectorizer.fit(cls.normalize_texts(texts))
+        vectorizer.fit(normalized_texts)
         return vectorizer
 
     @staticmethod

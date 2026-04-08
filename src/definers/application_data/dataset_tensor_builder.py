@@ -75,8 +75,20 @@ class DatasetTensorBuilder:
 
     @staticmethod
     def stack_tensor_rows(values, max_lengths, runtime):
-        import torch
+        try:
+            import torch
+        except Exception:
+            import numpy as np
 
+            return np.stack(
+                [
+                    runtime.cupy_to_numpy(
+                        runtime.reshape_numpy(value, lengths=max_lengths)
+                    )
+                    for value in values
+                ],
+                axis=0,
+            )
         return runtime.convert_tensor_dtype(
             torch.stack(
                 [
@@ -90,11 +102,14 @@ class DatasetTensorBuilder:
 
     @staticmethod
     def build_tensor_dataset(features, labels, runtime):
-        from torch.utils.data import TensorDataset
+        from definers.application_data.lightweight_datasets import (
+            resolve_tensor_dataset,
+        )
 
         all_data = list(features) + list(labels)
         if not all_data:
             return None
+        tensor_dataset_cls = resolve_tensor_dataset()
         max_lengths = runtime.get_max_shapes(*all_data)
         features_tensor = DatasetTensorBuilder.stack_tensor_rows(
             features, max_lengths, runtime
@@ -103,8 +118,8 @@ class DatasetTensorBuilder:
             labels_tensor = DatasetTensorBuilder.stack_tensor_rows(
                 labels, max_lengths, runtime
             )
-            return TensorDataset(features_tensor, labels_tensor)
-        return TensorDataset(features_tensor)
+            return tensor_dataset_cls(features_tensor, labels_tensor)
+        return tensor_dataset_cls(features_tensor)
 
     @classmethod
     def files_to_dataset(cls, features_paths, labels_paths=None):
