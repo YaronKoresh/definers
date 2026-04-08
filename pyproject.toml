@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "definers"
-version = "0.0.1"
+version = "1.0.2"
 authors = [
     { name = "Yaron Koresh" },
 ]
