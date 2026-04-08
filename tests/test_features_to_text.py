@@ -2,16 +2,15 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 import numpy as np
-from sklearn.feature_extraction.text import TfidfVectorizer
 
+from definers.application_data.vectorizers import create_vectorizer
 from definers.application_ml import features_to_text
 
 
 class TestFeaturesToText(unittest.TestCase):
     def setUp(self):
         self.texts = ["hello world", "python is fun"]
-        self.vectorizer = TfidfVectorizer()
-        self.vectorizer.fit(self.texts)
+        self.vectorizer = create_vectorizer(self.texts)
         self.features = self.vectorizer.transform(self.texts).toarray()[0]
 
     def test_successful_reconstruction(self):
@@ -24,9 +23,7 @@ class TestFeaturesToText(unittest.TestCase):
 
     def test_with_vocabulary(self):
         vocab = self.vectorizer.vocabulary_
-        reconstructed_text = features_to_text(
-            self.features, vocabulary=list(vocab.keys())
-        )
+        reconstructed_text = features_to_text(self.features, vocabulary=vocab)
         self.assertIsNotNone(reconstructed_text)
         self.assertIn("hello", reconstructed_text)
         self.assertIn("world", reconstructed_text)
@@ -62,8 +59,7 @@ class TestFeaturesToText(unittest.TestCase):
     def test_extract_text_features_keeps_provided_vectorizer_vocabulary(self):
         from definers.application_ml.inference import extract_text_features
 
-        trained_vectorizer = TfidfVectorizer(token_pattern="(?u)\\b\\w+\\b")
-        trained_vectorizer.fit(["alpha beta", "gamma"])
+        trained_vectorizer = create_vectorizer(["alpha beta", "gamma"])
         expected_vocabulary = dict(trained_vectorizer.vocabulary_)
 
         extracted = extract_text_features(

@@ -1,4 +1,10 @@
-from definers.application_text.validation import TextInputValidator
+import builtins
+import sys
+
+from definers.application_text.validation import (
+    TextInputValidator,
+    TextValidationError,
+)
 
 
 class ValidationError(Exception):
@@ -57,3 +63,20 @@ def test_text_input_validator_rejects_excessive_consecutive_spaces():
     assert messages == [
         ("Validation reject", "input has excessive consecutive spaces")
     ]
+
+
+def test_text_input_validator_default_falls_back_without_gradio(monkeypatch):
+    monkeypatch.delitem(sys.modules, "gradio", raising=False)
+
+    original_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == "gradio":
+            raise ModuleNotFoundError("missing gradio", name="gradio")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+    validator = TextInputValidator.default()
+
+    assert validator._error_factory is TextValidationError

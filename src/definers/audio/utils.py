@@ -4,9 +4,9 @@ import math
 import os
 from pathlib import Path
 
-import librosa
 import numpy as np
 
+from definers.audio.dependencies import librosa_module
 from definers.logger import init_logger
 from definers.system import catch, log, run, tmp
 
@@ -70,7 +70,10 @@ def apply_rms(y: np.ndarray, rms: float):
 
 
 def get_lufs(y: np.ndarray, sr: int) -> float:
-    from .mastering_loudness import get_lufs as _get_lufs
+    try:
+        from .mastering_loudness import get_lufs as _get_lufs
+    except ImportError:
+        from definers.audio.mastering_loudness import get_lufs as _get_lufs
 
     return _get_lufs(y, sr)
 
@@ -121,6 +124,7 @@ def calculate_active_rms(
     frame_length: int = 1024,
     hop_length: int = 256,
 ) -> float:
+    librosa = librosa_module()
     non_silent_intervals = librosa.effects.split(
         y, top_db=top_db, frame_length=frame_length, hop_length=hop_length
     )

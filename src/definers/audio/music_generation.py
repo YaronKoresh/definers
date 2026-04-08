@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-import librosa
 import numpy as np
 
 from definers.constants import MODELS, PROCESSORS
@@ -11,6 +10,7 @@ from definers.cuda import device
 from definers.system import catch, delete, exist, tmp
 from definers.text import random_string
 
+from .dependencies import librosa_module
 from .io import read_audio, save_audio
 
 
@@ -59,6 +59,8 @@ def extend_audio(
     import soundfile as sf
 
     from definers.ml import init_pretrained_model
+
+    librosa = librosa_module()
 
     if MODELS["music"] is None or PROCESSORS["music"] is None:
         init_pretrained_model("music")

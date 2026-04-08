@@ -24,7 +24,9 @@ class TextFeatureReconstructor:
 
     @classmethod
     def reconstruct(cls, predicted_features, vectorizer=None, vocabulary=None):
-        from sklearn.feature_extraction.text import TfidfVectorizer
+        from definers.application_data.text_vectorizer import (
+            vectorizer_from_vocabulary,
+        )
 
         if vectorizer is None and vocabulary is None:
             raise ValueError(
@@ -33,10 +35,7 @@ class TextFeatureReconstructor:
         try:
             active_vectorizer = vectorizer
             if active_vectorizer is None:
-                active_vectorizer = TfidfVectorizer(
-                    token_pattern="(?u)\\b\\w+\\b"
-                )
-                active_vectorizer.fit(vocabulary)
+                active_vectorizer = vectorizer_from_vocabulary(vocabulary)
             feature_names = active_vectorizer.get_feature_names_out()
             reconstructed_words = cls.rank_tokens(
                 predicted_features,

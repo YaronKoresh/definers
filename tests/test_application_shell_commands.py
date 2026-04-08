@@ -3,6 +3,7 @@ from argparse import Namespace
 from definers.application_shell.command_dispatcher import CliCommandDispatcher
 from definers.application_shell.command_parser import CliCommandParser
 from definers.application_shell.command_registry import CliCommandRegistry
+from definers.application_shell.install_command import InstallCommand
 from definers.application_shell.lyric_video_command import LyricVideoCommand
 from definers.application_shell.music_video_command import MusicVideoCommand
 from definers.application_shell.request_coercer import CliRequestCoercer
@@ -107,6 +108,21 @@ def test_dispatch_cli_command_handles_unknown_commands():
 
     assert exit_code == 1
     assert outputs == ["unknown command nope"]
+
+
+def test_dispatch_cli_command_rejects_install_without_handler():
+    outputs: list[object] = []
+
+    exit_code = CliCommandDispatcher.dispatch_cli_command(
+        InstallCommand(target="audio", target_kind="group", list_only=False),
+        start=lambda project: 0,
+        music_video=lambda audio, width, height, fps: None,
+        lyric_video=lambda *args, **kwargs: None,
+        output=outputs.append,
+    )
+
+    assert exit_code == 1
+    assert outputs == ["install command is not configured"]
 
 
 def test_parse_cli_command_normalizes_unknown_names():

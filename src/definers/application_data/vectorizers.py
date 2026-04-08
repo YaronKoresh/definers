@@ -5,10 +5,15 @@ class VectorizerService:
 
     @classmethod
     def create_vectorizer(cls, texts):
-        from sklearn.feature_extraction.text import TfidfVectorizer
+        from definers.application_data.text_vectorizer import (
+            create_text_vectorizer,
+        )
 
-        vectorizer = TfidfVectorizer(token_pattern="(?u)\\b\\w+\\b")
-        vectorizer.fit(cls.normalize_texts(texts))
+        normalized_texts = cls.normalize_texts(texts)
+        if not normalized_texts:
+            raise ValueError("texts must not be empty")
+        vectorizer = create_text_vectorizer(token_pattern="(?u)\\b\\w+\\b")
+        vectorizer.fit(normalized_texts)
         return vectorizer
 
     @staticmethod

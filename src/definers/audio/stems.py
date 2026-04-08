@@ -6,7 +6,6 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-import librosa
 import numpy as np
 
 from definers.constants import MODELS
@@ -14,6 +13,7 @@ from definers.logger import init_logger
 from definers.system import catch, delete, tmp
 from definers.text import random_string
 
+from .dependencies import librosa_module
 from .io import read_audio, save_audio
 from .utils import normalize_audio_to_peak
 
@@ -477,6 +477,7 @@ def _resample_audio_array(
     original_sample_rate: int,
     target_sample_rate: int,
 ) -> np.ndarray:
+    librosa = librosa_module()
     audio_array = _as_audio_array(audio_signal)
     if int(original_sample_rate) == int(target_sample_rate):
         return audio_array.astype(np.float32, copy=False)
@@ -831,6 +832,8 @@ def separate_stems(
 def stem_mixer(files, format_choice):
     import pydub
     from scipy.io.wavfile import write as write_wav
+
+    librosa = librosa_module()
 
     if not files or len(files) < 2:
         catch("Please upload at least two stem files.")

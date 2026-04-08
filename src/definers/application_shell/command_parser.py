@@ -8,6 +8,7 @@ from definers.application_shell.command_execution_metadata import (
     CommandExecutionMetadata,
 )
 from definers.application_shell.command_registry import CliCommandRegistry
+from definers.application_shell.install_command import InstallCommand
 from definers.application_shell.lyric_video_command import LyricVideoCommand
 from definers.application_shell.music_video_command import MusicVideoCommand
 from definers.application_shell.request_coercer import CliRequestCoercer
@@ -23,7 +24,13 @@ class CliCommandParser:
         *,
         read_lyrics_text: Callable[[str], str],
         command_registry: Mapping[str, CliCommandDefinition],
-    ) -> StartCommand | MusicVideoCommand | LyricVideoCommand | UnknownCommand:
+    ) -> (
+        StartCommand
+        | MusicVideoCommand
+        | LyricVideoCommand
+        | InstallCommand
+        | UnknownCommand
+    ):
         request = CliRequestCoercer.coerce_cli_request(args)
         command = CliCommandRegistry.normalize_cli_name(request.command)
         project = (
@@ -35,6 +42,16 @@ class CliCommandParser:
                 metadata=CommandExecutionMetadata(
                     requested_name=request.command,
                     resolved_name="start",
+                ),
+            )
+        if command == "install":
+            return InstallCommand(
+                target=request.install_target,
+                target_kind=request.install_kind,
+                list_only=bool(request.install_list),
+                metadata=CommandExecutionMetadata(
+                    requested_name=request.command,
+                    resolved_name="install",
                 ),
             )
         definition = command_registry.get(command)

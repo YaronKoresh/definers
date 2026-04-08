@@ -5,20 +5,27 @@ import os
 import re
 
 
-def normalize_selected_rows(selected_rows):
-    import gradio as gr
+def _ui_error(message: str):
+    try:
+        import gradio as gr
 
+        return gr.Error(message)
+    except Exception:
+        return ValueError(message)
+
+
+def normalize_selected_rows(selected_rows):
     from definers.constants import MAX_CONSECUTIVE_SPACES, MAX_INPUT_LENGTH
     from definers.ml import simple_text
 
     if selected_rows is None:
         return None
     if len(selected_rows) > MAX_INPUT_LENGTH:
-        raise gr.Error(
+        raise _ui_error(
             f"Selected rows input too long ({len(selected_rows)} > {MAX_INPUT_LENGTH})"
         )
     if " " * (MAX_CONSECUTIVE_SPACES + 1) in selected_rows:
-        raise gr.Error("Selected rows contains too many consecutive spaces")
+        raise _ui_error("Selected rows contains too many consecutive spaces")
     return simple_text(selected_rows)
 
 
@@ -182,12 +189,10 @@ def _split_result_output(title: str, result):
 
 
 def _require_value(name: str, value):
-    import gradio as gr
-
     if value is None:
-        raise gr.Error(f"{name} is required")
+        raise _ui_error(f"{name} is required")
     if isinstance(value, str) and not value.strip():
-        raise gr.Error(f"{name} is required")
+        raise _ui_error(f"{name} is required")
     return value
 
 

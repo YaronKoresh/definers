@@ -1,5 +1,14 @@
 class ArrayService:
     @staticmethod
+    def torch_module():
+        try:
+            import torch
+
+            return torch
+        except Exception:
+            return None
+
+    @staticmethod
     def runtime_numpy_modules():
         from definers.application_data.runtime_patches import init_cupy_numpy
 
@@ -81,12 +90,11 @@ class ArrayService:
 
     @classmethod
     def coerce_numpy_array(cls, value):
-        import torch
-
         np_module, numpy_module = cls.runtime_numpy_modules()
+        torch_module = cls.torch_module()
         if cls.is_cupy_value(value):
             value = cls.cupy_to_numpy(value)
-        if isinstance(value, torch.Tensor):
+        if torch_module is not None and isinstance(value, torch_module.Tensor):
             return value.cpu().numpy()
         if isinstance(value, str):
             return numpy_module.asarray(
@@ -127,20 +135,21 @@ class ArrayService:
 
     @staticmethod
     def dtype(size: int = 16, is_float: bool = True):
-        import torch
-
-        if size == 16 and is_float and torch.cuda.is_bf16_supported():
-            return torch.bfloat16
+        torch_module = ArrayService.torch_module()
+        if torch_module is None:
+            return None
+        if size == 16 and is_float and torch_module.cuda.is_bf16_supported():
+            return torch_module.bfloat16
         if size == 16 and is_float:
-            return torch.float16
+            return torch_module.float16
         if size == 32 and is_float:
-            return torch.float32
+            return torch_module.float32
         if size == 32 and not is_float:
-            return torch.int
+            return torch_module.int
         if size == 16 and not is_float:
-            return torch.int16
+            return torch_module.int16
         if size == 8 and not is_float:
-            return torch.int8
+            return torch_module.int8
         return None
 
     @classmethod
@@ -308,30 +317,31 @@ class ArrayService:
 
     @staticmethod
     def convert_tensor_dtype(tensor):
-        import torch
-
-        if tensor.is_floating_point():
-            if tensor.dtype == torch.float64:
-                return tensor.to(torch.float32)
+        torch_module = ArrayService.torch_module()
+        if torch_module is None:
             return tensor
-        if not torch.is_floating_point(tensor):
+        if tensor.is_floating_point():
+            if tensor.dtype == torch_module.float64:
+                return tensor.to(torch_module.float32)
+            return tensor
+        if not torch_module.is_floating_point(tensor):
             max_val = tensor.max()
             min_val = tensor.min()
             if min_val >= 0:
                 if max_val <= 255:
-                    return tensor.to(torch.uint8)
+                    return tensor.to(torch_module.uint8)
                 if max_val <= 65535:
-                    return tensor.to(torch.uint16)
+                    return tensor.to(torch_module.uint16)
                 if max_val <= 4294967295:
-                    return tensor.to(torch.uint32)
-                return tensor.to(torch.uint64)
+                    return tensor.to(torch_module.uint32)
+                return tensor.to(torch_module.uint64)
             if min_val >= -128 and max_val <= 127:
-                return tensor.to(torch.int8)
+                return tensor.to(torch_module.int8)
             if min_val >= -32768 and max_val <= 32767:
-                return tensor.to(torch.int16)
+                return tensor.to(torch_module.int16)
             if min_val >= -2147483648 and max_val <= 2147483647:
-                return tensor.to(torch.int32)
-            return tensor.to(torch.int64)
+                return tensor.to(torch_module.int32)
+            return tensor.to(torch_module.int64)
         return tensor
 
     @staticmethod

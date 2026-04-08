@@ -155,6 +155,30 @@ pip install ".[audio,ml,web]"
 
 You can still preinstall targeted extras for reproducible cold starts, but the runtime doesn't require the entire optional graph up front.
 
+On Windows, the published extras intentionally omit `stopes` because its dependency chain requires `posix_ipc`, which is not installable there.
+
+`madmom` stays out of the published extras because the reliable install path is a pinned GitHub commit rather than a PyPI-safe requirement string. The runtime installer and CLI installer still support it explicitly:
+
+```bash
+definers install madmom --type module
+```
+
+`basic-pitch` also stays out of the published extras because the runtime installer and CLI installer use the pinned fork commit instead of the upstream PyPI release, which conflicts with the published extras. The runtime installer and CLI installer still support it explicitly:
+
+```bash
+definers install basic_pitch --type module
+```
+
+`definers install audio` includes both `basic-pitch` and `madmom` through their pinned GitHub commit installs, even though the published extras still leave them out.
+
+For runtime-managed environments, you can also preinstall optional targets without relying on extras metadata:
+
+```bash
+definers install --list
+definers install audio
+definers install translate --type task
+```
+
 ### Development Install
 
 ```bash
@@ -612,6 +636,7 @@ poe check
 
 ```bash
 poe test
+poe coverage
 poe lint
 poe format
 poe build
@@ -620,6 +645,8 @@ poe cli-health
 poe answer-simulations
 poe ml-health
 ```
+
+`poe coverage` runs the full test suite with branch coverage and a terminal missing-lines report, then removes the temporary coverage data file so the workspace stays clean.
 
 When iterating on multimodal answer behavior, prefer a focused regression pass before the full suite.
 

@@ -5,6 +5,9 @@ from dataclasses import dataclass
 class CliRequest:
     command: str | None
     project: str = "chat"
+    install_target: str = ""
+    install_kind: str = "group"
+    install_list: bool = False
     audio: str = ""
     width: int = 0
     height: int = 0

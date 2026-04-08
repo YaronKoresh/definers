@@ -1,3 +1,7 @@
+class TextValidationError(RuntimeError):
+    pass
+
+
 class TextInputValidator:
     def __init__(
         self,
@@ -16,18 +20,23 @@ class TextInputValidator:
 
     @classmethod
     def default(cls):
-        import gradio as gr
-
         import definers.text as text
         from definers.constants import MAX_CONSECUTIVE_SPACES, MAX_INPUT_LENGTH
         from definers.system import log
+
+        try:
+            import gradio as gr
+
+            error_factory = gr.Error
+        except Exception:
+            error_factory = TextValidationError
 
         return cls(
             normalize_text=text.simple_text,
             log=log,
             max_input_length=MAX_INPUT_LENGTH,
             max_consecutive_spaces=MAX_CONSECUTIVE_SPACES,
-            error_factory=gr.Error,
+            error_factory=error_factory,
         )
 
     def validate(self, value):

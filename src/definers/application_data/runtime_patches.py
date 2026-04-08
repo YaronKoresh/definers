@@ -166,30 +166,33 @@ class RuntimePatchService:
                 setattr(numpy_module.char, name, func)
         if "asscalar" not in getattr(numpy_module, "__dict__", {}):
             numpy_module.asscalar = lambda a: a.item()
-        if "rec" not in getattr(numpy_module, "__dict__", {}):
-
-            class NumpyRec:
-                @staticmethod
-                def append_fields(base, names, data, dtypes=None):
-                    return recfunctions.append_fields(
-                        base, names, data, dtypes=dtypes
-                    )
-
-                @staticmethod
-                def drop_fields(base, names):
-                    return recfunctions.drop_fields(base, names)
-
-                @staticmethod
-                def rename_fields(base, name_dict):
-                    return recfunctions.rename_fields(base, name_dict)
-
-                @staticmethod
-                def merge_arrays(arrays, fill_value=-1, flatten=False):
-                    return recfunctions.merge_arrays(
+        rec_namespace = getattr(numpy_module, "rec", None)
+        if rec_namespace is None:
+            rec_namespace = types.SimpleNamespace()
+        cls.set_aliases(
+            rec_namespace,
+            {
+                "append_fields": lambda base, names, data, dtypes=None: (
+                    recfunctions.append_fields(base, names, data, dtypes=dtypes)
+                ),
+                "drop_fields": lambda base, names: recfunctions.drop_fields(
+                    base, names
+                ),
+                "rename_fields": lambda base, name_dict: (
+                    recfunctions.rename_fields(base, name_dict)
+                ),
+                "merge_arrays": lambda arrays, fill_value=-1, flatten=False: (
+                    recfunctions.merge_arrays(
                         arrays, fill_value=fill_value, flatten=flatten
                     )
-
-            numpy_module.rec = NumpyRec()
+                ),
+            },
+        )
+        if hasattr(numpy_module, "recarray") and not hasattr(
+            rec_namespace, "recarray"
+        ):
+            rec_namespace.recarray = numpy_module.recarray
+        numpy_module.rec = rec_namespace
         if "machar" not in getattr(numpy_module, "__dict__", {}):
 
             class MachAr:

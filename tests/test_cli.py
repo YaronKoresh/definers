@@ -63,6 +63,121 @@ def test_version():
     assert __version__ in out
 
 
+def test_install_list_outputs_known_targets():
+    code, out = run_cli(["install", "--list"])
+
+    assert code == 0
+    assert "available install groups:" in out
+    assert "audio" in out
+    assert "tts" in out
+    assert "translate" in out
+    assert "gradio" in out
+    assert "fairseq" not in out
+
+
+def test_install_group_dispatch(monkeypatch):
+    import definers.presentation.cli_install as cli_install
+
+    called = {}
+
+    def fake_install(target, *, target_kind, list_only, output):
+        called["target"] = target
+        called["target_kind"] = target_kind
+        called["list_only"] = list_only
+        output("installed audio")
+        return 0
+
+    monkeypatch.setattr(
+        cli_install,
+        "run_optional_install_command",
+        fake_install,
+    )
+
+    code, out = run_cli(["install", "audio"])
+
+    assert code == 0
+    assert out == "installed audio"
+    assert called == {
+        "target": "audio",
+        "target_kind": "group",
+        "list_only": False,
+    }
+
+
+def test_install_task_dispatch(monkeypatch):
+    import definers.presentation.cli_install as cli_install
+
+    called = {}
+
+    def fake_install(target, *, target_kind, list_only, output):
+        called["target"] = target
+        called["target_kind"] = target_kind
+        called["list_only"] = list_only
+        return 0
+
+    monkeypatch.setattr(
+        cli_install,
+        "run_optional_install_command",
+        fake_install,
+    )
+
+    code, out = run_cli(["install", "translate", "--type", "task"])
+
+    assert code == 0
+    assert out == ""
+    assert called == {
+        "target": "translate",
+        "target_kind": "task",
+        "list_only": False,
+    }
+
+
+def test_install_module_reports_pinned_madmom_source(monkeypatch):
+    import definers.presentation.cli_install as cli_install
+
+    monkeypatch.setattr(
+        cli_install,
+        "install_optional_target",
+        lambda target, *, kind: target == "madmom" and kind == "module",
+    )
+
+    output_lines = []
+    code = cli_install.run_optional_install_command(
+        "madmom",
+        target_kind="module",
+        list_only=False,
+        output=output_lines.append,
+    )
+
+    assert code == 0
+    assert len(output_lines) == 1
+    assert "installed module madmom:" in output_lines[0]
+    assert "27f032e8947204902c675e5e341a3faf5dc86dae" in output_lines[0]
+
+
+def test_install_module_reports_pinned_basic_pitch_source(monkeypatch):
+    import definers.presentation.cli_install as cli_install
+
+    monkeypatch.setattr(
+        cli_install,
+        "install_optional_target",
+        lambda target, *, kind: target == "basic_pitch" and kind == "module",
+    )
+
+    output_lines = []
+    code = cli_install.run_optional_install_command(
+        "basic_pitch",
+        target_kind="module",
+        list_only=False,
+        output=output_lines.append,
+    )
+
+    assert code == 0
+    assert len(output_lines) == 1
+    assert "installed module basic_pitch:" in output_lines[0]
+    assert "830590229b32e30faebf1626f046bb9d0b80def7" in output_lines[0]
+
+
 def test_start_dispatch(monkeypatch, tmp_path):
 
     import definers.presentation.gui_entrypoints as gui_entrypoints
@@ -128,6 +243,23 @@ def test_unknown_command():
     code, out = run_cli(["nope"])
     assert code != 0
     assert "unknown command" in out.lower()
+
+
+def test_install_without_target_requires_argument_or_list():
+    code, out = run_cli(["install"])
+
+    assert code == 1
+    assert out == "install target is required unless --list is used"
+
+
+def test_install_removed_fairseq_module_is_rejected():
+    code, out = run_cli(["install", "fairseq", "--type", "module"])
+
+    assert code == 1
+    assert (
+        out
+        == "unknown module target fairseq; run 'definers install --list' to inspect available targets"
+    )
 
 
 def test_start_dispatch_uses_registry_resolution(monkeypatch):

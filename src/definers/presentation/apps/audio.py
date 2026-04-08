@@ -955,7 +955,7 @@ def launch_audio_app():
                     with gr.Row():
                         with gr.Column():
                             vg_ref = gr.Audio(
-                                label="Reference Voice (Clear, 5-15s)",
+                                label="Reference Audio (Optional tone guide)",
                                 type="filepath",
                             )
                             vg_text = gr.Textbox(

@@ -25,7 +25,7 @@ jobs:
         run: python -m pip install --upgrade pip
 
       - name: Install Dev Tools
-        run: python -m pip install -e ".[dev,all]"
+        run: python -m pip install -e ".[dev]"
 
       - name: Syntax Check
         run: poe compile
