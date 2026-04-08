@@ -258,17 +258,6 @@ def _launch_image_surface(steps, *, app_title: str, description: str):
     )
 
 
-def launch_audio_hub():
-    return launch_surface_hub(
-        app_title="Definers Audio",
-        eyebrow="Audio Task Hub",
-        title="Open one focused audio workflow at a time.",
-        description="Choose the job you want to do first. Each surface trims the control set to one task family so non-expert users do not need to scan the entire studio.",
-        cards=AUDIO_SURFACE_CARDS,
-        legacy_command="definers start audio-workbench",
-    )
-
-
 def launch_audio_workbench():
     from definers.ui.apps.audio import launch_audio_app
 
@@ -365,17 +354,6 @@ def launch_audio_support_surface():
     )
 
 
-def launch_video_hub():
-    return launch_surface_hub(
-        app_title="Definers Video",
-        eyebrow="Video Task Hub",
-        title="Choose the exact video workflow you need.",
-        description="Video surfaces are now split by outcome so non-expert users do not need to scan composer, lyric, and visualizer controls together.",
-        cards=VIDEO_SURFACE_CARDS,
-        legacy_command="definers start video-workbench",
-    )
-
-
 def launch_video_workbench():
     from definers.ui.apps.video import launch_video_app
 
@@ -407,17 +385,6 @@ def launch_video_visualizer_surface():
         ("visualizer",),
         app_title="Definers Music Visualizer",
         description="Generate a visualizer from one track with only the export dimensions and frame rate shown.",
-    )
-
-
-def launch_image_hub():
-    return launch_surface_hub(
-        app_title="Definers Image",
-        eyebrow="Image Task Hub",
-        title="Pick one image job and stay on that track.",
-        description="Image surfaces are now split so non-expert users can generate, upscale, or title images without hopping through unrelated controls.",
-        cards=IMAGE_SURFACE_CARDS,
-        legacy_command="definers start image-workbench",
     )
 
 
@@ -455,17 +422,6 @@ def launch_image_title_surface():
     )
 
 
-def launch_train_hub():
-    return launch_surface_hub(
-        app_title="Definers ML",
-        eyebrow="ML Task Hub",
-        title="Enter the ML workflow you actually need.",
-        description="The ML launcher is now split into training, runtime, text, health, and ops surfaces so non-expert users can avoid the full cockpit until they need it.",
-        cards=TRAIN_SURFACE_CARDS,
-        legacy_command="definers start train-workbench",
-    )
-
-
 def launch_train_workbench():
     from definers.ui.apps.train import launch_train_app
 
@@ -473,52 +429,7 @@ def launch_train_workbench():
         app_title="Definers ML Workbench",
         hero_label="Definers ML Workbench",
         hero_heading="Train, run, inspect, and bootstrap models from the full cockpit.",
-        hero_description="All ML flows remain available together here for power users who want the original all-in-one workbench.",
-    )
-
-
-def launch_ml_health_surface():
-    return _launch_train_surface(
-        ("studio",),
-        app_title="Definers ML Health",
-        heading="Inspect runtime readiness before you train or run models.",
-        description="Refresh the live health report, validate runtime readiness, and review the capability map from one narrow surface.",
-    )
-
-
-def launch_ml_train_surface():
-    return _launch_train_surface(
-        ("train",),
-        app_title="Definers ML Train",
-        heading="Build one training plan and run one training flow.",
-        description="Load local or remote data, preview the route, and export a model artifact without inference or text tooling in view.",
-    )
-
-
-def launch_ml_run_surface():
-    return _launch_train_surface(
-        ("run",),
-        app_title="Definers ML Run",
-        heading="Predict, infer, or answer from one execution surface.",
-        description="Use saved artifacts, task-based inference, and the answer runtime without opening training or text tooling.",
-    )
-
-
-def launch_ml_text_surface():
-    return _launch_train_surface(
-        ("text",),
-        app_title="Definers ML Text Lab",
-        heading="Work on text features, summaries, and prompt shaping only.",
-        description="Extract text features, reconstruct text, summarize content, and optimize prompts from one text-only surface.",
-    )
-
-
-def launch_ml_ops_surface():
-    return _launch_train_surface(
-        ("ops",),
-        app_title="Definers ML Ops",
-        heading="Bootstrap models and inspect runtime support data.",
-        description="Initialize model files, load runtime models, inspect checkpoints, resolve languages, and run K-means advice from one support surface.",
+        hero_description="All ML flows remain available together here for users who want an all-in-one workbench.",
     )
 
 
@@ -526,7 +437,6 @@ __all__ = [
     "launch_audio_analysis_surface",
     "launch_audio_cleanup_surface",
     "launch_audio_create_surface",
-    "launch_audio_hub",
     "launch_audio_mastering_surface",
     "launch_audio_midi_surface",
     "launch_audio_stems_surface",
@@ -534,19 +444,11 @@ __all__ = [
     "launch_audio_vocals_surface",
     "launch_audio_workbench",
     "launch_image_generate_surface",
-    "launch_image_hub",
     "launch_image_title_surface",
     "launch_image_upscale_surface",
     "launch_image_workbench",
-    "launch_ml_health_surface",
-    "launch_ml_ops_surface",
-    "launch_ml_run_surface",
-    "launch_ml_text_surface",
-    "launch_ml_train_surface",
-    "launch_train_hub",
     "launch_train_workbench",
     "launch_video_composer_surface",
-    "launch_video_hub",
     "launch_video_lyrics_surface",
     "launch_video_visualizer_surface",
     "launch_video_workbench",

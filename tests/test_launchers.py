@@ -119,14 +119,11 @@ def test_gui_entrypoints_registers_focused_task_surfaces():
     assert {
         "audio",
         "audio-mastering",
-        "audio-workbench",
         "video",
         "video-composer",
-        "video-workbench",
         "image",
         "image-generate",
-        "image-workbench",
+        "image-upscale",
+        "image-title",
         "train",
-        "ml-train",
-        "train-workbench",
     }.issubset(set(GUI_LAUNCHERS))

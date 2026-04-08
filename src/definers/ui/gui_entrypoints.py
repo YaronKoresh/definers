@@ -42,8 +42,7 @@ GUI_LAUNCHERS = register_gui_launchers(
     {
         "translate": _gui_translate,
         "animation": _gui_animation,
-        "image": partial(_launch_focused_surface, "launch_image_hub"),
-        "image-workbench": partial(
+        "image": partial(
             _launch_focused_surface,
             "launch_image_workbench",
         ),
@@ -61,8 +60,7 @@ GUI_LAUNCHERS = register_gui_launchers(
         ),
         "chat": _gui_chat,
         "faiss": _gui_faiss,
-        "video": partial(_launch_focused_surface, "launch_video_hub"),
-        "video-workbench": partial(
+        "video": partial(
             _launch_focused_surface,
             "launch_video_workbench",
         ),
@@ -78,8 +76,7 @@ GUI_LAUNCHERS = register_gui_launchers(
             _launch_focused_surface,
             "launch_video_visualizer_surface",
         ),
-        "audio": partial(_launch_focused_surface, "launch_audio_hub"),
-        "audio-workbench": partial(
+        "audio": partial(
             _launch_focused_surface,
             "launch_audio_workbench",
         ),
@@ -111,29 +108,10 @@ GUI_LAUNCHERS = register_gui_launchers(
             _launch_focused_surface,
             "launch_audio_midi_surface",
         ),
-        "audio-support": partial(
-            _launch_focused_surface,
-            "launch_audio_support_surface",
-        ),
-        "train": partial(_launch_focused_surface, "launch_train_hub"),
-        "train-workbench": partial(
+        "train": partial(
             _launch_focused_surface,
             "launch_train_workbench",
         ),
-        "ml-health": partial(
-            _launch_focused_surface,
-            "launch_ml_health_surface",
-        ),
-        "ml-train": partial(
-            _launch_focused_surface,
-            "launch_ml_train_surface",
-        ),
-        "ml-run": partial(_launch_focused_surface, "launch_ml_run_surface"),
-        "ml-text": partial(
-            _launch_focused_surface,
-            "launch_ml_text_surface",
-        ),
-        "ml-ops": partial(_launch_focused_surface, "launch_ml_ops_surface"),
     },
     namespace=globals(),
 )

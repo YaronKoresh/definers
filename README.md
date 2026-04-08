@@ -146,12 +146,9 @@ Definers exposes both broad workbenches and narrower focused surfaces.
 
 ### Focused surfaces
 
-- Audio: `audio-mastering`, `audio-vocals`, `audio-cleanup`, `audio-stems`, `audio-analysis`, `audio-create`, `audio-midi`, `audio-support`
+- Audio: `audio-mastering`, `audio-vocals`, `audio-cleanup`, `audio-stems`, `audio-analysis`, `audio-create`, `audio-midi`
 - Image: `image-generate`, `image-upscale`, `image-title`
 - Video: `video-composer`, `video-lyrics`, `video-visualizer`
-- ML: `ml-health`, `ml-train`, `ml-run`, `ml-text`, `ml-ops`
-
-The broader surfaces remain available as `audio-workbench`, `image-workbench`, `video-workbench`, and `train-workbench`.
 
 ### Docker
 

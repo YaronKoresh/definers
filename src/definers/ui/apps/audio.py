@@ -134,9 +134,9 @@ def launch_audio_app(
                             )
                             enhancer_stem_mastering = gr.Checkbox(
                                 label="Use stem-aware mastering",
-                                value=True,
+                                value=False,
                             )
-                            with gr.Accordion("Macro Controls", open=True):
+                            with gr.Accordion("Macro Controls", open=False):
                                 enhancer_macro_note = gr.Markdown(
                                     value=str(
                                         initial_mastering_state["macro_note"]
@@ -180,7 +180,7 @@ def launch_audio_app(
                                 )
                             with gr.Accordion("Stem-Aware Path", open=False):
                                 with gr.Group(
-                                    visible=True
+                                    visible=False
                                 ) as enhancer_stem_settings:
                                     enhancer_stem_strategy = gr.Dropdown(
                                         STEM_MODEL_STRATEGY_CHOICES,
@@ -223,26 +223,25 @@ def launch_audio_app(
                                 clear_enhancer_btn = gr.Button(
                                     "Clear", variant="secondary"
                                 )
-                        with gr.Column():
-                            with gr.Group(visible=False) as enhancer_output_box:
-                                enhancer_output = gr.Audio(
-                                    label="Mastered Audio",
-                                    interactive=False,
-                                    buttons=["download"],
-                                )
-                                enhancer_report = gr.File(
-                                    label="Mastering Report",
-                                    interactive=False,
-                                    visible=False,
-                                )
-                                enhancer_stems_output = gr.File(
-                                    label="Mastered Stems",
-                                    interactive=False,
-                                    file_count="multiple",
-                                    visible=False,
-                                )
-                                enhancer_diagnostics = gr.Markdown()
-                                enhancer_share_links = gr.Markdown()
+                        with gr.Group(visible=False) as enhancer_output_box:
+                            enhancer_output = gr.Audio(
+                                label="Mastered Audio",
+                                interactive=False,
+                                buttons=["download"],
+                            )
+                            enhancer_report = gr.File(
+                                label="Mastering Report",
+                                interactive=False,
+                                visible=False,
+                            )
+                            enhancer_stems_output = gr.File(
+                                label="Mastered Stems",
+                                interactive=False,
+                                file_count="multiple",
+                                visible=False,
+                            )
+                            enhancer_diagnostics = gr.Markdown()
+                            enhancer_share_links = gr.Markdown()
                 with gr.Group(
                     visible=False, elem_classes="tool-container"
                 ) as view_vocal_finish:
