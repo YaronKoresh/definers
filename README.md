@@ -82,7 +82,7 @@ definers start chat
 definers start audio-mastering
 definers start image-generate
 definers start video-composer
-definers start train-workbench
+definers start train
 definers train
 ```
 
@@ -232,4 +232,4 @@ Definers is licensed under the MIT License. See [LICENSE](LICENSE).
 
 ## Maintainer
 
-Definers is maintained by Yaron Koresh.
+Definers is owned and maintained by Yaron Koresh.
