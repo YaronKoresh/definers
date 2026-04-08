@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import librosa
 import numpy as np
 
 from definers.constants import MADMOM_AVAILABLE
@@ -8,6 +7,8 @@ from definers.logger import init_logger
 from definers.media.image_helpers import get_max_resolution
 from definers.platform.paths import tmp
 from definers.system import cores
+
+from .dependencies import librosa_module
 
 _logger = init_logger()
 
@@ -27,6 +28,7 @@ def _resolve_tempo_and_beats(
     audio_path: str,
     duration: float | None,
 ):
+    librosa = librosa_module()
     if MADMOM_AVAILABLE and (duration is None or duration > 10):
         try:
             import madmom
@@ -54,6 +56,7 @@ def detect_silence_mask(
     threshold_db: float = -16,
     min_silence_len: float = 0.1,
 ) -> np.ndarray:
+    librosa = librosa_module()
 
     threshold_amplitude = librosa.db_to_amplitude(threshold_db)
     frame_length = int(0.02 * sample_rate)
@@ -89,6 +92,7 @@ def get_active_audio_timeline(
     threshold_db: float = -16,
     min_silence_len: float = 0.1,
 ) -> list[tuple[float, float]]:
+    librosa = librosa_module()
 
     (audio_data, sample_rate) = librosa.load(audio_file, sr=32000)
     silence_mask = detect_silence_mask(
@@ -111,6 +115,7 @@ def _build_audio_analysis_payload(
     actual_duration: float,
     duration: float | None,
 ) -> dict[str, object]:
+    librosa = librosa_module()
     stft = librosa.stft(y, hop_length=hop_length)
     (mag, _) = librosa.magphase(stft)
     stft_db = librosa.amplitude_to_db(mag, ref=np.max)
@@ -162,6 +167,7 @@ def analyze_audio(
     duration: float | None = None,
     offset: float = 0.0,
 ) -> dict[str, object]:
+    librosa = librosa_module()
 
     (y, sr) = librosa.load(
         audio_path, sr=None, duration=duration, offset=offset
@@ -178,6 +184,7 @@ def analyze_audio(
 
 
 def analyze_audio_features(audio_path: str, txt: bool = True):
+    librosa = librosa_module()
 
     try:
         y, sr = librosa.load(audio_path, sr=None, mono=True)
@@ -241,6 +248,7 @@ def beat_visualizer(
     animation_style: str,
     scale_intensity: float,
 ) -> str:
+    librosa = librosa_module()
 
     from moviepy import AudioFileClip, ColorClip, CompositeVideoClip, ImageClip
     from PIL import Image, ImageFilter

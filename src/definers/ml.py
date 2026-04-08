@@ -688,9 +688,9 @@ def init_model_repo(task: str, turbo: bool = True):
         TOKENIZERS[task] = AutoTokenizer.from_pretrained(tasks[task])
         model = AutoModelForSeq2SeqLM.from_pretrained(tasks[task]).to(device())
     elif task in ["tts"]:
-        from chatterbox.tts import ChatterboxTTS
+        from definers.audio.text_to_speech import LocalTextToSpeech
 
-        model = ChatterboxTTS.from_pretrained(device=device())
+        model = LocalTextToSpeech.from_pretrained(device_name=device())
     elif task in ["svc"]:
         with cwd():
             if not exist("./infer"):
@@ -1946,10 +1946,14 @@ def get_model_instructions(task: str, model_type: str) -> str:
                 if "image" in name or "pixel" in name:
                     (C, H, W) = (shape[1], shape[2], shape[3])
                     prep_steps += f"**For Input `{name}` (Image)**:\n1. Load image (e.g., with Pillow).\n2. Resize to `{H}x{W}`.\n3. Convert to a tensor and normalize (e.g., ImageNet stats).\n4. Ensure shape is `(1, {C}, {H}, {W})`.\n"
-                    example_imports += "from PIL import Image\nimport torchvision.transforms as T\n"
-                    example_body += "image = Image.open('path/to/image.jpg')\n"
-                    example_body += f"preprocess = T.Compose([T.Resize(({H}, {W})), T.ToTensor(), T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])])\n"
-                    example_body += f"dummy_inputs['{name}'] = preprocess(image).unsqueeze(0)\n"
+                    example_imports += (
+                        "import numpy as np\nfrom PIL import Image\n"
+                    )
+                    example_body += "image = Image.open('path/to/image.jpg').convert('RGB')\n"
+                    example_body += f"image = image.resize(({W}, {H}))\n"
+                    example_body += "image_array = np.asarray(image, dtype=np.float32) / 255.0\n"
+                    example_body += "image_array = (image_array - np.array([0.485, 0.456, 0.406], dtype=np.float32)) / np.array([0.229, 0.224, 0.225], dtype=np.float32)\n"
+                    example_body += f"dummy_inputs['{name}'] = torch.from_numpy(image_array.transpose(2, 0, 1)).unsqueeze(0)\n"
                 elif "text" in name or "ids" in name:
                     prep_steps += f"**For Input `{name}` (Text)**:\n1. Use the specific tokenizer the model was trained with.\n2. Convert text to token IDs.\n3. Format as a `{dtype}` tensor with shape `{shape}`.\n"
                     example_body += f"# Use the model's specific tokenizer\ndummy_inputs['{name}'] = torch.randint(0, 1000, {shape}, dtype=torch.long)\n"

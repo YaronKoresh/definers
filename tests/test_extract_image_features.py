@@ -4,11 +4,11 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-import cv2
 import numpy as np
 
 import definers.os_utils as os_utils
 import definers.path_utils as path_utils
+from tests.optional_dependency_stubs import build_fake_cv2_module
 
 if not hasattr(os_utils, "get_python_version"):
     os_utils.get_python_version = lambda: "3.10"
@@ -42,15 +42,19 @@ from definers.image import extract_image_features
 
 class TestExtractImageFeatures(unittest.TestCase):
     def setUp(self):
+        self.cv2_module = build_fake_cv2_module()
+        self.cv2_patcher = patch.dict("sys.modules", {"cv2": self.cv2_module})
+        self.cv2_patcher.start()
         self.test_dir = tempfile.mkdtemp()
         self.image_path = os.path.join(self.test_dir, "test_image.png")
         (self.width, self.height) = (64, 48)
         self.image = np.random.randint(
             0, 256, (self.height, self.width, 3), dtype=np.uint8
         )
-        cv2.imwrite(self.image_path, self.image)
+        self.cv2_module.imwrite(self.image_path, self.image)
 
     def tearDown(self):
+        self.cv2_patcher.stop()
         shutil.rmtree(self.test_dir)
 
     def test_successful_extraction(self):
@@ -66,6 +70,7 @@ class TestExtractImageFeatures(unittest.TestCase):
 
     def test_corrupt_image_file(self):
         corrupt_file_path = os.path.join(self.test_dir, "corrupt.png")
+        self.cv2_module._image_store[corrupt_file_path] = None
         with open(corrupt_file_path, "w") as f:
             f.write("this is not an image")
         features = extract_image_features(corrupt_file_path)

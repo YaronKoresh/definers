@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-import librosa
 import numpy as np
 
 from definers.constants import MODELS, language_codes
@@ -11,6 +10,7 @@ from definers.logger import init_logger
 from definers.system import catch, delete, exist, run, tmp
 
 from .analysis import analyze_audio_features
+from .dependencies import librosa_module
 from .io import save_audio
 from .utils import get_scale_notes, normalize_audio_to_peak
 
@@ -31,6 +31,8 @@ def humanize_vocals(audio_path: str, amount: float = 0.5) -> str | None:
     import soundfile as sf
 
     from definers.system import install_audio_effects
+
+    librosa = librosa_module()
 
     temp_dir = None
     try:
@@ -123,31 +125,38 @@ def transcribe_audio(audio_path: str, language: str) -> str | None:
 
 def generate_voice(
     text: str,
-    reference_audio: str,
+    reference_audio: str | None,
     format_choice: str,
 ) -> str | None:
-    import pydub
-    import soundfile as sf
-
     from definers.ml import init_pretrained_model
 
     if not MODELS["tts"]:
         init_pretrained_model("tts")
 
+    import pydub
+    import soundfile as sf
+
     try:
         temp_wav_path = tmp("wav", False)
-        wav = MODELS["tts"].generate(
+        wav, sample_rate = MODELS["tts"].generate(
             text=text,
-            audio_prompt_path=reference_audio,
+            reference_audio_path=reference_audio,
         )
-        wav = normalize_audio_to_peak(wav)
-        sf.write(temp_wav_path, wav, 24000)
+        wav = np.nan_to_num(np.asarray(wav, dtype=np.float32))
+        if wav.ndim > 1:
+            wav = np.mean(wav, axis=0, dtype=np.float32)
+        if wav.size == 0:
+            raise ValueError("Generated audio is empty")
+        peak = float(np.max(np.abs(wav))) if wav.size else 0.0
+        if peak > 0.0:
+            wav = np.clip((wav / peak) * 0.9, -1.0, 1.0)
+        sf.write(temp_wav_path, wav, int(sample_rate))
         sound = pydub.AudioSegment.from_file(temp_wav_path)
         output_stem = tmp(keep=False).replace(".data", "")
         return save_audio(
             destination_path=output_stem,
             audio_signal=sound,
-            sample_rate=24000,
+            sample_rate=int(sample_rate),
             output_format=format_choice,
         )
     except Exception as error:
@@ -163,6 +172,8 @@ def pitch_shift_vocals(
 ):
     import pydub
     import soundfile as sf
+
+    librosa = librosa_module()
 
     if seperated:
         y_vocals, sr = librosa.load(str(audio_path), sr=None)
@@ -224,6 +235,8 @@ def autotune_song(
     from scipy.signal import medfilt
 
     from definers.system import install_audio_effects
+
+    librosa = librosa_module()
 
     install_audio_effects()
     if output_path is None:

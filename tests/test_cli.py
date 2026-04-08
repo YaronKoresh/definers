@@ -69,6 +69,7 @@ def test_install_list_outputs_known_targets():
     assert code == 0
     assert "available install groups:" in out
     assert "audio" in out
+    assert "tts" in out
     assert "translate" in out
     assert "gradio" in out
     assert "fairseq" not in out

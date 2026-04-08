@@ -88,17 +88,28 @@ def test_optional_dependency_groups_omit_trimmed_packages():
     optional_dependencies_table = read_pyproject_config()["project"][
         "optional-dependencies"
     ]
+    audio_requirement_names = {
+        normalized_requirement_name(spec)
+        for spec in optional_dependencies_table["audio"]
+    }
 
+    assert (
+        "audio-separator>=0.30.2,<0.31.0"
+        in optional_dependencies_table["audio"]
+    )
     assert (
         'stopes>=2.2.1; sys_platform != "win32"'
         in optional_dependencies_table["nlp"]
     )
-    assert "basic-pitch>=0.4.0" not in optional_dependencies_table["audio"]
+    assert "basic-pitch" not in audio_requirement_names
     assert "beautifulsoup4>=4.12.0" not in optional_dependencies_table["web"]
     assert "gradio-client>=2.3.0" not in optional_dependencies_table["web"]
     assert "hydra-core>=1.3.0" not in optional_dependencies_table["ml"]
-    assert "madmom>=0.16.1" not in optional_dependencies_table["audio"]
-    assert "torchvision>=0.16.0" in optional_dependencies_table["ml"]
+    assert "tensorflow>=2.15.0" not in optional_dependencies_table["ml"]
+    assert "tf-keras>=2.15.0" not in optional_dependencies_table["ml"]
+    assert "madmom" not in audio_requirement_names
+    assert "transformers" not in audio_requirement_names
+    assert "torchvision>=0.16.0" not in optional_dependencies_table["ml"]
     assert "cssselect>=1.2.0" not in optional_dependencies_table["dev"]
     assert "resampy>=0.4.2" in optional_dependencies_table["audio"]
     assert "resampy>=0.4.2,<0.5" not in optional_dependencies_table["audio"]

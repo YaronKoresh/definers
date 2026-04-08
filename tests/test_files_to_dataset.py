@@ -2,19 +2,32 @@ import unittest
 from unittest.mock import patch
 
 import numpy as np
-from torch.utils.data import TensorDataset
 
 from definers.application_data.loaders import files_to_dataset
+from tests.torch_stubs import build_fake_torch_modules
 
 
 class TestFilesToDataset(unittest.TestCase):
     def setUp(self):
+        self.fake_torch, self.fake_torch_utils, self.fake_torch_data = (
+            build_fake_torch_modules()
+        )
+        self.torch_patcher = patch.dict(
+            "sys.modules",
+            {
+                "torch": self.fake_torch,
+                "torch.utils": self.fake_torch_utils,
+                "torch.utils.data": self.fake_torch_data,
+            },
+        )
+        self.torch_patcher.start()
         self.cupy_patcher = patch(
             "definers.application_data.arrays.cupy_to_numpy",
             side_effect=lambda x: x,
         )
         self.mock_cupy = self.cupy_patcher.start()
         self.addCleanup(self.cupy_patcher.stop)
+        self.addCleanup(self.torch_patcher.stop)
 
     @patch(
         "definers.application_data.loaders.load_as_numpy",
@@ -24,7 +37,7 @@ class TestFilesToDataset(unittest.TestCase):
         features_paths = ["f1.npy", "f2.npy"]
         labels_paths = ["l1.npy", "l2.npy"]
         dataset = files_to_dataset(features_paths, labels_paths)
-        self.assertIsInstance(dataset, TensorDataset)
+        self.assertIsInstance(dataset, self.fake_torch_data.TensorDataset)
         self.assertEqual(len(dataset.tensors), 2)
         self.assertEqual(len(dataset), 2)
         mock_load.assert_any_call("f1.npy", training=True)
@@ -37,7 +50,7 @@ class TestFilesToDataset(unittest.TestCase):
     def test_successful_run_features_only(self, mock_load):
         features_paths = ["f1.npy"]
         dataset = files_to_dataset(features_paths)
-        self.assertIsInstance(dataset, TensorDataset)
+        self.assertIsInstance(dataset, self.fake_torch_data.TensorDataset)
         self.assertEqual(len(dataset.tensors), 1)
         self.assertEqual(len(dataset), 1)
         mock_load.assert_called_once_with("f1.npy", training=True)
@@ -64,7 +77,7 @@ class TestFilesToDataset(unittest.TestCase):
     def test_load_returns_list(self, mock_load):
         features_paths = ["features.list"]
         dataset = files_to_dataset(features_paths)
-        self.assertIsInstance(dataset, TensorDataset)
+        self.assertIsInstance(dataset, self.fake_torch_data.TensorDataset)
         self.assertEqual(len(dataset), 2)
 
     @patch("torch.stack", side_effect=Exception("Tensor creation failed"))

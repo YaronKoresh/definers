@@ -5,9 +5,11 @@ class VectorizerService:
 
     @classmethod
     def create_vectorizer(cls, texts):
-        from sklearn.feature_extraction.text import TfidfVectorizer
+        from definers.application_data.text_vectorizer import (
+            create_text_vectorizer,
+        )
 
-        vectorizer = TfidfVectorizer(token_pattern="(?u)\\b\\w+\\b")
+        vectorizer = create_text_vectorizer(token_pattern="(?u)\\b\\w+\\b")
         vectorizer.fit(cls.normalize_texts(texts))
         return vectorizer
 

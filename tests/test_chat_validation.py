@@ -1,16 +1,23 @@
+import sys
+import types
 import unittest
 from unittest.mock import patch
 
-import gradio as gr
-
 import definers.presentation.chat_handlers as presentation_chat_handlers
 import definers.text as text
+from definers.application_text.validation import TextValidationError
 from definers.constants import MAX_CONSECUTIVE_SPACES, MAX_INPUT_LENGTH
 from definers.presentation.chat_handlers import get_chat_response
 
 
 class TestChatValidation(unittest.TestCase):
     def setUp(self):
+        self.gradio_patcher = patch.dict(
+            sys.modules,
+            {"gradio": types.SimpleNamespace(Error=TextValidationError)},
+        )
+        self.gradio_patcher.start()
+        self.addCleanup(self.gradio_patcher.stop)
         patchers = [
             patch.object(text, "language", return_value="en"),
             patch.object(
@@ -31,7 +38,7 @@ class TestChatValidation(unittest.TestCase):
 
     def test_get_chat_response_rejects_too_long(self):
         msg = {"text": "a" * (MAX_INPUT_LENGTH + 1), "files": []}
-        with self.assertRaises(gr.Error):
+        with self.assertRaises(TextValidationError):
             get_chat_response(msg, [])
 
     def test_get_chat_response_rejects_excess_spaces(self):
@@ -39,7 +46,7 @@ class TestChatValidation(unittest.TestCase):
             "text": "word" + " " * (MAX_CONSECUTIVE_SPACES + 2) + "word",
             "files": [],
         }
-        with self.assertRaises(gr.Error):
+        with self.assertRaises(TextValidationError):
             get_chat_response(msg, [])
 
     def test_get_chat_response_returns_validated_text_for_short_prompt(self):

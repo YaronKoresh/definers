@@ -1,7 +1,5 @@
 import unittest
 
-from sklearn.feature_extraction.text import TfidfVectorizer
-
 from definers.application_data.vectorizers import create_vectorizer
 
 
@@ -9,7 +7,7 @@ class TestCreateVectorizer(unittest.TestCase):
     def test_create_vectorizer_basic(self):
         texts = ["hello world", "this is a test"]
         vectorizer = create_vectorizer(texts)
-        self.assertIsInstance(vectorizer, TfidfVectorizer)
+        self.assertTrue(hasattr(vectorizer, "transform"))
         self.assertIsNotNone(vectorizer.vocabulary_)
         self.assertIn("hello", vectorizer.vocabulary_)
         self.assertIn("world", vectorizer.vocabulary_)
@@ -27,7 +25,7 @@ class TestCreateVectorizer(unittest.TestCase):
     def test_create_vectorizer_single_doc(self):
         texts = ["a single document"]
         vectorizer = create_vectorizer(texts)
-        self.assertIsInstance(vectorizer, TfidfVectorizer)
+        self.assertTrue(hasattr(vectorizer, "get_feature_names_out"))
         self.assertEqual(len(vectorizer.vocabulary_), 3)
         self.assertIn("a", vectorizer.vocabulary_)
         self.assertIn("single", vectorizer.vocabulary_)
@@ -36,7 +34,7 @@ class TestCreateVectorizer(unittest.TestCase):
     def test_create_vectorizer_tuple_input(self):
         texts = ("hello world", "tuple input")
         vectorizer = create_vectorizer(texts)
-        self.assertIsInstance(vectorizer, TfidfVectorizer)
+        self.assertTrue(hasattr(vectorizer, "fit"))
         self.assertIn("hello", vectorizer.vocabulary_)
         self.assertIn("tuple", vectorizer.vocabulary_)
 

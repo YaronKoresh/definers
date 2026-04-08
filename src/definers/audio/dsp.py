@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import numpy as np
-from numba import njit
 from scipy.ndimage import median_filter
 
 from ..file_ops import log
+from .dependencies import njit
 
 _FLOAT_EPSILON = np.finfo(np.float32).eps
 _ROBUST_SIGMA_SCALE = 1.4826

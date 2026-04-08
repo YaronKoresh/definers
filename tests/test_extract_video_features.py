@@ -4,21 +4,24 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-import cv2
 import numpy as np
 
 from definers.media.video_helpers import extract_video_features
+from tests.optional_dependency_stubs import build_fake_cv2_module
 
 
 class TestExtractVideoFeatures(unittest.TestCase):
     def setUp(self):
+        self.cv2_module = build_fake_cv2_module()
+        self.cv2_patcher = patch.dict("sys.modules", {"cv2": self.cv2_module})
+        self.cv2_patcher.start()
         self.test_dir = tempfile.mkdtemp()
         self.video_path = os.path.join(self.test_dir, "test_video.mp4")
         (self.width, self.height) = (64, 48)
         self.frame_count = 30
         self.fps = 10
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-        out = cv2.VideoWriter(
+        fourcc = self.cv2_module.VideoWriter_fourcc(*"mp4v")
+        out = self.cv2_module.VideoWriter(
             self.video_path, fourcc, self.fps, (self.width, self.height)
         )
         for _ in range(self.frame_count):
@@ -29,6 +32,7 @@ class TestExtractVideoFeatures(unittest.TestCase):
         out.release()
 
     def tearDown(self):
+        self.cv2_patcher.stop()
         shutil.rmtree(self.test_dir)
 
     @patch("definers.media.video_helpers.catch", lambda e: None)
@@ -58,8 +62,8 @@ class TestExtractVideoFeatures(unittest.TestCase):
     @patch("definers.media.video_helpers.catch", lambda e: None)
     def test_empty_video(self):
         empty_video_path = os.path.join(self.test_dir, "empty.mp4")
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-        out = cv2.VideoWriter(
+        fourcc = self.cv2_module.VideoWriter_fourcc(*"mp4v")
+        out = self.cv2_module.VideoWriter(
             empty_video_path, fourcc, self.fps, (self.width, self.height)
         )
         out.release()

@@ -42,9 +42,8 @@ def _github_archive_install_spec(
 MODULE_PACKAGE_SPECS: dict[str, tuple[str, ...]] = {
     "aiofiles": ("aiofiles",),
     "aiohttp": ("aiohttp",),
-    "audio_separator": ("audio-separator>=0.30.0",),
+    "audio_separator": ("audio-separator>=0.30.2,<0.31.0",),
     "basic_pitch": (BASIC_PITCH_PACKAGE_SPEC,),
-    "chatterbox": ("chatterbox-tts>=0.1.4",),
     "cssselect": ("cssselect>=1.2.0",),
     "cv2": ("opencv-contrib-python-headless>=4.8.0",),
     "datasets": ("datasets>=2.14.0",),
@@ -101,16 +100,10 @@ MODULE_PACKAGE_SPECS: dict[str, tuple[str, ...]] = {
         "torch>=2.1.0",
     ),
     "stopes": (STOPES_PACKAGE_SPEC,),
-    "tensorflow": ("tensorflow>=2.15.0",),
-    "tf_keras": ("tf-keras>=2.15.0",),
     "tokenizers": ("tokenizers>=0.15.0",),
     "torch": ("torch>=2.1.0",),
     "torchaudio": (
         "torchaudio>=2.1.0",
-        "torch>=2.1.0",
-    ),
-    "torchvision": (
-        "torchvision>=0.16.0",
         "torch>=2.1.0",
     ),
     "transformers": (
@@ -148,7 +141,6 @@ OPTIONAL_DEPENDENCY_GROUP_MODULES: dict[str, tuple[str, ...]] = {
         "soundfile",
         "sox",
         "torchaudio",
-        "chatterbox",
         "stable_whisper",
     ),
     "image": (
@@ -176,10 +168,7 @@ OPTIONAL_DEPENDENCY_GROUP_MODULES: dict[str, tuple[str, ...]] = {
         "safetensors",
         "sklearn",
         "sentencepiece",
-        "tensorflow",
-        "tf_keras",
         "tokenizers",
-        "torchvision",
         "transformers",
     ),
     "nlp": (
@@ -211,7 +200,7 @@ ML_TASK_MODULES: dict[str, tuple[str, ...]] = {
         "sacremoses",
         "langdetect",
     ),
-    "tts": ("chatterbox",),
+    "tts": ("transformers", "librosa", "pydub"),
     "video": ("diffusers",),
 }
 

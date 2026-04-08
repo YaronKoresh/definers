@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import tempfile
 
-import librosa
 import numpy as np
 
 from definers.logger import init_logger
+
+from .dependencies import librosa_module
 
 _logger = init_logger()
 
@@ -14,6 +15,7 @@ def create_spectrum_visualization(audio_path: str) -> str | None:
     import importlib
 
     plt = importlib.import_module("matplotlib.pyplot")
+    librosa = librosa_module()
 
     try:
         y, sr = librosa.load(audio_path, sr=None)

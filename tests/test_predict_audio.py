@@ -4,10 +4,13 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 import numpy as np
-import soundfile as sf
 
 import definers.audio.features as audio_features_module
 from definers.audio.features import predict_audio
+from tests.optional_dependency_stubs import (
+    build_fake_librosa_module,
+    build_fake_soundfile_module,
+)
 
 
 class TestPredictAudio(unittest.TestCase):
@@ -16,7 +19,20 @@ class TestPredictAudio(unittest.TestCase):
         self.audio_path = os.path.join(self.test_dir, "test.wav")
         self.sr = 32000
         self.audio_data = np.random.randn(self.sr * 2)
-        sf.write(self.audio_path, self.audio_data, self.sr)
+        with open(self.audio_path, "wb") as handle:
+            handle.write(b"audio")
+        self.fake_soundfile = build_fake_soundfile_module()
+        self.fake_librosa = build_fake_librosa_module(
+            {self.audio_path: (self.audio_data, self.sr)}
+        )
+        self.module_patcher = patch.dict(
+            "sys.modules",
+            {
+                "librosa": self.fake_librosa,
+                "soundfile": self.fake_soundfile,
+            },
+        )
+        self.module_patcher.start()
         self.mock_model = MagicMock()
         self.mock_model.predict.return_value = np.random.rand(100)
         self.mock_audio_analysis_backend = MagicMock()
@@ -79,6 +95,7 @@ class TestPredictAudio(unittest.TestCase):
         self.mock_tmp = self.patcher_tmp.start()
 
     def tearDown(self):
+        self.module_patcher.stop()
         self.patcher_full_path.stop()
         self.patcher_audio_analysis_backend.stop()
         self.patcher_array_backend.stop()
@@ -140,7 +157,7 @@ class TestPredictAudio(unittest.TestCase):
         result_path = predict_audio(self.mock_model, self.audio_path)
         self.assertIsNotNone(result_path)
         self.assertTrue(os.path.exists(result_path))
-        (output_data, output_sr) = sf.read(result_path)
+        (output_data, output_sr) = self.fake_soundfile.read(result_path)
         self.assertTrue(np.all(output_data == 0))
 
     def test_model_prediction_raises_exception(self):

@@ -16,16 +16,15 @@ def test_package_specs_for_ml_group_cover_runtime_gap_packages():
     specs = optional_dependencies.package_specs_for_group("ml")
 
     assert "scikit-learn>=1.3.0" in specs
-    assert "tensorflow>=2.15.0" in specs
-    assert "tf-keras>=2.15.0" in specs
+    assert "transformers>=4.36.0" in specs
     assert all("fairseq" not in spec for spec in specs)
     assert all("hydra-core" not in spec for spec in specs)
 
 
 def test_runtime_specs_for_pypi_optional_modules_omit_vcs_links():
     expected_specs = {
+        "audio_separator": "audio-separator>=0.30.2,<0.31.0",
         "basic_pitch": "basic-pitch>=0.4.0",
-        "chatterbox": "chatterbox-tts>=0.1.4",
         "madmom": "madmom>=0.16.1",
         "refiners": "refiners>=0.4.0",
         "stable_whisper": "stable-ts>=2.19.1",
@@ -110,6 +109,7 @@ def test_audio_group_install_includes_runtime_github_modules():
     audio_package_specs = optional_dependencies.package_specs_for_group("audio")
     audio_install_specs = optional_dependencies.install_specs_for_group("audio")
 
+    assert "audio-separator>=0.30.2,<0.31.0" in audio_package_specs
     assert "basic-pitch>=0.4.0" not in audio_package_specs
     assert "madmom>=0.16.1" not in audio_package_specs
     assert (
@@ -120,6 +120,15 @@ def test_audio_group_install_includes_runtime_github_modules():
         "madmom @ https://github.com/CPJKU/madmom/archive/27f032e8947204902c675e5e341a3faf5dc86dae.tar.gz"
         in audio_install_specs
     )
+
+
+def test_package_specs_for_tts_task_use_local_runtime_modules():
+    specs = optional_dependencies.package_specs_for_task("tts")
+
+    assert "transformers>=4.36.0" in specs
+    assert "librosa>=0.10.0" in specs
+    assert "pydub>=0.25.1" in specs
+    assert "soundfile>=0.12.0" in specs
 
 
 def test_install_specs_for_stopes_use_plain_spec_when_supported(
@@ -151,6 +160,7 @@ def test_optional_runtime_targets_list_groups_tasks_and_modules():
 
     assert targets["groups"][-1] == "all"
     assert "audio" in targets["groups"]
+    assert "tts" in targets["tasks"]
     assert "translate" in targets["tasks"]
     assert "gradio" in targets["modules"]
 
