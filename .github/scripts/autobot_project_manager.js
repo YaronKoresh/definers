@@ -277,10 +277,45 @@ async function ensureLabelExists({ github, owner, repo, name }) {
   } catch (error) {
     if (error.status === 404) {
       const definition = LABEL_DEFINITIONS[name] || { color: "ededed", description: "" };
-      await github.rest.issues.createLabel({ owner, repo, name, color: definition.color, description: definition.description });
+      try {
+        await github.rest.issues.createLabel({ owner, repo, name, color: definition.color, description: definition.description });
+      } catch (createError) {
+        if (createError.status !== 422) throw createError;
+        await github.rest.issues.getLabel({ owner, repo, name });
+      }
       return;
     }
     throw error;
+  }
+}
+
+function isInvalidLabelNameError(error, name) {
+  if (error?.status !== 422) return false;
+  const expectedName = normalizeLabelName(name);
+  const errors = Array.isArray(error?.response?.data?.errors) ? error.response.data.errors : [];
+  return errors.some((entry) => {
+    const resource = String(entry?.resource || "").toLowerCase();
+    const field = String(entry?.field || "").toLowerCase();
+    const code = String(entry?.code || "").toLowerCase();
+    const value = normalizeLabelName(entry?.value || "");
+    return resource === "label" && field === "name" && code === "invalid" && value === expectedName;
+  });
+}
+
+async function addLabelToIssue({ github, owner, repo, issueNumber, label }) {
+  await ensureLabelExists({ github, owner, repo, name: label });
+  try {
+    await github.rest.issues.addLabels({ owner, repo, issue_number: issueNumber, labels: [label] });
+  } catch (error) {
+    if (!isInvalidLabelNameError(error, label)) throw error;
+    await ensureLabelExists({ github, owner, repo, name: label });
+    await github.rest.issues.addLabels({ owner, repo, issue_number: issueNumber, labels: [label] });
+  }
+}
+
+async function addLabelsToIssue({ github, owner, repo, issueNumber, labels }) {
+  for (const label of uniqueValidLabels(labels)) {
+    await addLabelToIssue({ github, owner, repo, issueNumber, label });
   }
 }
 
@@ -526,10 +561,7 @@ async function syncPreparedProjectState({ github, owner, repo, issueNumber, stat
   }
 
   if (!state.isPR && state.issueLabelsToAdd.length > 0) {
-    for (const label of state.issueLabelsToAdd) {
-      await ensureLabelExists({ github, owner, repo, name: label });
-    }
-    await github.rest.issues.addLabels({ owner, repo, issue_number: issueNumber, labels: state.issueLabelsToAdd });
+    await addLabelsToIssue({ github, owner, repo, issueNumber, labels: state.issueLabelsToAdd });
   }
 
   if (state.isPR) {
@@ -541,10 +573,7 @@ async function syncPreparedProjectState({ github, owner, repo, issueNumber, stat
       }
     }
     if (state.labelsToAdd.length > 0) {
-      for (const label of state.labelsToAdd) {
-        await ensureLabelExists({ github, owner, repo, name: label });
-      }
-      await github.rest.issues.addLabels({ owner, repo, issue_number: issueNumber, labels: state.labelsToAdd });
+      await addLabelsToIssue({ github, owner, repo, issueNumber, labels: state.labelsToAdd });
     }
     if (state.commentBody) {
       await upsertBotComment({ github, owner, repo, issueNumber, body: state.commentBody, metadata: { aiLabels: state.nextAiLabels, maxAiLabels: MAX_AI_LABELS } });

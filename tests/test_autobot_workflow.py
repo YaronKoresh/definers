@@ -182,6 +182,36 @@ process.stdout.write(JSON.stringify(helper[process.argv[2]]));
     return json.loads(completed.stdout)
 
 
+def run_js_async_script(
+    helper_path: Path, script: str, payload: object
+) -> object:
+    node_path = shutil.which("node") or shutil.which("node.exe")
+    if node_path is None:
+        pytest.skip("node is required for autobot helper behavior tests")
+    with tempfile.NamedTemporaryFile(
+        mode="w", encoding="utf-8", suffix=".json", delete=False
+    ) as handle:
+        json.dump(payload, handle)
+        payload_path = Path(handle.name)
+    try:
+        completed = subprocess.run(
+            [
+                node_path,
+                "-e",
+                script,
+                str(helper_path),
+                str(payload_path),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        )
+    finally:
+        payload_path.unlink(missing_ok=True)
+    return json.loads(completed.stdout)
+
+
 def parse_result_labels(result: dict[str, object], key: str) -> set[str]:
     return set(json.loads(str(result[key])))
 
@@ -553,6 +583,112 @@ def test_pr_label_delta_does_not_backfill_from_summary_text() -> None:
 
     assert result["nextAiLabels"] == ["bug"]
     assert result["labelsToAdd"] == []
+
+
+def test_sync_prepared_project_state_retries_invalid_new_label_addition() -> (
+    None
+):
+    with tempfile.NamedTemporaryFile(
+        mode="w", encoding="utf-8", suffix=".json", delete=False
+    ) as handle:
+        json.dump(
+            {
+                "action": "opened",
+                "isPR": True,
+                "labelsToRemove": [],
+                "labelsToAdd": ["docker", "workflow"],
+                "commentBody": "",
+                "nextAiLabels": ["docker", "workflow"],
+            },
+            handle,
+        )
+        state_path = Path(handle.name)
+
+    script = """
+const fs = require("fs");
+const helper = require(process.argv[1]);
+const payload = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+const knownLabels = new Set(payload.knownLabels || []);
+const addAttempts = new Map();
+const calls = { getLabel: [], createLabel: [], addLabels: [] };
+const github = {
+    rest: {
+        issues: {
+            getLabel: async ({ name }) => {
+                calls.getLabel.push(name);
+                if (knownLabels.has(name)) {
+                    return { data: { name } };
+                }
+                const error = new Error("Not Found");
+                error.status = 404;
+                throw error;
+            },
+            createLabel: async ({ name }) => {
+                calls.createLabel.push(name);
+                knownLabels.add(name);
+                return { data: { name } };
+            },
+            addLabels: async ({ labels }) => {
+                calls.addLabels.push(labels);
+                const label = labels[0];
+                const attempt = (addAttempts.get(label) || 0) + 1;
+                addAttempts.set(label, attempt);
+                if (label === "workflow" && attempt === 1) {
+                    const error = new Error("Validation Failed");
+                    error.status = 422;
+                    error.response = {
+                        data: {
+                            errors: [
+                                { value: "workflow", resource: "Label", field: "name", code: "invalid" }
+                            ]
+                        }
+                    };
+                    throw error;
+                }
+                return { data: labels };
+            },
+            removeLabel: async () => {
+                throw new Error("removeLabel should not be called");
+            },
+            updateComment: async () => ({ data: {} }),
+            createComment: async () => ({ data: {} }),
+        }
+    }
+};
+
+(async () => {
+    const result = await helper.syncPreparedProjectState({
+        github,
+        owner: "owner",
+        repo: "repo",
+        issueNumber: 101,
+        stateFile: payload.stateFile,
+    });
+    process.stdout.write(JSON.stringify({ result, calls, knownLabels: [...knownLabels] }));
+})().catch((error) => {
+    process.stderr.write(String(error && error.stack || error));
+    process.exit(1);
+});
+""".strip()
+
+    try:
+        result = run_js_async_script(
+            PROJECT_MANAGER_HELPER,
+            script,
+            {"stateFile": str(state_path), "knownLabels": ["docker"]},
+        )
+    finally:
+        state_path.unlink(missing_ok=True)
+
+    assert result["result"]["labelsToAdd"] == ["docker", "workflow"]
+    assert result["calls"]["createLabel"] == ["workflow"]
+    assert result["calls"]["addLabels"] == [
+        ["docker"],
+        ["workflow"],
+        ["workflow"],
+    ]
+    assert ["docker", "workflow"] not in result["calls"]["addLabels"]
+    assert "workflow" in result["knownLabels"]
 
 
 def test_workflow_uses_smaller_helper_backed_project_steps() -> None:

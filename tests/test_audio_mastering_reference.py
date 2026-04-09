@@ -29,6 +29,9 @@ def _install_scipy_stub() -> None:
     signal_module.lfilter = lambda _b, _a, y, axis=-1: np.array(
         y, dtype=np.float32, copy=True
     )
+    signal_module.filtfilt = lambda _b, _a, y, axis=-1: np.array(
+        y, dtype=np.float32, copy=True
+    )
     signal_module.resample_poly = lambda y, up, down, axis=-1: np.array(
         y, dtype=np.float32, copy=True
     )

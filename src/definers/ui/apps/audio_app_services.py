@@ -381,6 +381,20 @@ def _write_json_payload(payload: dict[str, object]) -> str:
     return str(destination_path)
 
 
+def _write_text_payload(text: str, *, extension: str = "md") -> str:
+    from definers.system.output_paths import managed_output_path
+
+    destination_path = Path(
+        managed_output_path(
+            extension,
+            section="audio/reports",
+            stem="report",
+        )
+    )
+    destination_path.write_text(str(text), encoding="utf-8")
+    return str(destination_path)
+
+
 def _convert_audio_outputs(
     source_paths: list[str],
     format_choice: str,
@@ -439,10 +453,34 @@ def format_mastering_summary(
     if report is None:
         return "Mastering completed without diagnostics."
 
+    final_master_metrics = getattr(report, "final_in_memory_metrics", None)
     output_metrics = getattr(report, "output_metrics", None)
-    input_metrics = getattr(report, "input_metrics", None)
-    delivery_issues = tuple(getattr(report, "delivery_issues", ()) or ())
+    decoded_metrics = getattr(report, "decoded_metrics", None)
+    export_gain_applied_db = getattr(report, "export_gain_applied_db", None)
+    export_peak_alignment_mode = (
+        str(getattr(report, "export_peak_alignment_mode", "") or "")
+        .strip()
+        .lower()
+    )
+    export_peak_alignment_target_dbfs = getattr(
+        report,
+        "export_peak_alignment_target_dbfs",
+        None,
+    )
+    peak_catch_events = tuple(getattr(report, "peak_catch_events", ()) or ())
+    character_stage_decision = getattr(report, "character_stage_decision", None)
     summary_lines = []
+    verdict = "Master ready."
+    if final_master_metrics is not None and decoded_metrics is not None:
+        final_lufs = _metric_attr(final_master_metrics, "integrated_lufs")
+        decoded_lufs = _metric_attr(decoded_metrics, "integrated_lufs")
+        if (
+            final_lufs is not None
+            and decoded_lufs is not None
+            and abs(float(decoded_lufs) - float(final_lufs)) > 0.75
+        ):
+            verdict = "Master ready, but decoded playback shifts audibly from the final master."
+    summary_lines.append(f"**Verdict:** {verdict}")
     if control_mode:
         summary_lines.append(f"**Control Mode:** {control_mode}")
     if stem_mastering and stem_strategy:
@@ -452,21 +490,34 @@ def format_mastering_summary(
             f"**Preset:** {getattr(report, 'preset_name', 'n/a')}",
             f"**Delivery Profile:** {getattr(report, 'delivery_profile_name', 'n/a')}",
             f"**Stem-aware Path:** {'On' if stem_mastering else 'Off'}",
-            f"**Input LUFS:** {_format_metric_value(_metric_attr(input_metrics, 'integrated_lufs'), ' LUFS')}",
-            f"**Output LUFS:** {_format_metric_value(_metric_attr(output_metrics, 'integrated_lufs'), ' LUFS')}",
-            f"**True Peak:** {_format_metric_value(_metric_attr(output_metrics, 'true_peak_dbfs'), ' dBFS')}",
-            f"**Crest Factor:** {_format_metric_value(_metric_attr(output_metrics, 'crest_factor_db'), ' dB')}",
-            f"**Stereo Width:** {_format_metric_value(_metric_attr(output_metrics, 'stereo_width_ratio'))}",
-            f"**Headroom Recovery:** {getattr(report, 'headroom_recovery_mode', 'n/a')}",
-            f"**Recovered Gain:** {_format_metric_value(getattr(report, 'headroom_recovery_gain_db', None), ' dB')}",
-            f"**Post-spatial Motion:** {_format_metric_value(getattr(report, 'post_spatial_stereo_motion', None))}",
-            f"**Post-clamp Peak:** {_format_metric_value(getattr(report, 'post_clamp_true_peak_dbfs', None), ' dBFS')}",
+            f"**Final Master:** {_format_metric_value(_metric_attr(final_master_metrics, 'integrated_lufs'), ' LUFS')} / {_format_metric_value(_metric_attr(final_master_metrics, 'true_peak_dbfs'), ' dBFS')}",
+            f"**Delivered File:** {_format_metric_value(_metric_attr(output_metrics, 'integrated_lufs'), ' LUFS')} / {_format_metric_value(_metric_attr(output_metrics, 'true_peak_dbfs'), ' dBFS')}",
         ]
     )
-    if delivery_issues:
+    if decoded_metrics is not None:
         summary_lines.append(
-            "**Additional Information:** "
-            + ", ".join(str(issue) for issue in delivery_issues)
+            f"**Decoded Playback:** {_format_metric_value(_metric_attr(decoded_metrics, 'integrated_lufs'), ' LUFS')} / {_format_metric_value(_metric_attr(decoded_metrics, 'true_peak_dbfs'), ' dBFS')}"
+        )
+    if export_peak_alignment_mode == "align_to_ceil":
+        summary_lines.append(
+            f"**Ceiling Alignment:** Export used the available ceiling at {_format_metric_value(export_peak_alignment_target_dbfs, ' dBFS')} with {_format_metric_value(export_gain_applied_db, ' dB')} of gain."
+        )
+    processing_moves: list[str] = []
+    if character_stage_decision is not None and bool(
+        getattr(character_stage_decision, "applied", False)
+    ):
+        if bool(getattr(character_stage_decision, "reverted", False)):
+            processing_moves.append("character pass rolled back")
+        else:
+            processing_moves.append("character pass kept")
+    if peak_catch_events:
+        processing_moves.append(f"peak catch x{len(peak_catch_events)}")
+    headroom_recovery_mode = getattr(report, "headroom_recovery_mode", None)
+    if headroom_recovery_mode is not None:
+        processing_moves.append(f"headroom recovery: {headroom_recovery_mode}")
+    if processing_moves:
+        summary_lines.append(
+            "**Processing Moves:** " + ", ".join(processing_moves)
         )
     if stem_files:
         summary_lines.append(f"**Mastered Stems:** {len(stem_files)} files")
@@ -515,7 +566,7 @@ def run_mastering_tool(
         total=4,
     )
     output_path = _temp_audio_output_path(format_choice)
-    report_path = _write_json_payload({"status": "pending"})
+    report_path = _write_text_payload("Mastering report pending.\n")
     should_collect_mastered_stems = bool(stem_mastering)
     control_mode, profile_kwargs = resolve_mastering_request(
         profile_name,

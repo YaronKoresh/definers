@@ -75,11 +75,18 @@ sox = load_sox_module()
 _LAZY_SUBMODULES = {
     "audio",
     "cuda",
+    "data",
+    "file_ops",
+    "image",
     "logger",
+    "media",
     "ml",
+    "model_installation",
+    "optional_dependencies",
     "system",
     "text",
     "ui",
+    "video",
 }
 
 
@@ -89,6 +96,10 @@ def __getattr__(name: str) -> Any:
         globals()[name] = module
         return module
     raise AttributeError(name)
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()).union(_LAZY_SUBMODULES))
 
 
 __all__ = (

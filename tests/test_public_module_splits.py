@@ -1,3 +1,6 @@
+import importlib
+
+import definers
 import definers.text.system_messages as system_messages
 import definers.text.text_transforms as text_transforms
 import definers.text.translation as translation
@@ -128,6 +131,23 @@ def test_ml_facade_reexports_specific_modules():
     assert ml_facade.predict_linear_regression is predict_linear_regression
     assert ml_facade.get_ml_health_snapshot is get_ml_health_snapshot
     assert ml_facade.ml_health_markdown is ml_health_markdown
+
+
+def test_root_package_lazy_exposes_patch_target_modules():
+    assert definers.data is importlib.import_module("definers.data")
+    assert definers.image is importlib.import_module("definers.image")
+    assert definers.model_installation is importlib.import_module(
+        "definers.model_installation"
+    )
+
+
+def test_ml_facade_lazy_exposes_patch_target_submodules():
+    assert ml_facade.inference is importlib.import_module(
+        "definers.ml.inference"
+    )
+    assert ml_facade.repository_sync is importlib.import_module(
+        "definers.ml.repository_sync"
+    )
 
 
 def test_split_modules_are_directly_importable():

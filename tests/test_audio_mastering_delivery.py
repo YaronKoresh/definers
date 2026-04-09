@@ -39,6 +39,9 @@ def _install_scipy_stub() -> None:
     def lfilter(_b, _a, y, axis=-1):
         return np.array(y, dtype=np.float32, copy=True)
 
+    def filtfilt(_b, _a, y, axis=-1):
+        return np.array(y, dtype=np.float32, copy=True)
+
     def resample_poly(y, up, down, axis=-1):
         array = np.asarray(y, dtype=np.float32)
         if max(int(up), 1) == 1 and max(int(down), 1) == 1:
@@ -47,6 +50,7 @@ def _install_scipy_stub() -> None:
         return repeated[..., :: max(int(down), 1)]
 
     signal_module.lfilter = lfilter
+    signal_module.filtfilt = filtfilt
     signal_module.resample_poly = resample_poly
     signal_module.butter = lambda *args, **kwargs: "sos"
     signal_module.sosfiltfilt = lambda sos, x, axis=-1: np.array(
@@ -157,7 +161,10 @@ def test_save_verified_audio_retries_with_attenuation_until_profile_passes():
         export_ceiling_linear,
         abs=1e-6,
     )
-    assert np.max(np.abs(saved_signals[1])) < export_ceiling_linear
+    assert np.max(np.abs(saved_signals[1])) == pytest.approx(
+        export_ceiling_linear,
+        abs=1e-6,
+    )
     assert np.max(np.abs(final_signal)) == pytest.approx(
         np.max(np.abs(saved_signals[-1]))
     )
@@ -337,4 +344,6 @@ def test_verify_delivery_export_attaches_stage_metrics_and_contract_assessments(
     )
     assert result.report.output_contract_assessment is not None
     assert result.report.decoded_contract_assessment is not None
-    assert any("contract" in issue for issue in result.issues)
+    assert any(
+        "decoded" in issue or "drift" in issue for issue in result.issues
+    )

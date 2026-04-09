@@ -88,6 +88,8 @@ def test_run_mastering_tool_returns_report_and_stems(monkeypatch):
     assert "volume" not in captured
     assert "effects" not in captured
     assert captured["stem_model_name"] == "mastering"
+    assert Path(report_path).suffix == ".md"
+    assert "**Verdict:**" in summary_text
     assert "**Control Mode:** Vocal Focus" in summary_text
     assert "**Preset:** vocal" in summary_text
     assert "**Mastered Stems:** 2 files" in summary_text
@@ -209,6 +211,7 @@ def test_run_mastering_tool_writes_outputs_under_managed_root(
 
     assert Path(mastered_path).is_relative_to(tmp_path / "audio")
     assert Path(report_path).is_relative_to(tmp_path / "audio" / "reports")
+    assert Path(report_path).suffix == ".md"
     assert stem_files == [
         str(
             Path(mastered_path).parent

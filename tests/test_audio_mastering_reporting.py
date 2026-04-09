@@ -43,6 +43,9 @@ def _install_scipy_stub() -> None:
     def lfilter(_b, _a, y, axis=-1):
         return np.array(y, dtype=np.float32, copy=True)
 
+    def filtfilt(_b, _a, y, axis=-1):
+        return np.array(y, dtype=np.float32, copy=True)
+
     def resample_poly(y, up, down, axis=-1):
         array = np.asarray(y, dtype=np.float32)
         if max(int(up), 1) == 1 and max(int(down), 1) == 1:
@@ -51,6 +54,7 @@ def _install_scipy_stub() -> None:
         return repeated[..., :: max(int(down), 1)]
 
     signal_module.lfilter = lfilter
+    signal_module.filtfilt = filtfilt
     signal_module.resample_poly = resample_poly
     signal_module.butter = lambda *args, **kwargs: "sos"
     signal_module.sosfiltfilt = lambda sos, x, axis=-1: np.array(
@@ -344,7 +348,7 @@ def test_generate_mastering_report_uses_resolved_true_peak_target_for_margin():
     )
 
 
-def test_write_mastering_report_serializes_json(tmp_path: Path):
+def test_write_mastering_report_serializes_concise_json(tmp_path: Path):
     time_axis = np.linspace(0.0, 1.0, 8000, endpoint=False)
     input_signal = 0.2 * np.sin(2.0 * np.pi * 110.0 * time_axis).astype(
         np.float32
@@ -381,14 +385,46 @@ def test_write_mastering_report_serializes_json(tmp_path: Path):
 
     assert written_path == str(destination)
     payload = destination.read_text(encoding="utf-8")
+    assert '"report_title": "Mastering Report"' in payload
     assert '"preset_name": "edm"' in payload
-    assert '"post_character_metrics"' in payload
-    assert '"post_peak_catch_metrics"' in payload
-    assert '"post_delivery_trim_metrics"' in payload
-    assert '"post_clamp_metrics"' in payload
-    assert '"post_spatial_metrics"' in payload
-    assert '"delivery_trim_attenuation_db"' in payload
-    assert '"headroom_recovery_gain_db"' in payload
+    assert '"final_master"' in payload
+    assert '"delivery_file"' in payload
+    assert '"actions_taken"' in payload
+    assert '"attention"' in payload
+
+
+def test_write_mastering_report_renders_markdown(tmp_path: Path):
+    time_axis = np.linspace(0.0, 1.0, 8000, endpoint=False)
+    input_signal = 0.2 * np.sin(2.0 * np.pi * 110.0 * time_axis).astype(
+        np.float32
+    )
+    output_signal = 0.5 * np.sin(2.0 * np.pi * 110.0 * time_axis).astype(
+        np.float32
+    )
+
+    report = METRICS_MODULE.generate_mastering_report(
+        input_signal,
+        output_signal,
+        8000,
+        final_in_memory_signal=output_signal * 0.9,
+        preset_name="balanced",
+        delivery_profile_name="lossless",
+        export_gain_applied_db=1.1,
+        export_peak_alignment_mode="align_to_ceil",
+        export_peak_alignment_target_dbfs=-0.1,
+    )
+    destination = tmp_path / "mastering-report.md"
+
+    written_path = METRICS_MODULE.write_mastering_report(
+        report, str(destination)
+    )
+
+    assert written_path == str(destination)
+    payload = destination.read_text(encoding="utf-8")
+    assert "# Mastering Report" in payload
+    assert "## Final Master" in payload
+    assert "## Delivered File" in payload
+    assert "## Processing Notes" in payload
 
 
 def test_mastering_presets_wrap_config_factories():

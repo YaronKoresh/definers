@@ -604,10 +604,8 @@ def multiband_compress(
         sos_l = signal_module.butter(2, fc / sr2, btype="low", output="sos")
         sos_h = signal_module.butter(2, fc / sr2, btype="high", output="sos")
 
-        lp = signal_module.sosfilt(sos_l, x)
-        lp = signal_module.sosfilt(sos_l, lp)
-        hp = signal_module.sosfilt(sos_h, x)
-        hp = signal_module.sosfilt(sos_h, hp)
+        lp = signal_module.sosfiltfilt(sos_l, x, axis=-1)
+        hp = signal_module.sosfiltfilt(sos_h, x, axis=-1)
 
         return lp, hp
 

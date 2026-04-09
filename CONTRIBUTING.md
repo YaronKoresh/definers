@@ -4,7 +4,7 @@ This is the shortest safe contributor path for the current feature-first codebas
 
 ## Setup
 
-Definers targets Python 3.10 through 3.12.
+Definers targets Python 3.10 through 3.14.
 
 ```bash
 pip install -e ".[dev]"

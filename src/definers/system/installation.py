@@ -5,10 +5,81 @@ import pathlib
 import shutil
 import subprocess
 import sys
+import sysconfig
 import tempfile
 import zipfile
 
 from definers.constants import FFMPEG_URL
+
+
+def _first_existing_path(*candidates):
+    seen = set()
+    for candidate in candidates:
+        if not candidate:
+            continue
+        normalized = os.path.abspath(os.path.expanduser(os.fspath(candidate)))
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        if os.path.exists(normalized):
+            return normalized
+    return None
+
+
+def _faiss_python_cmake_args():
+    import numpy as numpy_module
+
+    python_root = _first_existing_path(sys.prefix, sys.base_prefix)
+    include_dir = _first_existing_path(
+        sysconfig.get_path("include"),
+        sysconfig.get_path("platinclude"),
+        sysconfig.get_config_var("INCLUDEPY"),
+        pathlib.Path(sys.base_prefix) / "include",
+        pathlib.Path(sys.prefix) / "include",
+    )
+    library_names = [
+        sysconfig.get_config_var("LDLIBRARY"),
+        sysconfig.get_config_var("LIBRARY"),
+    ]
+    if os.name == "nt":
+        version_nodot = sysconfig.get_config_var("py_version_nodot")
+        abi_flags = sysconfig.get_config_var("ABIFLAGS") or ""
+        if version_nodot:
+            library_names.extend(
+                [
+                    f"python{version_nodot}.lib",
+                    f"python{version_nodot}{abi_flags}.lib",
+                ]
+            )
+    library_dirs = [
+        sysconfig.get_config_var("LIBDIR"),
+        sysconfig.get_config_var("LIBPL"),
+        pathlib.Path(sys.base_prefix) / "libs",
+        pathlib.Path(sys.prefix) / "libs",
+        pathlib.Path(sys.base_prefix) / "lib",
+        pathlib.Path(sys.prefix) / "lib",
+    ]
+    library_candidates = []
+    for library_dir in library_dirs:
+        if not library_dir:
+            continue
+        for library_name in library_names:
+            if library_name:
+                library_candidates.append(
+                    pathlib.Path(library_dir) / library_name
+                )
+    python_library = _first_existing_path(*library_candidates)
+    numpy_include_dir = _first_existing_path(numpy_module.get_include())
+    definitions = [f"-DPython_EXECUTABLE={sys.executable}"]
+    if python_root is not None:
+        definitions.append(f"-DPython_ROOT_DIR={python_root}")
+    if include_dir is not None:
+        definitions.append(f"-DPython_INCLUDE_DIR={include_dir}")
+    if python_library is not None:
+        definitions.append(f"-DPython_LIBRARY={python_library}")
+    if numpy_include_dir is not None:
+        definitions.append(f"-DPython_NumPy_INCLUDE_DIRS={numpy_include_dir}")
+    return definitions
 
 
 def install_ffmpeg_windows():
@@ -363,12 +434,24 @@ def build_faiss():
     with system_module.cwd():
         git("YaronKoresh", "faiss", parent="./xfaiss")
     set_cuda_env()
-    cmake = "/usr/local/cmake/bin/cmake"
+    cmake = shutil.which("cmake") or "/usr/local/cmake/bin/cmake"
     try:
         with system_module.cwd("./xfaiss"):
             print("faiss - stage 1")
             system_module.run(
-                f"{cmake} -B build -DBUILD_TESTING=OFF -DCMAKE_BUILD_TYPE=Release -DFAISS_ENABLE_MKL=OFF -DFAISS_ENABLE_C_API=ON -DFAISS_ENABLE_GPU=ON -DFAISS_ENABLE_PYTHON=ON -DPython_EXECUTABLE={sys.executable} -DPython_INCLUDE_DIR={sys.prefix}/include/python{sys.version_info.major}.{sys.version_info.minor} -DPython_LIBRARY={sys.prefix}/lib/libpython{sys.version_info.major}.{sys.version_info.minor}.so -DPython_NumPy_INCLUDE_DIRS={sys.prefix}/lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages/numpy/core/include ."
+                [
+                    cmake,
+                    "-B",
+                    "build",
+                    "-DBUILD_TESTING=OFF",
+                    "-DCMAKE_BUILD_TYPE=Release",
+                    "-DFAISS_ENABLE_MKL=OFF",
+                    "-DFAISS_ENABLE_C_API=ON",
+                    "-DFAISS_ENABLE_GPU=ON",
+                    "-DFAISS_ENABLE_PYTHON=ON",
+                    *_faiss_python_cmake_args(),
+                    ".",
+                ]
             )
             print("faiss - stage 2")
             system_module.run(
@@ -475,9 +558,6 @@ def install_faiss():
             check=True,
         )
         py = sys.executable
-        prefix = sys.prefix
-        major = sys.version_info.major
-        minor = sys.version_info.minor
         subprocess.run(
             [
                 "cmake",
@@ -488,10 +568,7 @@ def install_faiss():
                 "-DFAISS_ENABLE_C_API=ON",
                 "-DFAISS_ENABLE_GPU=ON",
                 "-DFAISS_ENABLE_PYTHON=ON",
-                f"-DPython_EXECUTABLE={py}",
-                f"-DPython_INCLUDE_DIR={prefix}/include/python{major}.{minor}",
-                f"-DPython_LIBRARY={prefix}/lib/libpython{major}.{minor}.so",
-                f"-DPython_NumPy_INCLUDE_DIRS={prefix}/lib/python{major}.{minor}/site-packages/numpy/core/include",
+                *_faiss_python_cmake_args(),
                 ".",
             ],
             check=True,

@@ -4,7 +4,7 @@ Definers is a feature-first Python toolkit for ML, media workflows, data prepara
 
 ## Install
 
-Definers targets Python 3.10 through 3.12.
+Definers targets Python 3.10 through 3.14.
 
 ```bash
 pip install .

@@ -387,6 +387,9 @@ def process(
     log_fn("Mastering", "Applying low-end mono tightening...")
     y = self.apply_low_end_mono_tightening(y)
 
+    log_fn("Mastering", "Applying premaster true-peak trim...")
+    y = self.apply_pre_limiter_true_peak_trim(y)
+
     log_fn("Mastering", "Preparing finalization...")
     current_lufs = get_lufs_fn(y, self.resampling_target)
     dynamic_drive_db = self.compute_dynamic_drive(current_lufs)

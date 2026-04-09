@@ -490,7 +490,7 @@ def save_verified_audio(
         attenuated_signal = _apply_linear_export_ceiling(
             attenuated_signal,
             ceil_db,
-            allow_positive_gain=False,
+            allow_positive_gain=True,
         )
         if np.allclose(attenuated_signal, working_signal, atol=1e-8, rtol=0.0):
             break

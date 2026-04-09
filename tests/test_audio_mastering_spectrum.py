@@ -80,6 +80,7 @@ def _install_scipy_stub() -> None:
         y, copy=True
     )
     signal_module.butter = lambda *args, **kwargs: ("b", "a")
+    signal_module.filtfilt = lambda b, a, y, axis=-1: np.array(y, copy=True)
     signal_module.sosfilt = lambda sos, x: np.array(x, copy=True)
     signal_module.sosfiltfilt = lambda sos, x, axis=-1: np.array(x, copy=True)
 

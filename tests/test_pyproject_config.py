@@ -7,6 +7,12 @@ def read_pyproject_text() -> str:
     )
 
 
+def read_doc_text(name: str) -> str:
+    return (Path(__file__).resolve().parents[1] / name).read_text(
+        encoding="utf-8"
+    )
+
+
 def test_pyproject_omits_fairseq_and_vcs_install_metadata():
     pyproject_text = read_pyproject_text()
 
@@ -30,3 +36,20 @@ def test_pyproject_declares_clean_coverage_task():
     assert "--cov-report=term-missing:skip-covered" in pyproject_text
     assert 'COVERAGE_FILE = ".coverage.poe"' in pyproject_text
     assert "Path('.coverage.poe').unlink(missing_ok=True)" in pyproject_text
+
+
+def test_pyproject_declares_python_314_support():
+    pyproject_text = read_pyproject_text()
+
+    assert 'requires-python = ">=3.10,<3.15"' in pyproject_text
+    assert '"Programming Language :: Python :: 3.13"' in pyproject_text
+    assert '"Programming Language :: Python :: 3.14"' in pyproject_text
+
+
+def test_docs_advertise_python_314_support():
+    assert "Definers targets Python 3.10 through 3.14." in read_doc_text(
+        "README.md"
+    )
+    assert "Definers targets Python 3.10 through 3.14." in read_doc_text(
+        "CONTRIBUTING.md"
+    )

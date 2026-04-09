@@ -26,6 +26,7 @@ def _install_scipy_stub() -> None:
     signal_module = types.ModuleType("scipy.signal")
 
     signal_module.lfilter = lambda _b, _a, y, axis=-1: y
+    signal_module.filtfilt = lambda _b, _a, y, axis=-1: y
     signal_module.resample_poly = lambda y, up, down, axis=-1: y
     signal_module.butter = lambda *args, **kwargs: "sos"
     signal_module.sosfiltfilt = lambda sos, x, axis=-1: x

@@ -139,6 +139,317 @@ class MasteringReport:
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
+    def to_musician_dict(self) -> dict[str, Any]:
+        return _build_musician_report_payload(self)
+
+    def to_musician_markdown(self) -> str:
+        return _render_musician_report_markdown(self)
+
+
+def _safe_float(value: object) -> float | None:
+    if value is None:
+        return None
+    try:
+        resolved = float(value)
+    except Exception:
+        return None
+    if not np.isfinite(resolved):
+        return None
+    return resolved
+
+
+def _format_value(
+    value: object,
+    unit: str = "",
+    *,
+    decimals: int = 2,
+) -> str:
+    resolved = _safe_float(value)
+    if resolved is None:
+        return "n/a"
+    return f"{resolved:.{max(int(decimals), 0)}f}{unit}"
+
+
+def _metric_value(metrics: object | None, attribute_name: str) -> float | None:
+    if metrics is None:
+        return None
+    return _safe_float(getattr(metrics, attribute_name, None))
+
+
+def _metric_block(metrics: object | None) -> dict[str, float | None]:
+    return {
+        "loudness_lufs": _metric_value(metrics, "integrated_lufs"),
+        "true_peak_dbfs": _metric_value(metrics, "true_peak_dbfs"),
+        "crest_factor_db": _metric_value(metrics, "crest_factor_db"),
+        "stereo_width_ratio": _metric_value(metrics, "stereo_width_ratio"),
+        "low_end_mono_ratio": _metric_value(metrics, "low_end_mono_ratio"),
+    }
+
+
+def _final_master_assessment(
+    report: MasteringReport,
+) -> MasteringContractAssessment | None:
+    if report.contract is None:
+        return None
+    return assess_mastering_contract(
+        report.final_in_memory_metrics, report.contract
+    )
+
+
+def _export_alignment_note(report: MasteringReport) -> str | None:
+    alignment_mode = (
+        str(report.export_peak_alignment_mode or "").strip().lower()
+    )
+    export_gain_applied_db = _safe_float(report.export_gain_applied_db)
+    peak_alignment_target_dbfs = _safe_float(
+        report.export_peak_alignment_target_dbfs
+    )
+    if alignment_mode != "align_to_ceil" or export_gain_applied_db is None:
+        return None
+    if abs(export_gain_applied_db) <= 1e-6:
+        return None
+    target_text = (
+        f"{peak_alignment_target_dbfs:.2f} dBFS ceiling"
+        if peak_alignment_target_dbfs is not None
+        else "delivery ceiling"
+    )
+    if export_gain_applied_db > 0.0:
+        return f"Export was raised by {export_gain_applied_db:.2f} dB to use the available {target_text}."
+    return f"Export was trimmed by {abs(export_gain_applied_db):.2f} dB to stay under the {target_text}."
+
+
+def _processing_actions(report: MasteringReport) -> tuple[str, ...]:
+    actions: list[str] = []
+    alignment_note = _export_alignment_note(report)
+    if alignment_note is not None:
+        actions.append(alignment_note)
+    if report.character_stage_decision is not None and bool(
+        getattr(report.character_stage_decision, "applied", False)
+    ):
+        if bool(getattr(report.character_stage_decision, "reverted", False)):
+            actions.append("Character finish was auditioned and rolled back.")
+        else:
+            actions.append("Character finish was kept in the final master.")
+    if report.peak_catch_events:
+        actions.append(
+            f"Peak catch engaged {len(report.peak_catch_events)} time(s) after the character stage."
+        )
+    delivery_trim_attenuation_db = _safe_float(
+        report.delivery_trim_attenuation_db
+    )
+    if (
+        delivery_trim_attenuation_db is not None
+        and delivery_trim_attenuation_db > 0.05
+    ):
+        actions.append(
+            f"Delivery trim removed {delivery_trim_attenuation_db:.2f} dB before the final clamp."
+        )
+    headroom_recovery_gain_db = _safe_float(report.headroom_recovery_gain_db)
+    if (
+        headroom_recovery_gain_db is not None
+        and headroom_recovery_gain_db > 0.05
+    ):
+        actions.append(
+            f"Headroom recovery added {headroom_recovery_gain_db:.2f} dB after the clamp."
+        )
+    elif str(report.headroom_recovery_mode or "").strip().lower() == "disabled":
+        actions.append("Headroom recovery was not needed.")
+    return tuple(actions)
+
+
+def _attention_lines(report: MasteringReport) -> tuple[str, ...]:
+    lines: list[str] = []
+    tolerance_db = (
+        0.0
+        if report.contract is None
+        else float(getattr(report.contract, "target_lufs_tolerance_db", 0.0))
+    )
+    master_assessment = _final_master_assessment(report)
+    decoded_assessment = report.decoded_contract_assessment
+    if master_assessment is not None and abs(
+        master_assessment.target_lufs_error_db
+    ) > max(tolerance_db + 0.25, 0.35):
+        direction = (
+            "hotter"
+            if master_assessment.target_lufs_error_db > 0.0
+            else "quieter"
+        )
+        lines.append(
+            f"Final master lands {abs(master_assessment.target_lufs_error_db):.2f} dB {direction} than the target."
+        )
+    if (
+        master_assessment is not None
+        and master_assessment.short_term_over_db > 0.35
+    ):
+        lines.append(
+            f"Short-term loudness still rises {master_assessment.short_term_over_db:.2f} dB above the profile window."
+        )
+    if (
+        master_assessment is not None
+        and master_assessment.momentary_over_db > 0.35
+    ):
+        lines.append(
+            f"Momentary loudness still rises {master_assessment.momentary_over_db:.2f} dB above the profile window."
+        )
+    if decoded_assessment is not None and abs(
+        decoded_assessment.target_lufs_error_db
+    ) > max(tolerance_db + 0.25, 0.35):
+        direction = (
+            "hotter"
+            if decoded_assessment.target_lufs_error_db > 0.0
+            else "quieter"
+        )
+        lines.append(
+            f"Decoded playback lands {abs(decoded_assessment.target_lufs_error_db):.2f} dB {direction} than the target."
+        )
+    if (
+        decoded_assessment is not None
+        and decoded_assessment.true_peak_over_db > 0.05
+    ):
+        lines.append(
+            f"Decoded playback exceeds the delivery true-peak limit by {decoded_assessment.true_peak_over_db:.2f} dB."
+        )
+    return tuple(dict.fromkeys(lines))
+
+
+def _verdict_lines(report: MasteringReport) -> tuple[str, str]:
+    master_assessment = _final_master_assessment(report)
+    decoded_assessment = report.decoded_contract_assessment
+    attention_lines = _attention_lines(report)
+    if master_assessment is not None and master_assessment.passed:
+        if decoded_assessment is not None and not decoded_assessment.passed:
+            return (
+                "Final master is on target.",
+                "Decoded playback still moves outside the chosen delivery profile.",
+            )
+        return (
+            "Final master is on target.",
+            "Delivery translation looks stable for the chosen profile.",
+        )
+    if attention_lines:
+        return (
+            "Final master needs another pass.",
+            attention_lines[0],
+        )
+    return (
+        "Mastering finished.",
+        "Review the final master and delivery numbers below.",
+    )
+
+
+def _build_musician_report_payload(report: MasteringReport) -> dict[str, Any]:
+    headline, detail = _verdict_lines(report)
+    return {
+        "report_title": "Mastering Report",
+        "preset_name": report.preset_name,
+        "delivery_profile_name": report.delivery_profile_name,
+        "verdict": {
+            "headline": headline,
+            "detail": detail,
+        },
+        "final_master": _metric_block(report.final_in_memory_metrics),
+        "delivery_file": {
+            **_metric_block(report.output_metrics),
+            "export_gain_applied_db": _safe_float(
+                report.export_gain_applied_db
+            ),
+            "peak_alignment_mode": report.export_peak_alignment_mode,
+            "peak_alignment_target_dbfs": _safe_float(
+                report.export_peak_alignment_target_dbfs
+            ),
+        },
+        "decoded_playback": (
+            None
+            if report.decoded_metrics is None
+            else {
+                **_metric_block(report.decoded_metrics),
+                "sample_rate": report.decoded_sample_rate,
+            }
+        ),
+        "actions_taken": list(_processing_actions(report)),
+        "attention": list(_attention_lines(report)),
+    }
+
+
+def _render_musician_report_markdown(report: MasteringReport) -> str:
+    headline, detail = _verdict_lines(report)
+    final_master = report.final_in_memory_metrics
+    output_metrics = report.output_metrics
+    decoded_metrics = report.decoded_metrics
+    sections = [
+        "# Mastering Report",
+        "",
+        "## Verdict",
+        headline,
+        detail,
+        "",
+        "## Final Master",
+        f"- Preset: {report.preset_name or 'n/a'}",
+        f"- Delivery profile: {report.delivery_profile_name or 'n/a'}",
+        f"- Target loudness: {_format_value(report.target_lufs, ' LUFS')}",
+        f"- Final loudness: {_format_value(_metric_value(final_master, 'integrated_lufs'), ' LUFS')}",
+        f"- Final true peak: {_format_value(_metric_value(final_master, 'true_peak_dbfs'), ' dBFS')}",
+        f"- Crest factor: {_format_value(_metric_value(final_master, 'crest_factor_db'), ' dB')}",
+        f"- Stereo width: {_format_value(_metric_value(final_master, 'stereo_width_ratio'))}",
+        f"- Low-end mono focus: {_format_value(_metric_value(final_master, 'low_end_mono_ratio'))}",
+        "",
+        "## Delivered File",
+        f"- Export loudness: {_format_value(_metric_value(output_metrics, 'integrated_lufs'), ' LUFS')}",
+        f"- Export true peak: {_format_value(_metric_value(output_metrics, 'true_peak_dbfs'), ' dBFS')}",
+        f"- Export gain: {_format_value(report.export_gain_applied_db, ' dB')}",
+    ]
+    alignment_note = _export_alignment_note(report)
+    if alignment_note is not None:
+        sections.append(f"- Ceiling alignment: {alignment_note}")
+    if decoded_metrics is not None:
+        sections.extend(
+            [
+                "",
+                "## Decoded Playback",
+                f"- Decoded loudness: {_format_value(_metric_value(decoded_metrics, 'integrated_lufs'), ' LUFS')}",
+                f"- Decoded true peak: {_format_value(_metric_value(decoded_metrics, 'true_peak_dbfs'), ' dBFS')}",
+                f"- Decoded sample rate: {report.decoded_sample_rate if report.decoded_sample_rate is not None else 'n/a'}",
+            ]
+        )
+    sections.extend(["", "## Processing Notes"])
+    actions = _processing_actions(report)
+    if actions:
+        sections.extend(f"- {line}" for line in actions)
+    else:
+        sections.append("- No special follow-up moves were needed.")
+    sections.extend(["", "## Attention"])
+    attention = _attention_lines(report)
+    if attention:
+        sections.extend(f"- {line}" for line in attention)
+    else:
+        sections.append("- No major delivery warnings.")
+    return "\n".join(sections) + "\n"
+
+
+def _serialize_report_payload(report: object) -> dict[str, Any]:
+    to_musician_dict = getattr(report, "to_musician_dict", None)
+    if callable(to_musician_dict):
+        payload = to_musician_dict()
+        if isinstance(payload, dict):
+            return dict(payload)
+    to_dict = getattr(report, "to_dict", None)
+    if callable(to_dict):
+        payload = to_dict()
+        if isinstance(payload, dict):
+            return dict(payload)
+    return {"report": str(report)}
+
+
+def _render_report_text(report: object) -> str:
+    to_musician_markdown = getattr(report, "to_musician_markdown", None)
+    if callable(to_musician_markdown):
+        return str(to_musician_markdown())
+    payload = _serialize_report_payload(report)
+    lines = ["# Mastering Report", ""]
+    for key, value in payload.items():
+        lines.append(f"- {str(key).replace('_', ' ').title()}: {value}")
+    return "\n".join(lines) + "\n"
+
 
 def generate_mastering_report(
     input_signal: np.ndarray,
@@ -371,11 +682,21 @@ def write_mastering_report(
 ) -> str:
     destination = Path(destination_path)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text(
-        json.dumps(report.to_dict(), indent=max(int(indent), 0), sort_keys=True)
-        + "\n",
-        encoding="utf-8",
-    )
+    if destination.suffix.lower() == ".json":
+        destination.write_text(
+            json.dumps(
+                _serialize_report_payload(report),
+                indent=max(int(indent), 0),
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+    else:
+        destination.write_text(
+            _render_report_text(report),
+            encoding="utf-8",
+        )
     return str(destination)
 
 

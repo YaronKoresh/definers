@@ -82,6 +82,7 @@ def _install_scipy_stub() -> None:
         y, copy=True
     )
     signal_module.butter = lambda *args, **kwargs: ("b", "a")
+    signal_module.filtfilt = lambda b, a, y, axis=-1: np.array(y, copy=True)
     signal_module.sosfilt = lambda sos, x: np.array(x, copy=True)
     signal_module.sosfiltfilt = lambda sos, x, axis=-1: np.array(x, copy=True)
 
@@ -735,12 +736,12 @@ def test_apply_limiter_uses_forward_lookahead_without_output_delay(
     assert limited[1] == pytest.approx(1.0, rel=1e-6)
 
 
-def test_multiband_compress_cascades_lr4_filters(
+def test_multiband_compress_uses_zero_phase_lr4_filters(
     monkeypatch: pytest.MonkeyPatch,
 ):
     mastering = MASTERING_MODULE.SmartMastering(8000, resampling_target=8000)
     source = np.arange(16, dtype=float)
-    sosfilt_calls: list[tuple[str, np.ndarray]] = []
+    sosfiltfilt_calls: list[tuple[str, np.ndarray]] = []
 
     mastering.bands = [
         {
@@ -769,24 +770,28 @@ def test_multiband_compress_cascades_lr4_filters(
         lambda order, cutoff, btype, output: f"{btype}-sos",
     )
 
-    def fake_sosfilt(sos, x):
+    def fake_sosfiltfilt(sos, x, axis=-1):
         signal_slice = np.array(x, copy=True)
-        sosfilt_calls.append((sos, signal_slice))
+        sosfiltfilt_calls.append((sos, signal_slice))
         delta = 1.0 if sos == "low-sos" else 10.0
         return signal_slice + delta
 
-    monkeypatch.setattr(MASTERING_MODULE.signal, "sosfilt", fake_sosfilt)
+    monkeypatch.setattr(
+        MASTERING_MODULE.signal,
+        "sosfiltfilt",
+        fake_sosfiltfilt,
+    )
 
     mastering.multiband_compress(source)
 
-    assert [call[0] for call in sosfilt_calls] == [
+    assert [call[0] for call in sosfiltfilt_calls] == [
         "low-sos",
-        "low-sos",
-        "high-sos",
         "high-sos",
     ]
-    assert np.array_equal(sosfilt_calls[1][1], source + 1.0)
-    assert np.array_equal(sosfilt_calls[3][1], source + 10.0)
+    assert all(
+        np.array_equal(signal_slice, source)
+        for _sos, signal_slice in sosfiltfilt_calls
+    )
 
 
 def test_multiband_compress_links_stereo_gain(
@@ -2134,6 +2139,100 @@ def test_process_stem_mastered_input_skips_multiband_and_trims_hot_output(
     assert multiband_calls == []
     assert np.allclose(y_out, np.vstack([source, source]) * expected_scale)
     assert np.allclose(mastering.last_stage_signals["final_in_memory"], y_out)
+
+
+def test_process_applies_premaster_true_peak_trim_before_lufs_and_limiter(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    mastering = MASTERING_MODULE.SmartMastering(
+        8000,
+        resampling_target=8000,
+        preset="balanced",
+        target_lufs=-8.0,
+        micro_dynamics_strength=0.0,
+        pre_limiter_saturation_ratio=0.0,
+    )
+    source = np.array([0.8, -0.8, 0.9, -0.9], dtype=np.float32)
+    lufs_input_peaks: list[float] = []
+    saturation_input_peaks: list[float] = []
+    metrics = types.SimpleNamespace(
+        integrated_lufs=-8.0,
+        max_short_term_lufs=-9.0,
+        max_momentary_lufs=-8.5,
+        crest_factor_db=7.0,
+        stereo_width_ratio=0.2,
+        low_end_mono_ratio=0.95,
+        true_peak_dbfs=-4.0,
+    )
+
+    monkeypatch.setattr(MASTERING_MODULE, "apply_exciter", lambda y, *_: y)
+    monkeypatch.setattr(MASTERING_MODULE, "freq_cut", lambda y, *_, **__: y)
+    monkeypatch.setattr(mastering, "apply_eq", lambda y: y)
+    monkeypatch.setattr(mastering, "multiband_compress", lambda y: y)
+    monkeypatch.setattr(mastering, "apply_spatial_enhancement", lambda y: y)
+    monkeypatch.setattr(
+        mastering,
+        "apply_low_end_mono_tightening",
+        lambda y: y,
+    )
+    monkeypatch.setattr(
+        mastering,
+        "apply_pre_limiter_saturation",
+        lambda y, dynamic_drive_db=0.0: (
+            saturation_input_peaks.append(float(np.max(np.abs(y)))) or y
+        ),
+    )
+    monkeypatch.setattr(mastering, "apply_micro_dynamics_finish", lambda y: y)
+    monkeypatch.setattr(mastering, "apply_delivery_trim", lambda y: y)
+    monkeypatch.setattr(
+        mastering,
+        "apply_safety_clamp",
+        lambda y, ceil_db=-0.1: y,
+    )
+    monkeypatch.setattr(
+        mastering,
+        "apply_final_headroom_recovery",
+        lambda y: y,
+    )
+    monkeypatch.setattr(
+        MASTERING_MODULE,
+        "get_lufs",
+        lambda y, sr: lufs_input_peaks.append(float(np.max(np.abs(y)))) or -8.0,
+    )
+    monkeypatch.setattr(
+        MASTERING_MODULE,
+        "_measure_mastering_loudness",
+        lambda y, sr, **kwargs: metrics,
+    )
+    monkeypatch.setattr(
+        mastering,
+        "plan_follow_up_action",
+        lambda metrics, contract: types.SimpleNamespace(
+            should_apply=False,
+            gain_db=0.0,
+            soft_clip_ratio=mastering.limiter_soft_clip_ratio,
+            stereo_width_scale=1.0,
+            reasons=(),
+            integrated_gap_db=0.0,
+        ),
+    )
+    monkeypatch.setattr(
+        mastering,
+        "apply_limiter",
+        lambda y, drive_db, ceil_db, **kwargs: y,
+    )
+
+    sr_out, y_out = mastering.process(source, 8000)
+
+    expected_peak = float(10.0 ** (-3.0 / 20.0))
+
+    assert sr_out == 8000
+    assert lufs_input_peaks == [pytest.approx(expected_peak, abs=1e-4)]
+    assert saturation_input_peaks == [pytest.approx(expected_peak, abs=1e-4)]
+    assert float(np.max(np.abs(y_out))) == pytest.approx(
+        expected_peak,
+        abs=1e-4,
+    )
 
 
 def test_process_applies_final_peak_catch_after_character_stage_when_true_peak_is_hot(

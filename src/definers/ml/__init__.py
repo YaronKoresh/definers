@@ -219,6 +219,35 @@ _FAILED_MODEL_LOADS: dict[str, str] = {}
 
 logger = init_logger("definers.ml")
 
+_LAZY_SUBMODULES = {
+    "answer",
+    "contracts",
+    "health",
+    "health_api",
+    "inference",
+    "introspection",
+    "regression_api",
+    "regression_predictor",
+    "repository_sync",
+    "rvc",
+    "safe_deserialization",
+    "text",
+    "trainer_plan",
+    "training",
+}
+
+
+def __getattr__(name: str):
+    if name in _LAZY_SUBMODULES:
+        module = importlib.import_module(f"{__name__}.{name}")
+        globals()[name] = module
+        return module
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()).union(_LAZY_SUBMODULES))
+
 
 @dataclass(frozen=True, slots=True)
 class _AnswerRuntime:
@@ -497,6 +526,7 @@ def build_faiss():
     from pathlib import Path
 
     from definers.system.download_activity import create_activity_reporter
+    from definers.system.installation import _faiss_python_cmake_args
     from definers.system.output_paths import managed_output_session_dir
 
     report = create_activity_reporter(7)
@@ -511,7 +541,7 @@ def build_faiss():
     )
     git("YaronKoresh", "faiss", parent=str(source_dir))
     set_cuda_env()
-    cmake = "/usr/local/cmake/bin/cmake"
+    cmake = shutil.which("cmake") or "/usr/local/cmake/bin/cmake"
     try:
         with cwd(str(source_dir)):
             print("faiss - stage 1")
@@ -531,10 +561,7 @@ def build_faiss():
                     "-DFAISS_ENABLE_C_API=ON",
                     "-DFAISS_ENABLE_GPU=ON",
                     "-DFAISS_ENABLE_PYTHON=ON",
-                    f"-DPython_EXECUTABLE={sys.executable}",
-                    f"-DPython_INCLUDE_DIR={sys.prefix}/include/python{sys.version_info.major}.{sys.version_info.minor}",
-                    f"-DPython_LIBRARY={sys.prefix}/lib/libpython{sys.version_info.major}.{sys.version_info.minor}.so",
-                    f"-DPython_NumPy_INCLUDE_DIRS={sys.prefix}/lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages/numpy/core/include",
+                    *_faiss_python_cmake_args(),
                     ".",
                 ]
             )

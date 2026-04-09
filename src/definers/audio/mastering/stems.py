@@ -18,6 +18,9 @@ class StemMasteringPlan:
     overrides: dict[str, float | str | None]
 
 
+_STEM_SUM_ATTENUATION_LINEAR = float(10.0 ** (-6.0 / 20.0))
+
+
 def _stem_mix_gain_linear(mix_gain_db: float) -> float:
     return float(10.0 ** (float(mix_gain_db) / 20.0))
 
@@ -33,11 +36,39 @@ def _as_stereo(signal: np.ndarray) -> np.ndarray:
     array = np.asarray(signal, dtype=np.float32)
     if array.ndim == 1:
         return np.stack([array, array], axis=0)
-    if array.ndim == 2 and array.shape[0] <= array.shape[-1]:
-        return array.astype(np.float32, copy=False)
     if array.ndim == 2:
-        return array.T.astype(np.float32, copy=False)
+        oriented = (
+            array if array.shape[0] <= array.shape[-1] else array.T
+        ).astype(np.float32, copy=False)
+        if oriented.shape[0] == 1:
+            return np.repeat(oriented, 2, axis=0)
+        if oriented.shape[0] >= 2:
+            return oriented[:2]
     raise ValueError("Unsupported stem shape")
+
+
+def _synchronize_stem_mix_shape(
+    signal: np.ndarray,
+    *,
+    target_channels: int,
+    target_length: int,
+) -> np.ndarray:
+    synchronized = _as_stereo(signal)
+    if synchronized.shape[0] > target_channels:
+        synchronized = synchronized[:target_channels]
+    elif synchronized.shape[0] < target_channels:
+        synchronized = np.pad(
+            synchronized,
+            ((0, target_channels - synchronized.shape[0]), (0, 0)),
+        )
+    if synchronized.shape[-1] > target_length:
+        synchronized = synchronized[:, :target_length]
+    elif synchronized.shape[-1] < target_length:
+        synchronized = np.pad(
+            synchronized,
+            ((0, 0), (0, target_length - synchronized.shape[-1])),
+        )
+    return synchronized.astype(np.float32, copy=False)
 
 
 def _match_signal_length(signal: np.ndarray, target_length: int) -> np.ndarray:
@@ -176,21 +207,25 @@ def _prepare_mixed_stem_layers(
             stem_signal.astype(np.float32, copy=False),
         )
         max_length = max(max_length, stem_signal.shape[-1])
-        channel_count = stem_signal.shape[0]
+        channel_count = max(channel_count, stem_signal.shape[0])
 
     mixed = np.zeros((channel_count, max_length), dtype=np.float32)
     aligned_layers: dict[str, tuple[int, np.ndarray]] = {}
 
     for stem_name, (sample_rate, signal) in prepared_layers.items():
-        aligned_signal = signal
-        if aligned_signal.shape[-1] < max_length:
-            aligned_signal = np.pad(
-                aligned_signal,
-                ((0, 0), (0, max_length - aligned_signal.shape[-1])),
-            )
-        aligned_signal = aligned_signal.astype(np.float32, copy=False)
-        aligned_layers[stem_name] = (sample_rate, aligned_signal)
-        mixed = mixed + aligned_signal
+        aligned_signal = _synchronize_stem_mix_shape(
+            signal,
+            target_channels=channel_count,
+            target_length=max_length,
+        )
+        attenuated_signal = np.asarray(
+            aligned_signal * _STEM_SUM_ATTENUATION_LINEAR,
+            dtype=np.float32,
+        )
+        aligned_layers[stem_name] = (sample_rate, attenuated_signal)
+        mixed += attenuated_signal
+
+    mixed = np.clip(mixed, -1.0, 1.0).astype(np.float32, copy=False)
 
     safe_headroom_db = float(max(mix_headroom_db, 0.0))
     peak = float(np.max(np.abs(mixed))) if mixed.size else 0.0

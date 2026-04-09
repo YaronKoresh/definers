@@ -134,6 +134,32 @@ def test_mix_stem_layers_aligns_sample_rates_and_applies_headroom():
     )
 
 
+def test_mix_stem_layers_synchronizes_shapes_and_clips_hot_sum():
+    stems = {
+        "drums": (
+            8000,
+            np.ones(3, dtype=np.float32),
+        ),
+        "vocals": (
+            8000,
+            np.ones((2, 2), dtype=np.float32),
+        ),
+    }
+
+    mixed_sr, mixed_signal = MASTERING_STEMS_MODULE.mix_stem_layers(
+        stems,
+        mix_headroom_db=0.0,
+    )
+
+    stem_gain = float(10.0 ** (-6.0 / 20.0))
+
+    assert mixed_sr == 8000
+    assert mixed_signal.dtype == np.float32
+    assert mixed_signal.shape == (2, 3)
+    assert np.allclose(mixed_signal[:, :2], 1.0)
+    assert np.allclose(mixed_signal[:, 2], stem_gain, atol=1e-6)
+
+
 def test_process_stem_layers_processes_each_stem_and_cleans_temp_dir(
     tmp_path: Path,
 ):

@@ -49,6 +49,7 @@ from .eq import (
 from .finalization import (
     apply_delivery_trim as _apply_delivery_trim,
     apply_final_headroom_recovery as _apply_final_headroom_recovery,
+    apply_pre_limiter_true_peak_trim as _apply_pre_limiter_true_peak_trim,
     apply_stereo_width_restraint as _apply_stereo_width_restraint,
     compute_dynamic_drive as _compute_dynamic_drive,
     compute_primary_soft_clip_ratio as _compute_primary_soft_clip_ratio,
@@ -552,6 +553,14 @@ class SmartMastering:
             dynamic_drive_db=dynamic_drive_db,
         )
 
+    def apply_pre_limiter_true_peak_trim(self, y: np.ndarray) -> np.ndarray:
+        return _apply_pre_limiter_true_peak_trim(
+            self,
+            y,
+            sample_rate=self.resampling_target,
+            measure_true_peak_fn=_measure_true_peak,
+        )
+
     def apply_stereo_width_restraint(
         self,
         y: np.ndarray,
@@ -720,7 +729,7 @@ def _master_internal(
         from ..io import read_audio, save_audio
 
         report_path = kwargs.pop(
-            "report_path", f"{output_path}.report.json" if output_path else None
+            "report_path", f"{output_path}.report.md" if output_path else None
         )
         report_indent = int(kwargs.pop("report_indent", 2))
         bit_depth = int(kwargs.pop("bit_depth", 32))

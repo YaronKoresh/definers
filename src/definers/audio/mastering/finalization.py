@@ -56,6 +56,9 @@ class PeakCatchEvent:
         return asdict(self)
 
 
+_PRE_LIMITER_TRUE_PEAK_TARGET_DBFS = -3.0
+
+
 def _measure_signal_crest_factor_db(y: np.ndarray) -> float:
     signal = np.nan_to_num(
         np.asarray(y, dtype=np.float32),
@@ -394,6 +397,58 @@ def plan_follow_up_action(
     )
 
 
+def apply_pre_limiter_true_peak_trim(
+    self,
+    y: np.ndarray,
+    *,
+    sample_rate: int,
+    measure_true_peak_fn,
+) -> np.ndarray:
+    signal = np.nan_to_num(
+        np.asarray(y, dtype=np.float32),
+        nan=0.0,
+        posinf=0.0,
+        neginf=0.0,
+    )
+    self.last_pre_limiter_true_peak_target_dbfs = float(
+        _PRE_LIMITER_TRUE_PEAK_TARGET_DBFS
+    )
+    self.last_pre_limiter_true_peak_input_dbfs = None
+    self.last_pre_limiter_true_peak_output_dbfs = None
+    self.last_pre_limiter_true_peak_attenuation_db = 0.0
+    if signal.size == 0:
+        return signal
+
+    measured_true_peak_dbfs = measure_true_peak_fn(
+        signal,
+        sample_rate,
+        oversample_factor=self.true_peak_oversample_factor,
+    )
+    if not np.isfinite(measured_true_peak_dbfs):
+        return signal
+
+    self.last_pre_limiter_true_peak_input_dbfs = float(measured_true_peak_dbfs)
+    self.last_pre_limiter_true_peak_output_dbfs = float(measured_true_peak_dbfs)
+    if measured_true_peak_dbfs <= _PRE_LIMITER_TRUE_PEAK_TARGET_DBFS:
+        return signal
+
+    attenuation_db = float(
+        measured_true_peak_dbfs - _PRE_LIMITER_TRUE_PEAK_TARGET_DBFS
+    )
+    self.last_pre_limiter_true_peak_attenuation_db = attenuation_db
+    output = signal * float(10.0 ** (-attenuation_db / 20.0))
+    output_true_peak_dbfs = measure_true_peak_fn(
+        output,
+        sample_rate,
+        oversample_factor=self.true_peak_oversample_factor,
+    )
+    if np.isfinite(output_true_peak_dbfs):
+        self.last_pre_limiter_true_peak_output_dbfs = float(
+            output_true_peak_dbfs
+        )
+    return np.nan_to_num(output, nan=0.0, posinf=0.0, neginf=0.0)
+
+
 def apply_delivery_trim(
     self,
     y: np.ndarray,
@@ -584,6 +639,7 @@ __all__ = [
     "PeakCatchEvent",
     "apply_final_headroom_recovery",
     "apply_delivery_trim",
+    "apply_pre_limiter_true_peak_trim",
     "apply_pre_limiter_saturation",
     "apply_stereo_width_restraint",
     "compute_dynamic_drive",
