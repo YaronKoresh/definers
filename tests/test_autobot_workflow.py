@@ -158,6 +158,30 @@ process.stdout.write(JSON.stringify(result));
     return json.loads(completed.stdout)
 
 
+def read_js_module_export(helper_path: Path, export_name: str) -> object:
+    node_path = shutil.which("node") or shutil.which("node.exe")
+    if node_path is None:
+        pytest.skip("node is required for autobot helper behavior tests")
+    script = """
+const helper = require(process.argv[1]);
+process.stdout.write(JSON.stringify(helper[process.argv[2]]));
+""".strip()
+    completed = subprocess.run(
+        [
+            node_path,
+            "-e",
+            script,
+            str(helper_path),
+            export_name,
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
+    return json.loads(completed.stdout)
+
+
 def parse_result_labels(result: dict[str, object], key: str) -> set[str]:
     return set(json.loads(str(result[key])))
 
@@ -234,6 +258,10 @@ def test_large_pr_path_caps_batch_summaries_and_merges_final_summary() -> None:
         "- Add a final metadata line exactly in this form: AUTOBOT_LABEL_HINTS:"
         in helper
     )
+    assert (
+        "- Return 0-12 labels in that metadata line, ordered from most to least relevant."
+        in helper
+    )
     assert 'labelHintsReady: labelHints ? "true" : "false"' in helper
 
 
@@ -301,6 +329,10 @@ def test_final_summary_prompt_preserves_classification_signals() -> None:
         "If the evidence implies incompatible behavior or a major version impact, say that explicitly."
         in helper
     )
+    assert (
+        "The AUTOBOT_LABEL_HINTS line directly drives label sync and semver decisions"
+        in helper
+    )
 
 
 def test_synchronize_with_fresh_analysis_reconciles_against_live_pr_labels() -> (
@@ -313,6 +345,7 @@ def test_synchronize_with_fresh_analysis_reconciles_against_live_pr_labels() -> 
         in helper
     )
     assert "const currentLabels = uniqueValidLabels(currentPrLabels);" in helper
+    assert "deriveSummarySignalLabels" not in helper
     assert 'const hasFreshPrLabelResult = rawAiLabels !== "";' in helper
     assert "if (hasFreshPrLabelResult) {" in helper
     assert "nextAiLabels = parsedAiLabels;" in helper
@@ -416,6 +449,110 @@ def test_stale_major_release_alert_is_removed_when_pr_is_not_breaking() -> None:
         "await github.rest.issues.deleteComment({ owner, repo, comment_id: existingMajorAlertComment.id });"
         in helper
     )
+
+
+def test_workflow_prefers_ai_labels_before_deterministic_fallback() -> None:
+    workflow = read_workflow()
+
+    assert (
+        "AI_LABELS_RAW: ${{ steps.parse-pr-summary.outputs.label_hints || steps.ai-labels.outputs.response || steps.collect.outputs.deterministic_labels_json }}"
+        in workflow
+    )
+
+
+def test_version_bump_map_covers_every_supported_label() -> None:
+    label_definitions = read_js_module_export(
+        LABELS_HELPER, "LABEL_DEFINITIONS"
+    )
+    version_bumps = read_js_module_export(
+        LABELS_HELPER, "VERSION_BUMP_BY_LABEL"
+    )
+
+    assert set(version_bumps) == set(label_definitions)
+    assert version_bumps["breaking-change"] == "major"
+    assert version_bumps["enhancement"] == "minor"
+    assert version_bumps["improvement"] == "minor"
+    assert version_bumps["deprecation"] == "minor"
+    assert version_bumps["bug"] == "patch"
+    assert version_bumps["documentation"] == "patch"
+
+
+def test_autobot_uses_expanded_label_cap() -> None:
+    project_helper = read_project_manager_helper()
+    prompt_helper = read_prompts_helper()
+
+    assert "const MAX_AI_LABELS = 12;" in project_helper
+    assert "const MAX_AI_LABELS = 12;" in prompt_helper
+    assert (
+        "`Return a valid JSON array with up to ${MAX_AI_LABELS} lowercase label names.`,"
+        in prompt_helper
+    )
+    assert (
+        "`- Return at most ${MAX_AI_LABELS} labels, ordered from most to least relevant.`,"
+        in prompt_helper
+    )
+
+
+def test_pr_label_delta_retains_more_than_six_labels_when_supported() -> None:
+    result = run_js_helper_function(
+        PROJECT_MANAGER_HELPER,
+        "resolvePrLabelDelta",
+        {
+            "action": "opened",
+            "currentPrLabels": [],
+            "previousBotLabels": [],
+            "aiLabelsRaw": json.dumps(
+                [
+                    "breaking-change",
+                    "enhancement",
+                    "security",
+                    "api",
+                    "database",
+                    "schema",
+                    "compatibility",
+                    "migration",
+                    "feature-flag",
+                    "runtime",
+                    "performance",
+                    "workflow",
+                ]
+            ),
+            "aiSummary": "",
+        },
+    )
+
+    assert len(result["nextAiLabels"]) == 12
+    assert result["nextAiLabels"] == [
+        "breaking-change",
+        "enhancement",
+        "security",
+        "performance",
+        "api",
+        "database",
+        "schema",
+        "compatibility",
+        "migration",
+        "feature-flag",
+        "runtime",
+        "workflow",
+    ]
+
+
+def test_pr_label_delta_does_not_backfill_from_summary_text() -> None:
+    result = run_js_helper_function(
+        PROJECT_MANAGER_HELPER,
+        "resolvePrLabelDelta",
+        {
+            "action": "opened",
+            "currentPrLabels": ["bug"],
+            "previousBotLabels": [],
+            "aiLabelsRaw": json.dumps(["bug"]),
+            "aiSummary": "## Autobot Summary\n\n### What Changed\nThis adds a new feature and introduces breaking changes for existing consumers.\n\n### Release Relevance\n- The summary explicitly calls out a minor version impact for the new capability.\n- The old contract is backward-incompatible and requires migration, so this is a major version impact.\n\n### Risks And Testing\n- Consumers must update.\n\n### Classification Signals\n- New feature added.\n- Breaking change for consumers.",
+        },
+    )
+
+    assert result["nextAiLabels"] == ["bug"]
+    assert result["labelsToAdd"] == []
 
 
 def test_workflow_uses_smaller_helper_backed_project_steps() -> None:

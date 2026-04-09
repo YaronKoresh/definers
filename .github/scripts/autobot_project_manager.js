@@ -13,7 +13,7 @@ const {
 } = require("./autobot_labels");
 
 const MIN_RELEASE_SIZE = 3;
-const MAX_AI_LABELS = 6;
+const MAX_AI_LABELS = 12;
 const BUMP_ORDER = { none: 0, patch: 1, minor: 2, major: 3 };
 const BOT_COMMENT_SIGNATURE = "<!-- autobot-ai-summary -->";
 const MILESTONE_COMMENT_SIGNATURE = "<!-- autobot-milestone-update -->";

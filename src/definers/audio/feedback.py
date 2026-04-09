@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-import librosa
 import numpy as np
 
 from definers.logger import init_logger
+
+from .dependencies import librosa_module
 
 _logger = init_logger()
 
@@ -29,6 +30,7 @@ def get_audio_feedback(audio_path: str) -> str | None:
         return None
 
     try:
+        librosa = librosa_module()
         (y_stereo, sr) = librosa.load(audio_path, sr=None, mono=False)
         y_mono = librosa.to_mono(y_stereo) if y_stereo.ndim > 1 else y_stereo
         rms = librosa.feature.rms(y=y_mono)[0]

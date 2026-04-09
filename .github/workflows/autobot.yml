@@ -283,7 +283,7 @@ jobs:
         env:
           PROJECT_STATE_FILE: /tmp/autobot_project_state.json
           AI_SUMMARY: ${{ steps.parse-pr-summary.outputs.summary_body || steps.collect.outputs.deterministic_summary || steps.ai-issue-summary.outputs.response || steps.issue-summary-prompt.outputs.fallback_summary }}
-          AI_LABELS_RAW: ${{ steps.parse-pr-summary.outputs.label_hints || steps.collect.outputs.deterministic_labels_json || steps.ai-labels.outputs.response }}
+          AI_LABELS_RAW: ${{ steps.parse-pr-summary.outputs.label_hints || steps.ai-labels.outputs.response || steps.collect.outputs.deterministic_labels_json }}
           AI_COOLDOWN_ACTIVE: ${{ steps.ai-cooldown-state.outputs.active }}
           AI_COOLDOWN_UNTIL: ${{ steps.ai-cooldown-state.outputs.until }}
           PR_SUMMARY_TIER: ${{ steps.collect.outputs.summary_tier }}

@@ -74,7 +74,8 @@ function buildFinalPrSummaryPrompt({ summaryTier, candidateLabelsRaw, batchSumma
     "",
     `- Use only labels from this candidate set: ${candidateLabels.join(", ") || "(none)"}.`,
     "- Add a final metadata line exactly in this form: AUTOBOT_LABEL_HINTS: [\"label1\",\"label2\"]",
-    "- Return 0-6 labels in that metadata line, ordered from most to least relevant.",
+    "- Return 0-12 labels in that metadata line, ordered from most to least relevant.",
+    "- The AUTOBOT_LABEL_HINTS line directly drives label sync and semver decisions, so include every clearly supported semver-relevant label.",
     "- Use only direct evidence from the prompt for those label hints.",
     "- End your response with the exact final line: END_OF_REPORT",
     "",
@@ -220,7 +221,7 @@ function buildIssueSummaryArtifacts({ issue, outputPath = "/tmp/issue_summary_pr
 }
 
 function buildLabelPrompt({ eventName, prSummary, issueSummary, candidateLabelsRaw, outputPath = "/tmp/label_prompt.txt" }) {
-  const MAX_AI_LABELS = 6;
+  const MAX_AI_LABELS = 12;
   const MAX_SUMMARY_CHARS = 2400;
   const eventKind = eventName === "issues" ? "issue" : "pull request";
   const summaryBody = stripEndMarker(eventKind === "issue" ? issueSummary || "" : prSummary || "");
@@ -244,6 +245,7 @@ function buildLabelPrompt({ eventName, prSummary, issueSummary, candidateLabelsR
     `- Return at most ${MAX_AI_LABELS} labels, ordered from most to least relevant.`,
     "- Use only direct evidence from the summary.",
     "- Prefer version-critical labels first when clearly supported.",
+    "- Labels drive semver and milestone decisions, so keep supported release labels instead of collapsing them into generic summaries.",
     "- Return ONLY a JSON array of label name strings. No markdown, no explanation, no extra text.",
     "- Return label names exactly as provided in ALLOWED LABELS (lowercase).",
     "- If nothing fits, return an empty array: []",

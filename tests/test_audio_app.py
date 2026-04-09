@@ -1,3 +1,4 @@
+import builtins
 import importlib
 import sys
 from types import ModuleType
@@ -116,6 +117,21 @@ def test_launch_audio_app_hides_mastering_output_column_until_result(
     registry = []
     fake_gradio = _build_fake_gradio_module(registry)
     monkeypatch.setitem(sys.modules, "gradio", fake_gradio)
+    monkeypatch.delitem(sys.modules, "definers.ui.apps.audio", raising=False)
+    monkeypatch.delitem(sys.modules, "definers.audio", raising=False)
+    monkeypatch.delitem(sys.modules, "definers.audio.feedback", raising=False)
+
+    original_import = builtins.__import__
+
+    def guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if str(name).split(".", 1)[0] == "librosa":
+            raise ModuleNotFoundError(
+                "No module named 'librosa'",
+                name="librosa",
+            )
+        return original_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", guarded_import)
 
     audio_app = importlib.import_module("definers.ui.apps.audio")
 
