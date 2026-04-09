@@ -1,3 +1,413 @@
+from html import escape
+from typing import Any
+
+
+def _progress_markup(
+    title: str,
+    state: str = "idle",
+    detail: str | None = None,
+    steps: tuple[str, ...] | list[str] | None = None,
+    active_step: int | None = None,
+) -> str:
+    normalized_state = str(state or "idle").strip().lower()
+    detail_text = (
+        "Choose an action to begin."
+        if detail is None
+        else str(detail).strip() or "Choose an action to begin."
+    )
+    state_label = {
+        "idle": "Ready",
+        "running": "Running",
+        "success": "Done",
+        "error": "Failed",
+    }.get(normalized_state, "Ready")
+    resolved_steps = tuple(
+        str(step).strip() for step in tuple(steps or ()) if str(step).strip()
+    )
+    progress_percent = 0.0
+    completed_steps: tuple[str, ...] = ()
+    current_step_label: str | None = None
+    remaining_steps: tuple[str, ...] = resolved_steps
+    if resolved_steps:
+        if normalized_state == "success":
+            progress_percent = 100.0
+            completed_steps = resolved_steps
+            remaining_steps = ()
+        elif normalized_state == "idle":
+            progress_percent = 0.0
+        else:
+            bounded_active_step = max(
+                1,
+                min(
+                    int(active_step or 1),
+                    len(resolved_steps),
+                ),
+            )
+            progress_percent = (
+                bounded_active_step / len(resolved_steps)
+            ) * 100.0
+            completed_steps = resolved_steps[: bounded_active_step - 1]
+            current_step_label = resolved_steps[bounded_active_step - 1]
+            remaining_steps = resolved_steps[bounded_active_step:]
+    done_text = ", ".join(completed_steps) or "Nothing completed yet"
+    current_text = current_step_label or (
+        "Waiting to start"
+        if normalized_state == "idle"
+        else "Completed"
+        if normalized_state == "success"
+        else detail_text
+    )
+    remaining_text = (
+        ", ".join(remaining_steps)
+        if remaining_steps
+        else "Start a workflow to load steps"
+        if not resolved_steps and normalized_state == "idle"
+        else "Nothing left"
+    )
+    step_count_markup = (
+        f'<em class="definers-progress-shell__count">{int(active_step or 0)}/{len(resolved_steps)}</em>'
+        if resolved_steps and normalized_state == "running"
+        else f'<em class="definers-progress-shell__count">{len(completed_steps)}/{len(resolved_steps)}</em>'
+        if resolved_steps
+        else ""
+    )
+    step_items_markup = ""
+    if resolved_steps:
+        step_items = []
+        for index, step_label in enumerate(resolved_steps, start=1):
+            step_state = "todo"
+            if normalized_state == "success" or index <= len(completed_steps):
+                step_state = "done"
+            elif index == len(completed_steps) + 1:
+                step_state = (
+                    "error" if normalized_state == "error" else "active"
+                )
+            step_items.append(
+                '<li class="definers-progress-shell__step '
+                f'definers-progress-shell__step--{escape(step_state)}">'
+                f"<span>{index}</span>"
+                f"<strong>{escape(step_label)}</strong>"
+                "</li>"
+            )
+        step_items_markup = (
+            '<ol class="definers-progress-shell__steps">'
+            + "".join(step_items)
+            + "</ol>"
+        )
+    return (
+        '<section class="definers-progress-shell '
+        f'definers-progress-shell--{escape(normalized_state)}">'
+        '<div class="definers-progress-shell__meta">'
+        f"<span>{escape(state_label)}</span>"
+        f"<strong>{escape(str(title or 'Workspace status'))}</strong>"
+        f"{step_count_markup}"
+        "</div>"
+        f"<p>{escape(detail_text)}</p>"
+        '<div class="definers-progress-shell__summary">'
+        "<div><span>Done</span>"
+        f"<strong>{escape(done_text)}</strong></div>"
+        "<div><span>Now</span>"
+        f"<strong>{escape(current_text)}</strong></div>"
+        "<div><span>Left</span>"
+        f"<strong>{escape(remaining_text)}</strong></div>"
+        "</div>"
+        '<div class="definers-progress-shell__rail">'
+        f'<div class="definers-progress-shell__bar" style="width: {progress_percent:.2f}%"></div>'
+        "</div>"
+        f"{step_items_markup}"
+        "</section>"
+    )
+
+
+def init_progress_tracker(
+    title: str = "Workspace ready",
+    detail: str = "Choose an action to begin.",
+):
+    import gradio as gr
+
+    return gr.Markdown(
+        value=_progress_markup(title, "idle", detail),
+        elem_classes="definers-progress-panel",
+    )
+
+
+def _output_folder_markup(
+    path: str,
+    detail: str,
+    *,
+    state: str = "ready",
+) -> str:
+    return (
+        '<section class="definers-output-toolbar__card '
+        f'definers-output-toolbar__card--{escape(state)}">'
+        "<span>Outputs Folder</span>"
+        f"<strong>{escape(path)}</strong>"
+        f"<p>{escape(detail)}</p>"
+        "</section>"
+    )
+
+
+def _open_directory(path: str) -> None:
+    import os
+    import subprocess
+    import sys
+
+    if sys.platform.startswith("win") and hasattr(os, "startfile"):
+        os.startfile(path)
+        return
+    if sys.platform == "darwin":
+        subprocess.Popen(["open", path])
+        return
+    subprocess.Popen(["xdg-open", path])
+
+
+def open_managed_output_root() -> str:
+    from pathlib import Path
+
+    from definers.system.output_paths import managed_output_root
+
+    output_root = Path(managed_output_root())
+    output_root.mkdir(parents=True, exist_ok=True)
+    try:
+        _open_directory(str(output_root))
+    except Exception as error:
+        return _output_folder_markup(
+            str(output_root),
+            f"Could not open the folder automatically: {error}",
+            state="error",
+        )
+    return _output_folder_markup(
+        str(output_root),
+        "Opened in the system file manager.",
+        state="open",
+    )
+
+
+def init_output_folder_controls(
+    button_label: str = "Open Outputs Folder",
+):
+    import gradio as gr
+
+    from definers.system.output_paths import managed_output_root
+
+    with gr.Row(elem_classes="definers-output-toolbar"):
+        button = gr.Button(button_label, variant="secondary")
+        status = gr.Markdown(
+            value=_output_folder_markup(
+                managed_output_root(),
+                "Artifacts produced by the GUI are saved here.",
+            ),
+            elem_classes="definers-output-toolbar__status",
+        )
+    button.click(
+        fn=open_managed_output_root,
+        outputs=[status],
+        show_progress="hidden",
+    )
+    return button, status
+
+
+def progress_update(
+    title: str,
+    state: str = "idle",
+    detail: str | None = None,
+    steps: tuple[str, ...] | list[str] | None = None,
+    active_step: int | None = None,
+):
+    import gradio as gr
+
+    return gr.update(
+        value=_progress_markup(
+            title,
+            state,
+            detail,
+            steps=steps,
+            active_step=active_step,
+        )
+    )
+
+
+def _coerce_outputs(outputs):
+    if outputs is None:
+        return []
+    if isinstance(outputs, (list, tuple)):
+        return list(outputs)
+    return [outputs]
+
+
+def _coerce_result_values(result, output_count: int):
+    if output_count == 0:
+        return ()
+    if output_count == 1:
+        return (result,)
+    if not isinstance(result, (list, tuple)):
+        raise TypeError("Expected a list or tuple of outputs")
+    if len(result) != output_count:
+        raise ValueError("Unexpected number of outputs returned")
+    return tuple(result)
+
+
+def _activity_detail(
+    fallback_detail: str,
+    activity_snapshot: Any,
+) -> str:
+    if activity_snapshot is None:
+        return fallback_detail
+    activity_message = str(getattr(activity_snapshot, "message", "")).strip()
+    return activity_message or fallback_detail
+
+
+def wrap_progress_handler(
+    handler,
+    *,
+    output_count: int,
+    action_label: str,
+    steps: tuple[str, ...] | list[str] | None = None,
+    running_detail: str | None = None,
+    success_detail: str | None = None,
+    poll_interval_seconds: float = 0.12,
+):
+    def wrapped(*args):
+        import gradio as gr
+
+        from definers.system.download_activity import (
+            create_download_activity_task,
+            get_download_activity_snapshot,
+            resolve_download_activity_task,
+            wait_for_download_activity_task,
+        )
+
+        idle_updates = tuple(gr.update() for _ in range(output_count))
+        resolved_steps = tuple(steps or ()) or (
+            "Validate request",
+            "Run workflow",
+            "Publish result",
+        )
+        yield (
+            *idle_updates,
+            progress_update(
+                action_label,
+                "running",
+                "Checking the request.",
+                steps=resolved_steps,
+                active_step=1,
+            ),
+        )
+        activity_task = create_download_activity_task(handler, *args)
+        running_step = min(2, len(resolved_steps))
+        yield (
+            *idle_updates,
+            progress_update(
+                action_label,
+                "running",
+                running_detail or "Working on your request.",
+                steps=resolved_steps,
+                active_step=running_step,
+            ),
+        )
+        last_sequence = -1
+        while True:
+            task_done = wait_for_download_activity_task(
+                activity_task,
+                poll_interval_seconds,
+            )
+            activity_snapshot = get_download_activity_snapshot(
+                activity_task.scope_id
+            )
+            if (
+                activity_snapshot is not None
+                and activity_snapshot.sequence != last_sequence
+            ):
+                last_sequence = activity_snapshot.sequence
+                yield (
+                    *idle_updates,
+                    progress_update(
+                        action_label,
+                        "running",
+                        _activity_detail(
+                            running_detail or "Working on your request.",
+                            activity_snapshot,
+                        ),
+                        steps=resolved_steps,
+                        active_step=running_step,
+                    ),
+                )
+            if task_done:
+                break
+        try:
+            result, activity_snapshot = resolve_download_activity_task(
+                activity_task
+            )
+            normalized_result = _coerce_result_values(result, output_count)
+        except Exception as error:
+            yield (
+                *idle_updates,
+                progress_update(
+                    action_label,
+                    "error",
+                    _activity_detail(
+                        str(error),
+                        getattr(error, "download_activity_snapshot", None),
+                    ),
+                    steps=resolved_steps,
+                    active_step=running_step,
+                ),
+            )
+            raise
+        if len(resolved_steps) > 2:
+            yield (
+                *normalized_result,
+                progress_update(
+                    action_label,
+                    "running",
+                    "Publishing the result.",
+                    steps=resolved_steps,
+                    active_step=len(resolved_steps),
+                ),
+            )
+        yield (
+            *normalized_result,
+            progress_update(
+                action_label,
+                "success",
+                success_detail or "Result is ready.",
+                steps=resolved_steps,
+                active_step=len(resolved_steps),
+            ),
+        )
+
+    return wrapped
+
+
+def bind_progress_click(
+    button,
+    handler,
+    *,
+    progress_output,
+    inputs=None,
+    outputs=None,
+    action_label: str,
+    steps: tuple[str, ...] | list[str] | None = None,
+    running_detail: str | None = None,
+    success_detail: str | None = None,
+    show_progress: str = "minimal",
+):
+    resolved_outputs = _coerce_outputs(outputs)
+    return button.click(
+        fn=wrap_progress_handler(
+            handler,
+            output_count=len(resolved_outputs),
+            action_label=action_label,
+            steps=steps,
+            running_detail=running_detail,
+            success_detail=success_detail,
+        ),
+        inputs=inputs,
+        outputs=[*resolved_outputs, progress_output],
+        show_progress=show_progress,
+    )
+
+
 class GradioShared:
     @staticmethod
     def theme():
@@ -315,6 +725,284 @@ html > body footer {
     box-shadow: var(--definers-shadow), var(--definers-glow);
 }
 
+.definers-progress-panel {
+    margin-bottom: 18px !important;
+}
+
+.definers-output-toolbar {
+    gap: 14px !important;
+    align-items: stretch !important;
+    margin-bottom: 18px !important;
+}
+
+.definers-output-toolbar > .column,
+.definers-output-toolbar > .gradio-container,
+.definers-output-toolbar > div {
+    min-width: 0;
+}
+
+.definers-output-toolbar button {
+    min-width: 220px;
+}
+
+.definers-output-toolbar__status {
+    flex: 1 1 auto;
+    margin: 0 !important;
+}
+
+.definers-output-toolbar__status > * {
+    margin: 0 !important;
+}
+
+.definers-output-toolbar__card {
+    margin: 0 !important;
+    padding: 16px 18px !important;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 20px;
+    background: linear-gradient(180deg, rgba(57, 68, 82, 0.24) 0%, rgba(16, 21, 30, 0.94) 100%);
+    box-shadow: var(--definers-shadow-soft);
+}
+
+.definers-output-toolbar__card span {
+    display: block;
+    margin-bottom: 6px;
+    color: var(--definers-accent-strong);
+    font-size: 0.74rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+}
+
+.definers-output-toolbar__card strong {
+    display: block;
+    min-width: 0;
+    color: var(--definers-ink-strong);
+    font-size: 0.9rem;
+    line-height: 1.45;
+    word-break: break-word;
+}
+
+.definers-output-toolbar__card p {
+    margin: 8px 0 0 0 !important;
+    padding: 0 !important;
+    color: var(--definers-muted);
+    line-height: 1.45;
+}
+
+.definers-output-toolbar__card--open {
+    border-color: rgba(74, 222, 128, 0.28);
+}
+
+.definers-output-toolbar__card--error {
+    border-color: rgba(248, 113, 113, 0.3);
+}
+
+.definers-progress-shell {
+    position: relative;
+    overflow: hidden;
+    margin: 0 !important;
+    padding: 18px 22px !important;
+    border: 1px solid var(--definers-border);
+    border-radius: 22px;
+    background: linear-gradient(180deg, rgba(57, 68, 82, 0.28) 0%, rgba(16, 21, 30, 0.96) 100%);
+    box-shadow: var(--definers-shadow-soft);
+}
+
+.definers-progress-shell__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+
+.definers-progress-shell__meta span {
+    color: var(--definers-accent-strong);
+    font-size: 0.74rem;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+}
+
+.definers-progress-shell__meta strong {
+    color: var(--definers-ink-strong);
+    font-size: 1rem;
+}
+
+.definers-progress-shell__count {
+    margin-left: auto;
+    color: var(--definers-muted);
+    font-size: 0.76rem;
+    font-style: normal;
+}
+
+.definers-progress-shell p {
+    margin: 0 0 12px 0 !important;
+    padding: 0 !important;
+    color: var(--definers-muted);
+    line-height: 1.5;
+}
+
+.definers-progress-shell__summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.definers-progress-shell__summary div {
+    min-width: 0;
+    padding: 10px 12px;
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    border-radius: 16px;
+    background: rgba(15, 23, 42, 0.34);
+}
+
+.definers-progress-shell__summary span {
+    display: block;
+    margin-bottom: 6px;
+    color: var(--definers-muted);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.definers-progress-shell__summary strong {
+    display: block;
+    min-width: 0;
+    color: var(--definers-ink-strong);
+    font-size: 0.88rem;
+    line-height: 1.4;
+}
+
+.definers-progress-shell__rail {
+    position: relative;
+    height: 8px;
+    border-radius: 999px;
+    background: rgba(148, 163, 184, 0.18);
+    overflow: hidden;
+}
+
+.definers-progress-shell__bar {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 0;
+    border-radius: inherit;
+    background: linear-gradient(90deg, rgba(84, 226, 255, 0.25), rgba(84, 226, 255, 0.92), rgba(255, 191, 102, 0.85));
+    transition: width 180ms ease, opacity 180ms ease;
+}
+
+.definers-progress-shell--idle .definers-progress-shell__bar {
+    opacity: 0.48;
+}
+
+.definers-progress-shell--running .definers-progress-shell__bar {
+    animation: definers-panel-sheen 1.2s linear infinite;
+}
+
+.definers-progress-shell--success .definers-progress-shell__bar {
+    background: linear-gradient(90deg, rgba(74, 222, 128, 0.62), rgba(134, 239, 172, 0.95));
+}
+
+.definers-progress-shell--error .definers-progress-shell__bar {
+    background: linear-gradient(90deg, rgba(248, 113, 113, 0.75), rgba(252, 165, 165, 0.95));
+}
+
+.definers-progress-shell__steps {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 10px;
+    margin: 12px 0 0 0 !important;
+    padding: 0 !important;
+    list-style: none;
+}
+
+.definers-progress-shell__step {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    padding: 10px 12px;
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    border-radius: 16px;
+    background: rgba(15, 23, 42, 0.26);
+}
+
+.definers-progress-shell__step span {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    flex: 0 0 24px;
+    border-radius: 999px;
+    border: 1px solid rgba(148, 163, 184, 0.26);
+    color: var(--definers-muted);
+    font-size: 0.76rem;
+    font-weight: 700;
+}
+
+.definers-progress-shell__step strong {
+    min-width: 0;
+    color: var(--definers-muted);
+    font-size: 0.86rem;
+    line-height: 1.35;
+}
+
+.definers-progress-shell__step--done {
+    border-color: rgba(74, 222, 128, 0.28);
+    background: rgba(21, 128, 61, 0.16);
+}
+
+.definers-progress-shell__step--done span {
+    border-color: rgba(74, 222, 128, 0.32);
+    color: rgb(187, 247, 208);
+}
+
+.definers-progress-shell__step--done strong {
+    color: rgb(220, 252, 231);
+}
+
+.definers-progress-shell__step--active {
+    border-color: rgba(84, 226, 255, 0.34);
+    background: rgba(8, 145, 178, 0.16);
+}
+
+.definers-progress-shell__step--active span {
+    border-color: rgba(84, 226, 255, 0.36);
+    color: rgb(186, 230, 253);
+}
+
+.definers-progress-shell__step--active strong {
+    color: var(--definers-ink-strong);
+}
+
+.definers-progress-shell__step--error {
+    border-color: rgba(248, 113, 113, 0.34);
+    background: rgba(153, 27, 27, 0.16);
+}
+
+.definers-progress-shell__step--error span {
+    border-color: rgba(248, 113, 113, 0.34);
+    color: rgb(254, 202, 202);
+}
+
+.definers-progress-shell__step--error strong {
+    color: rgb(254, 226, 226);
+}
+
+@media (max-width: 900px) {
+    .definers-output-toolbar {
+        flex-direction: column;
+    }
+
+    .definers-progress-shell__summary {
+        grid-template-columns: 1fr;
+    }
+}
+
 .tool-container h2,
 .tool-container h3 {
     color: var(--definers-ink-strong) !important;
@@ -568,7 +1256,7 @@ label + .tab-like-container {
                 title=title,
                 description="Production-grade assistant for generation, analysis, debugging, and delivery decisions.",
                 save_history=True,
-                show_progress="hidden",
+                show_progress="minimal",
                 concurrency_limit=None,
             )
 

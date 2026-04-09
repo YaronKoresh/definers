@@ -75,6 +75,7 @@ def test_build_training_plan_markdown_uses_auto_trainer_plan(monkeypatch):
 
 def test_handle_training_returns_model_output_and_plan(monkeypatch):
     import definers.ml as ml_module
+    import definers.system.output_paths as output_paths_module
 
     trainer_plan_module = importlib.import_module("definers.ml.trainer_plan")
 
@@ -89,7 +90,7 @@ def test_handle_training_returns_model_output_and_plan(monkeypatch):
 
         def train(self, **kwargs):
             assert kwargs["resume_from"] == "model.joblib"
-            assert kwargs["save_as"] == "trained-output.joblib"
+            assert kwargs["save_as"] == "/managed/train/trained-output.joblib"
             assert kwargs["batch_size"] == 24
             assert kwargs["validation_split"] == 0.15
             assert kwargs["test_split"] == 0.2
@@ -99,6 +100,11 @@ def test_handle_training_returns_model_output_and_plan(monkeypatch):
 
     monkeypatch.setattr(ml_module, "AutoTrainer", FakeTrainer)
     monkeypatch.setattr(ml_module, "simple_text", lambda value: value)
+    monkeypatch.setattr(
+        output_paths_module,
+        "managed_output_path",
+        lambda *args, **kwargs: f"/managed/train/{kwargs['filename']}",
+    )
     monkeypatch.setattr(
         trainer_plan_module,
         "render_training_plan_markdown",

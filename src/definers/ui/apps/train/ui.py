@@ -354,6 +354,11 @@ def build_train_app(
     import gradio as gr
 
     from definers.constants import MAX_INPUT_LENGTH, tasks
+    from definers.ui.gradio_shared import (
+        bind_progress_click,
+        init_output_folder_controls,
+        init_progress_tracker,
+    )
 
     from .handlers import (
         build_training_plan_markdown,
@@ -399,6 +404,35 @@ def build_train_app(
                 description=hero_description,
             )
         )
+        progress_status = init_progress_tracker(
+            "ML studio ready",
+            "Choose a task and execute it.",
+        )
+        init_output_folder_controls()
+
+        def bind_action(
+            button,
+            handler,
+            *,
+            inputs=None,
+            outputs=None,
+            action_label,
+            steps=None,
+            running_detail=None,
+            success_detail=None,
+        ):
+            return bind_progress_click(
+                button,
+                handler,
+                progress_output=progress_status,
+                inputs=inputs,
+                outputs=outputs,
+                action_label=action_label,
+                steps=steps,
+                running_detail=running_detail,
+                success_detail=success_detail,
+            )
+
         with gr.Tabs(elem_classes="studio-panel"):
             if "studio" in selected_sections:
                 with gr.TabItem(TRAIN_TAB_NAMES[0]):
@@ -420,13 +454,31 @@ def build_train_app(
                             validation_status = gr.Markdown(
                                 "## Validation\n- Status: idle"
                             )
-                    refresh_health_button.click(
-                        fn=handle_ml_health_report,
+                    bind_action(
+                        refresh_health_button,
+                        handle_ml_health_report,
                         outputs=[health_markdown, validation_status],
+                        action_label="Refresh ML Health",
+                        steps=(
+                            "Validate runtime",
+                            "Collect health snapshot",
+                            "Publish report",
+                        ),
+                        running_detail="Collecting the live ML health snapshot.",
+                        success_detail="ML health snapshot is ready.",
                     )
-                    validate_health_button.click(
-                        fn=handle_validate_ml_health,
+                    bind_action(
+                        validate_health_button,
+                        handle_validate_ml_health,
                         outputs=[validation_status],
+                        action_label="Validate Runtime",
+                        steps=(
+                            "Validate request",
+                            "Inspect dependencies",
+                            "Publish validation",
+                        ),
+                        running_detail="Validating the runtime dependencies.",
+                        success_detail="Runtime validation is complete.",
                     )
             if "train" in selected_sections:
                 with gr.TabItem(TRAIN_TAB_NAMES[1]):
@@ -522,8 +574,9 @@ def build_train_app(
                                 "## Training Plan\n- Build a plan to inspect the execution route."
                             )
                             train_output = gr.File(label="Training Output")
-                    preview_plan_button.click(
-                        fn=build_training_plan_markdown,
+                    bind_action(
+                        preview_plan_button,
+                        build_training_plan_markdown,
                         inputs=[
                             local_features,
                             local_labels,
@@ -541,9 +594,18 @@ def build_train_app(
                             stratify,
                         ],
                         outputs=[training_plan],
+                        action_label="Preview Training Plan",
+                        steps=(
+                            "Validate data sources",
+                            "Build training plan",
+                            "Publish plan",
+                        ),
+                        running_detail="Building the training plan preview.",
+                        success_detail="Training plan preview is ready.",
                     )
-                    train_button.click(
-                        fn=handle_training,
+                    bind_action(
+                        train_button,
+                        handle_training,
                         inputs=[
                             local_features,
                             local_labels,
@@ -562,6 +624,14 @@ def build_train_app(
                             stratify,
                         ],
                         outputs=[train_output, training_plan, training_status],
+                        action_label="Train Model",
+                        steps=(
+                            "Validate training inputs",
+                            "Run training job",
+                            "Publish artifacts",
+                        ),
+                        running_detail="Running the training workflow.",
+                        success_detail="Training run is complete.",
                     )
             if "run" in selected_sections:
                 with gr.TabItem(TRAIN_TAB_NAMES[2]):
@@ -595,8 +665,9 @@ def build_train_app(
                                         label="Prediction Preview",
                                         language="json",
                                     )
-                            predict_button.click(
-                                fn=handle_prediction,
+                            bind_action(
+                                predict_button,
+                                handle_prediction,
                                 inputs=[
                                     model_predict,
                                     prediction_data,
@@ -607,6 +678,14 @@ def build_train_app(
                                     predict_status,
                                     predict_preview,
                                 ],
+                                action_label="Run Prediction",
+                                steps=(
+                                    "Validate model inputs",
+                                    "Run prediction",
+                                    "Publish artifact",
+                                ),
+                                running_detail="Running the saved model prediction.",
+                                success_detail="Prediction result is ready.",
                             )
                         with gr.TabItem(RUN_TAB_NAMES[1]):
                             with gr.Row():
@@ -640,8 +719,9 @@ def build_train_app(
                                         label="Inference Preview",
                                         language="json",
                                     )
-                            infer_button.click(
-                                fn=handle_inference,
+                            bind_action(
+                                infer_button,
+                                handle_inference,
                                 inputs=[
                                     inference_task,
                                     inference_data,
@@ -652,6 +732,14 @@ def build_train_app(
                                     infer_status,
                                     infer_preview,
                                 ],
+                                action_label="Run Task Inference",
+                                steps=(
+                                    "Validate inference inputs",
+                                    "Run inference",
+                                    "Publish artifact",
+                                ),
+                                running_detail="Running task-based inference.",
+                                success_detail="Inference result is ready.",
                             )
                         with gr.TabItem(RUN_TAB_NAMES[2]):
                             with gr.Row():
@@ -679,14 +767,23 @@ def build_train_app(
                                         lines=10,
                                         buttons=["copy"],
                                     )
-                            answer_button.click(
-                                fn=handle_answer,
+                            bind_action(
+                                answer_button,
+                                handle_answer,
                                 inputs=[
                                     answer_prompt,
                                     answer_history,
                                     answer_attachment,
                                 ],
                                 outputs=[answer_output],
+                                action_label="Run Answer Runtime",
+                                steps=(
+                                    "Validate prompt payload",
+                                    "Run answer runtime",
+                                    "Publish answer",
+                                ),
+                                running_detail="Running the answer runtime.",
+                                success_detail="Answer output is ready.",
                             )
             if "text" in selected_sections:
                 with gr.TabItem(TRAIN_TAB_NAMES[3]):
@@ -711,10 +808,19 @@ def build_train_app(
                                         label="Feature Matrix",
                                         language="json",
                                     )
-                            extract_features_button.click(
-                                fn=handle_text_feature_extraction,
+                            bind_action(
+                                extract_features_button,
+                                handle_text_feature_extraction,
                                 inputs=[feature_text],
                                 outputs=[feature_output, feature_summary],
+                                action_label="Extract Text Features",
+                                steps=(
+                                    "Validate source text",
+                                    "Extract feature matrix",
+                                    "Publish features",
+                                ),
+                                running_detail="Extracting the text feature matrix.",
+                                success_detail="Text features are ready.",
                             )
                         with gr.TabItem(TEXT_TAB_NAMES[1]):
                             with gr.Row():
@@ -739,10 +845,19 @@ def build_train_app(
                                         lines=8,
                                         buttons=["copy"],
                                     )
-                            reconstruct_button.click(
-                                fn=handle_features_to_text,
+                            bind_action(
+                                reconstruct_button,
+                                handle_features_to_text,
                                 inputs=[reconstructed_features, vocabulary],
                                 outputs=[reconstructed_text],
+                                action_label="Reconstruct Text",
+                                steps=(
+                                    "Validate feature payload",
+                                    "Reconstruct text",
+                                    "Publish text",
+                                ),
+                                running_detail="Reconstructing text from features.",
+                                success_detail="Reconstructed text is ready.",
                             )
                         with gr.TabItem(TEXT_TAB_NAMES[2]):
                             with gr.Row():
@@ -789,20 +904,47 @@ def build_train_app(
                                         label="Iterative Output",
                                         lines=6,
                                     )
-                            quick_summary_button.click(
-                                fn=handle_quick_summary,
+                            bind_action(
+                                quick_summary_button,
+                                handle_quick_summary,
                                 inputs=[summary_text],
                                 outputs=[quick_summary_output],
+                                action_label="One-Pass Summarize",
+                                steps=(
+                                    "Validate source text",
+                                    "Create summary",
+                                    "Publish summary",
+                                ),
+                                running_detail="Creating a one-pass summary.",
+                                success_detail="One-pass summary is ready.",
                             )
-                            map_reduce_button.click(
-                                fn=handle_map_reduce_summary,
+                            bind_action(
+                                map_reduce_button,
+                                handle_map_reduce_summary,
                                 inputs=[summary_text, max_words],
                                 outputs=[map_reduce_output],
+                                action_label="Map-Reduce Summary",
+                                steps=(
+                                    "Validate source text",
+                                    "Run map-reduce summary",
+                                    "Publish summary",
+                                ),
+                                running_detail="Running the map-reduce summary flow.",
+                                success_detail="Map-reduce summary is ready.",
                             )
-                            iterative_summary_button.click(
-                                fn=handle_iterative_summary,
+                            bind_action(
+                                iterative_summary_button,
+                                handle_iterative_summary,
                                 inputs=[summary_text, max_words, min_loops],
                                 outputs=[iterative_summary_output],
+                                action_label="Iterative Summary",
+                                steps=(
+                                    "Validate source text",
+                                    "Run iterative summary",
+                                    "Publish summary",
+                                ),
+                                running_detail="Running the iterative summary flow.",
+                                success_detail="Iterative summary is ready.",
                             )
                         with gr.TabItem(TEXT_TAB_NAMES[3]):
                             with gr.Row():
@@ -825,10 +967,19 @@ def build_train_app(
                                         label="Optimized Prompt",
                                         lines=8,
                                     )
-                            prompt_button.click(
-                                fn=handle_prompt_optimization,
+                            bind_action(
+                                prompt_button,
+                                handle_prompt_optimization,
                                 inputs=[prompt_input],
                                 outputs=[preprocessed_prompt, optimized_prompt],
+                                action_label="Optimize Prompt",
+                                steps=(
+                                    "Validate prompt",
+                                    "Optimize prompt",
+                                    "Publish result",
+                                ),
+                                running_detail="Optimizing the prompt payload.",
+                                success_detail="Prompt optimization is ready.",
                             )
             if "ops" in selected_sections:
                 with gr.TabItem(TRAIN_TAB_NAMES[4]):
@@ -866,19 +1017,37 @@ def build_train_app(
                                     load_runtime_status = gr.Markdown(
                                         "## Runtime Model Init\n- Status: idle"
                                     )
-                            init_model_files_button.click(
-                                fn=handle_init_model_files,
+                            bind_action(
+                                init_model_files_button,
+                                handle_init_model_files,
                                 inputs=[
                                     bootstrap_task,
                                     turbo,
                                     bootstrap_model_type,
                                 ],
                                 outputs=[init_model_files_status],
+                                action_label="Init Model Files",
+                                steps=(
+                                    "Validate bootstrap config",
+                                    "Initialize model files",
+                                    "Publish status",
+                                ),
+                                running_detail="Initializing model files for the selected task.",
+                                success_detail="Model file initialization is complete.",
                             )
-                            load_runtime_button.click(
-                                fn=handle_load_runtime_model,
+                            bind_action(
+                                load_runtime_button,
+                                handle_load_runtime_model,
                                 inputs=[bootstrap_task, turbo],
                                 outputs=[load_runtime_status],
+                                action_label="Load Runtime Model",
+                                steps=(
+                                    "Validate bootstrap config",
+                                    "Load runtime model",
+                                    "Publish status",
+                                ),
+                                running_detail="Loading the runtime model.",
+                                success_detail="Runtime model is ready.",
                             )
                         with gr.TabItem(OPS_TAB_NAMES[1]):
                             with gr.Row():
@@ -918,8 +1087,9 @@ def build_train_app(
                                         label="K-Means Metrics",
                                         language="json",
                                     )
-                            kmeans_button.click(
-                                fn=handle_kmeans_suggestions,
+                            bind_action(
+                                kmeans_button,
+                                handle_kmeans_suggestions,
                                 inputs=[
                                     kmeans_matrix,
                                     k_min,
@@ -927,6 +1097,14 @@ def build_train_app(
                                     random_state,
                                 ],
                                 outputs=[kmeans_summary, kmeans_output],
+                                action_label="Suggest Cluster Counts",
+                                steps=(
+                                    "Validate feature matrix",
+                                    "Score cluster counts",
+                                    "Publish metrics",
+                                ),
+                                running_detail="Scoring candidate cluster counts.",
+                                success_detail="K-means suggestions are ready.",
                             )
                         with gr.TabItem(OPS_TAB_NAMES[2]):
                             with gr.Row():
@@ -957,18 +1135,36 @@ def build_train_app(
                                     language_status = gr.Markdown(
                                         "## Language Lookup\n- Status: idle"
                                     )
-                            checkpoint_button.click(
-                                fn=handle_rvc_checkpoint_lookup,
+                            bind_action(
+                                checkpoint_button,
+                                handle_rvc_checkpoint_lookup,
                                 inputs=[
                                     checkpoint_folder,
                                     checkpoint_model_name,
                                 ],
                                 outputs=[checkpoint_status],
+                                action_label="Find Latest Checkpoint",
+                                steps=(
+                                    "Validate checkpoint path",
+                                    "Resolve latest checkpoint",
+                                    "Publish status",
+                                ),
+                                running_detail="Looking up the latest RVC checkpoint.",
+                                success_detail="Checkpoint lookup is complete.",
                             )
-                            language_button.click(
-                                fn=handle_language_lookup,
+                            bind_action(
+                                language_button,
+                                handle_language_lookup,
                                 inputs=[language_code],
                                 outputs=[language_status],
+                                action_label="Resolve Language",
+                                steps=(
+                                    "Validate language code",
+                                    "Resolve language",
+                                    "Publish status",
+                                ),
+                                running_detail="Resolving the language code.",
+                                success_detail="Language lookup is ready.",
                             )
     return app
 

@@ -23,13 +23,23 @@ class TranslateApp:
 
         from definers.constants import language_codes
         from definers.system import unique
-        from definers.ui.gradio_shared import launch_blocks
+        from definers.ui.gradio_shared import (
+            bind_progress_click,
+            init_output_folder_controls,
+            init_progress_tracker,
+            launch_blocks,
+        )
 
         with gr.Blocks() as app:
             gr.Markdown("# AI Translator")
             gr.Markdown(
                 "### An AI-based translation software for the community"
             )
+            progress_status = init_progress_tracker(
+                "Translator ready",
+                "Enter text and choose a target language.",
+            )
+            init_output_folder_controls()
             with gr.Row():
                 with gr.Column():
                     txt = gr.Textbox(
@@ -53,10 +63,20 @@ class TranslateApp:
                         buttons=["copy"],
                     )
             btn = gr.Button(value="Translate")
-            btn.click(
-                fn=TranslateApp.translate_text,
+            bind_progress_click(
+                btn,
+                TranslateApp.translate_text,
+                progress_output=progress_status,
                 inputs=[txt, lang],
                 outputs=[res],
+                action_label="Translate",
+                steps=(
+                    "Validate text",
+                    "Translate content",
+                    "Publish result",
+                ),
+                running_detail="Translating the text.",
+                success_detail="Translation is ready.",
             )
         launch_blocks(app)
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 
 from definers.constants import MADMOM_AVAILABLE
@@ -253,6 +255,8 @@ def beat_visualizer(
     from moviepy import AudioFileClip, ColorClip, CompositeVideoClip, ImageClip
     from PIL import Image, ImageFilter
 
+    from definers.system.output_paths import managed_output_path
+
     img = Image.open(image_path)
     (w, h) = get_max_resolution(*img.size)
     img = img.resize((w, h), Image.Resampling.LANCZOS)
@@ -267,7 +271,11 @@ def beat_visualizer(
     if image_effect in effect_map:
         img = img.filter(effect_map[image_effect])
 
-    output_path = tmp(".mp4")
+    output_path = managed_output_path(
+        "mp4",
+        section="audio",
+        stem=f"{Path(audio_path).stem}_visualizer",
+    )
 
     audio_clip = AudioFileClip(audio_path)
     duration = audio_clip.duration

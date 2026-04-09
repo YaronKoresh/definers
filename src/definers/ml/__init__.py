@@ -485,12 +485,19 @@ def is_clusters_model(model):
 
 
 def build_faiss():
-    with cwd():
-        git("YaronKoresh", "faiss", parent="./xfaiss")
+    from pathlib import Path
+
+    from definers.system.output_paths import managed_output_session_dir
+
+    source_dir = Path(managed_output_session_dir("faiss", stem="source"))
+    wheel_dir = managed_output_session_dir("faiss", stem="wheel")
+    repaired_wheel_dir = managed_output_session_dir("faiss", stem="repair")
+
+    git("YaronKoresh", "faiss", parent=str(source_dir))
     set_cuda_env()
     cmake = "/usr/local/cmake/bin/cmake"
     try:
-        with cwd("./xfaiss"):
+        with cwd(str(source_dir)):
             print("faiss - stage 1")
             run(
                 [
@@ -534,8 +541,7 @@ def build_faiss():
                     "swigfaiss",
                 ]
             )
-        temp_dir = tmp(dir=True)
-        with cwd("./xfaiss/build/faiss/python"):
+        with cwd(str(source_dir / "build" / "faiss" / "python")):
             print(
                 "faiss - stage 4: Building wheel with numpy==1.26.4 constraint"
             )
@@ -551,18 +557,16 @@ def build_faiss():
                         "wheel",
                         ".",
                         "-w",
-                        temp_dir,
+                        wheel_dir,
                         "-c",
                         constraints_path,
                     ]
                 )
             finally:
                 os.remove(constraints_path)
-        with cwd():
-            delete("./xfaiss")
+        delete(str(source_dir))
         free()
-        any_wheel_path = paths(f"{temp_dir}/faiss-*.whl")[0]
-        repaired_wheel_dir = tmp(dir=True)
+        any_wheel_path = paths(f"{wheel_dir}/faiss-*.whl")[0]
         print("faiss - stage 5: Repairing wheel")
         run(
             [
@@ -796,7 +800,6 @@ def init_model_repo(task: str, turbo: bool = True):
         ).to(device())
     elif task in ["answer"]:
         import torch
-        from huggingface_hub import snapshot_download
         from transformers import (
             AutoConfig,
             AutoModelForCausalLM,
@@ -804,14 +807,21 @@ def init_model_repo(task: str, turbo: bool = True):
             AutoTokenizer,
         )
 
+        from definers.model_installation import (
+            hf_file_download,
+            hf_snapshot_download,
+        )
+
         package_name = "phi4_package"
         print(f"Downloading source files for {tasks[task]}...")
         not_win = get_os_name() != "windows"
         snapshot_dir = Path(
-            snapshot_download(
+            hf_snapshot_download(
                 repo_id=tasks[task],
                 allow_patterns=["*.txt", "*.py", "*.json", "*.safetensors"],
                 revision="33e62acdd07cd7d6635badd529aa0a3467bb9c6a",
+                item_label=str(tasks[task]),
+                detail="Downloading answer model source files.",
                 local_dir_use_symlinks=not_win,
             )
         )
@@ -907,15 +917,18 @@ def init_model_repo(task: str, turbo: bool = True):
     elif task in ["image"]:
         import torch
         from diffusers import FluxPipeline
-        from huggingface_hub import hf_hub_download
         from safetensors.torch import load_file
+
+        from definers.model_installation import hf_file_download
 
         model = FluxPipeline.from_pretrained(
             tasks[task], torch_dtype=dtype(), use_safetensors=True
         )
-        srpo_path = hf_hub_download(
+        srpo_path = hf_file_download(
             repo_id=tasks["image-spro"],
             filename="diffusion_pytorch_model.safetensors",
+            item_label="SRPO transformer weights",
+            detail="Downloading image refinement weights.",
         )
         state_dict = load_file(srpo_path)
         model.transformer.load_state_dict(state_dict)
@@ -2839,14 +2852,26 @@ class AutoTrainer:
             prediction = get_cluster_content(model, int(prediction[0]))
         output_type = guess_numpy_type(prediction)
         if output_type == "text":
+            from definers.system.output_paths import managed_output_path
+
             text_output = features_to_text(prediction)
-            path = random_string() + ".txt"
+            path = managed_output_path(
+                "txt",
+                section="train",
+                stem="prediction",
+            )
             with open(path, "w", encoding="utf-8") as file_obj:
                 file_obj.write(text_output)
             return path
         if output_type == "image":
+            from definers.system.output_paths import managed_output_path
+
             image_output = features_to_image(prediction)
-            path = random_string() + ".png"
+            path = managed_output_path(
+                "png",
+                section="train",
+                stem="prediction",
+            )
             import imageio.v3 as iio
 
             iio.imwrite(path, cupy_to_numpy(image_output))

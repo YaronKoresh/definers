@@ -139,7 +139,10 @@ def calculate_active_rms(
 
 
 def normalize_audio_to_peak(
-    input_path: str, target_level: float = 0.9, format: str | None = None
+    input_path: str,
+    target_level: float = 0.9,
+    format: str | None = None,
+    output_path: str | None = None,
 ) -> str | None:
     from pydub import AudioSegment
 
@@ -150,7 +153,7 @@ def normalize_audio_to_peak(
     if format is None:
         format = Path(input_path).suffix.lstrip(".") or "wav"
 
-    output_path = tmp(format)
+    resolved_output_path = output_path or tmp(format)
 
     try:
         audio = AudioSegment.from_file(input_path)
@@ -160,22 +163,22 @@ def normalize_audio_to_peak(
 
     if target_level == 0.0 or audio.max_dBFS == -float("inf"):
         silent_audio = AudioSegment.silent(duration=len(audio))
-        silent_audio.export(output_path, format=format)
+        silent_audio.export(resolved_output_path, format=format)
         log(
             "Exported silent file"
-            f"Silent audio detected or target level is 0. Saved silent file to '{output_path}'"
+            f"Silent audio detected or target level is 0. Saved silent file to '{resolved_output_path}'"
         )
-        return output_path
+        return resolved_output_path
 
     target_dbfs = 20 * math.log10(target_level)
     gain_to_apply = target_dbfs - audio.max_dBFS
     normalized_audio = audio.apply_gain(gain_to_apply)
-    normalized_audio.export(output_path, format=format)
+    normalized_audio.export(resolved_output_path, format=format)
     log(
         f"Successfully normalized '{input_path}' to a peak of {target_dbfs:.2f} dBFS."
     )
-    _logger.info("Saved result to '%s'", output_path)
-    return output_path
+    _logger.info("Saved result to '%s'", resolved_output_path)
+    return resolved_output_path
 
 
 def stretch_audio(

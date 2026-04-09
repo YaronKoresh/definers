@@ -1,6 +1,7 @@
 import importlib
 import math
 import os
+from pathlib import Path
 
 try:
     np = importlib.import_module("cupy")
@@ -190,9 +191,24 @@ def get_max_resolution(width, height, mega_pixels=0.25, factor=16):
     return (w_factored, h_factored)
 
 
-def save_image(img, path="."):
+def save_image(img, path=None):
+    from definers.system.output_paths import managed_output_path
+
     random_name = _image_random_string()
-    name = os.path.join(path, "img_" + random_name + ".png")
+    if path is None:
+        name = managed_output_path(
+            "png",
+            section="image",
+            stem=f"img_{random_name}",
+        )
+    else:
+        resolved_path = str(path)
+        if os.path.splitext(resolved_path)[1]:
+            Path(resolved_path).parent.mkdir(parents=True, exist_ok=True)
+            name = resolved_path
+        else:
+            os.makedirs(resolved_path, exist_ok=True)
+            name = os.path.join(resolved_path, f"img_{random_name}.png")
     img.save(name)
     return name
 
@@ -242,15 +258,17 @@ def write_on_image(
     from PIL import Image, ImageDraw, ImageFont
 
     from definers.media.web_transfer import google_drive_download
-    from definers.system.filesystem import read
+    from definers.system.output_paths import managed_output_path
 
-    existing_items = read(".")
-    has_font = isinstance(existing_items, list) and (
-        "Alef-Bold.ttf" in existing_items
+    font_path = managed_output_path(
+        section="image_assets",
+        filename="Alef-Bold.ttf",
+        unique=False,
     )
-    if not has_font:
+    if not os.path.exists(font_path):
         google_drive_download(
-            "1C48KkYWQDYu7ypbNtSXAUJ6kuzoZ42sI", "./Alef-Bold.ttf"
+            "1C48KkYWQDYu7ypbNtSXAUJ6kuzoZ42sI",
+            font_path,
         )
     img = Image.open(image_path)
     (w, h) = img.size
@@ -262,7 +280,7 @@ def write_on_image(
         text_block = text_block.strip()
         num_lines = max(1, len(text_block.split("\n")))
         font_size = min(math.ceil(w / 12), math.ceil(h / (num_lines * 4)))
-        font = ImageFont.truetype("Alef-Bold.ttf", font_size)
+        font = ImageFont.truetype(font_path, font_size)
         text_bbox = draw.textbbox((0, 0), text_block, font=font)
         total_text_height = text_bbox[3] - text_bbox[1]
         if vertical_position == "top":

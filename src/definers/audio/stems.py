@@ -298,10 +298,51 @@ def _build_separator_kwargs(
             "overlap": 4,
         },
     }
-    model_file_dir = os.environ.get("AUDIO_SEPARATOR_MODEL_DIR")
-    if model_file_dir:
-        kwargs["model_file_dir"] = model_file_dir
+    from definers.model_installation import stem_model_dir
+
+    kwargs["model_file_dir"] = stem_model_dir()
     return kwargs
+
+
+def _stem_model_cache_path(model_name: str) -> Path:
+    from definers.model_installation import stem_model_dir
+
+    return Path(stem_model_dir()) / Path(str(model_name)).name
+
+
+def _has_local_stem_model(model_name: str) -> bool:
+    return _stem_model_cache_path(model_name).exists()
+
+
+def _runtime_stage_model_candidates(
+    stage: SeparatorModelStage,
+) -> tuple[str, ...]:
+    cached_candidates = tuple(
+        model_candidate
+        for model_candidate in stage.model_candidates
+        if _has_local_stem_model(model_candidate)
+    )
+    if cached_candidates:
+        return cached_candidates
+    return stage.model_candidates[:1]
+
+
+def _download_runtime_stage_models(
+    model_candidates: Sequence[str],
+) -> tuple[str, ...]:
+    resolved_candidates = tuple(model_candidates)
+    if not resolved_candidates:
+        return ()
+    missing_candidates = tuple(
+        model_candidate
+        for model_candidate in resolved_candidates
+        if not _has_local_stem_model(model_candidate)
+    )
+    if missing_candidates:
+        from definers.model_installation import download_stem_models
+
+        download_stem_models(missing_candidates)
+    return resolved_candidates
 
 
 def _prepare_stage_directory(output_dir: str) -> str:
@@ -404,7 +445,15 @@ def _run_separator_stage(
 ) -> tuple[str, tuple[str, ...]]:
     Separator = _load_audio_separator_class()
     last_error: Exception | None = None
-    for model_candidate in stage.model_candidates:
+    runtime_model_candidates = _runtime_stage_model_candidates(stage)
+    try:
+        _download_runtime_stage_models(runtime_model_candidates)
+    except Exception as error:
+        if stage.required:
+            raise RuntimeError("Audio separator stage failed") from error
+        _logger.warning("Skipping optional separator stage: %s", error)
+        return "", ()
+    for model_candidate in runtime_model_candidates:
         _prepare_stage_directory(output_dir)
         try:
             separator = Separator(
@@ -444,7 +493,15 @@ def _run_separator_stage_batch(
     Separator = _load_audio_separator_class()
     last_error: Exception | None = None
     batched_input_paths = tuple(input_paths.values())
-    for model_candidate in stage.model_candidates:
+    runtime_model_candidates = _runtime_stage_model_candidates(stage)
+    try:
+        _download_runtime_stage_models(runtime_model_candidates)
+    except Exception as error:
+        if stage.required:
+            raise RuntimeError("Audio separator stage failed") from error
+        _logger.warning("Skipping optional separator stage: %s", error)
+        return dict(input_paths)
+    for model_candidate in runtime_model_candidates:
         _prepare_stage_directory(output_dir)
         try:
             separator = Separator(
@@ -774,13 +831,18 @@ def separate_stem_layers(
     output_dir: str | None = None,
     quality_flags: Sequence[str] = (),
 ) -> tuple[dict[str, str], str]:
+    from definers.system.output_paths import managed_output_session_dir
+
     resolved_two_stems = None
     if two_stems is not None:
         resolved_two_stems = _normalize_model_name(
             two_stems,
             option_name="separator two-stems value",
         ).lower()
-    resolved_output_dir = output_dir or tmp(dir=True)
+    resolved_output_dir = output_dir or managed_output_session_dir(
+        "audio_stems",
+        stem=Path(audio_path).stem,
+    )
     owns_output_dir = output_dir is None
 
     try:
@@ -819,7 +881,12 @@ def separate_stems(
     separation_type=None,
     format_choice: str = "wav",
 ):
-    output_dir = tmp(dir=True)
+    from definers.system.output_paths import managed_output_session_dir
+
+    output_dir = managed_output_session_dir(
+        "audio_stems",
+        stem=Path(audio_path).stem,
+    )
     try:
         stem_paths, _resolved_output_dir = separate_stem_layers(
             audio_path,
@@ -838,6 +905,8 @@ def separate_stems(
         delete(output_dir)
         catch("Stem separation failed.")
         return None
+    final_output_dir = Path(output_dir) / "exports"
+    final_output_dir.mkdir(parents=True, exist_ok=True)
 
     def export_stem(chosen_stem_path, suffix):
         sr, sound = read_audio(chosen_stem_path)
@@ -845,9 +914,8 @@ def separate_stems(
             str(format_choice).strip().lower().lstrip(".") or "wav"
         )
         output_stem = str(
-            Path(audio_path)
-            .with_name(Path(audio_path).stem + suffix)
-            .with_suffix(f".{normalized_format}")
+            final_output_dir
+            / f"{Path(audio_path).stem}{suffix}.{normalized_format}"
         )
         return save_audio(
             audio_signal=sound,
@@ -857,16 +925,25 @@ def separate_stems(
 
     if separation_type == "acapella":
         voice = export_stem(vocals_path, "_acapella")
-        delete(output_dir)
-        return normalize_audio_to_peak(voice)
+        return normalize_audio_to_peak(voice, output_path=voice)
     if separation_type == "karaoke":
         music = export_stem(accompaniment_path, "_karaoke")
-        delete(output_dir)
-        return normalize_audio_to_peak(music)
+        return normalize_audio_to_peak(music, output_path=music)
 
-    voice = normalize_audio_to_peak(export_stem(vocals_path, "_acapella"))
-    music = normalize_audio_to_peak(export_stem(accompaniment_path, "_karaoke"))
-    delete(output_dir)
+    voice = normalize_audio_to_peak(
+        export_stem(vocals_path, "_acapella"),
+        output_path=str(
+            final_output_dir
+            / f"{Path(audio_path).stem}_acapella.{str(format_choice).strip().lower().lstrip('.') or 'wav'}"
+        ),
+    )
+    music = normalize_audio_to_peak(
+        export_stem(accompaniment_path, "_karaoke"),
+        output_path=str(
+            final_output_dir
+            / f"{Path(audio_path).stem}_karaoke.{str(format_choice).strip().lower().lstrip('.') or 'wav'}"
+        ),
+    )
     return voice, music
 
 
@@ -875,6 +952,7 @@ def stem_mixer(files, format_choice):
     from scipy.io.wavfile import write as write_wav
 
     librosa = librosa_module()
+    from definers.system.output_paths import managed_output_path
 
     if not files or len(files) < 2:
         catch("Please upload at least two stem files.")
@@ -925,8 +1003,10 @@ def stem_mixer(files, format_choice):
     write_wav(temp_wav_path, target_sr, (mixed_y * 32767).astype(np.int16))
     sound = pydub.AudioSegment.from_file(temp_wav_path)
     normalized_format = str(format_choice).strip().lower().lstrip(".") or "wav"
-    output_stem = Path(temp_wav_path).with_name(
-        f"stem_mix_{random_string()}.{normalized_format}"
+    output_stem = managed_output_path(
+        normalized_format,
+        section="audio",
+        stem=f"stem_mix_{random_string()}",
     )
     output_path = save_audio(
         audio_signal=sound,

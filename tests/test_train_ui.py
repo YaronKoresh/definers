@@ -54,8 +54,8 @@ class _FakeComponent:
     def __exit__(self, exc_type, exc, tb):
         return False
 
-    def click(self, fn=None, inputs=None, outputs=None):
-        self.click_calls.append((fn, inputs, outputs))
+    def click(self, fn=None, inputs=None, outputs=None, **kwargs):
+        self.click_calls.append((fn, inputs, outputs, kwargs))
         return self
 
 
@@ -140,3 +140,12 @@ def test_build_train_app_constructs_expected_tabs(monkeypatch):
     assert "Run" in tab_labels
     assert "Text Lab" in tab_labels
     assert "Ops" in tab_labels
+
+    open_outputs_button = next(
+        component
+        for component in registry
+        if component.kind == "Button"
+        and (component.args[0] if component.args else None)
+        == "Open Outputs Folder"
+    )
+    assert open_outputs_button.click_calls

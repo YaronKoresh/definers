@@ -1,4 +1,11 @@
-from definers.ui.gradio_shared import init_chat, launch_blocks
+from definers.ui.gradio_shared import (
+    bind_progress_click,
+    init_chat,
+    init_output_folder_controls,
+    init_progress_tracker,
+    launch_blocks,
+    progress_update,
+)
 
 
 def launch_audio_app(
@@ -37,6 +44,12 @@ def launch_audio_app(
     from definers.ml import (
         convert_vocal_rvc,
     )
+    from definers.system.download_activity import (
+        create_download_activity_task,
+        get_download_activity_snapshot,
+        resolve_download_activity_task,
+        wait_for_download_activity_task,
+    )
     from definers.text import random_string
     from definers.ui.apps.audio_app_services import (
         MASTERING_PROFILE_CHOICES,
@@ -44,6 +57,7 @@ def launch_audio_app(
         describe_stem_model_choice,
         get_mastering_profile_ui_state,
         is_custom_stem_model_strategy,
+        resolve_mastering_stem_previews,
         run_audio_analysis_tool,
         run_audio_preview_tool,
         run_autotune_song_tool,
@@ -104,6 +118,33 @@ def launch_audio_app(
                 label=navigation_label,
                 elem_id="nav-dropdown",
                 visible=len(tool_map) > 1,
+            )
+
+        audio_progress = init_progress_tracker(
+            "Audio workspace ready",
+            "Choose a workflow and start processing.",
+        )
+        init_output_folder_controls()
+
+        def bind_audio_action(
+            button,
+            handler,
+            *,
+            inputs=None,
+            outputs=None,
+            action_label,
+            running_detail=None,
+            success_detail=None,
+        ):
+            return bind_progress_click(
+                button,
+                handler,
+                progress_output=audio_progress,
+                inputs=inputs,
+                outputs=outputs,
+                action_label=action_label,
+                running_detail=running_detail,
+                success_detail=success_detail,
             )
 
         with gr.Row(elem_id="main-row"):
@@ -223,25 +264,73 @@ def launch_audio_app(
                                 clear_enhancer_btn = gr.Button(
                                     "Clear", variant="secondary"
                                 )
-                        with gr.Group(visible=False) as enhancer_output_box:
-                            enhancer_output = gr.Audio(
-                                label="Mastered Audio",
-                                interactive=False,
-                                buttons=["download"],
-                            )
-                            enhancer_report = gr.File(
-                                label="Mastering Report",
-                                interactive=False,
-                                visible=False,
-                            )
-                            enhancer_stems_output = gr.File(
-                                label="Mastered Stems",
-                                interactive=False,
-                                file_count="multiple",
-                                visible=False,
-                            )
-                            enhancer_diagnostics = gr.Markdown()
-                            enhancer_share_links = gr.Markdown()
+                        with gr.Column(
+                            scale=1,
+                            visible=False,
+                            elem_id="enhancer-output-column",
+                        ) as enhancer_output_column:
+                            with gr.Group(elem_id="enhancer-output-box"):
+                                enhancer_output = gr.Audio(
+                                    label="Mastered Audio",
+                                    interactive=False,
+                                    buttons=["download"],
+                                )
+                                enhancer_report = gr.File(
+                                    label="Mastering Report",
+                                    interactive=False,
+                                    visible=False,
+                                )
+                                enhancer_stems_output = gr.File(
+                                    label="Mastered Stems",
+                                    interactive=False,
+                                    file_count="multiple",
+                                    visible=False,
+                                )
+                                with gr.Group(
+                                    visible=False
+                                ) as enhancer_stem_preview_box:
+                                    gr.Markdown("### Mastered Stem Previews")
+                                    with gr.Row():
+                                        with gr.Column():
+                                            enhancer_vocals_stem = gr.Audio(
+                                                label="Vocals Stem",
+                                                interactive=False,
+                                                buttons=["download"],
+                                                visible=False,
+                                            )
+                                            enhancer_bass_stem = gr.Audio(
+                                                label="Bass Stem",
+                                                interactive=False,
+                                                buttons=["download"],
+                                                visible=False,
+                                            )
+                                            enhancer_guitar_stem = gr.Audio(
+                                                label="Guitar Stem",
+                                                interactive=False,
+                                                buttons=["download"],
+                                                visible=False,
+                                            )
+                                        with gr.Column():
+                                            enhancer_drums_stem = gr.Audio(
+                                                label="Drums Stem",
+                                                interactive=False,
+                                                buttons=["download"],
+                                                visible=False,
+                                            )
+                                            enhancer_other_stem = gr.Audio(
+                                                label="Other Stem",
+                                                interactive=False,
+                                                buttons=["download"],
+                                                visible=False,
+                                            )
+                                            enhancer_piano_stem = gr.Audio(
+                                                label="Piano Stem",
+                                                interactive=False,
+                                                buttons=["download"],
+                                                visible=False,
+                                            )
+                                enhancer_diagnostics = gr.Markdown()
+                                enhancer_share_links = gr.Markdown()
                 with gr.Group(
                     visible=False, elem_classes="tool-container"
                 ) as view_vocal_finish:
@@ -875,16 +964,24 @@ def launch_audio_app(
                         )
                     with gr.Row():
                         but1 = gr.Button("Train", variant="primary")
-                        but1.click(
-                            fn=train_voice_lab_model,
+                        bind_audio_action(
+                            but1,
+                            train_voice_lab_model,
                             inputs=[experiment, inp, lvl],
                             outputs=[outp, lvl],
+                            action_label="Train Voice Lab",
+                            running_detail="Training the voice lab model.",
+                            success_detail="Voice lab training finished.",
                         )
                         but2 = gr.Button("Convert", variant="primary")
-                        but2.click(
-                            fn=convert_vocal_rvc,
+                        bind_audio_action(
+                            but2,
+                            convert_vocal_rvc,
                             inputs=[experiment, inp],
                             outputs=[outp],
+                            action_label="Convert Voice",
+                            running_detail="Running the voice conversion model.",
+                            success_detail="Converted voice output is ready.",
                         )
                 with gr.Group(
                     visible=False, elem_classes="tool-container"
@@ -1253,31 +1350,209 @@ def launch_audio_app(
                 "Check out this creation from Definers Audio! ðŸŽ¶",
             )
 
+        def empty_mastering_stem_preview_updates():
+            return {
+                enhancer_stem_preview_box: gr.update(visible=False),
+                enhancer_vocals_stem: gr.update(value=None, visible=False),
+                enhancer_drums_stem: gr.update(value=None, visible=False),
+                enhancer_bass_stem: gr.update(value=None, visible=False),
+                enhancer_other_stem: gr.update(value=None, visible=False),
+                enhancer_guitar_stem: gr.update(value=None, visible=False),
+                enhancer_piano_stem: gr.update(value=None, visible=False),
+            }
+
+        def mastering_stem_preview_updates(stem_files):
+            stem_previews, _extra_stem_files = resolve_mastering_stem_previews(
+                list(stem_files or ())
+            )
+            return {
+                enhancer_stem_preview_box: gr.update(
+                    visible=any(stem_previews.values())
+                ),
+                enhancer_vocals_stem: gr.update(
+                    value=stem_previews["vocals"],
+                    visible=stem_previews["vocals"] is not None,
+                ),
+                enhancer_drums_stem: gr.update(
+                    value=stem_previews["drums"],
+                    visible=stem_previews["drums"] is not None,
+                ),
+                enhancer_bass_stem: gr.update(
+                    value=stem_previews["bass"],
+                    visible=stem_previews["bass"] is not None,
+                ),
+                enhancer_other_stem: gr.update(
+                    value=stem_previews["other"],
+                    visible=stem_previews["other"] is not None,
+                ),
+                enhancer_guitar_stem: gr.update(
+                    value=stem_previews["guitar"],
+                    visible=stem_previews["guitar"] is not None,
+                ),
+                enhancer_piano_stem: gr.update(
+                    value=stem_previews["piano"],
+                    visible=stem_previews["piano"] is not None,
+                ),
+            }
+
+        def resolve_activity_detail(
+            fallback_detail,
+            activity_snapshot,
+        ):
+            if activity_snapshot is None:
+                return fallback_detail
+            activity_message = str(
+                getattr(activity_snapshot, "message", "")
+            ).strip()
+            return activity_message or fallback_detail
+
+        def poll_activity_updates(
+            activity_task,
+            base_updates,
+            *,
+            action_label,
+            action_steps,
+            detail,
+            active_step,
+        ):
+            last_sequence = -1
+            while True:
+                task_done = wait_for_download_activity_task(
+                    activity_task,
+                    0.12,
+                )
+                activity_snapshot = get_download_activity_snapshot(
+                    activity_task.scope_id
+                )
+                if (
+                    activity_snapshot is not None
+                    and activity_snapshot.sequence != last_sequence
+                ):
+                    last_sequence = activity_snapshot.sequence
+                    yield {
+                        **base_updates,
+                        audio_progress: progress_update(
+                            action_label,
+                            "running",
+                            resolve_activity_detail(
+                                detail,
+                                activity_snapshot,
+                            ),
+                            steps=action_steps,
+                            active_step=active_step,
+                        ),
+                    }
+                if task_done:
+                    break
+
         def create_ui_handler(
             btn, out_el, out_box, out_share, logic_func, *inputs
         ):
+            action_label = str(
+                getattr(btn, "value", None) or "Processing audio"
+            )
+            action_steps = (
+                "Validate request",
+                "Run audio workflow",
+                "Publish output",
+            )
+
             def ui_handler_generator(*args):
+                yield {
+                    btn: gr.update(
+                        value=f"{action_label}...", interactive=False
+                    ),
+                    out_box: gr.update(visible=False),
+                    out_el: gr.update(value=None),
+                    out_share: gr.update(value=""),
+                    audio_progress: progress_update(
+                        action_label,
+                        "running",
+                        "Checking the request.",
+                        steps=action_steps,
+                        active_step=1,
+                    ),
+                }
+                running_updates = {
+                    btn: gr.update(
+                        value=f"{action_label}...", interactive=False
+                    ),
+                    out_box: gr.update(visible=False),
+                    out_el: gr.update(value=None),
+                    out_share: gr.update(value=""),
+                    audio_progress: progress_update(
+                        action_label,
+                        "running",
+                        "Running the workflow.",
+                        steps=action_steps,
+                        active_step=2,
+                    ),
+                }
+                yield running_updates
                 try:
-                    result = logic_func(*args)
+                    activity_task = create_download_activity_task(
+                        logic_func,
+                        *args,
+                    )
+                    yield from poll_activity_updates(
+                        activity_task,
+                        {
+                            btn: gr.update(
+                                value=f"{action_label}...",
+                                interactive=False,
+                            ),
+                            out_box: gr.update(visible=False),
+                            out_el: gr.update(value=None),
+                            out_share: gr.update(value=""),
+                        },
+                        action_label=action_label,
+                        action_steps=action_steps,
+                        detail="Running the workflow.",
+                        active_step=2,
+                    )
+                    result, _ = resolve_download_activity_task(activity_task)
                     share_html = build_share_markup(result)
-                    return (
-                        gr.update(value=btn.value, interactive=True),
-                        gr.update(visible=True),
-                        gr.update(value=result),
-                        gr.update(value=share_html),
-                    )
-                except Exception:
-                    return (
-                        gr.update(value=btn.value, interactive=True),
-                        gr.update(visible=False),
-                        gr.update(value=None),
-                        gr.update(value=""),
-                    )
+                    yield {
+                        btn: gr.update(value=action_label, interactive=True),
+                        out_box: gr.update(visible=True),
+                        out_el: gr.update(value=result),
+                        out_share: gr.update(value=share_html),
+                        audio_progress: progress_update(
+                            action_label,
+                            "success",
+                            "Result is ready.",
+                            steps=action_steps,
+                            active_step=len(action_steps),
+                        ),
+                    }
+                except Exception as error:
+                    yield {
+                        btn: gr.update(value=action_label, interactive=True),
+                        out_box: gr.update(visible=False),
+                        out_el: gr.update(value=None),
+                        out_share: gr.update(value=""),
+                        audio_progress: progress_update(
+                            action_label,
+                            "error",
+                            resolve_activity_detail(
+                                str(error),
+                                getattr(
+                                    error,
+                                    "download_activity_snapshot",
+                                    None,
+                                ),
+                            ),
+                            steps=action_steps,
+                            active_step=2,
+                        ),
+                    }
+                    raise gr.Error(str(error))
 
             btn.click(
                 ui_handler_generator,
                 inputs=inputs,
-                outputs=[btn, out_box, out_el, out_share],
+                outputs=[btn, out_box, out_el, out_share, audio_progress],
+                show_progress="minimal",
             )
 
         def update_mastering_profile_ui(
@@ -1464,24 +1739,73 @@ def launch_audio_app(
             save_mastered_stems_value,
             stem_model_override,
         ):
+            mastering_steps = (
+                "Validate source",
+                "Configure mastering",
+                "Run mastering engine",
+                "Load reports and stems",
+                "Publish output",
+            )
             yield {
                 enhancer_btn: gr.update(
                     value="Mastering...", interactive=False
                 ),
-                enhancer_output_box: gr.update(visible=False),
+                enhancer_output_column: gr.update(visible=False),
                 enhancer_output: None,
                 enhancer_report: gr.update(value=None, visible=False),
                 enhancer_stems_output: gr.update(value=None, visible=False),
+                **empty_mastering_stem_preview_updates(),
                 enhancer_diagnostics: "",
                 enhancer_share_links: "",
+                audio_progress: progress_update(
+                    "Master Audio",
+                    "running",
+                    "Checking the mastering request.",
+                    steps=mastering_steps,
+                    active_step=1,
+                ),
+            }
+            yield {
+                enhancer_btn: gr.update(
+                    value="Mastering...", interactive=False
+                ),
+                enhancer_output_column: gr.update(visible=False),
+                enhancer_output: None,
+                enhancer_report: gr.update(value=None, visible=False),
+                enhancer_stems_output: gr.update(value=None, visible=False),
+                **empty_mastering_stem_preview_updates(),
+                enhancer_diagnostics: "",
+                enhancer_share_links: "",
+                audio_progress: progress_update(
+                    "Master Audio",
+                    "running",
+                    "Preparing the mastering route.",
+                    steps=mastering_steps,
+                    active_step=2,
+                ),
+            }
+            yield {
+                enhancer_btn: gr.update(
+                    value="Mastering...", interactive=False
+                ),
+                enhancer_output_column: gr.update(visible=False),
+                enhancer_output: None,
+                enhancer_report: gr.update(value=None, visible=False),
+                enhancer_stems_output: gr.update(value=None, visible=False),
+                **empty_mastering_stem_preview_updates(),
+                enhancer_diagnostics: "",
+                enhancer_share_links: "",
+                audio_progress: progress_update(
+                    "Master Audio",
+                    "running",
+                    "Running the mastering engine.",
+                    steps=mastering_steps,
+                    active_step=3,
+                ),
             }
             try:
-                (
-                    mastered_path,
-                    report_path,
-                    diagnostics_text,
-                    stem_files,
-                ) = run_mastering_tool(
+                activity_task = create_download_activity_task(
+                    run_mastering_tool,
                     audio_path,
                     output_format,
                     profile_name,
@@ -1495,11 +1819,47 @@ def launch_audio_app(
                     save_mastered_stems_value,
                     stem_model_override,
                 )
-                yield {
+                yield from poll_activity_updates(
+                    activity_task,
+                    {
+                        enhancer_btn: gr.update(
+                            value="Mastering...", interactive=False
+                        ),
+                        enhancer_output_column: gr.update(visible=False),
+                        enhancer_output: None,
+                        enhancer_report: gr.update(
+                            value=None,
+                            visible=False,
+                        ),
+                        enhancer_stems_output: gr.update(
+                            value=None,
+                            visible=False,
+                        ),
+                        **empty_mastering_stem_preview_updates(),
+                        enhancer_diagnostics: "",
+                        enhancer_share_links: "",
+                    },
+                    action_label="Master Audio",
+                    action_steps=mastering_steps,
+                    detail="Running the mastering engine.",
+                    active_step=3,
+                )
+                (
+                    (
+                        mastered_path,
+                        report_path,
+                        diagnostics_text,
+                        stem_files,
+                    ),
+                    _,
+                ) = resolve_download_activity_task(
+                    activity_task,
+                )
+                result_updates = {
                     enhancer_btn: gr.update(
                         value="Master Audio", interactive=True
                     ),
-                    enhancer_output_box: gr.update(visible=True),
+                    enhancer_output_column: gr.update(visible=True),
                     enhancer_output: mastered_path,
                     enhancer_report: gr.update(
                         value=report_path,
@@ -1507,22 +1867,58 @@ def launch_audio_app(
                     ),
                     enhancer_stems_output: gr.update(
                         value=stem_files or None,
-                        visible=bool(stem_files),
+                        visible=bool(save_mastered_stems_value and stem_files),
                     ),
+                    **mastering_stem_preview_updates(stem_files),
                     enhancer_diagnostics: diagnostics_text,
                     enhancer_share_links: build_share_markup(mastered_path),
+                }
+                yield {
+                    **result_updates,
+                    audio_progress: progress_update(
+                        "Master Audio",
+                        "running",
+                        "Loading diagnostics and stem previews.",
+                        steps=mastering_steps,
+                        active_step=4,
+                    ),
+                }
+                yield {
+                    **result_updates,
+                    audio_progress: progress_update(
+                        "Master Audio",
+                        "success",
+                        "Mastered audio and stem previews are ready.",
+                        steps=mastering_steps,
+                        active_step=len(mastering_steps),
+                    ),
                 }
             except Exception as error:
                 yield {
                     enhancer_btn: gr.update(
                         value="Master Audio", interactive=True
                     ),
-                    enhancer_output_box: gr.update(visible=False),
+                    enhancer_output_column: gr.update(visible=False),
                     enhancer_output: None,
                     enhancer_report: gr.update(value=None, visible=False),
                     enhancer_stems_output: gr.update(value=None, visible=False),
+                    **empty_mastering_stem_preview_updates(),
                     enhancer_diagnostics: "",
                     enhancer_share_links: "",
+                    audio_progress: progress_update(
+                        "Master Audio",
+                        "error",
+                        resolve_activity_detail(
+                            str(error),
+                            getattr(
+                                error,
+                                "download_activity_snapshot",
+                                None,
+                            ),
+                        ),
+                        steps=mastering_steps,
+                        active_step=3,
+                    ),
                 }
                 raise gr.Error(str(error))
 
@@ -1544,13 +1940,22 @@ def launch_audio_app(
             ],
             [
                 enhancer_btn,
-                enhancer_output_box,
+                enhancer_output_column,
                 enhancer_output,
                 enhancer_report,
                 enhancer_stems_output,
+                enhancer_stem_preview_box,
+                enhancer_vocals_stem,
+                enhancer_drums_stem,
+                enhancer_bass_stem,
+                enhancer_other_stem,
+                enhancer_guitar_stem,
+                enhancer_piano_stem,
                 enhancer_diagnostics,
                 enhancer_share_links,
+                audio_progress,
             ],
+            show_progress="minimal",
         )
 
         create_ui_handler(
@@ -1633,6 +2038,11 @@ def launch_audio_app(
         )
 
         def preview_ui(audio_path, max_duration, output_format):
+            preview_steps = (
+                "Validate source",
+                "Build preview clip",
+                "Publish output",
+            )
             yield {
                 preview_btn: gr.update(
                     value="Building Preview...", interactive=False
@@ -1641,6 +2051,29 @@ def launch_audio_app(
                 preview_output: None,
                 preview_summary: "",
                 preview_share_links: "",
+                audio_progress: progress_update(
+                    "Create Preview",
+                    "running",
+                    "Checking the preview request.",
+                    steps=preview_steps,
+                    active_step=1,
+                ),
+            }
+            yield {
+                preview_btn: gr.update(
+                    value="Building Preview...", interactive=False
+                ),
+                preview_output_box: gr.update(visible=False),
+                preview_output: None,
+                preview_summary: "",
+                preview_share_links: "",
+                audio_progress: progress_update(
+                    "Create Preview",
+                    "running",
+                    "Building the preview clip.",
+                    steps=preview_steps,
+                    active_step=2,
+                ),
             }
             try:
                 preview_path, preview_text = run_audio_preview_tool(
@@ -1656,6 +2089,13 @@ def launch_audio_app(
                     preview_output: preview_path,
                     preview_summary: preview_text,
                     preview_share_links: build_share_markup(preview_path),
+                    audio_progress: progress_update(
+                        "Create Preview",
+                        "success",
+                        "Preview clip is ready.",
+                        steps=preview_steps,
+                        active_step=len(preview_steps),
+                    ),
                 }
             except Exception as error:
                 yield {
@@ -1666,6 +2106,13 @@ def launch_audio_app(
                     preview_output: None,
                     preview_summary: "",
                     preview_share_links: "",
+                    audio_progress: progress_update(
+                        "Create Preview",
+                        "error",
+                        str(error),
+                        steps=preview_steps,
+                        active_step=2,
+                    ),
                 }
                 raise gr.Error(str(error))
 
@@ -1678,7 +2125,9 @@ def launch_audio_app(
                 preview_output,
                 preview_summary,
                 preview_share_links,
+                audio_progress,
             ],
+            show_progress="minimal",
         )
 
         def split_ui(
@@ -1689,12 +2138,38 @@ def launch_audio_app(
             skip_time,
             target_sample_rate,
         ):
+            split_steps = (
+                "Validate source",
+                "Split into chunks",
+                "Publish output",
+            )
             yield {
                 split_btn: gr.update(value="Splitting...", interactive=False),
                 split_output_box: gr.update(visible=False),
                 split_preview_output: None,
                 split_files_output: None,
                 split_summary_output: "",
+                audio_progress: progress_update(
+                    "Split Audio",
+                    "running",
+                    "Checking the split request.",
+                    steps=split_steps,
+                    active_step=1,
+                ),
+            }
+            yield {
+                split_btn: gr.update(value="Splitting...", interactive=False),
+                split_output_box: gr.update(visible=False),
+                split_preview_output: None,
+                split_files_output: None,
+                split_summary_output: "",
+                audio_progress: progress_update(
+                    "Split Audio",
+                    "running",
+                    "Splitting the audio into chunks.",
+                    steps=split_steps,
+                    active_step=2,
+                ),
             }
             try:
                 preview_path, split_files, summary_text = run_split_audio_tool(
@@ -1711,6 +2186,13 @@ def launch_audio_app(
                     split_preview_output: preview_path,
                     split_files_output: split_files,
                     split_summary_output: summary_text,
+                    audio_progress: progress_update(
+                        "Split Audio",
+                        "success",
+                        "Split files are ready.",
+                        steps=split_steps,
+                        active_step=len(split_steps),
+                    ),
                 }
             except Exception as error:
                 yield {
@@ -1719,6 +2201,13 @@ def launch_audio_app(
                     split_preview_output: None,
                     split_files_output: None,
                     split_summary_output: "",
+                    audio_progress: progress_update(
+                        "Split Audio",
+                        "error",
+                        str(error),
+                        steps=split_steps,
+                        active_step=2,
+                    ),
                 }
                 raise gr.Error(str(error))
 
@@ -1738,7 +2227,9 @@ def launch_audio_app(
                 split_preview_output,
                 split_files_output,
                 split_summary_output,
+                audio_progress,
             ],
+            show_progress="minimal",
         )
 
         create_ui_handler(
@@ -1769,6 +2260,12 @@ def launch_audio_app(
             shifts_value,
             model_override,
         ):
+            stem_steps = (
+                "Validate source",
+                "Resolve separation route",
+                "Separate layers",
+                "Publish output",
+            )
             mode_map = {
                 "Acapella (Vocals Only)": "acapella",
                 "Karaoke (Instrumental Only)": "karaoke",
@@ -1783,18 +2280,80 @@ def launch_audio_app(
                 stem_files_output: None,
                 stem_summary_output: "",
                 stem_share_links: "",
+                audio_progress: progress_update(
+                    "Separate Stems",
+                    "running",
+                    "Checking the stem request.",
+                    steps=stem_steps,
+                    active_step=1,
+                ),
+            }
+            yield {
+                stem_btn: gr.update(value="Separating...", interactive=False),
+                stem_output_box: gr.update(visible=False),
+                stem_output: None,
+                stem_files_output: None,
+                stem_summary_output: "",
+                stem_share_links: "",
+                audio_progress: progress_update(
+                    "Separate Stems",
+                    "running",
+                    "Selecting the stem separation route.",
+                    steps=stem_steps,
+                    active_step=2,
+                ),
+            }
+            yield {
+                stem_btn: gr.update(value="Separating...", interactive=False),
+                stem_output_box: gr.update(visible=False),
+                stem_output: None,
+                stem_files_output: None,
+                stem_summary_output: "",
+                stem_share_links: "",
+                audio_progress: progress_update(
+                    "Separate Stems",
+                    "running",
+                    "Separating the selected stem layers.",
+                    steps=stem_steps,
+                    active_step=3,
+                ),
             }
             try:
-                primary_output, stem_files, summary_text = (
-                    run_stem_separation_tool(
-                        audio_path,
-                        resolved_mode,
-                        output_format,
-                        model_name,
-                        shifts_value,
-                        model_override,
-                    )
+                activity_task = create_download_activity_task(
+                    run_stem_separation_tool,
+                    audio_path,
+                    resolved_mode,
+                    output_format,
+                    model_name,
+                    shifts_value,
+                    model_override,
                 )
+                yield from poll_activity_updates(
+                    activity_task,
+                    {
+                        stem_btn: gr.update(
+                            value="Separating...",
+                            interactive=False,
+                        ),
+                        stem_output_box: gr.update(visible=False),
+                        stem_output: None,
+                        stem_files_output: None,
+                        stem_summary_output: "",
+                        stem_share_links: "",
+                    },
+                    action_label="Separate Stems",
+                    action_steps=stem_steps,
+                    detail="Separating the selected stem layers.",
+                    active_step=3,
+                )
+                (
+                    (
+                        primary_output,
+                        stem_files,
+                        summary_text,
+                    ),
+                    _,
+                ) = resolve_download_activity_task(activity_task)
                 yield {
                     stem_btn: gr.update(
                         value="Separate Stems", interactive=True
@@ -1804,6 +2363,13 @@ def launch_audio_app(
                     stem_files_output: stem_files,
                     stem_summary_output: summary_text,
                     stem_share_links: build_share_markup(primary_output),
+                    audio_progress: progress_update(
+                        "Separate Stems",
+                        "success",
+                        "Stem outputs are ready.",
+                        steps=stem_steps,
+                        active_step=len(stem_steps),
+                    ),
                 }
             except Exception as error:
                 yield {
@@ -1815,6 +2381,20 @@ def launch_audio_app(
                     stem_files_output: None,
                     stem_summary_output: "",
                     stem_share_links: "",
+                    audio_progress: progress_update(
+                        "Separate Stems",
+                        "error",
+                        resolve_activity_detail(
+                            str(error),
+                            getattr(
+                                error,
+                                "download_activity_snapshot",
+                                None,
+                            ),
+                        ),
+                        steps=stem_steps,
+                        active_step=3,
+                    ),
                 }
                 raise gr.Error(str(error))
 
@@ -1835,7 +2415,9 @@ def launch_audio_app(
                 stem_files_output,
                 stem_summary_output,
                 stem_share_links,
+                audio_progress,
             ],
+            show_progress="minimal",
         )
 
         create_ui_handler(
@@ -1905,6 +2487,11 @@ def launch_audio_app(
         )
 
         def analysis_ui(audio_path, hop_length, duration_value, offset_value):
+            analysis_steps = (
+                "Validate source",
+                "Analyze tempo and key",
+                "Publish report",
+            )
             yield {
                 analysis_btn: gr.update(
                     value="Analyzing...", interactive=False
@@ -1913,6 +2500,29 @@ def launch_audio_app(
                 analysis_bpm_key_output: "",
                 analysis_diagnostics_output: "",
                 analysis_json_output: None,
+                audio_progress: progress_update(
+                    "Analyze Audio",
+                    "running",
+                    "Checking the analysis request.",
+                    steps=analysis_steps,
+                    active_step=1,
+                ),
+            }
+            yield {
+                analysis_btn: gr.update(
+                    value="Analyzing...", interactive=False
+                ),
+                analysis_output_box: gr.update(visible=False),
+                analysis_bpm_key_output: "",
+                analysis_diagnostics_output: "",
+                analysis_json_output: None,
+                audio_progress: progress_update(
+                    "Analyze Audio",
+                    "running",
+                    "Inspecting tempo, key, and diagnostics.",
+                    steps=analysis_steps,
+                    active_step=2,
+                ),
             }
             try:
                 bpm_key_text, diagnostics_text, report_path = (
@@ -1931,6 +2541,13 @@ def launch_audio_app(
                     analysis_bpm_key_output: bpm_key_text,
                     analysis_diagnostics_output: diagnostics_text,
                     analysis_json_output: report_path,
+                    audio_progress: progress_update(
+                        "Analyze Audio",
+                        "success",
+                        "Audio analysis is ready.",
+                        steps=analysis_steps,
+                        active_step=len(analysis_steps),
+                    ),
                 }
             except Exception as error:
                 yield {
@@ -1941,6 +2558,13 @@ def launch_audio_app(
                     analysis_bpm_key_output: "",
                     analysis_diagnostics_output: "",
                     analysis_json_output: None,
+                    audio_progress: progress_update(
+                        "Analyze Audio",
+                        "error",
+                        str(error),
+                        steps=analysis_steps,
+                        active_step=2,
+                    ),
                 }
                 raise gr.Error(str(error))
 
@@ -1958,75 +2582,270 @@ def launch_audio_app(
                 analysis_bpm_key_output,
                 analysis_diagnostics_output,
                 analysis_json_output,
+                audio_progress,
             ],
+            show_progress="minimal",
         )
 
         def feedback_ui(audio_path):
+            feedback_steps = (
+                "Validate source",
+                "Review track",
+                "Publish feedback",
+            )
             yield {
                 feedback_btn: gr.update(
                     value="Analyzing...", interactive=False
                 ),
                 feedback_output: "",
+                audio_progress: progress_update(
+                    "Get Feedback",
+                    "running",
+                    "Checking the feedback request.",
+                    steps=feedback_steps,
+                    active_step=1,
+                ),
+            }
+            yield {
+                feedback_btn: gr.update(
+                    value="Analyzing...", interactive=False
+                ),
+                feedback_output: "",
+                audio_progress: progress_update(
+                    "Get Feedback",
+                    "running",
+                    "Reviewing the track for feedback.",
+                    steps=feedback_steps,
+                    active_step=2,
+                ),
             }
             try:
-                feedback_text = get_audio_feedback(audio_path)
+                activity_task = create_download_activity_task(
+                    get_audio_feedback,
+                    audio_path,
+                )
+                yield from poll_activity_updates(
+                    activity_task,
+                    {
+                        feedback_btn: gr.update(
+                            value="Analyzing...",
+                            interactive=False,
+                        ),
+                        feedback_output: "",
+                    },
+                    action_label="Get Feedback",
+                    action_steps=feedback_steps,
+                    detail="Reviewing the track for feedback.",
+                    active_step=2,
+                )
+                feedback_text, _ = resolve_download_activity_task(activity_task)
                 yield {
                     feedback_btn: gr.update(
                         value="Get Feedback", interactive=True
                     ),
                     feedback_output: feedback_text,
+                    audio_progress: progress_update(
+                        "Get Feedback",
+                        "success",
+                        "Feedback is ready.",
+                        steps=feedback_steps,
+                        active_step=len(feedback_steps),
+                    ),
                 }
             except Exception as error:
                 yield {
                     feedback_btn: gr.update(
                         value="Get Feedback", interactive=True
-                    )
+                    ),
+                    audio_progress: progress_update(
+                        "Get Feedback",
+                        "error",
+                        resolve_activity_detail(
+                            str(error),
+                            getattr(
+                                error,
+                                "download_activity_snapshot",
+                                None,
+                            ),
+                        ),
+                        steps=feedback_steps,
+                        active_step=2,
+                    ),
                 }
                 raise gr.Error(str(error))
 
         feedback_btn.click(
-            feedback_ui, [feedback_input], [feedback_btn, feedback_output]
+            feedback_ui,
+            [feedback_input],
+            [feedback_btn, feedback_output, audio_progress],
+            show_progress="minimal",
         )
 
         def instrument_id_ui(audio_path):
+            instrument_steps = (
+                "Validate source",
+                "Identify instruments",
+                "Publish report",
+            )
             yield {
                 instrument_id_btn: gr.update(
                     value="Identifying...", interactive=False
                 ),
                 instrument_id_output: "",
+                audio_progress: progress_update(
+                    "Identify Instruments",
+                    "running",
+                    "Checking the identification request.",
+                    steps=instrument_steps,
+                    active_step=1,
+                ),
+            }
+            yield {
+                instrument_id_btn: gr.update(
+                    value="Identifying...", interactive=False
+                ),
+                instrument_id_output: "",
+                audio_progress: progress_update(
+                    "Identify Instruments",
+                    "running",
+                    "Identifying the instrument mix.",
+                    steps=instrument_steps,
+                    active_step=2,
+                ),
             }
             try:
-                instrument_text = identify_instruments(audio_path)
+                activity_task = create_download_activity_task(
+                    identify_instruments,
+                    audio_path,
+                )
+                yield from poll_activity_updates(
+                    activity_task,
+                    {
+                        instrument_id_btn: gr.update(
+                            value="Identifying...",
+                            interactive=False,
+                        ),
+                        instrument_id_output: "",
+                    },
+                    action_label="Identify Instruments",
+                    action_steps=instrument_steps,
+                    detail="Identifying the instrument mix.",
+                    active_step=2,
+                )
+                instrument_text, _ = resolve_download_activity_task(
+                    activity_task
+                )
                 yield {
                     instrument_id_btn: gr.update(
                         value="Identify Instruments",
                         interactive=True,
                     ),
                     instrument_id_output: instrument_text,
+                    audio_progress: progress_update(
+                        "Identify Instruments",
+                        "success",
+                        "Instrument identification is ready.",
+                        steps=instrument_steps,
+                        active_step=len(instrument_steps),
+                    ),
                 }
             except Exception as error:
                 yield {
                     instrument_id_btn: gr.update(
                         value="Identify Instruments",
                         interactive=True,
-                    )
+                    ),
+                    audio_progress: progress_update(
+                        "Identify Instruments",
+                        "error",
+                        resolve_activity_detail(
+                            str(error),
+                            getattr(
+                                error,
+                                "download_activity_snapshot",
+                                None,
+                            ),
+                        ),
+                        steps=instrument_steps,
+                        active_step=2,
+                    ),
                 }
                 raise gr.Error(str(error))
 
         instrument_id_btn.click(
             instrument_id_ui,
             [instrument_id_input],
-            [instrument_id_btn, instrument_id_output],
+            [instrument_id_btn, instrument_id_output, audio_progress],
+            show_progress="minimal",
         )
 
         def stt_ui(audio_path, language):
+            transcription_steps = (
+                "Validate source",
+                "Transcribe audio",
+                "Save transcript",
+                "Publish output",
+            )
             yield {
                 stt_btn: gr.update(value="Transcribing...", interactive=False),
                 stt_output: "",
                 stt_file_output: gr.update(visible=False),
+                audio_progress: progress_update(
+                    "Transcribe Audio",
+                    "running",
+                    "Checking the transcription request.",
+                    steps=transcription_steps,
+                    active_step=1,
+                ),
+            }
+            yield {
+                stt_btn: gr.update(value="Transcribing...", interactive=False),
+                stt_output: "",
+                stt_file_output: gr.update(visible=False),
+                audio_progress: progress_update(
+                    "Transcribe Audio",
+                    "running",
+                    "Transcribing the selected audio.",
+                    steps=transcription_steps,
+                    active_step=2,
+                ),
             }
             try:
-                transcript = transcribe_audio(audio_path, language)
+                activity_task = create_download_activity_task(
+                    transcribe_audio,
+                    audio_path,
+                    language,
+                )
+                yield from poll_activity_updates(
+                    activity_task,
+                    {
+                        stt_btn: gr.update(
+                            value="Transcribing...",
+                            interactive=False,
+                        ),
+                        stt_output: "",
+                        stt_file_output: gr.update(visible=False),
+                    },
+                    action_label="Transcribe Audio",
+                    action_steps=transcription_steps,
+                    detail="Transcribing the selected audio.",
+                    active_step=2,
+                )
+                transcript, _ = resolve_download_activity_task(activity_task)
+                yield {
+                    stt_btn: gr.update(
+                        value="Transcribing...", interactive=False
+                    ),
+                    stt_output: transcript,
+                    stt_file_output: gr.update(visible=False),
+                    audio_progress: progress_update(
+                        "Transcribe Audio",
+                        "running",
+                        "Saving the transcript file.",
+                        steps=transcription_steps,
+                        active_step=3,
+                    ),
+                }
                 file_path = save_text_to_file(transcript)
                 yield {
                     stt_btn: gr.update(
@@ -2034,25 +2853,70 @@ def launch_audio_app(
                     ),
                     stt_output: transcript,
                     stt_file_output: gr.update(visible=True, value=file_path),
+                    audio_progress: progress_update(
+                        "Transcribe Audio",
+                        "success",
+                        "Transcript is ready.",
+                        steps=transcription_steps,
+                        active_step=len(transcription_steps),
+                    ),
                 }
             except Exception as error:
                 yield {
                     stt_btn: gr.update(
                         value="Transcribe Audio", interactive=True
-                    )
+                    ),
+                    audio_progress: progress_update(
+                        "Transcribe Audio",
+                        "error",
+                        resolve_activity_detail(
+                            str(error),
+                            getattr(
+                                error,
+                                "download_activity_snapshot",
+                                None,
+                            ),
+                        ),
+                        steps=transcription_steps,
+                        active_step=3,
+                    ),
                 }
                 raise gr.Error(str(error))
 
         stt_btn.click(
             stt_ui,
             [stt_input, stt_language],
-            [stt_btn, stt_output, stt_file_output],
+            [stt_btn, stt_output, stt_file_output, audio_progress],
+            show_progress="minimal",
         )
 
         def spec_ui(audio_path):
+            spectrum_steps = (
+                "Validate source",
+                "Render spectrum",
+                "Publish output",
+            )
             yield {
                 spec_btn: gr.update(value="Generating...", interactive=False),
                 spec_output: None,
+                audio_progress: progress_update(
+                    "Generate Spectrum",
+                    "running",
+                    "Checking the spectrum request.",
+                    steps=spectrum_steps,
+                    active_step=1,
+                ),
+            }
+            yield {
+                spec_btn: gr.update(value="Generating...", interactive=False),
+                spec_output: None,
+                audio_progress: progress_update(
+                    "Generate Spectrum",
+                    "running",
+                    "Rendering the spectrum visualization.",
+                    steps=spectrum_steps,
+                    active_step=2,
+                ),
             }
             try:
                 spec_image = create_spectrum_visualization(audio_path)
@@ -2061,16 +2925,35 @@ def launch_audio_app(
                         value="Generate Spectrum", interactive=True
                     ),
                     spec_output: spec_image,
+                    audio_progress: progress_update(
+                        "Generate Spectrum",
+                        "success",
+                        "Spectrum visualization is ready.",
+                        steps=spectrum_steps,
+                        active_step=len(spectrum_steps),
+                    ),
                 }
             except Exception as error:
                 yield {
                     spec_btn: gr.update(
                         value="Generate Spectrum", interactive=True
-                    )
+                    ),
+                    audio_progress: progress_update(
+                        "Generate Spectrum",
+                        "error",
+                        str(error),
+                        steps=spectrum_steps,
+                        active_step=2,
+                    ),
                 }
                 raise gr.Error(str(error))
 
-        spec_btn.click(spec_ui, [spec_input], [spec_btn, spec_output])
+        spec_btn.click(
+            spec_ui,
+            [spec_input],
+            [spec_btn, spec_output, audio_progress],
+            show_progress="minimal",
+        )
 
         def clear_ui(*components):
             updates = {}
@@ -2092,15 +2975,20 @@ def launch_audio_app(
             return updates
 
         clear_enhancer_btn.click(
-            lambda: clear_ui(
-                enhancer_input,
-                enhancer_output,
-                enhancer_report,
-                enhancer_stems_output,
-                enhancer_diagnostics,
-                enhancer_share_links,
-                enhancer_output_box,
-            ),
+            lambda: {
+                **clear_ui(
+                    enhancer_input,
+                    enhancer_output,
+                    enhancer_report,
+                    enhancer_stems_output,
+                    enhancer_diagnostics,
+                    enhancer_share_links,
+                ),
+                **empty_mastering_stem_preview_updates(),
+                enhancer_output_column: gr.update(visible=False),
+                enhancer_report: gr.update(value=None, visible=False),
+                enhancer_stems_output: gr.update(value=None, visible=False),
+            },
             [],
             [
                 enhancer_input,
@@ -2109,7 +2997,14 @@ def launch_audio_app(
                 enhancer_stems_output,
                 enhancer_diagnostics,
                 enhancer_share_links,
-                enhancer_output_box,
+                enhancer_output_column,
+                enhancer_stem_preview_box,
+                enhancer_vocals_stem,
+                enhancer_drums_stem,
+                enhancer_bass_stem,
+                enhancer_other_stem,
+                enhancer_guitar_stem,
+                enhancer_piano_stem,
             ],
         )
         clear_autotune_btn.click(
@@ -2345,10 +3240,14 @@ def launch_audio_app(
             [],
             [lyric_audio, lyric_bg, lyric_output, lyric_output_box, lyric_text],
         )
-        load_transcript_btn.click(
+        bind_audio_action(
+            load_transcript_btn,
             transcribe_audio,
-            [lyric_audio, lyric_language],
-            [lyric_text],
+            inputs=[lyric_audio, lyric_language],
+            outputs=[lyric_text],
+            action_label="Load Transcript",
+            running_detail="Transcribing the lyric reference audio.",
+            success_detail="Transcript has been loaded into the editor.",
         )
 
     launch_blocks(app)

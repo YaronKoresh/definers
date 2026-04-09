@@ -18,7 +18,11 @@ def get_audio_duration(file_path: str) -> float | None:
         return None
 
 
-def audio_preview(file_path: str, max_duration: float = 30) -> str | None:
+def audio_preview(
+    file_path: str,
+    max_duration: float = 30,
+    output_folder: str | None = None,
+) -> str | None:
     from definers.system import exist, full_path
 
     file_path = full_path(file_path)
@@ -46,6 +50,7 @@ def audio_preview(file_path: str, max_duration: float = 30) -> str | None:
                 chunk_duration=total_duration,
                 chunks_limit=1,
                 skip_time=0,
+                output_folder=output_folder,
             )
             return preview_paths[0] if preview_paths else None
 
@@ -92,6 +97,7 @@ def audio_preview(file_path: str, max_duration: float = 30) -> str | None:
             chunk_duration=max_duration,
             chunks_limit=1,
             skip_time=start_time,
+            output_folder=output_folder,
         )
         if preview_paths:
             _logger.debug("Preview extraction successful: %s", preview_paths[0])

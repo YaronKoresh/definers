@@ -33,12 +33,15 @@ def init_upscale():
     import torch
 
     import definers as _d
+    from definers.model_installation import hf_file_download
 
     try:
-        probe_model_path = _d.hf_hub_download(
+        probe_model_path = hf_file_download(
             repo_id="philz1337x/upscaler",
             filename="4x-UltraSharp.pth",
             revision="011deacac8270114eb7d2eeff4fe6fa9a837be70",
+            item_label="4x-UltraSharp.pth",
+            detail="Downloading upscale checkpoint.",
         )
     except Exception:
         raise
@@ -364,67 +367,88 @@ def init_upscale():
     pillow_heif.register_heif_opener()
 
     def _rescale_checkpoints():
-        from huggingface_hub import hf_hub_download
+        checkpoint_specs = (
+            (
+                "refiners/juggernaut.reborn.sd1_5.unet",
+                "model.safetensors",
+                "347d14c3c782c4959cc4d1bb1e336d19f7dda4d2",
+                "UNet checkpoint",
+            ),
+            (
+                "refiners/juggernaut.reborn.sd1_5.text_encoder",
+                "model.safetensors",
+                "744ad6a5c0437ec02ad826df9f6ede102bb27481",
+                "Text encoder checkpoint",
+            ),
+            (
+                "refiners/juggernaut.reborn.sd1_5.autoencoder",
+                "model.safetensors",
+                "3c1aae3fc3e03e4a2b7e0fa42b62ebb64f1a4c19",
+                "Autoencoder checkpoint",
+            ),
+            (
+                "refiners/controlnet.sd1_5.tile",
+                "model.safetensors",
+                "48ced6ff8bfa873a8976fa467c3629a240643387",
+                "Tile ControlNet checkpoint",
+            ),
+            (
+                "philz1337x/upscaler",
+                "4x-UltraSharp.pth",
+                "011deacac8270114eb7d2eeff4fe6fa9a837be70",
+                "ESRGAN checkpoint",
+            ),
+            (
+                "philz1337x/embeddings",
+                "JuggernautNegative-neg.pt",
+                "203caa7e9cc2bc225031a4021f6ab1ded283454a",
+                "Negative embedding",
+            ),
+            (
+                "philz1337x/loras",
+                "more_details.safetensors",
+                "a3802c0280c0d00c2ab18d37454a8744c44e474e",
+                "More Details LoRA",
+            ),
+            (
+                "philz1337x/loras",
+                "SDXLrender_v2.0.safetensors",
+                "a3802c0280c0d00c2ab18d37454a8744c44e474e",
+                "SDXL Render LoRA",
+            ),
+        )
+
+        downloaded_checkpoints = {
+            label: Path(
+                hf_file_download(
+                    repo_id=repo_id,
+                    filename=filename,
+                    revision=revision,
+                    item_label=label,
+                    detail=f"Fetching {repo_id}.",
+                    completed=index,
+                    total=len(checkpoint_specs),
+                )
+            )
+            for index, (repo_id, filename, revision, label) in enumerate(
+                checkpoint_specs,
+                start=1,
+            )
+        }
 
         CHECKPOINTS = ESRGANUpscalerCheckpoints(
-            unet=Path(
-                hf_hub_download(
-                    repo_id="refiners/juggernaut.reborn.sd1_5.unet",
-                    filename="model.safetensors",
-                    revision="347d14c3c782c4959cc4d1bb1e336d19f7dda4d2",
-                )
-            ),
-            clip_text_encoder=Path(
-                hf_hub_download(
-                    repo_id="refiners/juggernaut.reborn.sd1_5.text_encoder",
-                    filename="model.safetensors",
-                    revision="744ad6a5c0437ec02ad826df9f6ede102bb27481",
-                )
-            ),
-            lda=Path(
-                hf_hub_download(
-                    repo_id="refiners/juggernaut.reborn.sd1_5.autoencoder",
-                    filename="model.safetensors",
-                    revision="3c1aae3fc3e03e4a2b7e0fa42b62ebb64f1a4c19",
-                )
-            ),
-            controlnet_tile=Path(
-                hf_hub_download(
-                    repo_id="refiners/controlnet.sd1_5.tile",
-                    filename="model.safetensors",
-                    revision="48ced6ff8bfa873a8976fa467c3629a240643387",
-                )
-            ),
-            esrgan=Path(
-                hf_hub_download(
-                    repo_id="philz1337x/upscaler",
-                    filename="4x-UltraSharp.pth",
-                    revision="011deacac8270114eb7d2eeff4fe6fa9a837be70",
-                )
-            ),
-            negative_embedding=Path(
-                hf_hub_download(
-                    repo_id="philz1337x/embeddings",
-                    filename="JuggernautNegative-neg.pt",
-                    revision="203caa7e9cc2bc225031a4021f6ab1ded283454a",
-                )
-            ),
+            unet=downloaded_checkpoints["UNet checkpoint"],
+            clip_text_encoder=downloaded_checkpoints["Text encoder checkpoint"],
+            lda=downloaded_checkpoints["Autoencoder checkpoint"],
+            controlnet_tile=downloaded_checkpoints[
+                "Tile ControlNet checkpoint"
+            ],
+            esrgan=downloaded_checkpoints["ESRGAN checkpoint"],
+            negative_embedding=downloaded_checkpoints["Negative embedding"],
             negative_embedding_key="string_to_param.*",
             loras={
-                "more_details": Path(
-                    hf_hub_download(
-                        repo_id="philz1337x/loras",
-                        filename="more_details.safetensors",
-                        revision="a3802c0280c0d00c2ab18d37454a8744c44e474e",
-                    )
-                ),
-                "sdxl_render": Path(
-                    hf_hub_download(
-                        repo_id="philz1337x/loras",
-                        filename="SDXLrender_v2.0.safetensors",
-                        revision="a3802c0280c0d00c2ab18d37454a8744c44e474e",
-                    )
-                ),
+                "more_details": downloaded_checkpoints["More Details LoRA"],
+                "sdxl_render": downloaded_checkpoints["SDXL Render LoRA"],
             },
         )
         return CHECKPOINTS

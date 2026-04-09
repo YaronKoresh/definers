@@ -16,6 +16,8 @@ def change_audio_speed(
 ):
     import pydub
 
+    from definers.system.output_paths import managed_output_path
+
     sound_out = None
     if preserve_pitch:
         audio_path_out = tmp(Path(audio_path).suffix)
@@ -34,16 +36,15 @@ def change_audio_speed(
             overrides={"frame_rate": new_frame_rate},
         ).set_frame_rate(sound.frame_rate)
     if sound_out:
-        output_stem = str(
-            Path(audio_path).with_name(
-                f"{Path(audio_path).stem}_speed_{speed_factor}x"
-            )
+        output_stem = managed_output_path(
+            format_choice,
+            section="audio",
+            stem=f"{Path(audio_path).stem}_speed_{speed_factor}x",
         )
         return save_audio(
             destination_path=output_stem,
             audio_signal=sound_out,
             sample_rate=24000,
-            output_format=format_choice,
         )
     catch("Could not process audio speed change.")
     return None

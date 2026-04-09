@@ -31,6 +31,7 @@ def humanize_vocals(audio_path: str, amount: float = 0.5) -> str | None:
     import soundfile as sf
 
     from definers.system import install_audio_effects
+    from definers.system.output_paths import managed_output_path
 
     librosa = librosa_module()
 
@@ -93,10 +94,14 @@ def humanize_vocals(audio_path: str, amount: float = 0.5) -> str | None:
             y_humanized = np.copy(y)
 
         input_path = Path(audio_path)
-        output_path = input_path.parent / f"{input_path.stem}_humanized.wav"
-        sf.write(str(output_path), y_humanized, sr)
+        output_path = managed_output_path(
+            "wav",
+            section="audio",
+            stem=f"{input_path.stem}_humanized",
+        )
+        sf.write(output_path, y_humanized, sr)
         _logger.info("Humanized audio saved to: %s", output_path)
-        return str(output_path)
+        return output_path
     except Exception:
         _logger.exception("An error occurred during humanize_vocals")
         return None
@@ -129,6 +134,7 @@ def generate_voice(
     format_choice: str,
 ) -> str | None:
     from definers.ml import init_pretrained_model
+    from definers.system.output_paths import managed_output_path
 
     if not MODELS["tts"]:
         init_pretrained_model("tts")
@@ -152,12 +158,15 @@ def generate_voice(
             wav = np.clip((wav / peak) * 0.9, -1.0, 1.0)
         sf.write(temp_wav_path, wav, int(sample_rate))
         sound = pydub.AudioSegment.from_file(temp_wav_path)
-        output_stem = tmp(keep=False).replace(".data", "")
+        output_stem = managed_output_path(
+            format_choice,
+            section="audio",
+            stem="generated_voice",
+        )
         return save_audio(
             destination_path=output_stem,
             audio_signal=sound,
             sample_rate=int(sample_rate),
-            output_format=format_choice,
         )
     except Exception as error:
         catch(f"Generation failed: {error}")
@@ -174,6 +183,7 @@ def pitch_shift_vocals(
     import soundfile as sf
 
     librosa = librosa_module()
+    from definers.system.output_paths import managed_output_path
 
     if seperated:
         y_vocals, sr = librosa.load(str(audio_path), sr=None)
@@ -205,15 +215,14 @@ def pitch_shift_vocals(
     instrumental = pydub.AudioSegment.from_file(instrumental_file)
     shifted_vocals = pydub.AudioSegment.from_file(shifted_vocals_path)
     combined = instrumental.overlay(shifted_vocals)
-    output_stem = str(
-        Path(audio_path).with_name(
-            f"{Path(audio_path).stem}_vocal_pitch_shifted"
-        )
+    output_stem = managed_output_path(
+        format_choice,
+        section="audio",
+        stem=f"{Path(audio_path).stem}_vocal_pitch_shifted",
     )
     final_output_path = save_audio(
         audio_signal=combined,
         destination_path=output_stem,
-        output_format=format_choice,
     )
     delete(str(vocals_file.parent))
     delete(shifted_vocals_path)

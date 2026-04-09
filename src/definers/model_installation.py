@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import gc
+import importlib.util
+import os
 import shutil
 import tempfile
 import threading
@@ -182,20 +184,110 @@ def _ensure_huggingface_hub() -> None:
         raise RuntimeError("huggingface_hub is required to download models")
 
 
+def _report_download_activity(
+    item_label: str | None = None,
+    *,
+    detail: str | None = None,
+    phase: str = "download",
+    completed: int | None = None,
+    total: int | None = None,
+) -> None:
+    try:
+        from definers.system.download_activity import report_download_activity
+    except Exception:
+        return
+    report_download_activity(
+        item_label,
+        detail=detail,
+        phase=phase,
+        completed=completed,
+        total=total,
+    )
+
+
+def _huggingface_max_workers() -> int:
+    configured_workers = os.environ.get("DEFINERS_HF_MAX_WORKERS", "").strip()
+    if configured_workers:
+        try:
+            resolved_workers = int(configured_workers)
+        except ValueError:
+            resolved_workers = 0
+        if resolved_workers > 0:
+            return resolved_workers
+    cpu_count = os.cpu_count() or 8
+    return max(8, min(16, cpu_count))
+
+
+def _prepare_huggingface_runtime() -> None:
+    if (
+        not os.environ.get("HF_HUB_ENABLE_HF_TRANSFER", "").strip()
+        and importlib.util.find_spec("hf_transfer") is not None
+    ):
+        os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
+    os.environ.setdefault("HF_XET_HIGH_PERFORMANCE", "1")
+
+
+def stem_model_dir() -> str:
+    configured_model_dir = os.environ.get(
+        "AUDIO_SEPARATOR_MODEL_DIR", ""
+    ).strip()
+    configured_data_root = os.environ.get("DEFINERS_DATA_ROOT", "").strip()
+    if configured_model_dir:
+        target_root = Path(configured_model_dir).expanduser()
+    elif configured_data_root:
+        target_root = (
+            Path(configured_data_root).expanduser()
+            / "models"
+            / "audio_separator"
+        )
+    elif os.name == "nt":
+        local_app_data = os.environ.get("LOCALAPPDATA", "").strip()
+        target_root = (
+            Path(local_app_data).expanduser() / "definers" / "audio_separator"
+            if local_app_data
+            else Path.home()
+            / "AppData"
+            / "Local"
+            / "definers"
+            / "audio_separator"
+        )
+    else:
+        target_root = Path.home() / ".cache" / "definers" / "audio_separator"
+    target_root.mkdir(parents=True, exist_ok=True)
+    return str(target_root.resolve())
+
+
 def _snapshot_download(
     repo_id: str,
     *,
     revision: str | None = None,
     allow_patterns: Iterable[str] | None = None,
+    item_label: str | None = None,
+    detail: str | None = None,
+    completed: int | None = None,
+    total: int | None = None,
+    **extra_kwargs: object,
 ) -> str:
+    _prepare_huggingface_runtime()
     _ensure_huggingface_hub()
     from huggingface_hub import snapshot_download
 
-    kwargs: dict[str, object] = {"repo_id": repo_id}
+    _report_download_activity(
+        item_label or repo_id,
+        detail=detail or "Preparing Hugging Face snapshot download.",
+        phase="download",
+        completed=completed,
+        total=total,
+    )
+    kwargs: dict[str, object] = {
+        "repo_id": repo_id,
+        "max_workers": _huggingface_max_workers(),
+    }
     if revision is not None:
         kwargs["revision"] = revision
     if allow_patterns is not None:
         kwargs["allow_patterns"] = list(allow_patterns)
+    kwargs.update(extra_kwargs)
     return str(snapshot_download(**kwargs))
 
 
@@ -204,17 +296,78 @@ def _hf_download(
     filename: str,
     *,
     revision: str | None = None,
+    item_label: str | None = None,
+    detail: str | None = None,
+    completed: int | None = None,
+    total: int | None = None,
+    **extra_kwargs: object,
 ) -> str:
+    _prepare_huggingface_runtime()
     _ensure_huggingface_hub()
     from huggingface_hub import hf_hub_download
 
+    resolved_item_label = item_label or f"{repo_id}/{filename}"
+    _report_download_activity(
+        resolved_item_label,
+        detail=detail or "Preparing Hugging Face file download.",
+        phase="artifact",
+        completed=completed,
+        total=total,
+    )
     kwargs: dict[str, object] = {
         "repo_id": repo_id,
         "filename": filename,
     }
     if revision is not None:
         kwargs["revision"] = revision
+    kwargs.update(extra_kwargs)
     return str(hf_hub_download(**kwargs))
+
+
+def hf_snapshot_download(
+    repo_id: str,
+    *,
+    revision: str | None = None,
+    allow_patterns: Iterable[str] | None = None,
+    item_label: str | None = None,
+    detail: str | None = None,
+    completed: int | None = None,
+    total: int | None = None,
+    **extra_kwargs: object,
+) -> str:
+    return _snapshot_download(
+        repo_id,
+        revision=revision,
+        allow_patterns=allow_patterns,
+        item_label=item_label,
+        detail=detail,
+        completed=completed,
+        total=total,
+        **extra_kwargs,
+    )
+
+
+def hf_file_download(
+    repo_id: str,
+    filename: str,
+    *,
+    revision: str | None = None,
+    item_label: str | None = None,
+    detail: str | None = None,
+    completed: int | None = None,
+    total: int | None = None,
+    **extra_kwargs: object,
+) -> str:
+    return _hf_download(
+        repo_id,
+        filename,
+        revision=revision,
+        item_label=item_label,
+        detail=detail,
+        completed=completed,
+        total=total,
+        **extra_kwargs,
+    )
 
 
 def _clone_enhanced_rvc_fork(target_root: str | Path) -> Path:
@@ -302,19 +455,33 @@ def download_rvc_assets(
     return ensure_enhanced_rvc_fork_folders(target_root)
 
 
-def _download_stem_models() -> None:
+def download_stem_models(
+    model_names: Iterable[str] | None = None,
+) -> tuple[str, ...]:
     if not ensure_module_runtime("audio_separator"):
         raise RuntimeError(
             "audio-separator is required to download stem models"
         )
     from audio_separator.separator import Separator
 
+    resolved_model_names = tuple(
+        dict.fromkeys(
+            str(model_name).strip()
+            for model_name in (
+                STEM_MODEL_FILES if model_names is None else tuple(model_names)
+            )
+            if str(model_name).strip()
+        )
+    )
+    resolved_model_dir = stem_model_dir()
+
     separator = Separator(
-        output_dir=str(ASSET_ROOT),
+        output_dir=resolved_model_dir,
         output_format="WAV",
         sample_rate=44100,
         use_soundfile=True,
         log_level=40,
+        model_file_dir=resolved_model_dir,
         demucs_params={
             "shifts": 2,
             "overlap": 0.25,
@@ -325,9 +492,21 @@ def _download_stem_models() -> None:
             "overlap": 4,
         },
     )
-    for model_name in STEM_MODEL_FILES:
+    for index, model_name in enumerate(resolved_model_names, start=1):
+        _report_download_activity(
+            model_name,
+            detail="Preparing separator checkpoint.",
+            phase="download",
+            completed=index,
+            total=len(resolved_model_names),
+        )
         separator.download_model_files(model_name)
     gc.collect()
+    return resolved_model_names
+
+
+def _download_stem_models() -> None:
+    download_stem_models()
 
 
 def _download_stable_whisper_model() -> None:
@@ -343,8 +522,19 @@ def _download_stable_whisper_model() -> None:
 
 
 def _download_upscale_models() -> None:
-    for repo_id, filename, revision in UPSCALE_FILES:
-        _hf_download(repo_id, filename, revision=revision)
+    for index, (repo_id, filename, revision) in enumerate(
+        UPSCALE_FILES,
+        start=1,
+    ):
+        _hf_download(
+            repo_id,
+            filename,
+            revision=revision,
+            item_label=filename,
+            detail=f"Fetching {repo_id}",
+            completed=index,
+            total=len(UPSCALE_FILES),
+        )
 
 
 def _download_answer_model() -> None:
@@ -414,6 +604,11 @@ MODEL_TASK_DOWNLOADERS: dict[str, Callable[[], None]] = {
 
 
 def _install_model_task(task_name: str) -> None:
+    _report_download_activity(
+        task_name,
+        detail="Preparing model assets.",
+        phase="model",
+    )
     MODEL_TASK_DOWNLOADERS[task_name]()
 
 
@@ -478,11 +673,15 @@ __all__ = [
     "UPSCALE_FILES",
     "download_rvc_assets",
     "download_enhanced_rvc_fork_folders",
+    "download_stem_models",
     "enhanced_rvc_fork_folder_paths",
     "ensure_enhanced_rvc_fork_folders",
+    "hf_file_download",
+    "hf_snapshot_download",
     "has_enhanced_rvc_fork_folders",
     "install_model_target",
     "model_domain_names",
     "model_runtime_targets",
     "model_task_names",
+    "stem_model_dir",
 ]

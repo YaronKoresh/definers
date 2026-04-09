@@ -45,12 +45,18 @@ def _normalize_short_text(name: str, value):
 
 
 def _normalize_output_name(value):
+    from definers.system.output_paths import managed_output_path
+
     output_name = _normalize_short_text("save_as", value)
     if output_name is None:
         return None
-    if os.path.splitext(os.path.basename(output_name))[1]:
-        return output_name
-    return f"{output_name}.joblib"
+    base_name = os.path.basename(output_name)
+    if not os.path.splitext(base_name)[1]:
+        base_name = f"{base_name}.joblib"
+    return managed_output_path(
+        section="train",
+        filename=base_name,
+    )
 
 
 def _coerce_uploaded_value(value):

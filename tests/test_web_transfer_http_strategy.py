@@ -6,6 +6,12 @@ from types import ModuleType, SimpleNamespace
 from typing import IO
 
 from definers.media.web_transfer import HttpChunkedTransferStrategy
+from definers.system.download_activity import (
+    bind_download_activity_scope,
+    clear_download_activity_scope,
+    create_download_activity_scope,
+    get_download_activity_snapshot,
+)
 
 
 class FakeAsyncFile:
@@ -121,3 +127,32 @@ def test_http_chunked_transfer_strategy_executes_sync_download(
     strategy._execute_transfer_sync("https://example.com/data.bin", target_node)
 
     assert target_node.read_bytes() == payload
+
+
+def test_http_chunked_transfer_strategy_reports_transfer_activity(
+    monkeypatch, tmp_path: Path
+) -> None:
+    payload = b"sync-payload"
+    strategy = HttpChunkedTransferStrategy(chunk_size_bytes=4)
+    target_node = tmp_path / "sync" / "payload.bin"
+    fake_response = FakeUrlResponse(payload)
+    fake_response.headers = {"Content-Length": str(len(payload))}
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda source_uri, timeout: fake_response,
+    )
+
+    scope_id = create_download_activity_scope()
+    with bind_download_activity_scope(scope_id):
+        strategy._execute_transfer_sync(
+            "https://example.com/data.bin",
+            target_node,
+        )
+    activity_snapshot = get_download_activity_snapshot(scope_id)
+    clear_download_activity_scope(scope_id)
+
+    assert activity_snapshot is not None
+    assert activity_snapshot.phase == "transfer"
+    assert activity_snapshot.item_label == "payload.bin"
+    assert activity_snapshot.bytes_downloaded == len(payload)
+    assert activity_snapshot.bytes_total == len(payload)

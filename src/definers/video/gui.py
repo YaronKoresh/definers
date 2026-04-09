@@ -1,5 +1,5 @@
 import importlib
-import tempfile
+from pathlib import Path
 
 from definers.constants import STYLES_DB
 
@@ -454,6 +454,7 @@ def generate_video_handler(
     from moviepy import AudioFileClip, VideoClip
 
     from definers.audio import analyze_audio
+    from definers.system.output_paths import managed_output_path
 
     (w, h, img_array, error) = prepare_common_resources(
         audio, image, resolution
@@ -492,9 +493,11 @@ def generate_video_handler(
     clip = VideoClip(make_frame, duration=duration)
     clip = clip.with_audio(AudioFileClip(audio))
 
-    temp_file = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
-    output = temp_file.name
-    temp_file.close()
+    output = managed_output_path(
+        "mp4",
+        section="video",
+        stem=f"{Path(audio).stem}_composition",
+    )
 
     print("Rendering...")
     clip.write_videofile(

@@ -364,10 +364,15 @@ class TestRepositorySyncHuggingFaceRouting(unittest.TestCase):
             repository_sync.init_model_file(repo_id, turbo=False)
 
         mock_hf_download.assert_not_called()
-        mock_snapshot_download.assert_called_once_with(
-            repo_id=repo_id,
-            revision=None,
-            allow_patterns=[
+        mock_snapshot_download.assert_called_once()
+        self.assertEqual(
+            mock_snapshot_download.call_args.kwargs["repo_id"],
+            repo_id,
+        )
+        self.assertIsNone(mock_snapshot_download.call_args.kwargs["revision"])
+        self.assertEqual(
+            mock_snapshot_download.call_args.kwargs["allow_patterns"],
+            [
                 "*.bin",
                 "*.json",
                 "*.model",
@@ -375,6 +380,10 @@ class TestRepositorySyncHuggingFaceRouting(unittest.TestCase):
                 "*.safetensors",
                 "*.vocab",
             ],
+        )
+        self.assertGreaterEqual(
+            mock_snapshot_download.call_args.kwargs["max_workers"],
+            8,
         )
         fake_transformers_module.AutoModelForCausalLM.from_pretrained.assert_called_once_with(
             snapshot_dir,

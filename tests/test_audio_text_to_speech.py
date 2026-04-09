@@ -91,11 +91,17 @@ def test_generate_voice_writes_backend_audio(monkeypatch):
     fake_tts = FakeTts()
     monkeypatch.setitem(voice.MODELS, "tts", fake_tts)
 
-    temp_paths = iter(["generated.wav", "voice_output.data"])
+    temp_paths = iter(["generated.wav"])
     monkeypatch.setattr(
         voice,
         "tmp",
         lambda extension=None, keep=True: next(temp_paths),
+    )
+    monkeypatch.setattr(
+        "definers.system.output_paths.managed_output_path",
+        lambda suffix=None, *, section, stem, filename=None, unique=True: (
+            "managed/generated_voice.mp3"
+        ),
     )
 
     written = {}
@@ -131,10 +137,10 @@ def test_generate_voice_writes_backend_audio(monkeypatch):
     assert written["path"] == "generated.wav"
     assert written["sample_rate"] == 16000
     assert np.isclose(np.max(np.abs(written["data"])), 0.9)
-    assert saved["destination_path"] == "voice_output"
+    assert saved["destination_path"] == "managed/generated_voice.mp3"
     assert saved["audio_signal"] is fake_sound
     assert saved["sample_rate"] == 16000
-    assert saved["output_format"] == "mp3"
+    assert "output_format" not in saved
 
 
 def test_generate_voice_returns_none_when_backend_fails(monkeypatch):

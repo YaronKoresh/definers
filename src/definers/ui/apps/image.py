@@ -40,7 +40,12 @@ class ImageApp:
         import gradio as gr
 
         from definers.constants import MAX_INPUT_LENGTH
-        from definers.ui.gradio_shared import launch_blocks
+        from definers.ui.gradio_shared import (
+            bind_progress_click,
+            init_output_folder_controls,
+            init_progress_tracker,
+            launch_blocks,
+        )
 
         enabled_steps = set(steps or ("generate", "upscale", "title"))
 
@@ -48,6 +53,11 @@ class ImageApp:
             gr.HTML(
                 f"""<div class=\"audio-hero\"><p class=\"eyebrow\">{escape(hero_eyebrow)}</p><h1>{escape(app_title)}</h1><p>{escape(hero_description)}</p></div>"""
             )
+            progress_status = init_progress_tracker(
+                "Image studio ready",
+                "Choose an image action and run it.",
+            )
+            init_output_folder_controls()
             with gr.Row():
                 with gr.Column(scale=1):
                     if "generate" in enabled_steps:
@@ -99,22 +109,52 @@ class ImageApp:
                     if "title" in enabled_steps:
                         add_titles = gr.Button("Add title(s)")
             if "generate" in enabled_steps:
-                generate_image.click(
-                    fn=ImageApp.generate_image,
+                bind_progress_click(
+                    generate_image,
+                    ImageApp.generate_image,
+                    progress_output=progress_status,
                     inputs=[data, width_input, height_input],
                     outputs=[cover],
+                    action_label="Generate Image",
+                    steps=(
+                        "Validate prompt",
+                        "Generate image",
+                        "Publish result",
+                    ),
+                    running_detail="Generating the image.",
+                    success_detail="Generated image is ready.",
                 )
             if "upscale" in enabled_steps:
-                upscale_now.click(
-                    fn=ImageApp.upscale_image,
+                bind_progress_click(
+                    upscale_now,
+                    ImageApp.upscale_image,
+                    progress_output=progress_status,
                     inputs=[cover],
                     outputs=[cover],
+                    action_label="Upscale Image",
+                    steps=(
+                        "Validate source image",
+                        "Upscale image",
+                        "Publish result",
+                    ),
+                    running_detail="Upscaling the selected image.",
+                    success_detail="Upscaled image is ready.",
                 )
             if "title" in enabled_steps:
-                add_titles.click(
-                    fn=ImageApp.title_image,
+                bind_progress_click(
+                    add_titles,
+                    ImageApp.title_image,
+                    progress_output=progress_status,
                     inputs=[cover, top, middle, bottom],
                     outputs=[cover],
+                    action_label="Add Titles",
+                    steps=(
+                        "Validate source image",
+                        "Render title overlays",
+                        "Publish result",
+                    ),
+                    running_detail="Applying title overlays.",
+                    success_detail="Titled image is ready.",
                 )
         launch_blocks(app)
 

@@ -20,7 +20,13 @@ textarea { overflow-y: auto !important; }
         import gradio as gr
 
         from definers.constants import STYLES_DB
-        from definers.ui.gradio_shared import launch_blocks
+        from definers.ui.gradio_shared import (
+            bind_progress_click,
+            css as shared_css,
+            init_output_folder_controls,
+            init_progress_tracker,
+            launch_blocks,
+        )
         from definers.ui.lyric_video_service import lyric_video
         from definers.ui.music_video_service import music_video
         from definers.video.gui import filter_styles, generate_video_handler
@@ -34,6 +40,11 @@ textarea { overflow-y: auto !important; }
             gr.HTML(
                 f"""<div class=\"audio-hero\"><p class=\"eyebrow\">{escape(hero_eyebrow)}</p><h1>{escape(app_title)}</h1><p>{escape(hero_description)}</p></div>"""
             )
+            progress_status = init_progress_tracker(
+                "Video workspace ready",
+                "Pick a render workflow and start it.",
+            )
+            init_output_folder_controls()
             with gr.Tabs():
                 if "composer" in selected_tabs:
                     with gr.TabItem("Composer"):
@@ -164,8 +175,10 @@ textarea { overflow-y: auto !important; }
 
                                     btn = gr.Button("Generate Video")
                                     out_vid = gr.Video(label="Output Video")
-                                    btn.click(
-                                        fn=generate_video_handler,
+                                    bind_progress_click(
+                                        btn,
+                                        generate_video_handler,
+                                        progress_output=progress_status,
                                         inputs=[
                                             audio_in,
                                             image_in,
@@ -186,6 +199,14 @@ textarea { overflow-y: auto !important; }
                                             ce_logo,
                                         ],
                                         outputs=[out_vid],
+                                        action_label="Generate Video",
+                                        steps=(
+                                            "Validate media",
+                                            "Render composition",
+                                            "Publish result",
+                                        ),
+                                        running_detail="Rendering the video composition.",
+                                        success_detail="Video render is ready.",
                                     )
                 if "lyrics" in selected_tabs:
                     with gr.TabItem("Lyric Video"):
@@ -219,8 +240,10 @@ textarea { overflow-y: auto !important; }
                             )
                             lv_btn = gr.Button("Make Lyric Video")
                             lv_out = gr.Video(label="Lyric Output")
-                            lv_btn.click(
-                                fn=lyric_video,
+                            bind_progress_click(
+                                lv_btn,
+                                lyric_video,
+                                progress_output=progress_status,
                                 inputs=[
                                     lv_audio,
                                     lv_bg,
@@ -234,6 +257,14 @@ textarea { overflow-y: auto !important; }
                                     lv_fade,
                                 ],
                                 outputs=[lv_out],
+                                action_label="Make Lyric Video",
+                                steps=(
+                                    "Validate media",
+                                    "Render lyric video",
+                                    "Publish result",
+                                ),
+                                running_detail="Rendering the lyric video.",
+                                success_detail="Lyric video is ready.",
                             )
                 if "visualizer" in selected_tabs:
                     with gr.TabItem("Visualizer"):
@@ -249,14 +280,24 @@ textarea { overflow-y: auto !important; }
                             )
                             mv_btn = gr.Button("Generate Visualizer")
                             mv_out = gr.Video(label="Visualizer Output")
-                            mv_btn.click(
-                                fn=music_video,
+                            bind_progress_click(
+                                mv_btn,
+                                music_video,
+                                progress_output=progress_status,
                                 inputs=[mv_audio, mv_width, mv_height, mv_fps],
                                 outputs=[mv_out],
+                                action_label="Generate Visualizer",
+                                steps=(
+                                    "Validate audio",
+                                    "Render visualizer",
+                                    "Publish result",
+                                ),
+                                running_detail="Rendering the music visualizer.",
+                                success_detail="Visualizer video is ready.",
                             )
         launch_blocks(
             app,
-            custom_css=VideoApp.VIDEO_APP_CSS,
+            custom_css=shared_css() + "\n" + VideoApp.VIDEO_APP_CSS,
             custom_theme=video_theme,
         )
 

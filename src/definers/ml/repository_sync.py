@@ -344,6 +344,13 @@ class RepositorySyncService:
     ):
         from huggingface_hub import HfApi, hf_hub_download, snapshot_download
 
+        from definers.model_installation import (
+            _huggingface_max_workers,
+            _prepare_huggingface_runtime,
+        )
+        from definers.system.download_activity import report_download_activity
+
+        _prepare_huggingface_runtime()
         reference = _parse_huggingface_reference(value)
         repo_files = tuple(
             sorted(
@@ -364,10 +371,16 @@ class RepositorySyncService:
                 f"No compatible model files found in Hugging Face repository '{reference.repo_id}'."
             )
         if _is_transformers_text_generation_repo(repo_files, selected_files):
+            report_download_activity(
+                reference.repo_id,
+                detail="Downloading text-generation repository.",
+                phase="download",
+            )
             snapshot_dir = snapshot_download(
                 repo_id=reference.repo_id,
                 revision=reference.revision,
                 allow_patterns=list(TEXT_GENERATION_ALLOW_PATTERNS),
+                max_workers=_huggingface_max_workers(),
             )
             return ResolvedModelSource(
                 local_path=snapshot_dir,
@@ -381,7 +394,14 @@ class RepositorySyncService:
                 loader_kind="hf-text-generation",
             )
         local_files = []
-        for repo_file in selected_files:
+        for index, repo_file in enumerate(selected_files, start=1):
+            report_download_activity(
+                repo_file,
+                detail=f"Downloading file from {reference.repo_id}.",
+                phase="artifact",
+                completed=index,
+                total=len(selected_files),
+            )
             local_files.append(
                 hf_hub_download(
                     repo_id=reference.repo_id,
@@ -621,6 +641,15 @@ class RepositorySyncService:
 
         from huggingface_hub import hf_hub_download
 
+        from definers.model_installation import _prepare_huggingface_runtime
+        from definers.system.download_activity import report_download_activity
+
+        _prepare_huggingface_runtime()
+        report_download_activity(
+            index_file,
+            detail=f"Downloading shard index from {reference.repo_id}.",
+            phase="artifact",
+        )
         local_index_path = hf_hub_download(
             repo_id=reference.repo_id,
             filename=index_file,

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import gc
 import re
+from pathlib import Path
 
 
 def strip_nikud(text: str) -> str:
@@ -43,6 +44,7 @@ def lyric_video(
     import definers.text as text
     from definers.constants import MODELS
     from definers.system import catch, cores, log, tmp
+    from definers.system.output_paths import managed_output_path
 
     def clean_word(text_value):
         return "".join(filter(str.isalnum, text_value.lower()))
@@ -210,7 +212,11 @@ def lyric_video(
     final_clip = CompositeVideoClip(
         [background_clip] + lyric_clips, size=output_size
     ).with_audio(audio_clip)
-    output_path = tmp("mp4", keep=False)
+    output_path = managed_output_path(
+        "mp4",
+        section="video",
+        stem=f"{Path(audio_path).stem}_lyrics",
+    )
     print(f"Writing video to temporary file: {output_path}")
     final_clip.write_videofile(
         output_path,

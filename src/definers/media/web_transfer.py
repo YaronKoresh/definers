@@ -14,6 +14,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Protocol, runtime_checkable
+from urllib.parse import urlsplit
 
 from definers.constants import user_agents
 from definers.resilience import (
@@ -24,6 +25,7 @@ from definers.resilience import (
     execute_with_resilience_async,
 )
 from definers.system import log
+from definers.system.download_activity import report_download_activity
 
 try:
     from lxml.cssselect import CSSSelector
@@ -106,9 +108,49 @@ class NetworkTransferStrategy(Protocol):
     ) -> bool: ...
 
 
+def _content_length(value: object) -> int | None:
+    try:
+        resolved_length = int(str(value))
+    except Exception:
+        return None
+    return resolved_length if resolved_length >= 0 else None
+
+
+def _transfer_item_label(source_uri: str, target_node: Path) -> str:
+    target_name = str(target_node.name).strip()
+    if target_name:
+        return target_name
+    source_name = Path(urlsplit(source_uri).path).name.strip()
+    return source_name or source_uri
+
+
+def _transfer_progress(
+    source_uri: str,
+    target_node: Path,
+    *,
+    detail: str,
+    phase: str,
+    bytes_downloaded: int | None = None,
+    bytes_total: int | None = None,
+    completed: int | None = None,
+    total: int | None = None,
+) -> None:
+    report_download_activity(
+        _transfer_item_label(source_uri, target_node),
+        detail=detail,
+        phase=phase,
+        completed=completed,
+        total=total,
+        bytes_downloaded=bytes_downloaded,
+        bytes_total=bytes_total,
+    )
+
+
 class HttpChunkedTransferStrategy:
     def __init__(
-        self, chunk_size_bytes: int = 8192, request_timeout_seconds: float = 30
+        self,
+        chunk_size_bytes: int = 262144,
+        request_timeout_seconds: float = 30,
     ):
         self.chunk_size_bytes = chunk_size_bytes
         self.request_timeout_seconds = request_timeout_seconds
@@ -152,15 +194,32 @@ class HttpChunkedTransferStrategy:
                     source_uri, timeout=request_timeout
                 ) as network_response:
                     network_response.raise_for_status()
+                    total_bytes = _content_length(
+                        getattr(
+                            getattr(network_response, "headers", {}),
+                            "get",
+                            lambda _key, _default=None: None,
+                        )("Content-Length")
+                    )
                     async with aiofiles.open(
                         staging_node, "wb"
                     ) as persistent_storage:
+                        downloaded_bytes = 0
                         async for (
                             data_chunk
                         ) in network_response.content.iter_chunked(
                             self.chunk_size_bytes
                         ):
                             await persistent_storage.write(data_chunk)
+                            downloaded_bytes += len(data_chunk)
+                            _transfer_progress(
+                                source_uri,
+                                target_node,
+                                detail="Streaming artifact bytes.",
+                                phase="transfer",
+                                bytes_downloaded=downloaded_bytes,
+                                bytes_total=total_bytes,
+                            )
             await asyncio.to_thread(
                 self._commit_staging_target, staging_node, target_node
             )
@@ -177,12 +236,29 @@ class HttpChunkedTransferStrategy:
             with urllib.request.urlopen(
                 source_uri, timeout=self.request_timeout_seconds
             ) as response:
+                total_bytes = _content_length(
+                    getattr(
+                        getattr(response, "headers", {}),
+                        "get",
+                        lambda _key, _default=None: None,
+                    )("Content-Length")
+                )
                 with open(staging_node, "wb") as persistent_storage:
+                    downloaded_bytes = 0
                     while True:
                         data_chunk = response.read(self.chunk_size_bytes)
                         if not data_chunk:
                             break
                         persistent_storage.write(data_chunk)
+                        downloaded_bytes += len(data_chunk)
+                        _transfer_progress(
+                            source_uri,
+                            target_node,
+                            detail="Streaming artifact bytes.",
+                            phase="transfer",
+                            bytes_downloaded=downloaded_bytes,
+                            bytes_total=total_bytes,
+                        )
             self._commit_staging_target(staging_node, target_node)
         except Exception:
             self._cleanup_staging_target(staging_node)
@@ -191,7 +267,9 @@ class HttpChunkedTransferStrategy:
 
 class ZipExtractTransferStrategy:
     def __init__(
-        self, chunk_size_bytes: int = 8192, request_timeout_seconds: float = 60
+        self,
+        chunk_size_bytes: int = 262144,
+        request_timeout_seconds: float = 60,
     ):
         self.chunk_size_bytes = chunk_size_bytes
         self.request_timeout_seconds = request_timeout_seconds
@@ -226,7 +304,15 @@ class ZipExtractTransferStrategy:
     ) -> None:
         target_node.mkdir(parents=True, exist_ok=True)
         resolved_target_root = target_node.resolve()
-        for archive_member in archive_context.infolist():
+        archive_members = archive_context.infolist()
+        for member_index, archive_member in enumerate(archive_members, start=1):
+            report_download_activity(
+                str(target_node.name or resolved_target_root.name),
+                detail=archive_member.filename,
+                phase="extract",
+                completed=member_index,
+                total=len(archive_members),
+            )
             destination_node = self._resolve_archive_member_path(
                 resolved_target_root, archive_member.filename
             )
@@ -259,7 +345,45 @@ class ZipExtractTransferStrategy:
                 source_uri, timeout=request_timeout
             ) as network_response:
                 network_response.raise_for_status()
-                memory_buffer = io.BytesIO(await network_response.read())
+                total_bytes = _content_length(
+                    getattr(
+                        getattr(network_response, "headers", {}),
+                        "get",
+                        lambda _key, _default=None: None,
+                    )("Content-Length")
+                )
+                memory_buffer = io.BytesIO()
+                if hasattr(network_response, "content") and hasattr(
+                    network_response.content, "iter_chunked"
+                ):
+                    downloaded_bytes = 0
+                    async for (
+                        data_chunk
+                    ) in network_response.content.iter_chunked(
+                        self.chunk_size_bytes
+                    ):
+                        memory_buffer.write(data_chunk)
+                        downloaded_bytes += len(data_chunk)
+                        _transfer_progress(
+                            source_uri,
+                            target_node,
+                            detail="Downloading archive bytes.",
+                            phase="artifact",
+                            bytes_downloaded=downloaded_bytes,
+                            bytes_total=total_bytes,
+                        )
+                else:
+                    payload = await network_response.read()
+                    memory_buffer.write(payload)
+                    _transfer_progress(
+                        source_uri,
+                        target_node,
+                        detail="Downloading archive bytes.",
+                        phase="artifact",
+                        bytes_downloaded=len(payload),
+                        bytes_total=total_bytes,
+                    )
+                memory_buffer.seek(0)
                 with zipfile.ZipFile(memory_buffer) as archive_context:
                     self._extract_archive(archive_context, target_node)
         return True
@@ -272,6 +396,20 @@ class ZipExtractTransferStrategy:
             source_uri, timeout=self.request_timeout_seconds
         ) as response:
             payload = response.read()
+        _transfer_progress(
+            source_uri,
+            target_node,
+            detail="Downloading archive bytes.",
+            phase="artifact",
+            bytes_downloaded=len(payload),
+            bytes_total=_content_length(
+                getattr(
+                    getattr(response, "headers", {}),
+                    "get",
+                    lambda _key, _default=None: None,
+                )("Content-Length")
+            ),
+        )
         memory_buffer = io.BytesIO(payload)
         with zipfile.ZipFile(memory_buffer) as archive_context:
             self._extract_archive(archive_context, target_node)

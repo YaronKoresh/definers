@@ -64,34 +64,33 @@ class AnimationApp:
         export_to_gif(output.frames[0], chunk_path, fps=fps)
         chunk_state["chunk_paths"].append(chunk_path)
         chunk_state["current_chunk"] += 1
-        progress_text = f"Finished chunk {current_chunk_index}/{total_chunks}. Ready for next chunk."
         if current_chunk_index == total_chunks:
-            progress_text = "All chunks generated! You can now combine them."
+            pass
         return (
             chunk_path,
             chunk_state,
-            gr.update(value=progress_text),
             gr.update(visible=True),
         )
 
     @staticmethod
     def combine_chunks(chunk_state):
+        from pathlib import Path
+
         import gradio as gr
         from PIL import Image
 
         fps = 20
         if not chunk_state["chunk_paths"]:
-            raise gr.Error("No chunks to combine.")
-        gr.Info(
-            f"Combining {len(chunk_state['chunk_paths'])} chunks into final GIF..."
-        )
+            raise RuntimeError("No chunks to combine.")
         all_frames = []
         for chunk_path in chunk_state["chunk_paths"]:
             with Image.open(chunk_path) as gif:
                 for index in range(gif.n_frames):
                     gif.seek(index)
                     all_frames.append(gif.copy().convert("RGBA"))
-        final_gif_path = "final_animation.gif"
+        final_gif_path = str(
+            Path(chunk_state["chunks_path"]) / "final_animation.gif"
+        )
         all_frames[0].save(
             final_gif_path,
             save_all=True,
@@ -106,15 +105,17 @@ class AnimationApp:
     def reset_state(chunk_state):
         import gradio as gr
 
-        from definers.system import tmp
+        from definers.system.output_paths import managed_output_session_dir
 
         chunk_state["current_chunk"] = 1
         chunk_state["chunk_paths"] = []
-        chunk_state["chunks_path"] = tmp(dir=True)
+        chunk_state["chunks_path"] = managed_output_session_dir(
+            "animation",
+            stem="chunks",
+        )
         return (
             chunk_state,
             None,
-            "Ready to generate the first chunk.",
             gr.update(visible=False),
             gr.update(interactive=True),
         )
@@ -124,15 +125,23 @@ class AnimationApp:
         import gradio as gr
 
         from definers.constants import MAX_INPUT_LENGTH
-        from definers.system import tmp
-        from definers.ui.gradio_shared import launch_blocks
+        from definers.system.output_paths import managed_output_session_dir
+        from definers.ui.gradio_shared import (
+            bind_progress_click,
+            init_output_folder_controls,
+            init_progress_tracker,
+            launch_blocks,
+        )
 
         with gr.Blocks() as app:
             chunk_state = gr.State(
                 {
                     "current_chunk": 1,
                     "chunk_paths": [],
-                    "chunks_path": tmp(dir=True),
+                    "chunks_path": managed_output_session_dir(
+                        "animation",
+                        stem="chunks",
+                    ),
                 }
             )
             gr.Markdown("# Image to Animation: Manual Chunking Method")
@@ -169,7 +178,11 @@ class AnimationApp:
                         interactive=False,
                         height=420,
                     )
-                    prog = gr.Markdown("Ready to generate the first chunk.")
+                    prog = init_progress_tracker(
+                        "Animation ready",
+                        "Ready to generate the first chunk.",
+                    )
+                    init_output_folder_controls()
             with gr.Row():
                 generate_button = gr.Button(
                     "Generate Next Chunk",
@@ -181,26 +194,55 @@ class AnimationApp:
                     visible=False,
                 )
                 reset_button = gr.Button("Start Over")
-            generate_button.click(
-                fn=AnimationApp.generate_chunk,
+            bind_progress_click(
+                generate_button,
+                AnimationApp.generate_chunk,
+                progress_output=prog,
                 inputs=[txt, img, dur, seed, chunk_state],
-                outputs=[out, chunk_state, prog, combine_button],
+                outputs=[out, chunk_state, combine_button],
+                action_label="Generate Next Chunk",
+                steps=(
+                    "Validate inputs",
+                    "Render next chunk",
+                    "Publish chunk",
+                ),
+                running_detail="Generating the next animation chunk.",
+                success_detail="Chunk generation finished.",
             )
-            combine_button.click(
-                fn=AnimationApp.combine_chunks,
+            bind_progress_click(
+                combine_button,
+                AnimationApp.combine_chunks,
+                progress_output=prog,
                 inputs=[chunk_state],
                 outputs=[out, combine_button],
+                action_label="Combine Chunks",
+                steps=(
+                    "Validate chunk set",
+                    "Combine animation frames",
+                    "Publish animation",
+                ),
+                running_detail="Combining the generated chunks.",
+                success_detail="Final animation is ready.",
             )
-            reset_button.click(
-                fn=AnimationApp.reset_state,
+            bind_progress_click(
+                reset_button,
+                AnimationApp.reset_state,
+                progress_output=prog,
                 inputs=[chunk_state],
                 outputs=[
                     chunk_state,
                     out,
-                    prog,
                     combine_button,
                     generate_button,
                 ],
+                action_label="Reset Animation Session",
+                steps=(
+                    "Clear session",
+                    "Rebuild chunk workspace",
+                    "Reset controls",
+                ),
+                running_detail="Resetting the chunk session.",
+                success_detail="Animation session has been reset.",
             )
         launch_blocks(app)
 

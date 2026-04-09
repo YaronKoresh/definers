@@ -93,6 +93,84 @@ def test_run_mastering_tool_returns_report_and_stems(monkeypatch):
     assert "**Mastered Stems:** 2 files" in summary_text
 
 
+def test_run_mastering_tool_collects_stems_for_gui_preview(monkeypatch):
+    captured = {}
+    fake_report = types.SimpleNamespace(
+        preset_name="balanced",
+        delivery_profile_name="lossless",
+        input_metrics=None,
+        output_metrics=None,
+        headroom_recovery_mode="adaptive",
+        headroom_recovery_gain_db=0.0,
+        post_spatial_stereo_motion=0.0,
+        post_clamp_true_peak_dbfs=-1.0,
+        delivery_issues=(),
+        to_dict=lambda: {"preset_name": "balanced"},
+    )
+
+    def fake_master(audio_path, output_path=None, **kwargs):
+        captured.update(kwargs)
+        resolved_output_path = Path(str(output_path))
+        resolved_output_path.write_text("audio", encoding="utf-8")
+        report_path = Path(str(kwargs["report_path"]))
+        report_path.write_text("{}", encoding="utf-8")
+        stem_dir = (
+            resolved_output_path.parent / f"{resolved_output_path.stem}_stems"
+        )
+        stem_dir.mkdir(parents=True, exist_ok=True)
+        (stem_dir / "bass_mastered.wav").write_text("bass", encoding="utf-8")
+        return str(resolved_output_path), fake_report
+
+    _patch_audio_symbol(
+        monkeypatch,
+        "master",
+        "definers.audio.mastering",
+        fake_master,
+    )
+
+    _mastered_path, _report_path, _summary_text, stem_files = (
+        services.run_mastering_tool(
+            "song.wav",
+            "WAV",
+            "Balanced",
+            0.5,
+            0.5,
+            0.5,
+            True,
+            "mastering",
+            2,
+            6.0,
+            False,
+        )
+    )
+
+    assert captured["save_mastered_stems"] is True
+    assert stem_files == [
+        str(Path(stem_files[0]).with_name("bass_mastered.wav"))
+    ]
+
+
+def test_resolve_mastering_stem_previews_maps_common_stems_and_extras():
+    previews, extras = services.resolve_mastering_stem_previews(
+        [
+            "vocals_mastered.wav",
+            "drums_mastered.wav",
+            "guitar_room.wav",
+            "fx_print.wav",
+        ]
+    )
+
+    assert previews == {
+        "vocals": "vocals_mastered.wav",
+        "drums": "drums_mastered.wav",
+        "bass": None,
+        "other": None,
+        "guitar": "guitar_room.wav",
+        "piano": None,
+    }
+    assert extras == ["fx_print.wav"]
+
+
 def test_get_mastering_profile_ui_state_locks_named_profiles():
     state = services.get_mastering_profile_ui_state("EDM", 0.2, 0.3, 0.4)
 

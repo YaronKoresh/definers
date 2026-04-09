@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import random
+from pathlib import Path
 
 
 def load_numeric_backend():
@@ -19,6 +20,7 @@ def music_video(audio_path, width=1920, height=1080, fps=30):
     from moviepy.video.VideoClip import VideoClip
 
     from definers.system import cores
+    from definers.system.output_paths import managed_output_path
     from definers.video.gui import draw_star_of_david
 
     np = load_numeric_backend()
@@ -207,7 +209,11 @@ def music_video(audio_path, width=1920, height=1080, fps=30):
             )
         return frame.astype(np.uint8)
 
-    output_path = audio_path.rsplit(".", 1)[0] + "_video.mp4"
+    output_path = managed_output_path(
+        "mp4",
+        section="video",
+        stem=f"{Path(audio_path).stem}_video",
+    )
     animation = VideoClip(make_frame, duration=duration)
     final_clip = animation.with_audio(AudioFileClip(audio_path))
     final_clip.write_videofile(

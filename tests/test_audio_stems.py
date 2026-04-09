@@ -176,6 +176,16 @@ def test_run_separator_stage_batch_reuses_loaded_model_for_cleanup(
         "_load_audio_separator_class",
         lambda: FakeSeparator,
     )
+    monkeypatch.setattr(
+        STEMS_MODULE,
+        "_has_local_stem_model",
+        lambda model_name: True,
+    )
+    monkeypatch.setattr(
+        STEMS_MODULE,
+        "_download_runtime_stage_models",
+        lambda model_candidates: tuple(model_candidates),
+    )
 
     selected_outputs = STEMS_MODULE._run_separator_stage_batch(
         {
@@ -207,11 +217,12 @@ def test_run_separator_stage_batch_reuses_loaded_model_for_cleanup(
     }
 
 
-def test_run_separator_stage_ignores_missing_output_paths(
+def test_run_separator_stage_skips_remote_fallbacks_for_optional_stage(
     tmp_path: Path,
     monkeypatch,
 ):
     loaded_models: list[str] = []
+    downloaded_models: list[tuple[str, ...]] = []
 
     class FakeSeparator:
         def __init__(self, **kwargs):
@@ -227,14 +238,86 @@ def test_run_separator_stage_ignores_missing_output_paths(
                 Path(self.output_dir)
                 / f"{Path(str(input_path)).stem}_(Vocals)_{self.loaded_model}.wav"
             )
-            if self.loaded_model == "good.ckpt":
-                output_path.write_text("vocals", encoding="utf-8")
             return [str(output_path)]
 
     monkeypatch.setattr(
         STEMS_MODULE,
         "_load_audio_separator_class",
         lambda: FakeSeparator,
+    )
+    monkeypatch.setattr(
+        STEMS_MODULE,
+        "_has_local_stem_model",
+        lambda model_name: False,
+    )
+    monkeypatch.setattr(
+        STEMS_MODULE,
+        "_download_runtime_stage_models",
+        lambda model_candidates: (
+            downloaded_models.append(tuple(model_candidates))
+            or tuple(model_candidates)
+        ),
+    )
+
+    model_name, output_files = STEMS_MODULE._run_separator_stage(
+        "song.wav",
+        STEMS_MODULE.SeparatorModelStage(
+            model_candidates=("ghost.ckpt", "good.ckpt"),
+            preferred_stems=("vocals",),
+            required=False,
+        ),
+        str(tmp_path / "stage"),
+        44100,
+        shifts=2,
+    )
+
+    assert downloaded_models == [("ghost.ckpt",)]
+    assert loaded_models == ["ghost.ckpt"]
+    assert model_name == ""
+    assert output_files == ()
+
+
+def test_run_separator_stage_prefers_cached_candidates(
+    tmp_path: Path,
+    monkeypatch,
+):
+    loaded_models: list[str] = []
+    downloaded_models: list[tuple[str, ...]] = []
+
+    class FakeSeparator:
+        def __init__(self, **kwargs):
+            self.output_dir = kwargs["output_dir"]
+            self.loaded_model = ""
+
+        def load_model(self, model_filename):
+            self.loaded_model = str(model_filename)
+            loaded_models.append(self.loaded_model)
+
+        def separate(self, input_path):
+            output_path = (
+                Path(self.output_dir)
+                / f"{Path(str(input_path)).stem}_(Vocals)_{self.loaded_model}.wav"
+            )
+            output_path.write_text("vocals", encoding="utf-8")
+            return [str(output_path)]
+
+    monkeypatch.setattr(
+        STEMS_MODULE,
+        "_load_audio_separator_class",
+        lambda: FakeSeparator,
+    )
+    monkeypatch.setattr(
+        STEMS_MODULE,
+        "_has_local_stem_model",
+        lambda model_name: model_name == "good.ckpt",
+    )
+    monkeypatch.setattr(
+        STEMS_MODULE,
+        "_download_runtime_stage_models",
+        lambda model_candidates: (
+            downloaded_models.append(tuple(model_candidates))
+            or tuple(model_candidates)
+        ),
     )
 
     model_name, output_files = STEMS_MODULE._run_separator_stage(
@@ -249,7 +332,8 @@ def test_run_separator_stage_ignores_missing_output_paths(
         shifts=2,
     )
 
-    assert loaded_models == ["ghost.ckpt", "good.ckpt"]
+    assert downloaded_models == [("good.ckpt",)]
+    assert loaded_models == ["good.ckpt"]
     assert model_name == "good.ckpt"
     assert output_files == (
         str(tmp_path / "stage" / "song_(Vocals)_good.ckpt.wav"),

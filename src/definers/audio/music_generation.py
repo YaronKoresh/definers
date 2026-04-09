@@ -19,6 +19,7 @@ def generate_music(prompt: str, duration_s: float, format_choice: str) -> str:
     from scipy.io.wavfile import write as write_wav
 
     from definers.ml import init_pretrained_model
+    from definers.system.output_paths import managed_output_path
 
     if MODELS["music"] is None or PROCESSORS["music"] is None:
         init_pretrained_model("music")
@@ -39,12 +40,15 @@ def generate_music(prompt: str, duration_s: float, format_choice: str) -> str:
     temp_wav_path = tmp("wav", keep=False)
     write_wav(temp_wav_path, rate=sampling_rate, data=wav_output)
     sound = pydub.AudioSegment.from_file(temp_wav_path)
-    output_stem = Path(temp_wav_path).with_name(f"generated_{random_string()}")
+    output_stem = managed_output_path(
+        format_choice,
+        section="audio",
+        stem=f"generated_{random_string()}",
+    )
     output_path = save_audio(
         destination_path=output_stem,
         audio_signal=sound,
         sample_rate=32000,
-        output_format=format_choice,
     )
     delete(temp_wav_path)
     return output_path
@@ -59,6 +63,7 @@ def extend_audio(
     import soundfile as sf
 
     from definers.ml import init_pretrained_model
+    from definers.system.output_paths import managed_output_path
 
     librosa = librosa_module()
 
@@ -96,13 +101,14 @@ def extend_audio(
     if original_sound.channels != extension_sound.channels:
         extension_sound = extension_sound.set_channels(original_sound.channels)
     final_sound = original_sound + extension_sound
-    output_stem = str(
-        Path(audio_path).with_name(f"{Path(audio_path).stem}_extended")
+    output_stem = managed_output_path(
+        format_choice,
+        section="audio",
+        stem=f"{Path(audio_path).stem}_extended",
     )
     final_output_path = save_audio(
         audio_signal=final_sound,
         destination_path=output_stem,
-        output_format=format_choice,
     )
     delete(temp_extension_path)
     return final_output_path
@@ -111,6 +117,8 @@ def extend_audio(
 def audio_to_midi(audio_path: str):
     import madmom
     from basic_pitch.inference import predict
+
+    from definers.system.output_paths import managed_output_path
 
     proc = madmom.features.beats.DBNBeatTrackingProcessor(fps=100)
     act = madmom.features.beats.RNNBeatProcessor()(audio_path)
@@ -125,15 +133,20 @@ def audio_to_midi(audio_path: str):
         maximum_frequency=4200,
     )
     _ = (model_output, note_events)
-    name = random_string() + ".mid"
-    midi_data.write(f"./{name}")
-    return name
+    output_path = managed_output_path(
+        "mid",
+        section="audio",
+        stem=f"{Path(audio_path).stem}_{random_string()}",
+    )
+    midi_data.write(output_path)
+    return output_path
 
 
 def midi_to_audio(midi_path: str, format_choice: str):
     from midi2audio import FluidSynth
 
     from definers.system import install_audio_effects
+    from definers.system.output_paths import managed_output_path
 
     install_audio_effects()
 
@@ -161,14 +174,15 @@ def midi_to_audio(midi_path: str, format_choice: str):
     temp_wav_path = tmp(".wav")
     fluid_synth.midi_to_audio(midi_path, temp_wav_path)
     sr, sound = read_audio(temp_wav_path)
-    output_stem = str(
-        Path(midi_path).with_name(f"{Path(midi_path).stem}_render")
+    output_stem = managed_output_path(
+        format_choice,
+        section="audio",
+        stem=f"{Path(midi_path).stem}_render",
     )
     final_output_path = save_audio(
         audio_signal=sound,
         destination_path=output_stem,
         sample_rate=sr,
-        output_format=format_choice,
     )
     delete(temp_wav_path)
     return final_output_path

@@ -137,6 +137,8 @@ def dj_mix(
     import madmom
     import pydub
 
+    from definers.system.output_paths import managed_output_path
+
     if not files or len(files) < 2:
         _logger.warning(
             "Please provide at least two audio files for DJ mixing."
@@ -217,10 +219,13 @@ def dj_mix(
             processed_tracks[i], crossfade=transition_ms
         )
 
-    output_stem = tmp("dj_mix", keep=False)
+    output_stem = managed_output_path(
+        format_choice,
+        section="audio",
+        stem="dj_mix",
+    )
     final_output_path = save_audio(
         destination_path=output_stem,
         audio_signal=final_mix,
-        output_format=format_choice,
     )
     return final_output_path

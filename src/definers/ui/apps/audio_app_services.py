@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import json
 from pathlib import Path
 
@@ -16,6 +17,15 @@ STEM_MODEL_STRATEGY_CHOICES = (
     "Demucs fine-tuned 4-stem",
     "HDemucs MMI 4-stem",
     "Custom checkpoint override",
+)
+
+MASTERING_STEM_PREVIEW_ORDER = (
+    "vocals",
+    "drums",
+    "bass",
+    "other",
+    "guitar",
+    "piano",
 )
 
 _MASTERING_PROFILE_METADATA = {
@@ -296,9 +306,13 @@ def normalize_audio_format_choice(format_choice: str) -> str:
 
 
 def _temp_audio_output_path(format_choice: str) -> str:
-    from definers.system import tmp
+    from definers.system.output_paths import managed_output_path
 
-    return tmp(normalize_audio_format_choice(format_choice), keep=False)
+    return managed_output_path(
+        normalize_audio_format_choice(format_choice),
+        section="audio",
+        stem="audio_output",
+    )
 
 
 def _coerce_optional_int(value: float | int | None) -> int | None:
@@ -319,10 +333,29 @@ def _coerce_optional_float(value: float | int | None) -> float | None:
     return resolved_value
 
 
-def _write_json_payload(payload: dict[str, object]) -> str:
-    from definers.system import tmp
+def _supports_keyword_argument(function, argument_name: str) -> bool:
+    try:
+        signature = inspect.signature(function)
+    except Exception:
+        return False
+    for parameter in signature.parameters.values():
+        if parameter.kind == inspect.Parameter.VAR_KEYWORD:
+            return True
+        if parameter.name == argument_name:
+            return True
+    return False
 
-    destination_path = Path(tmp("json", keep=False))
+
+def _write_json_payload(payload: dict[str, object]) -> str:
+    from definers.system.output_paths import managed_output_path
+
+    destination_path = Path(
+        managed_output_path(
+            "json",
+            section="audio_reports",
+            stem="report",
+        )
+    )
     destination_path.write_text(
         json.dumps(payload, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
@@ -339,9 +372,14 @@ def _convert_audio_outputs(
         return source_paths
 
     from definers.audio import read_audio, save_audio
-    from definers.system import tmp
+    from definers.system.output_paths import managed_output_session_dir
 
-    output_dir = Path(tmp(dir=True))
+    output_dir = Path(
+        managed_output_session_dir(
+            "audio_converted",
+            stem="converted",
+        )
+    )
     converted_paths: list[str] = []
     for source_path in source_paths:
         sample_rate, audio_signal = read_audio(source_path)
@@ -417,6 +455,25 @@ def format_mastering_summary(
     return "\n\n".join(summary_lines)
 
 
+def resolve_mastering_stem_previews(
+    stem_files: list[str],
+) -> tuple[dict[str, str | None], list[str]]:
+    previews = {key: None for key in MASTERING_STEM_PREVIEW_ORDER}
+    extras: list[str] = []
+    for stem_path in stem_files:
+        resolved_path = str(stem_path)
+        normalized_name = Path(resolved_path).stem.strip().lower()
+        matched_key = None
+        for key in MASTERING_STEM_PREVIEW_ORDER:
+            if key in normalized_name and previews[key] is None:
+                previews[key] = resolved_path
+                matched_key = key
+                break
+        if matched_key is None:
+            extras.append(resolved_path)
+    return previews, extras
+
+
 def run_mastering_tool(
     audio_path: str,
     format_choice: str,
@@ -435,6 +492,7 @@ def run_mastering_tool(
 
     output_path = _temp_audio_output_path(format_choice)
     report_path = _write_json_payload({"status": "pending"})
+    should_collect_mastered_stems = bool(stem_mastering)
     control_mode, profile_kwargs = resolve_mastering_request(
         profile_name,
         bass,
@@ -451,7 +509,7 @@ def run_mastering_tool(
         "stem_model_name": resolved_stem_model_name,
         "stem_shifts": max(int(stem_shifts), 1),
         "stem_mix_headroom_db": float(stem_mix_headroom_db),
-        "save_mastered_stems": bool(save_mastered_stems),
+        "save_mastered_stems": should_collect_mastered_stems,
     }
     mastering_kwargs.update(profile_kwargs)
 
@@ -467,7 +525,7 @@ def run_mastering_tool(
     stem_output_dir = (
         Path(mastered_path).parent / f"{Path(mastered_path).stem}_stems"
     )
-    if save_mastered_stems and stem_output_dir.exists():
+    if should_collect_mastered_stems and stem_output_dir.exists():
         stem_files = [
             str(path)
             for path in sorted(stem_output_dir.iterdir())
@@ -501,6 +559,7 @@ def run_stem_separation_tool(
     model_override: str | None = None,
 ) -> tuple[str | None, list[str], str]:
     from definers.audio import separate_stem_layers, separate_stems
+    from definers.system.output_paths import managed_output_session_dir
 
     normalized_format = normalize_audio_format_choice(format_choice)
     normalized_mode = str(separation_mode).strip().lower()
@@ -510,10 +569,18 @@ def run_stem_separation_tool(
             model_name,
             model_override,
         )
+        separation_kwargs = {
+            "model_name": resolved_model_name,
+            "shifts": max(int(shifts), 1),
+        }
+        if _supports_keyword_argument(separate_stem_layers, "output_dir"):
+            separation_kwargs["output_dir"] = managed_output_session_dir(
+                "audio_stems",
+                stem=Path(audio_path).stem,
+            )
         stem_paths, _output_dir = separate_stem_layers(
             audio_path,
-            model_name=resolved_model_name,
-            shifts=max(int(shifts), 1),
+            **separation_kwargs,
         )
         ordered_names = ["vocals", "drums", "bass", "other", "guitar", "piano"]
         outputs = [
@@ -626,8 +693,15 @@ def run_audio_preview_tool(
     format_choice: str,
 ) -> tuple[str, str]:
     from definers.audio import audio_preview, get_audio_duration
+    from definers.system.output_paths import managed_output_session_dir
 
-    preview_path = audio_preview(audio_path, max_duration=float(max_duration))
+    preview_kwargs = {"max_duration": float(max_duration)}
+    if _supports_keyword_argument(audio_preview, "output_folder"):
+        preview_kwargs["output_folder"] = managed_output_session_dir(
+            "audio_preview",
+            stem=Path(audio_path).stem,
+        )
+    preview_path = audio_preview(audio_path, **preview_kwargs)
     if preview_path is None:
         raise RuntimeError("Preview generation failed")
     converted_paths = _convert_audio_outputs(
@@ -654,9 +728,12 @@ def run_split_audio_tool(
     target_sample_rate: float | int | None,
 ) -> tuple[str | None, list[str], str]:
     from definers.audio import split_audio
-    from definers.system import tmp
+    from definers.system.output_paths import managed_output_session_dir
 
-    output_dir = tmp(dir=True)
+    output_dir = managed_output_session_dir(
+        "audio_split",
+        stem=Path(audio_path).stem,
+    )
     outputs = split_audio(
         audio_path,
         chunk_duration=float(chunk_duration),
@@ -731,6 +808,7 @@ def run_audio_analysis_tool(
 
 
 __all__ = (
+    "MASTERING_STEM_PREVIEW_ORDER",
     "MASTERING_PROFILE_CHOICES",
     "STEM_MODEL_STRATEGY_CHOICES",
     "describe_stem_model_choice",
@@ -739,6 +817,7 @@ __all__ = (
     "is_custom_stem_model_strategy",
     "normalize_audio_format_choice",
     "normalize_mastering_profile_selection",
+    "resolve_mastering_stem_previews",
     "resolve_mastering_request",
     "resolve_stem_model_name",
     "run_audio_analysis_tool",
