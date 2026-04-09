@@ -10,12 +10,11 @@ def strip_nikud(text: str) -> str:
 
 
 def init_stable_whisper():
-    import stable_whisper
-
     from definers.constants import MODELS
+    from definers.model_installation import load_stable_whisper_model
 
     print("Loading multilingual transcription model (stable-ts)...")
-    MODELS["stable-whisper"] = stable_whisper.load_model("tiny", device="cpu")
+    MODELS["stable-whisper"] = load_stable_whisper_model(device_name="cpu")
 
 
 def lyric_video(
@@ -44,14 +43,29 @@ def lyric_video(
     import definers.text as text
     from definers.constants import MODELS
     from definers.system import catch, cores, log, tmp
+    from definers.system.download_activity import (
+        create_activity_reporter,
+        report_download_activity,
+    )
     from definers.system.output_paths import managed_output_path
 
     def clean_word(text_value):
         return "".join(filter(str.isalnum, text_value.lower()))
 
+    report = create_activity_reporter(5)
+    report(
+        1,
+        "Load lyric media",
+        detail="Loading the audio and lyric inputs.",
+    )
     audio_clip = AudioFileClip(audio_path)
     duration = audio_clip.duration
     lyrics_text = strip_nikud(lyrics_text)
+    report(
+        2,
+        "Detect lyric language",
+        detail="Detecting the lyric language and preparing synchronization.",
+    )
     detected_lang = text.language(lyrics_text)
     print(f"🌍 Detected language: {detected_lang}")
     print("🎤 Starting automatic lyric synchronization...")
@@ -59,12 +73,18 @@ def lyric_video(
     lines = [
         line.strip() for line in lyrics_text.strip().split("\n") if line.strip()
     ]
+    line_report = create_activity_reporter(len(lines) or 1)
     if not lines:
         print("Warning: Lyrics text is empty.")
     else:
         lyrics_text = "\n".join(lines)
         try:
             if MODELS["stable-whisper"] is None:
+                report_download_activity(
+                    "Load lyric alignment model",
+                    detail="Initializing the transcription runtime.",
+                    phase="model",
+                )
                 init_stable_whisper()
             model = MODELS["stable-whisper"]
             print("Transcribing audio with music-optimized settings...")
@@ -129,6 +149,11 @@ def lyric_video(
                             correct_idx += 1
                             correct_to_transcript_map[correct_idx] = -1
             for i, original_line in enumerate(lines):
+                line_report(
+                    i + 1,
+                    "Align lyric lines",
+                    detail=f"Aligning lyric line {i + 1}/{len(lines)}.",
+                )
                 (start_word_idx, end_word_idx) = line_boundaries[i]
                 (first_transcript_idx, last_transcript_idx) = (-1, -1)
                 for word_i in range(start_word_idx, end_word_idx):
@@ -152,6 +177,11 @@ def lyric_video(
             return None
     log("Timed Lyrics", timed_lyrics)
     print("✅ Synchronization complete.")
+    report(
+        3,
+        "Build lyric overlays",
+        detail="Preparing the lyric overlay clips and background.",
+    )
     output_size = (max_dim, max_dim)
     if background_path:
         is_image = background_path.lower().endswith((".png", ".jpg", ".jpeg"))
@@ -185,7 +215,15 @@ def lyric_video(
             f"No background provided. Using default size: {output_size[0]}x{output_size[1]} pixels."
         )
     lyric_clips = []
-    for start, end, line in timed_lyrics:
+    clip_report = create_activity_reporter(len(timed_lyrics) or 1)
+    for clip_index, (start, end, line) in enumerate(timed_lyrics, start=1):
+        clip_report(
+            clip_index,
+            "Prepare lyric overlays",
+            detail=(
+                f"Preparing lyric overlay {clip_index}/{len(timed_lyrics) or 1}."
+            ),
+        )
         clip_duration = round(end - start, 3)
         log("Clip duration", clip_duration)
         if clip_duration <= 0:
@@ -218,6 +256,11 @@ def lyric_video(
         stem=f"{Path(audio_path).stem}_lyrics",
     )
     print(f"Writing video to temporary file: {output_path}")
+    report(
+        4,
+        "Render lyric video",
+        detail="Encoding the lyric video frames.",
+    )
     final_clip.write_videofile(
         output_path,
         codec="libx264",
@@ -227,4 +270,9 @@ def lyric_video(
         threads=cores(),
     )
     print("Video rendering complete.")
+    report(
+        5,
+        "Finalize lyric video",
+        detail="Writing the lyric video output.",
+    )
     return output_path

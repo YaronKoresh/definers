@@ -342,21 +342,19 @@ class RepositorySyncService:
     def resolve_huggingface_model_source(
         value: str, requested_model_type: str | None
     ):
-        from huggingface_hub import HfApi, hf_hub_download, snapshot_download
-
         from definers.model_installation import (
-            _huggingface_max_workers,
-            _prepare_huggingface_runtime,
+            _huggingface_repo_files,
+            hf_file_download,
+            hf_snapshot_download,
         )
         from definers.system.download_activity import report_download_activity
 
-        _prepare_huggingface_runtime()
         reference = _parse_huggingface_reference(value)
         repo_files = tuple(
             sorted(
-                HfApi().list_repo_files(
+                _huggingface_repo_files(
                     reference.repo_id,
-                    revision=reference.revision,
+                    reference.revision,
                 )
             )
         )
@@ -376,11 +374,12 @@ class RepositorySyncService:
                 detail="Downloading text-generation repository.",
                 phase="download",
             )
-            snapshot_dir = snapshot_download(
+            snapshot_dir = hf_snapshot_download(
                 repo_id=reference.repo_id,
                 revision=reference.revision,
                 allow_patterns=list(TEXT_GENERATION_ALLOW_PATTERNS),
-                max_workers=_huggingface_max_workers(),
+                item_label=reference.repo_id,
+                detail="Downloading text-generation repository.",
             )
             return ResolvedModelSource(
                 local_path=snapshot_dir,
@@ -403,10 +402,14 @@ class RepositorySyncService:
                 total=len(selected_files),
             )
             local_files.append(
-                hf_hub_download(
+                hf_file_download(
                     repo_id=reference.repo_id,
                     filename=repo_file,
                     revision=reference.revision,
+                    item_label=repo_file,
+                    detail=f"Downloading file from {reference.repo_id}.",
+                    completed=index,
+                    total=len(selected_files),
                 )
             )
         resolved_model_type = _resolve_model_type(
@@ -639,21 +642,14 @@ class RepositorySyncService:
         import json
         from pathlib import Path
 
-        from huggingface_hub import hf_hub_download
+        from definers.model_installation import hf_file_download
 
-        from definers.model_installation import _prepare_huggingface_runtime
-        from definers.system.download_activity import report_download_activity
-
-        _prepare_huggingface_runtime()
-        report_download_activity(
-            index_file,
-            detail=f"Downloading shard index from {reference.repo_id}.",
-            phase="artifact",
-        )
-        local_index_path = hf_hub_download(
+        local_index_path = hf_file_download(
             repo_id=reference.repo_id,
             filename=index_file,
             revision=reference.revision,
+            item_label=index_file,
+            detail=f"Downloading shard index from {reference.repo_id}.",
         )
         with open(local_index_path, encoding="utf-8") as file_obj:
             index_data = json.load(file_obj)

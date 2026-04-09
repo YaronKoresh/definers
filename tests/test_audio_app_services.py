@@ -150,6 +150,132 @@ def test_run_mastering_tool_collects_stems_for_gui_preview(monkeypatch):
     ]
 
 
+def test_run_mastering_tool_writes_outputs_under_managed_root(
+    monkeypatch, tmp_path
+):
+    fake_report = types.SimpleNamespace(
+        preset_name="balanced",
+        delivery_profile_name="lossless",
+        input_metrics=None,
+        output_metrics=None,
+        headroom_recovery_mode="adaptive",
+        headroom_recovery_gain_db=0.0,
+        post_spatial_stereo_motion=0.0,
+        post_clamp_true_peak_dbfs=-1.0,
+        delivery_issues=(),
+        to_dict=lambda: {"preset_name": "balanced"},
+    )
+
+    monkeypatch.setenv("DEFINERS_GUI_OUTPUT_ROOT", str(tmp_path))
+
+    def fake_master(audio_path, output_path=None, **kwargs):
+        resolved_output_path = Path(str(output_path))
+        assert resolved_output_path.is_relative_to(tmp_path)
+        resolved_output_path.write_text("audio", encoding="utf-8")
+        report_path = Path(str(kwargs["report_path"]))
+        assert report_path.is_relative_to(tmp_path)
+        report_path.write_text("{}", encoding="utf-8")
+        stem_dir = (
+            resolved_output_path.parent / f"{resolved_output_path.stem}_stems"
+        )
+        stem_dir.mkdir(parents=True, exist_ok=True)
+        (stem_dir / "vocals_mastered.wav").write_text(
+            "vocals", encoding="utf-8"
+        )
+        return str(resolved_output_path), fake_report
+
+    _patch_audio_symbol(
+        monkeypatch,
+        "master",
+        "definers.audio.mastering",
+        fake_master,
+    )
+
+    mastered_path, report_path, _summary_text, stem_files = (
+        services.run_mastering_tool(
+            "song.wav",
+            "WAV",
+            "Balanced",
+            0.5,
+            0.5,
+            0.5,
+            True,
+            "mastering",
+            2,
+            6.0,
+            True,
+        )
+    )
+
+    assert Path(mastered_path).is_relative_to(tmp_path / "audio")
+    assert Path(report_path).is_relative_to(tmp_path / "audio" / "reports")
+    assert stem_files == [
+        str(
+            Path(mastered_path).parent
+            / f"{Path(mastered_path).stem}_stems"
+            / "vocals_mastered.wav"
+        )
+    ]
+
+
+def test_run_stem_separation_tool_passes_managed_output_dir(
+    monkeypatch, tmp_path
+):
+    captured = {}
+
+    monkeypatch.setenv("DEFINERS_GUI_OUTPUT_ROOT", str(tmp_path))
+
+    def fake_separate_stem_layers(
+        audio_path,
+        model_name="mastering",
+        shifts=2,
+        output_dir=None,
+    ):
+        captured.update(
+            {
+                "audio_path": audio_path,
+                "model_name": model_name,
+                "shifts": shifts,
+                "output_dir": output_dir,
+            }
+        )
+        resolved_output_dir = Path(str(output_dir))
+        resolved_output_dir.mkdir(parents=True, exist_ok=True)
+        return (
+            {
+                "vocals": str(resolved_output_dir / "vocals.wav"),
+                "drums": str(resolved_output_dir / "drums.wav"),
+            },
+            str(resolved_output_dir),
+        )
+
+    _patch_audio_symbol(
+        monkeypatch,
+        "separate_stem_layers",
+        "definers.audio.stems",
+        fake_separate_stem_layers,
+    )
+
+    primary_output, output_files, _summary_text = (
+        services.run_stem_separation_tool(
+            "song.wav",
+            "mastering_layers",
+            "WAV",
+            "htdemucs_ft.yaml",
+            4,
+        )
+    )
+
+    assert primary_output == str(Path(captured["output_dir"]) / "vocals.wav")
+    assert output_files == [
+        str(Path(captured["output_dir"]) / "vocals.wav"),
+        str(Path(captured["output_dir"]) / "drums.wav"),
+    ]
+    assert Path(str(captured["output_dir"])).is_relative_to(
+        tmp_path / "audio" / "stems"
+    )
+
+
 def test_resolve_mastering_stem_previews_maps_common_stems_and_extras():
     previews, extras = services.resolve_mastering_stem_previews(
         [

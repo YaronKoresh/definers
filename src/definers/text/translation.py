@@ -127,6 +127,10 @@ def ai_translate(text: str, lang: str = "en") -> str:
     from sacremoses import MosesPunctNormalizer
 
     from definers.system import catch
+    from definers.system.download_activity import (
+        create_activity_reporter,
+        report_download_activity,
+    )
 
     if not text or not text.strip():
         return ""
@@ -136,15 +140,30 @@ def ai_translate(text: str, lang: str = "en") -> str:
     if MODELS["translate"] is None or TOKENIZERS["translate"] is None:
         from definers.ml import init_pretrained_model
 
+        report_download_activity(
+            "Load translation model",
+            detail="Initializing the translation runtime.",
+            phase="model",
+        )
         init_pretrained_model("translate")
     model = MODELS["translate"]
     tokenizer = TOKENIZERS["translate"]
     tokenizer.tgt_lang = target_code
     translated_paragraphs: list[str] = []
-    for paragraph in normalized_text.split("\n"):
+    paragraphs = normalized_text.split("\n")
+    paragraph_total = sum(1 for paragraph in paragraphs if paragraph.strip())
+    paragraph_report = create_activity_reporter(paragraph_total or 1)
+    paragraph_index = 0
+    for paragraph in paragraphs:
         if not paragraph.strip():
             translated_paragraphs.append("")
             continue
+        paragraph_index += 1
+        paragraph_report(
+            paragraph_index,
+            "Translate paragraph",
+            detail=f"Translating paragraph {paragraph_index}/{paragraph_total}.",
+        )
         try:
             source_language_code, source_code = (
                 resolve_source_translation_context(paragraph)
@@ -179,9 +198,23 @@ def ai_translate(text: str, lang: str = "en") -> str:
             continue
         try:
             translated_sentences = []
-            for sentence in list(splitter(paragraph)):
+            sentences = [
+                sentence
+                for sentence in list(splitter(paragraph))
+                if sentence.strip()
+            ]
+            sentence_report = create_activity_reporter(len(sentences) or 1)
+            for sentence_index, sentence in enumerate(sentences, start=1):
                 if not sentence.strip():
                     continue
+                sentence_report(
+                    sentence_index,
+                    "Translate sentence",
+                    detail=(
+                        f"Paragraph {paragraph_index}/{paragraph_total}, "
+                        f"sentence {sentence_index}/{len(sentences) or 1}."
+                    ),
+                )
                 translated_sentences.append(
                     translate_text_segment(
                         model,

@@ -376,6 +376,18 @@ class TestDownloadFileOrchestrator(unittest.TestCase):
         self.assertIs(defaults[0], transport_module.execute_async_operation)
         self.assertIs(defaults[1], transport_module.create_http_orchestrator)
 
+    def test_create_http_orchestrator_uses_parallel_range_strategy(
+        self,
+    ) -> None:
+        transport_module = get_transport_module()
+
+        orchestrator = transport_module.create_http_orchestrator()
+
+        self.assertIsInstance(
+            orchestrator.strategy,
+            transport_module.AdaptiveHttpTransferStrategy,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -78,6 +78,12 @@ def test_handle_training_returns_model_output_and_plan(monkeypatch):
     import definers.system.output_paths as output_paths_module
 
     trainer_plan_module = importlib.import_module("definers.ml.trainer_plan")
+    activity = []
+
+    monkeypatch.setattr(
+        "definers.system.download_activity.report_download_activity",
+        lambda item_label=None, **kwargs: activity.append(item_label),
+    )
 
     class FakeTrainer:
         def __init__(self, **kwargs):
@@ -132,6 +138,13 @@ def test_handle_training_returns_model_output_and_plan(monkeypatch):
     assert model_output == "trained.joblib"
     assert plan == "plan:file-dataset:features.csv"
     assert "Artifact: trained.joblib" in status
+    assert activity == [
+        "Normalize training request",
+        "Initialize trainer",
+        "Build training plan",
+        "Run training job",
+        "Render training status",
+    ]
 
 
 def test_handle_prediction_uses_model_path(monkeypatch):
@@ -301,6 +314,7 @@ def test_summary_handlers_delegate_to_ml(monkeypatch):
 def test_handle_prompt_optimization_bootstraps_translate_and_summary(
     monkeypatch,
 ):
+    import definers.constants as constants_module
     import definers.ml as ml_module
 
     init_calls = []
@@ -315,14 +329,14 @@ def test_handle_prompt_optimization_bootstraps_translate_and_summary(
         lambda prompt: f"prep:{prompt}",
     )
     monkeypatch.setattr(
-        ml_module,
-        "optimize_prompt_realism",
-        lambda prompt: f"opt:{prompt}",
+        constants_module,
+        "general_positive_prompt",
+        "cinematic",
     )
 
     assert handle_prompt_optimization("sunrise") == (
         "prep:sunrise",
-        "opt:sunrise",
+        "prep:sunrise, cinematic, cinematic.",
     )
     assert init_calls == [("summary", True), ("translate", True)]
 

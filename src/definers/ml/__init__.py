@@ -319,6 +319,8 @@ def init_model_file(task: str, turbo: bool = True, model_type: str = None):
 
 
 def kmeans_k_suggestions(X, k_range=range(2, 20), random_state=None):
+    from definers.system.download_activity import create_activity_reporter
+
     try:
         from cuml.cluster import KMeans as cluster_factory
     except Exception:
@@ -340,6 +342,8 @@ def kmeans_k_suggestions(X, k_range=range(2, 20), random_state=None):
     suggested_k_calinski_harabasz = None
     final_suggestion_k = None
     kmeans_lib = cluster_factory
+    normalized_k_range = tuple(k_range)
+    k_report = create_activity_reporter(len(normalized_k_range) or 1)
     is_cupy_available = getattr(np, "__name__", "").lower() == "cupy"
     if is_cupy_available and (kmeans_lib is not None):
         print(
@@ -350,7 +354,7 @@ def kmeans_k_suggestions(X, k_range=range(2, 20), random_state=None):
             "Warning: CuPy (cuML) is unavailable, falling back to CPU with scikit-learn KMeans."
         )
     X_array = np.asarray(X)
-    if len(k_range) < 2:
+    if len(normalized_k_range) < 2:
         return {
             "wcss": wcss_values,
             "silhouette_scores": silhouette_scores,
@@ -363,7 +367,12 @@ def kmeans_k_suggestions(X, k_range=range(2, 20), random_state=None):
             "final_suggestion": final_suggestion_k,
             "notes": "K-range too small to provide meaningful suggestions. Try a range with at least 2 different k values.",
         }
-    for k in k_range:
+    for index, k in enumerate(normalized_k_range, start=1):
+        k_report(
+            index,
+            "Score cluster count",
+            detail=f"Evaluating k={k} ({index}/{len(normalized_k_range)}).",
+        )
         if k <= 1:
             wcss_values[k] = 0
             silhouette_scores[k] = np.nan
@@ -383,10 +392,10 @@ def kmeans_k_suggestions(X, k_range=range(2, 20), random_state=None):
             numpy_X, numpy_labels
         )
     wcss_ratios = {}
-    if len(k_range) > 2:
-        for i in range(len(k_range) - 1):
-            k1 = k_range[i]
-            k2 = k_range[i + 1]
+    if len(normalized_k_range) > 2:
+        for i in range(len(normalized_k_range) - 1):
+            k1 = normalized_k_range[i]
+            k2 = normalized_k_range[i + 1]
             if wcss_values[k1] > 0:
                 ratio = wcss_values[k2] / wcss_values[k1]
                 wcss_ratios[k2] = ratio
@@ -487,18 +496,30 @@ def is_clusters_model(model):
 def build_faiss():
     from pathlib import Path
 
+    from definers.system.download_activity import create_activity_reporter
     from definers.system.output_paths import managed_output_session_dir
 
+    report = create_activity_reporter(7)
     source_dir = Path(managed_output_session_dir("faiss", stem="source"))
     wheel_dir = managed_output_session_dir("faiss", stem="wheel")
     repaired_wheel_dir = managed_output_session_dir("faiss", stem="repair")
 
+    report(
+        1,
+        "Clone FAISS source",
+        detail="Downloading the FAISS source repository.",
+    )
     git("YaronKoresh", "faiss", parent=str(source_dir))
     set_cuda_env()
     cmake = "/usr/local/cmake/bin/cmake"
     try:
         with cwd(str(source_dir)):
             print("faiss - stage 1")
+            report(
+                2,
+                "Configure FAISS build",
+                detail="Configuring the CMake build directory.",
+            )
             run(
                 [
                     cmake,
@@ -518,6 +539,11 @@ def build_faiss():
                 ]
             )
             print("faiss - stage 2")
+            report(
+                3,
+                "Build FAISS core",
+                detail="Compiling the FAISS core library.",
+            )
             run(
                 [
                     cmake,
@@ -530,6 +556,11 @@ def build_faiss():
                 ]
             )
             print("faiss - stage 3")
+            report(
+                4,
+                "Build Python bindings",
+                detail="Compiling the FAISS Python bindings.",
+            )
             run(
                 [
                     cmake,
@@ -544,6 +575,11 @@ def build_faiss():
         with cwd(str(source_dir / "build" / "faiss" / "python")):
             print(
                 "faiss - stage 4: Building wheel with numpy==1.26.4 constraint"
+            )
+            report(
+                5,
+                "Build wheel",
+                detail="Building the FAISS wheel artifact.",
             )
             with tempfile.NamedTemporaryFile(mode="w", delete=False) as reqs:
                 reqs.write("numpy==1.26.4\n")
@@ -568,6 +604,11 @@ def build_faiss():
         free()
         any_wheel_path = paths(f"{wheel_dir}/faiss-*.whl")[0]
         print("faiss - stage 5: Repairing wheel")
+        report(
+            6,
+            "Repair wheel",
+            detail="Repairing platform-specific wheel metadata.",
+        )
         run(
             [
                 sys.executable,
@@ -582,6 +623,11 @@ def build_faiss():
         repaired_wheel_path = paths(f"{repaired_wheel_dir}/faiss-*.whl")[0]
         print(
             "faiss - stage 6: Modifying final wheel metadata for runtime constraints"
+        )
+        report(
+            7,
+            "Finalize wheel",
+            detail="Applying final dependency constraints to the wheel.",
         )
         dependency_constraints = {"numpy": "==1.26.4"}
         final_wheel_path = modify_wheel_requirements(
@@ -717,9 +763,18 @@ def init_model_repo(task: str, turbo: bool = True):
         import nltk
         from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
+        from definers.model_installation import hf_snapshot_download
+
         nltk.download("punkt_tab")
-        TOKENIZERS[task] = AutoTokenizer.from_pretrained(tasks[task])
-        model = AutoModelForSeq2SeqLM.from_pretrained(tasks[task]).to(device())
+        local_repo_path = hf_snapshot_download(
+            repo_id=tasks[task],
+            item_label=str(tasks[task]),
+            detail="Downloading translation model source files.",
+        )
+        TOKENIZERS[task] = AutoTokenizer.from_pretrained(local_repo_path)
+        model = AutoModelForSeq2SeqLM.from_pretrained(local_repo_path).to(
+            device()
+        )
     elif task in ["tts"]:
         from definers.audio.text_to_speech import LocalTextToSpeech
 
@@ -748,17 +803,33 @@ def init_model_repo(task: str, turbo: bool = True):
     elif task in ["speech-recognition"]:
         from transformers import pipeline
 
+        from definers.model_installation import hf_snapshot_download
+
+        local_repo_path = hf_snapshot_download(
+            repo_id=tasks["speech-recognition"],
+            item_label=str(tasks["speech-recognition"]),
+            detail="Downloading speech recognition model source files.",
+        )
+
         model = pipeline(
             "automatic-speech-recognition",
-            model=tasks["speech-recognition"],
+            model=local_repo_path,
             device=device(),
         )
     elif task in ["audio-classification"]:
         from transformers import pipeline
 
+        from definers.model_installation import hf_snapshot_download
+
+        local_repo_path = hf_snapshot_download(
+            repo_id=tasks["audio-classification"],
+            item_label=str(tasks["audio-classification"]),
+            detail="Downloading audio classification model source files.",
+        )
+
         model = pipeline(
             "audio-classification",
-            model=tasks["audio-classification"],
+            model=local_repo_path,
             device=device(),
         )
     elif task in ["detect"]:
@@ -774,17 +845,24 @@ def init_model_repo(task: str, turbo: bool = True):
             pipeline,
         )
 
-        config = AutoConfig.from_pretrained(tasks[task])
+        from definers.model_installation import hf_snapshot_download
+
+        local_repo_path = hf_snapshot_download(
+            repo_id=tasks[task],
+            item_label=str(tasks[task]),
+            detail="Downloading detection model source files.",
+        )
+        config = AutoConfig.from_pretrained(local_repo_path)
         try:
             model = AutoModel.from_pretrained(
-                tasks[task],
+                local_repo_path,
                 config=config,
                 trust_remote_code=True,
                 torch_dtype=dtype(),
             ).to(device())
         except:
             model = TFAutoModel.from_pretrained(
-                tasks[task],
+                local_repo_path,
                 config=config,
                 trust_remote_code=True,
                 torch_dtype=dtype(),
@@ -792,11 +870,17 @@ def init_model_repo(task: str, turbo: bool = True):
     elif task in ["music"]:
         from transformers import AutoProcessor, MusicgenForConditionalGeneration
 
-        PROCESSORS[task] = AutoProcessor.from_pretrained(
-            "facebook/musicgen-small"
+        from definers.model_installation import hf_snapshot_download
+
+        local_repo_path = hf_snapshot_download(
+            repo_id=tasks[task],
+            item_label=str(tasks[task]),
+            detail="Downloading music generation model source files.",
         )
+
+        PROCESSORS[task] = AutoProcessor.from_pretrained(local_repo_path)
         model = MusicgenForConditionalGeneration.from_pretrained(
-            "facebook/musicgen-small"
+            local_repo_path
         ).to(device())
     elif task in ["answer"]:
         import torch
@@ -895,10 +979,17 @@ def init_model_repo(task: str, turbo: bool = True):
     elif task in ["summary"]:
         from transformers import T5ForConditionalGeneration, T5Tokenizer
 
-        TOKENIZERS[task] = T5Tokenizer.from_pretrained(tasks[task])
+        from definers.model_installation import hf_snapshot_download
+
+        local_repo_path = hf_snapshot_download(
+            repo_id=tasks[task],
+            item_label=str(tasks[task]),
+            detail="Downloading summary model source files.",
+        )
+        TOKENIZERS[task] = T5Tokenizer.from_pretrained(local_repo_path)
         free()
         model = T5ForConditionalGeneration.from_pretrained(
-            tasks[task], torch_dtype=dtype()
+            local_repo_path, torch_dtype=dtype()
         ).to(device())
     elif task in ["video"]:
         import torch
@@ -907,11 +998,18 @@ def init_model_repo(task: str, turbo: bool = True):
             HunyuanVideoTransformer3DModel,
         )
 
+        from definers.model_installation import hf_snapshot_download
+
+        local_repo_path = hf_snapshot_download(
+            repo_id=tasks[task],
+            item_label=str(tasks[task]),
+            detail="Downloading video generation model source files.",
+        )
         transformer = HunyuanVideoTransformer3DModel.from_pretrained(
-            tasks[task], subfolder="transformer", torch_dtype=dtype()
+            local_repo_path, subfolder="transformer", torch_dtype=dtype()
         )
         model = HunyuanVideoImageToVideoPipeline.from_pretrained(
-            tasks[task], transformer=transformer, torch_dtype=dtype()
+            local_repo_path, transformer=transformer, torch_dtype=dtype()
         )
         model.to(device())
     elif task in ["image"]:
@@ -919,10 +1017,18 @@ def init_model_repo(task: str, turbo: bool = True):
         from diffusers import FluxPipeline
         from safetensors.torch import load_file
 
-        from definers.model_installation import hf_file_download
+        from definers.model_installation import (
+            hf_file_download,
+            hf_snapshot_download,
+        )
 
+        local_repo_path = hf_snapshot_download(
+            repo_id=tasks[task],
+            item_label=str(tasks[task]),
+            detail="Downloading image generation model source files.",
+        )
         model = FluxPipeline.from_pretrained(
-            tasks[task], torch_dtype=dtype(), use_safetensors=True
+            local_repo_path, torch_dtype=dtype(), use_safetensors=True
         )
         srpo_path = hf_file_download(
             repo_id=tasks["image-spro"],
@@ -936,8 +1042,20 @@ def init_model_repo(task: str, turbo: bool = True):
     elif task not in tasks:
         from transformers import AutoModel
 
+        from definers.model_installation import hf_snapshot_download
+
+        model_source = (
+            hf_snapshot_download(
+                repo_id=task,
+                item_label=task,
+                detail="Downloading model source files.",
+            )
+            if is_huggingface_repo(task)
+            else task
+        )
+
         model = AutoModel.from_pretrained(
-            task, torch_dtype=dtype(), trust_remote_code=True
+            model_source, torch_dtype=dtype(), trust_remote_code=True
         ).to(device())
     if turbo:
         try:
@@ -1032,6 +1150,11 @@ def init_pretrained_model(task: str, turbo: bool = True):
             )
             or is_huggingface_repo(normalized_task)
         ):
+            from definers.model_installation import (
+                install_fast_huggingface_download_hooks,
+            )
+
+            install_fast_huggingface_download_hooks()
             return init_model_repo(normalized_task, turbo)
         return init_model_file(normalized_task, turbo)
     except Exception as error:
@@ -1100,7 +1223,14 @@ def pipe(
     from transformers import AutoTokenizer
 
     if task in ["detect"]:
-        tokenizer = AutoTokenizer.from_pretrained(tasks[task])
+        from definers.model_installation import hf_snapshot_download
+
+        local_repo_path = hf_snapshot_download(
+            str(tasks[task]),
+            item_label=str(tasks[task]),
+            detail="Downloading detection model source files.",
+        )
+        tokenizer = AutoTokenizer.from_pretrained(local_repo_path)
         inputs = tokenizer(*params1, **params2, return_tensors="tf")
     elif task in ["image", "video"]:
         inputs = params2

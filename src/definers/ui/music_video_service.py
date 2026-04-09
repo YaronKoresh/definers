@@ -20,19 +20,38 @@ def music_video(audio_path, width=1920, height=1080, fps=30):
     from moviepy.video.VideoClip import VideoClip
 
     from definers.system import cores
+    from definers.system.download_activity import (
+        create_activity_reporter,
+    )
     from definers.system.output_paths import managed_output_path
     from definers.video.gui import draw_star_of_david
 
+    report = create_activity_reporter(5)
+    report(
+        1,
+        "Load visualizer audio",
+        detail="Loading the audio file for visualization.",
+    )
     np = load_numeric_backend()
     hop_length = 512
     (y, sr) = librosa.load(audio_path)
     duration = librosa.get_duration(y=y, sr=sr)
+    report(
+        2,
+        "Analyze spectrum",
+        detail="Computing spectral and loudness features.",
+    )
     stft = librosa.stft(y, hop_length=hop_length)
     stft_db = librosa.amplitude_to_db(np.abs(stft), ref=np.max)
     rms = librosa.feature.rms(y=y, hop_length=hop_length)[0]
     spectral_centroid = librosa.feature.spectral_centroid(
         y=y, sr=sr, hop_length=hop_length
     )[0]
+    report(
+        3,
+        "Detect beats",
+        detail="Detecting beat positions for the visualizer.",
+    )
     proc = madmom.features.beats.DBNBeatTrackingProcessor(fps=100)
     act = madmom.features.beats.RNNBeatProcessor()(audio_path)
     beat_times = proc(act)
@@ -48,8 +67,29 @@ def music_video(audio_path, width=1920, height=1080, fps=30):
     )
     (w, h) = (width, height)
     (center_x, center_y) = (w // 2, h // 2)
+    render_frame_total = max(int(duration * max(int(fps), 1)), 1)
+    render_report = create_activity_reporter(render_frame_total)
+    render_update_interval = max(render_frame_total // 180, 1)
+    last_reported_frame = 0
 
     def make_frame(t):
+        nonlocal last_reported_frame
+
+        frame_number = min(
+            max(int(t * max(int(fps), 1)) + 1, 1),
+            render_frame_total,
+        )
+        if (
+            frame_number == 1
+            or frame_number == render_frame_total
+            or frame_number - last_reported_frame >= render_update_interval
+        ) and frame_number != last_reported_frame:
+            last_reported_frame = frame_number
+            render_report(
+                frame_number,
+                "Render visualizer frames",
+                detail=f"Rendering frame {frame_number}/{render_frame_total}.",
+            )
         frame_idx = int(t * sr / hop_length)
         safe_idx = min(frame_idx, len(rms_norm) - 1, len(centroid_norm) - 1)
         (grid_x, grid_y) = np.meshgrid(np.arange(w), np.arange(h))
@@ -214,6 +254,11 @@ def music_video(audio_path, width=1920, height=1080, fps=30):
         section="video",
         stem=f"{Path(audio_path).stem}_video",
     )
+    report(
+        4,
+        "Render visualizer frames",
+        detail=f"Encoding {render_frame_total} visualizer frames.",
+    )
     animation = VideoClip(make_frame, duration=duration)
     final_clip = animation.with_audio(AudioFileClip(audio_path))
     final_clip.write_videofile(
@@ -224,5 +269,10 @@ def music_video(audio_path, width=1920, height=1080, fps=30):
         ffmpeg_params=["-pix_fmt", "yuv420p"],
         preset="ultrafast",
         threads=cores(),
+    )
+    report(
+        5,
+        "Finalize visualizer video",
+        detail="Writing the visualizer video output.",
     )
     return output_path

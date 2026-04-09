@@ -408,7 +408,7 @@ def build_train_app(
             "ML studio ready",
             "Choose a task and execute it.",
         )
-        init_output_folder_controls()
+        init_output_folder_controls(section="train")
 
         def bind_action(
             button,

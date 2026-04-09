@@ -28,7 +28,7 @@ class TestInstallFfmpegWindows(unittest.TestCase):
 
     @patch("definers.system.is_admin_windows", return_value=True)
     @patch("subprocess.run", side_effect=[FileNotFoundError, MagicMock()])
-    @patch("requests.get")
+    @patch("definers.media.web_transfer.download_file")
     @patch("zipfile.ZipFile")
     @patch("shutil.move")
     @patch("shutil.rmtree")
@@ -45,19 +45,19 @@ class TestInstallFfmpegWindows(unittest.TestCase):
         mock_rmtree,
         mock_move,
         mock_zipfile,
-        mock_requests_get,
+        mock_download_file,
         mock_run,
         mock_is_admin,
     ):
-        mock_response = MagicMock()
-        mock_response.raise_for_status.return_value = None
-        mock_response.iter_content.return_value = [b"zip_data"]
-        mock_requests_get.return_value.__enter__.return_value = mock_response
+        mock_download_file.return_value = "/tmp/ffmpeg.zip"
         mock_zip_instance = MagicMock()
         mock_zipfile.return_value.__enter__.return_value = mock_zip_instance
         install_ffmpeg_windows()
         self.assertEqual(mock_run.call_count, 2)
-        mock_requests_get.assert_called_once()
+        mock_download_file.assert_called_once_with(
+            "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip",
+            "/tmp/ffmpeg.zip",
+        )
         mock_zipfile.assert_called_once_with("/tmp/ffmpeg.zip", "r")
         mock_zip_instance.extractall.assert_called_once_with(
             "/tmp/ffmpeg_extracted"

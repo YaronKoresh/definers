@@ -12,9 +12,8 @@ from definers.constants import FFMPEG_URL
 
 
 def install_ffmpeg_windows():
-    import requests
-
     from definers import system as system_module
+    from definers.media.web_transfer import download_file
 
     print("[INFO] Running FFmpeg installer for Windows...")
     if not system_module.is_admin_windows():
@@ -72,11 +71,9 @@ def install_ffmpeg_windows():
             f"[INFO] Downloading latest FFmpeg essentials build from {FFMPEG_URL}..."
         )
         os.makedirs(temp_dir, exist_ok=True)
-        with requests.get(FFMPEG_URL, stream=True) as response:
-            response.raise_for_status()
-            with open(zip_path, "wb") as handle:
-                for chunk in response.iter_content(chunk_size=8192):
-                    handle.write(chunk)
+        downloaded_path = download_file(FFMPEG_URL, zip_path)
+        if downloaded_path is None:
+            raise OSError("FFmpeg download failed.")
         print("[SUCCESS] Download complete.")
         print(f"[INFO] Extracting FFmpeg to {extract_path}...")
         if os.path.exists(extract_path):

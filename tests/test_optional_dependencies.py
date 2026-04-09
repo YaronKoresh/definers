@@ -23,8 +23,10 @@ def test_package_specs_for_ml_group_cover_runtime_gap_packages():
 
 def test_runtime_specs_for_pypi_optional_modules_omit_vcs_links():
     expected_specs = {
+        "aioquic": "aioquic>=1.2.0",
         "audio_separator": "audio-separator>=0.30.2,<0.31.0",
         "basic_pitch": "basic-pitch>=0.4.0",
+        "httpx": "httpx[http2]>=0.28.0",
         "madmom": "madmom>=0.16.1",
         "refiners": "refiners>=0.4.0",
         "stable_whisper": "stable-ts>=2.19.1",
@@ -80,6 +82,8 @@ def test_install_optional_target_installs_group_specs(monkeypatch):
             "fastapi>=0.100.0",
             "googledrivedownloader>=1.1.0",
             "gradio>=6.9.0",
+            "httpx[http2]>=0.28.0",
+            "aioquic>=1.2.0",
             "lxml[html_clean]>=5.2.0",
             "cssselect>=1.2.0",
             "matplotlib>=3.7.0",
@@ -162,7 +166,9 @@ def test_optional_runtime_targets_list_groups_tasks_and_modules():
     assert "audio" in targets["groups"]
     assert "tts" in targets["tasks"]
     assert "translate" in targets["tasks"]
+    assert "aioquic" in targets["modules"]
     assert "gradio" in targets["modules"]
+    assert "httpx" in targets["modules"]
 
 
 def test_runtime_groups_omit_vcs_links():

@@ -44,7 +44,7 @@ textarea { overflow-y: auto !important; }
                 "Video workspace ready",
                 "Pick a render workflow and start it.",
             )
-            init_output_folder_controls()
+            init_output_folder_controls(section="video")
             with gr.Tabs():
                 if "composer" in selected_tabs:
                     with gr.TabItem("Composer"):

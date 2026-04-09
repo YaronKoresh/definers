@@ -267,6 +267,11 @@ def _build_vocal_pair_stage(model_name: str) -> SeparatorModelStage:
 
 def _load_audio_separator_class():
     try:
+        from definers.model_installation import (
+            install_audio_separator_runtime_hooks,
+        )
+
+        install_audio_separator_runtime_hooks()
         from audio_separator.separator import Separator
     except Exception as error:
         raise RuntimeError(
@@ -304,14 +309,10 @@ def _build_separator_kwargs(
     return kwargs
 
 
-def _stem_model_cache_path(model_name: str) -> Path:
-    from definers.model_installation import stem_model_dir
-
-    return Path(stem_model_dir()) / Path(str(model_name)).name
-
-
 def _has_local_stem_model(model_name: str) -> bool:
-    return _stem_model_cache_path(model_name).exists()
+    from definers.model_installation import stem_model_artifacts_ready
+
+    return stem_model_artifacts_ready(str(model_name))
 
 
 def _runtime_stage_model_candidates(
@@ -330,7 +331,14 @@ def _runtime_stage_model_candidates(
 def _download_runtime_stage_models(
     model_candidates: Sequence[str],
 ) -> tuple[str, ...]:
-    resolved_candidates = tuple(model_candidates)
+    from definers.model_installation import resolve_stem_model_filename
+
+    resolved_candidates = tuple(
+        dict.fromkeys(
+            resolve_stem_model_filename(model_candidate)
+            for model_candidate in model_candidates
+        )
+    )
     if not resolved_candidates:
         return ()
     missing_candidates = tuple(
@@ -345,10 +353,62 @@ def _download_runtime_stage_models(
     return resolved_candidates
 
 
+def _prefetch_stage_model_candidates(
+    stage: SeparatorModelStage | None,
+) -> tuple[str, ...]:
+    if stage is None:
+        return ()
+    if not stage.model_candidates:
+        return ()
+    cached_candidates = tuple(
+        model_candidate
+        for model_candidate in stage.model_candidates
+        if _has_local_stem_model(model_candidate)
+    )
+    if cached_candidates:
+        return cached_candidates[:1]
+    return stage.model_candidates[:1]
+
+
+def _prefetch_mastering_plan_models(
+    plan: MasteringSeparatorPlan,
+) -> tuple[str, ...]:
+    prefetch_candidates: list[str] = []
+    for stage in plan.preprocess_stages:
+        prefetch_candidates.extend(_prefetch_stage_model_candidates(stage))
+    for stage in (
+        plan.vocal_pair_stage,
+        plan.reference_split_stage,
+        plan.four_stem_stage,
+        plan.vocal_stage,
+        plan.vocal_restoration_stage,
+        plan.instrumental_cleanup_stage,
+    ):
+        prefetch_candidates.extend(_prefetch_stage_model_candidates(stage))
+    return _download_runtime_stage_models(
+        tuple(dict.fromkeys(prefetch_candidates))
+    )
+
+
 def _prepare_stage_directory(output_dir: str) -> str:
     delete(output_dir)
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     return output_dir
+
+
+def _separator_output_error(
+    output_files: Sequence[object],
+    output_dir: str,
+) -> FileNotFoundError:
+    flattened_output_files = _flatten_output_files(output_files)
+    if not flattened_output_files:
+        return FileNotFoundError("Audio separator returned no output files")
+    return FileNotFoundError(
+        "Audio separator returned output files that were not created under "
+        + str(Path(output_dir))
+        + ": "
+        + ", ".join(flattened_output_files)
+    )
 
 
 def _resolve_output_paths(
@@ -447,10 +507,15 @@ def _run_separator_stage(
     last_error: Exception | None = None
     runtime_model_candidates = _runtime_stage_model_candidates(stage)
     try:
-        _download_runtime_stage_models(runtime_model_candidates)
+        runtime_model_candidates = _download_runtime_stage_models(
+            runtime_model_candidates
+        )
     except Exception as error:
         if stage.required:
-            raise RuntimeError("Audio separator stage failed") from error
+            raise RuntimeError(
+                "Audio separator stage failed while preparing models: "
+                + str(error)
+            ) from error
         _logger.warning("Skipping optional separator stage: %s", error)
         return "", ()
     for model_candidate in runtime_model_candidates:
@@ -470,10 +535,16 @@ def _run_separator_stage(
             )
             if resolved_output_files:
                 return model_candidate, resolved_output_files
+            last_error = _separator_output_error(output_files, output_dir)
         except Exception as error:
             last_error = error
     if stage.required:
-        raise RuntimeError("Audio separator stage failed") from last_error
+        raise RuntimeError(
+            "Audio separator stage failed for model candidates "
+            + ", ".join(runtime_model_candidates)
+            + ": "
+            + str(last_error)
+        ) from last_error
     if last_error is not None:
         _logger.warning("Skipping optional separator stage: %s", last_error)
     return "", ()
@@ -495,10 +566,15 @@ def _run_separator_stage_batch(
     batched_input_paths = tuple(input_paths.values())
     runtime_model_candidates = _runtime_stage_model_candidates(stage)
     try:
-        _download_runtime_stage_models(runtime_model_candidates)
+        runtime_model_candidates = _download_runtime_stage_models(
+            runtime_model_candidates
+        )
     except Exception as error:
         if stage.required:
-            raise RuntimeError("Audio separator stage failed") from error
+            raise RuntimeError(
+                "Audio separator stage failed while preparing models: "
+                + str(error)
+            ) from error
         _logger.warning("Skipping optional separator stage: %s", error)
         return dict(input_paths)
     for model_candidate in runtime_model_candidates:
@@ -528,10 +604,16 @@ def _run_separator_stage_batch(
                     stem_name: selected_outputs.get(stem_name, source_path)
                     for stem_name, source_path in input_paths.items()
                 }
+            last_error = _separator_output_error(output_files, output_dir)
         except Exception as error:
             last_error = error
     if stage.required:
-        raise RuntimeError("Audio separator stage failed") from last_error
+        raise RuntimeError(
+            "Audio separator stage failed for model candidates "
+            + ", ".join(runtime_model_candidates)
+            + ": "
+            + str(last_error)
+        ) from last_error
     if last_error is not None:
         _logger.warning("Skipping optional separator stage: %s", last_error)
     return dict(input_paths)
@@ -840,7 +922,7 @@ def separate_stem_layers(
             option_name="separator two-stems value",
         ).lower()
     resolved_output_dir = output_dir or managed_output_session_dir(
-        "audio_stems",
+        "audio/stems",
         stem=Path(audio_path).stem,
     )
     owns_output_dir = output_dir is None
@@ -863,6 +945,7 @@ def separate_stem_layers(
             quality_flags=quality_flags,
             model_name=model_name,
         )
+        _prefetch_mastering_plan_models(plan)
         stem_paths = _run_mastering_separator_pipeline(
             audio_path,
             resolved_output_dir,
@@ -884,7 +967,7 @@ def separate_stems(
     from definers.system.output_paths import managed_output_session_dir
 
     output_dir = managed_output_session_dir(
-        "audio_stems",
+        "audio/stems",
         stem=Path(audio_path).stem,
     )
     try:

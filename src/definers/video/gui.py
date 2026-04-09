@@ -454,14 +454,28 @@ def generate_video_handler(
     from moviepy import AudioFileClip, VideoClip
 
     from definers.audio import analyze_audio
+    from definers.system.download_activity import (
+        create_activity_reporter,
+    )
     from definers.system.output_paths import managed_output_path
 
+    report = create_activity_reporter(5)
+    report(
+        1,
+        "Validate media",
+        detail="Checking the selected media and composition settings.",
+    )
     (w, h, img_array, error) = prepare_common_resources(
         audio, image, resolution
     )
     if error:
         return (None, error)
     print("Analyzing full audio...")
+    report(
+        2,
+        "Analyze audio",
+        detail="Analyzing the input audio track.",
+    )
     adata = normalize_audio_payload(analyze_audio(audio))
     duration = adata.get("duration", 0.0)
     if duration <= 0:
@@ -470,8 +484,29 @@ def generate_video_handler(
     custom_config = _build_custom_element_config(
         ce_x, ce_y, ce_scale, ce_opacity, ce_text, ce_logo
     )
+    render_frame_total = max(int(duration * max(int(fps), 1)), 1)
+    render_report = create_activity_reporter(render_frame_total)
+    render_update_interval = max(render_frame_total // 180, 1)
+    last_reported_frame = 0
 
     def make_frame(t):
+        nonlocal last_reported_frame
+
+        frame_number = min(
+            max(int(t * max(int(fps), 1)) + 1, 1),
+            render_frame_total,
+        )
+        if (
+            frame_number == 1
+            or frame_number == render_frame_total
+            or frame_number - last_reported_frame >= render_update_interval
+        ) and frame_number != last_reported_frame:
+            last_reported_frame = frame_number
+            render_report(
+                frame_number,
+                "Render video frames",
+                detail=f"Rendering frame {frame_number}/{render_frame_total}.",
+            )
         frame = _render_composed_frame(
             t,
             style,
@@ -490,6 +525,11 @@ def generate_video_handler(
         )
         return cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
+    report(
+        3,
+        "Prepare composition",
+        detail="Building the video composition pipeline.",
+    )
     clip = VideoClip(make_frame, duration=duration)
     clip = clip.with_audio(AudioFileClip(audio))
 
@@ -500,6 +540,11 @@ def generate_video_handler(
     )
 
     print("Rendering...")
+    report(
+        4,
+        "Render video frames",
+        detail=f"Encoding {render_frame_total} video frames.",
+    )
     clip.write_videofile(
         output,
         fps=fps,
@@ -507,6 +552,11 @@ def generate_video_handler(
         audio_codec="aac",
         preset="ultrafast",
         logger=None,
+    )
+    report(
+        5,
+        "Finalize video",
+        detail="Writing the rendered video output.",
     )
     return (output, f"Render Complete! Duration: {duration:.2f}s")
 

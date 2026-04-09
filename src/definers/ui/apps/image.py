@@ -2,25 +2,89 @@ class ImageApp:
     @staticmethod
     def title_image(image_path, top, middle, bottom):
         from definers.image import write_on_image
+        from definers.system.download_activity import (
+            create_activity_reporter,
+        )
 
-        return write_on_image(image_path, top, middle, bottom)
+        report = create_activity_reporter(3)
+        report(
+            1,
+            "Validate source image",
+            detail="Checking the selected image and title inputs.",
+        )
+        report(
+            2,
+            "Render title overlays",
+            detail="Rendering the requested title overlays.",
+        )
+        result = write_on_image(image_path, top, middle, bottom)
+        report(
+            3,
+            "Finalize titled image",
+            detail="Saving the titled image output.",
+        )
+        return result
 
     @staticmethod
     def upscale_image(path):
         from definers.image import upscale
+        from definers.system.download_activity import (
+            create_activity_reporter,
+        )
 
-        return upscale(path)
+        report = create_activity_reporter(3)
+        report(
+            1,
+            "Validate source image",
+            detail="Checking the selected image for upscaling.",
+        )
+        report(
+            2,
+            "Prepare upscaler",
+            detail="Loading the upscaling runtime and checkpoints.",
+        )
+        result = upscale(path)
+        report(
+            3,
+            "Finalize upscale",
+            detail="Saving the upscaled image output.",
+        )
+        return result
 
     @staticmethod
     def generate_image(text, width, height):
         from definers.image import get_max_resolution
         from definers.ml import optimize_prompt_realism, pipe
+        from definers.system.download_activity import (
+            create_activity_reporter,
+        )
         from definers.text.validation import TextInputValidator
 
+        report = create_activity_reporter(4)
+        report(
+            1,
+            "Validate prompt",
+            detail="Checking the image prompt.",
+        )
         validator = TextInputValidator.default()
         validated_text = validator.validate(text)
+        report(
+            2,
+            "Resolve canvas",
+            detail="Calculating the target image resolution.",
+        )
         width, height = get_max_resolution(width, height, mega_pixels=2.5)
+        report(
+            3,
+            "Prepare prompt",
+            detail="Optimizing the prompt for image generation.",
+        )
         validated_text = optimize_prompt_realism(validated_text)
+        report(
+            4,
+            "Generate image",
+            detail="Running the image generation model.",
+        )
         return pipe(
             "image",
             prompt=validated_text,
@@ -57,7 +121,7 @@ class ImageApp:
                 "Image studio ready",
                 "Choose an image action and run it.",
             )
-            init_output_folder_controls()
+            init_output_folder_controls(section="image")
             with gr.Row():
                 with gr.Column(scale=1):
                     if "generate" in enabled_steps:

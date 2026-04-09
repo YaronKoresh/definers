@@ -30,9 +30,16 @@ def test_summarize_bootstraps_summary_runtime(monkeypatch):
     original_model = MODELS.get("summary")
     original_tokenizer = TOKENIZERS.get("summary")
     calls = []
+    activity = []
 
     monkeypatch.setitem(MODELS, "summary", None)
     monkeypatch.setitem(TOKENIZERS, "summary", None)
+    monkeypatch.setattr(
+        "definers.system.download_activity.report_download_activity",
+        lambda item_label=None, **kwargs: activity.append(
+            (item_label, kwargs.get("detail"))
+        ),
+    )
 
     def fake_init_pretrained_model(task):
         calls.append(task)
@@ -51,6 +58,11 @@ def test_summarize_bootstraps_summary_runtime(monkeypatch):
         TOKENIZERS["summary"] = original_tokenizer
 
     assert calls == ["summary"]
+    assert [item for item, _ in activity] == [
+        "Load summary model",
+        "Encode summary prompt",
+        "Generate summary text",
+    ]
 
 
 def test_ai_translate_bootstraps_translate_runtime(monkeypatch):
@@ -59,9 +71,21 @@ def test_ai_translate_bootstraps_translate_runtime(monkeypatch):
     original_model = MODELS.get("translate")
     original_tokenizer = TOKENIZERS.get("translate")
     calls = []
+    activity = []
 
     monkeypatch.setitem(MODELS, "translate", None)
     monkeypatch.setitem(TOKENIZERS, "translate", None)
+    monkeypatch.setattr(
+        "definers.system.download_activity.report_download_activity",
+        lambda item_label=None, **kwargs: activity.append(
+            (
+                item_label,
+                kwargs.get("detail"),
+                kwargs.get("completed"),
+                kwargs.get("total"),
+            )
+        ),
+    )
     monkeypatch.setattr(translation, "resolve_target_code", lambda lang: "en")
     monkeypatch.setattr(
         translation,
@@ -107,3 +131,8 @@ def test_ai_translate_bootstraps_translate_runtime(monkeypatch):
         TOKENIZERS["translate"] = original_tokenizer
 
     assert calls == ["translate"]
+    assert any(item == "Load translation model" for item, *_ in activity)
+    assert any(
+        item == "Translate paragraph" and completed == 1 and total == 1
+        for item, _, completed, total in activity
+    )

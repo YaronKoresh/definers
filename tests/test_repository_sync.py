@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 import tempfile
@@ -153,25 +154,59 @@ class TestRepositorySyncHelpers(unittest.TestCase):
             )
         )
 
+    def test_read_index_shard_files_uses_fast_file_download(self):
+        reference = repository_sync.HuggingFaceReference(
+            "owner/repo",
+            revision="rev-1",
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            local_index_path = Path(temp_dir) / "model.index.json"
+            local_index_path.write_text(
+                json.dumps(
+                    {
+                        "weight_map": {
+                            "layer.0": "0001-of-0002.safetensors",
+                            "layer.1": "0002-of-0002.safetensors",
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with patch(
+                "definers.model_installation.hf_file_download",
+                return_value=str(local_index_path),
+            ) as mock_download:
+                shard_files = repository_sync._read_index_shard_files(
+                    reference,
+                    "subdir/model.safetensors.index.json",
+                )
+
+        self.assertEqual(
+            shard_files,
+            (
+                "subdir/0001-of-0002.safetensors",
+                "subdir/0002-of-0002.safetensors",
+            ),
+        )
+        mock_download.assert_called_once_with(
+            repo_id="owner/repo",
+            filename="subdir/model.safetensors.index.json",
+            revision="rev-1",
+            item_label="subdir/model.safetensors.index.json",
+            detail="Downloading shard index from owner/repo.",
+        )
+
 
 class TestRepositorySyncHuggingFaceRouting(unittest.TestCase):
-    def test_init_model_file_uses_huggingface_hub_for_blob_url(self):
+    def test_init_model_file_uses_model_installation_file_download_for_blob_url(
+        self,
+    ):
         blob_url = (
             "https://huggingface.co/ibm-granite/granite-4.0-h-350m/blob/"
             "3b17b717b8f2f5d305b0a92c1491e239aeda19c8/model.safetensors"
         )
-        fake_module = types.ModuleType("huggingface_hub")
-
-        class FakeApi:
-            def list_repo_files(self, repo_id, revision=None):
-                self.repo_id = repo_id
-                self.revision = revision
-                return ["model.safetensors"]
-
         fake_download = MagicMock(return_value="C:/tmp/model.safetensors")
-        fake_module.HfApi = FakeApi
-        fake_module.hf_hub_download = fake_download
-        fake_module.snapshot_download = MagicMock()
 
         secure_path_calls = []
 
@@ -180,7 +215,17 @@ class TestRepositorySyncHuggingFaceRouting(unittest.TestCase):
             return value
 
         with (
-            patch.dict(sys.modules, {"huggingface_hub": fake_module}),
+            patch(
+                "definers.model_installation._huggingface_repo_files",
+                return_value=("model.safetensors",),
+            ),
+            patch(
+                "definers.model_installation.hf_file_download",
+                fake_download,
+            ),
+            patch(
+                "definers.model_installation.hf_snapshot_download"
+            ) as mock_snapshot,
             patch.object(
                 repository_sync, "_load_model", return_value={}
             ) as mock_load,
@@ -196,10 +241,15 @@ class TestRepositorySyncHuggingFaceRouting(unittest.TestCase):
 
         mock_download.assert_not_called()
         mock_turbo.assert_not_called()
+        mock_snapshot.assert_not_called()
         fake_download.assert_called_once_with(
             repo_id="ibm-granite/granite-4.0-h-350m",
             filename="model.safetensors",
             revision="3b17b717b8f2f5d305b0a92c1491e239aeda19c8",
+            item_label="model.safetensors",
+            detail="Downloading file from ibm-granite/granite-4.0-h-350m.",
+            completed=1,
+            total=1,
         )
         mock_load.assert_called_once_with(
             "C:/tmp/model.safetensors",
@@ -226,24 +276,21 @@ class TestRepositorySyncHuggingFaceRouting(unittest.TestCase):
             "granite-4.0-h-350m/snapshots/3b17b717b8f2f5d305b0a92c1491e239aeda19c8/"
             "model.safetensors"
         )
-        fake_module = types.ModuleType("huggingface_hub")
-
-        class FakeApi:
-            def list_repo_files(self, repo_id, revision=None):
-                return ["model.safetensors"]
-
         secure_path_calls = []
 
         def fake_secure_path(value, trust=None, **kwargs):
             secure_path_calls.append((value, trust, kwargs))
             return value
 
-        fake_module.HfApi = FakeApi
-        fake_module.hf_hub_download = MagicMock(return_value=cached_path)
-        fake_module.snapshot_download = MagicMock()
-
         with (
-            patch.dict(sys.modules, {"huggingface_hub": fake_module}),
+            patch(
+                "definers.model_installation._huggingface_repo_files",
+                return_value=("model.safetensors",),
+            ),
+            patch(
+                "definers.model_installation.hf_file_download",
+                MagicMock(return_value=cached_path),
+            ),
             patch.object(
                 repository_sync, "_load_model", return_value={}
             ) as mock_load,
@@ -298,24 +345,10 @@ class TestRepositorySyncHuggingFaceRouting(unittest.TestCase):
     def test_init_model_file_uses_snapshot_for_transformers_repo(self):
         repo_id = "ibm-granite/granite-4.0-h-350m"
         snapshot_dir = "C:/Users/User/.cache/huggingface/hub/models--ibm-granite--granite-4.0-h-350m/snapshots/abcdef"
-        fake_hf_module = types.ModuleType("huggingface_hub")
         fake_transformers_module = types.ModuleType("transformers")
-
-        class FakeApi:
-            def list_repo_files(self, repo_id, revision=None):
-                return [
-                    "config.json",
-                    "generation_config.json",
-                    "tokenizer.json",
-                    "tokenizer_config.json",
-                    "model.safetensors",
-                ]
 
         mock_snapshot_download = MagicMock(return_value=snapshot_dir)
         mock_hf_download = MagicMock()
-        fake_hf_module.HfApi = FakeApi
-        fake_hf_module.snapshot_download = mock_snapshot_download
-        fake_hf_module.hf_hub_download = mock_hf_download
 
         mock_tokenizer = MagicMock()
         mock_tokenizer.batch_decode.return_value = ["decoded"]
@@ -349,9 +382,26 @@ class TestRepositorySyncHuggingFaceRouting(unittest.TestCase):
             patch.dict(
                 sys.modules,
                 {
-                    "huggingface_hub": fake_hf_module,
                     "transformers": fake_transformers_module,
                 },
+            ),
+            patch(
+                "definers.model_installation._huggingface_repo_files",
+                return_value=(
+                    "config.json",
+                    "generation_config.json",
+                    "tokenizer.json",
+                    "tokenizer_config.json",
+                    "model.safetensors",
+                ),
+            ),
+            patch(
+                "definers.model_installation.hf_snapshot_download",
+                mock_snapshot_download,
+            ),
+            patch(
+                "definers.model_installation.hf_file_download",
+                mock_hf_download,
             ),
             patch.object(repository_sync, "_apply_turbo_optimizations"),
             patch.object(repository_sync, "device", return_value="cpu"),
@@ -381,9 +431,13 @@ class TestRepositorySyncHuggingFaceRouting(unittest.TestCase):
                 "*.vocab",
             ],
         )
-        self.assertGreaterEqual(
-            mock_snapshot_download.call_args.kwargs["max_workers"],
-            8,
+        self.assertEqual(
+            mock_snapshot_download.call_args.kwargs["item_label"],
+            repo_id,
+        )
+        self.assertEqual(
+            mock_snapshot_download.call_args.kwargs["detail"],
+            "Downloading text-generation repository.",
         )
         fake_transformers_module.AutoModelForCausalLM.from_pretrained.assert_called_once_with(
             snapshot_dir,

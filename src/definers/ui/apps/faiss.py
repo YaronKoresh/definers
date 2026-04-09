@@ -17,7 +17,7 @@ class FaissApp:
                 "FAISS builder ready",
                 "Click build when you want to prepare the wheel.",
             )
-            init_output_folder_controls()
+            init_output_folder_controls(section="faiss")
             build_button = gr.Button("Build FAISS Wheel", variant="primary")
             wheel_output = gr.File(label="Download faiss wheel")
             bind_progress_click(

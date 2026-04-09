@@ -35,7 +35,7 @@ def test_progress_markup_tracks_done_current_and_remaining_steps():
     assert "Load reports and stems, Publish output" in markup
     assert "definers-progress-shell__step--done" in markup
     assert "definers-progress-shell__step--active" in markup
-    assert 'style="width: 60.00%"' in markup
+    assert 'style="width: 40.00%"' in markup
 
 
 def test_wrap_progress_handler_surfaces_publish_step(monkeypatch):
@@ -104,3 +104,19 @@ def test_wrap_progress_handler_surfaces_runtime_download_activity(
     assert any(
         "Downloading answer model." in value for value in progress_values
     )
+
+
+def test_progress_markup_interpolates_runtime_activity_progress():
+    markup = _progress_markup(
+        "Master Audio",
+        "running",
+        "Downloading model.",
+        steps=("Validate source", "Run mastering engine", "Publish output"),
+        active_step=2,
+        activity_completed=3,
+        activity_total=4,
+    )
+
+    assert "2/3 · 3/4" in markup
+    assert "Run mastering engine (3/4)" in markup
+    assert 'style="width: 58.33%"' in markup

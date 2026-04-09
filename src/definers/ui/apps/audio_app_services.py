@@ -315,6 +315,24 @@ def _temp_audio_output_path(format_choice: str) -> str:
     )
 
 
+def _report_audio_activity(
+    item_label: str,
+    *,
+    detail: str,
+    completed: int | None = None,
+    total: int | None = None,
+) -> None:
+    from definers.system.download_activity import report_download_activity
+
+    report_download_activity(
+        item_label,
+        detail=detail,
+        phase="step",
+        completed=completed,
+        total=total,
+    )
+
+
 def _coerce_optional_int(value: float | int | None) -> int | None:
     if value is None:
         return None
@@ -352,7 +370,7 @@ def _write_json_payload(payload: dict[str, object]) -> str:
     destination_path = Path(
         managed_output_path(
             "json",
-            section="audio_reports",
+            section="audio/reports",
             stem="report",
         )
     )
@@ -376,7 +394,7 @@ def _convert_audio_outputs(
 
     output_dir = Path(
         managed_output_session_dir(
-            "audio_converted",
+            "audio/converted",
             stem="converted",
         )
     )
@@ -490,6 +508,12 @@ def run_mastering_tool(
 ) -> tuple[str, str | None, str, list[str]]:
     from definers.audio import master
 
+    _report_audio_activity(
+        "Resolve mastering request",
+        detail="Normalizing the mastering profile and output paths.",
+        completed=1,
+        total=4,
+    )
     output_path = _temp_audio_output_path(format_choice)
     report_path = _write_json_payload({"status": "pending"})
     should_collect_mastered_stems = bool(stem_mastering)
@@ -513,14 +537,27 @@ def run_mastering_tool(
     }
     mastering_kwargs.update(profile_kwargs)
 
+    _report_audio_activity(
+        "Run mastering pipeline",
+        detail="Processing the mix through the mastering engine.",
+        completed=2,
+        total=4,
+    )
     mastered_path, report = master(
         audio_path,
         output_path=output_path,
+        raise_on_error=True,
         **mastering_kwargs,
     )
     if mastered_path is None:
         raise RuntimeError("Mastering failed")
 
+    _report_audio_activity(
+        "Collect mastering artifacts",
+        detail="Loading the mastering report and any rendered stems.",
+        completed=3,
+        total=4,
+    )
     stem_files: list[str] = []
     stem_output_dir = (
         Path(mastered_path).parent / f"{Path(mastered_path).stem}_stems"
@@ -533,6 +570,12 @@ def run_mastering_tool(
         ]
 
     resolved_report_path = report_path if Path(report_path).exists() else None
+    _report_audio_activity(
+        "Publish mastered output",
+        detail="Mastered audio is ready for the interface.",
+        completed=4,
+        total=4,
+    )
     return (
         mastered_path,
         resolved_report_path,
@@ -563,6 +606,12 @@ def run_stem_separation_tool(
 
     normalized_format = normalize_audio_format_choice(format_choice)
     normalized_mode = str(separation_mode).strip().lower()
+    _report_audio_activity(
+        "Validate stem request",
+        detail="Resolving the separation mode and output format.",
+        completed=1,
+        total=3,
+    )
 
     if normalized_mode == "mastering_layers":
         resolved_model_name = resolve_stem_model_name(
@@ -575,9 +624,15 @@ def run_stem_separation_tool(
         }
         if _supports_keyword_argument(separate_stem_layers, "output_dir"):
             separation_kwargs["output_dir"] = managed_output_session_dir(
-                "audio_stems",
+                "audio/stems",
                 stem=Path(audio_path).stem,
             )
+        _report_audio_activity(
+            "Resolve stem strategy",
+            detail="Preparing the mastering-layers separation route.",
+            completed=1,
+            total=3,
+        )
         stem_paths, _output_dir = separate_stem_layers(
             audio_path,
             **separation_kwargs,
@@ -592,6 +647,18 @@ def run_stem_separation_tool(
             if stem_name not in ordered_names
         )
         outputs = _convert_audio_outputs(outputs, normalized_format)
+        _report_audio_activity(
+            "Convert stem exports",
+            detail="Finalizing the separated layer files.",
+            completed=2,
+            total=3,
+        )
+        _report_audio_activity(
+            "Publish stem outputs",
+            detail="Separated mastering layers are ready.",
+            completed=3,
+            total=3,
+        )
         summary = (
             "Separated mastering layers with "
             + stem_model_choice_label(model_name, model_override)
@@ -601,14 +668,32 @@ def run_stem_separation_tool(
         return (outputs[0] if outputs else None, outputs, summary)
 
     if normalized_mode == "vocals_karaoke":
+        _report_audio_activity(
+            "Separate vocals and instrumental",
+            detail="Running the vocal-plus-karaoke split.",
+            completed=2,
+            total=3,
+        )
         outputs = list(
             separate_stems(audio_path, format_choice=normalized_format) or ()
         )
         if not outputs:
             raise RuntimeError("Stem separation failed")
+        _report_audio_activity(
+            "Publish stem outputs",
+            detail="Vocals and instrumental stems are ready.",
+            completed=3,
+            total=3,
+        )
         return outputs[0], outputs, "Created vocals and instrumental stems"
 
     separation_type = "acapella" if normalized_mode == "acapella" else "karaoke"
+    _report_audio_activity(
+        "Separate requested stem",
+        detail="Running the selected two-stem export.",
+        completed=2,
+        total=3,
+    )
     output_path = separate_stems(
         audio_path,
         separation_type=separation_type,
@@ -616,6 +701,12 @@ def run_stem_separation_tool(
     )
     if output_path is None:
         raise RuntimeError("Stem separation failed")
+    _report_audio_activity(
+        "Publish stem output",
+        detail="Requested stem export is ready.",
+        completed=3,
+        total=3,
+    )
     summary = (
         "Created vocal-only stem"
         if separation_type == "acapella"
@@ -635,6 +726,12 @@ def run_autotune_song_tool(
 ) -> str:
     from definers.audio import autotune_song
 
+    _report_audio_activity(
+        "Prepare autotune request",
+        detail="Normalizing the AutoTune settings and output path.",
+        completed=1,
+        total=2,
+    )
     output_path = _temp_audio_output_path(format_choice)
     tuned_path = autotune_song(
         audio_path,
@@ -647,6 +744,12 @@ def run_autotune_song_tool(
     )
     if tuned_path is None:
         raise RuntimeError("AutoTune failed")
+    _report_audio_activity(
+        "Publish autotuned audio",
+        detail="AutoTuned audio is ready.",
+        completed=2,
+        total=2,
+    )
     return tuned_path
 
 
@@ -657,6 +760,12 @@ def run_humanize_vocals_tool(
 ) -> str:
     from definers.audio import humanize_vocals
 
+    _report_audio_activity(
+        "Humanize vocal take",
+        detail="Applying vocal timing and pitch variation.",
+        completed=1,
+        total=2,
+    )
     humanized_path = humanize_vocals(audio_path, amount=float(amount))
     if humanized_path is None:
         raise RuntimeError("Vocal humanization failed")
@@ -664,26 +773,56 @@ def run_humanize_vocals_tool(
         [humanized_path],
         normalize_audio_format_choice(format_choice),
     )
+    _report_audio_activity(
+        "Publish humanized vocals",
+        detail="Humanized vocal output is ready.",
+        completed=2,
+        total=2,
+    )
     return converted_paths[0]
 
 
 def run_remove_silence_tool(audio_path: str, format_choice: str) -> str:
     from definers.audio import remove_silence
 
+    _report_audio_activity(
+        "Remove silence",
+        detail="Applying silence-trimming to the audio.",
+        completed=1,
+        total=2,
+    )
     output_path = _temp_audio_output_path(format_choice)
     cleaned_path = remove_silence(audio_path, output_path)
     if cleaned_path is None:
         raise RuntimeError("Silence removal failed")
+    _report_audio_activity(
+        "Publish cleaned audio",
+        detail="Silence-reduced audio is ready.",
+        completed=2,
+        total=2,
+    )
     return cleaned_path
 
 
 def run_compact_audio_tool(audio_path: str, format_choice: str) -> str:
     from definers.audio import compact_audio
 
+    _report_audio_activity(
+        "Compact audio",
+        detail="Rendering a lighter delivery version of the audio.",
+        completed=1,
+        total=2,
+    )
     output_path = _temp_audio_output_path(format_choice)
     compacted_path = compact_audio(audio_path, output_path)
     if compacted_path is None:
         raise RuntimeError("Audio compaction failed")
+    _report_audio_activity(
+        "Publish compacted audio",
+        detail="Compacted audio is ready.",
+        completed=2,
+        total=2,
+    )
     return compacted_path
 
 
@@ -695,15 +834,27 @@ def run_audio_preview_tool(
     from definers.audio import audio_preview, get_audio_duration
     from definers.system.output_paths import managed_output_session_dir
 
+    _report_audio_activity(
+        "Prepare preview request",
+        detail="Resolving preview duration and output directory.",
+        completed=1,
+        total=3,
+    )
     preview_kwargs = {"max_duration": float(max_duration)}
     if _supports_keyword_argument(audio_preview, "output_folder"):
         preview_kwargs["output_folder"] = managed_output_session_dir(
-            "audio_preview",
+            "audio/preview",
             stem=Path(audio_path).stem,
         )
     preview_path = audio_preview(audio_path, **preview_kwargs)
     if preview_path is None:
         raise RuntimeError("Preview generation failed")
+    _report_audio_activity(
+        "Convert preview clip",
+        detail="Converting the preview to the requested delivery format.",
+        completed=2,
+        total=3,
+    )
     converted_paths = _convert_audio_outputs(
         [preview_path],
         normalize_audio_format_choice(format_choice),
@@ -715,6 +866,12 @@ def run_audio_preview_tool(
             f"**Source Duration:** {_format_metric_value(source_duration, ' s')}",
             f"**Preview Duration:** {_format_metric_value(preview_duration, ' s')}",
         ]
+    )
+    _report_audio_activity(
+        "Publish preview clip",
+        detail="Preview clip and duration summary are ready.",
+        completed=3,
+        total=3,
     )
     return converted_paths[0], summary
 
@@ -730,8 +887,14 @@ def run_split_audio_tool(
     from definers.audio import split_audio
     from definers.system.output_paths import managed_output_session_dir
 
+    _report_audio_activity(
+        "Prepare split request",
+        detail="Resolving chunk options and output directory.",
+        completed=1,
+        total=2,
+    )
     output_dir = managed_output_session_dir(
-        "audio_split",
+        "audio/split",
         stem=Path(audio_path).stem,
     )
     outputs = split_audio(
@@ -745,6 +908,12 @@ def run_split_audio_tool(
     )
     if not outputs:
         raise RuntimeError("Audio splitting failed")
+    _report_audio_activity(
+        "Publish split outputs",
+        detail="Chunk files and preview are ready.",
+        completed=2,
+        total=2,
+    )
     summary = "\n\n".join(
         [
             f"**Chunks Created:** {len(outputs)}",
@@ -765,6 +934,12 @@ def run_audio_analysis_tool(
 
     from definers.audio import analyze_audio, analyze_audio_features
 
+    _report_audio_activity(
+        "Analyze track",
+        detail="Computing tempo, key, and spectrum metrics.",
+        completed=1,
+        total=2,
+    )
     resolved_duration = _coerce_optional_float(duration)
     payload = analyze_audio(
         audio_path,
@@ -803,6 +978,12 @@ def run_audio_analysis_tool(
             f"**Average RMS:** {_format_metric_value(analysis_payload['rms']['mean'])}",
             f"**Low / Mid / High RMS:** {analysis_payload['rms']['low_mean']:.4f} / {analysis_payload['rms']['mid_mean']:.4f} / {analysis_payload['rms']['high_mean']:.4f}",
         ]
+    )
+    _report_audio_activity(
+        "Publish analysis report",
+        detail="Analysis summary and JSON payload are ready.",
+        completed=2,
+        total=2,
     )
     return summary_text, summary_markdown, _write_json_payload(analysis_payload)
 

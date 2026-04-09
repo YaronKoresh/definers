@@ -76,6 +76,7 @@ def _activity_prefix(
         "extract": "Extracting archive",
         "index": "Resolving model index",
         "model": "Initializing model",
+        "step": "Running step",
         "transfer": "Transferring artifact",
     }.get(str(phase).strip().lower(), "Running task")
     if completed is not None and total:
@@ -134,6 +135,13 @@ def get_download_activity_snapshot(
 def clear_download_activity_scope(scope_id: str) -> None:
     with _SNAPSHOT_LOCK:
         _SNAPSHOTS.pop(str(scope_id), None)
+
+
+def current_download_activity_scope() -> str | None:
+    scope_id = _ACTIVE_SCOPE.get()
+    if not scope_id:
+        return None
+    return str(scope_id)
 
 
 def report_download_activity(
@@ -195,6 +203,44 @@ def report_download_activity(
         return snapshot
 
 
+def create_activity_reporter(
+    total: int,
+    *,
+    phase: str = "step",
+):
+    resolved_total = _normalize_count(total)
+    if resolved_total is None or resolved_total == 0:
+        resolved_total = 1
+
+    def reporter(
+        completed: int,
+        item_label: str | None = None,
+        *,
+        detail: str | None = None,
+        phase_override: str | None = None,
+        total_override: int | None = None,
+        bytes_downloaded: int | None = None,
+        bytes_total: int | None = None,
+    ) -> DownloadActivitySnapshot | None:
+        normalized_completed = _normalize_count(completed)
+        if normalized_completed is None:
+            normalized_completed = 0
+        normalized_total = _normalize_count(total_override)
+        if normalized_total is None or normalized_total == 0:
+            normalized_total = resolved_total
+        return report_download_activity(
+            item_label,
+            detail=detail,
+            phase=phase_override or phase,
+            completed=normalized_completed,
+            total=normalized_total,
+            bytes_downloaded=bytes_downloaded,
+            bytes_total=bytes_total,
+        )
+
+    return reporter
+
+
 def create_download_activity_task(
     handler,
     *args,
@@ -248,6 +294,8 @@ __all__ = (
     "DownloadActivityTask",
     "bind_download_activity_scope",
     "clear_download_activity_scope",
+    "current_download_activity_scope",
+    "create_activity_reporter",
     "create_download_activity_scope",
     "create_download_activity_task",
     "get_download_activity_snapshot",

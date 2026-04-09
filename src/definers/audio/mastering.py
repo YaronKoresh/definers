@@ -683,11 +683,15 @@ def master(
 ) -> tuple[str | None, MasteringReport | None]:
 
     stem_mastering = bool(kwargs.pop("stem_mastering", True))
+    raise_on_error = kwargs.pop("raise_on_error", None)
+    internal_kwargs = dict(kwargs)
+    if raise_on_error is not None:
+        internal_kwargs["raise_on_error"] = bool(raise_on_error)
     return _master_internal(
         input_path,
         output_path=output_path,
         stem_mastering=stem_mastering,
-        **kwargs,
+        **internal_kwargs,
     )
 
 
@@ -696,6 +700,7 @@ def _master_internal(
     *,
     output_path: str | None,
     stem_mastering: bool,
+    raise_on_error: bool = False,
     **kwargs: object,
 ) -> tuple[str | None, MasteringReport | None]:
     try:
@@ -807,6 +812,8 @@ def _master_internal(
         from definers.system import catch
 
         catch(error)
+        if raise_on_error:
+            raise
         return None, None
 
 

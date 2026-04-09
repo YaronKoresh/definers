@@ -8,7 +8,42 @@ def _progress_markup(
     detail: str | None = None,
     steps: tuple[str, ...] | list[str] | None = None,
     active_step: int | None = None,
+    activity_completed: int | None = None,
+    activity_total: int | None = None,
+    bytes_downloaded: int | None = None,
+    bytes_total: int | None = None,
 ) -> str:
+    def _format_bytes(value: int | None) -> str | None:
+        if value is None:
+            return None
+        try:
+            normalized = max(int(value), 0)
+        except Exception:
+            return None
+        suffixes = ("B", "KiB", "MiB", "GiB", "TiB")
+        scaled = float(normalized)
+        suffix = suffixes[0]
+        for suffix in suffixes:
+            if scaled < 1024.0 or suffix == suffixes[-1]:
+                break
+            scaled /= 1024.0
+        if suffix == "B":
+            return f"{int(scaled)} {suffix}"
+        return f"{scaled:.1f} {suffix}"
+
+    def _activity_fraction() -> float | None:
+        if activity_total and activity_completed is not None:
+            return max(
+                0.0,
+                min(float(activity_completed) / float(activity_total), 1.0),
+            )
+        if bytes_total and bytes_downloaded is not None:
+            return max(
+                0.0,
+                min(float(bytes_downloaded) / float(bytes_total), 1.0),
+            )
+        return None
+
     normalized_state = str(state or "idle").strip().lower()
     detail_text = (
         "Choose an action to begin."
@@ -28,6 +63,7 @@ def _progress_markup(
     completed_steps: tuple[str, ...] = ()
     current_step_label: str | None = None
     remaining_steps: tuple[str, ...] = resolved_steps
+    activity_fraction = _activity_fraction()
     if resolved_steps:
         if normalized_state == "success":
             progress_percent = 100.0
@@ -43,12 +79,22 @@ def _progress_markup(
                     len(resolved_steps),
                 ),
             )
-            progress_percent = (
-                bounded_active_step / len(resolved_steps)
-            ) * 100.0
             completed_steps = resolved_steps[: bounded_active_step - 1]
             current_step_label = resolved_steps[bounded_active_step - 1]
             remaining_steps = resolved_steps[bounded_active_step:]
+            resolved_fraction = (
+                activity_fraction
+                if activity_fraction is not None
+                and normalized_state == "running"
+                else 0.0
+                if normalized_state == "running"
+                else 1.0
+            )
+            progress_percent = (
+                (len(completed_steps) + resolved_fraction) / len(resolved_steps)
+            ) * 100.0
+    elif normalized_state == "running" and activity_fraction is not None:
+        progress_percent = activity_fraction * 100.0
     done_text = ", ".join(completed_steps) or "Nothing completed yet"
     current_text = current_step_label or (
         "Waiting to start"
@@ -57,6 +103,16 @@ def _progress_markup(
         if normalized_state == "success"
         else detail_text
     )
+    if normalized_state == "running" and activity_total:
+        completed_count = max(int(activity_completed or 0), 0)
+        current_text = (
+            f"{current_text} ({completed_count}/{int(activity_total)})"
+        )
+    elif normalized_state == "running" and bytes_total:
+        downloaded_text = _format_bytes(bytes_downloaded)
+        total_text = _format_bytes(bytes_total)
+        if downloaded_text and total_text:
+            current_text = f"{current_text} ({downloaded_text} / {total_text})"
     remaining_text = (
         ", ".join(remaining_steps)
         if remaining_steps
@@ -64,8 +120,29 @@ def _progress_markup(
         if not resolved_steps and normalized_state == "idle"
         else "Nothing left"
     )
+    if normalized_state == "running" and activity_total:
+        remaining_count = max(
+            int(activity_total) - int(activity_completed or 0), 0
+        )
+        if remaining_count > 0 and remaining_steps:
+            remaining_text = (
+                f"{remaining_count} items left in the current batch, then "
+                + ", ".join(remaining_steps)
+            )
+        elif remaining_count > 0:
+            remaining_text = (
+                f"{remaining_count} items left in the current batch"
+            )
     step_count_markup = (
-        f'<em class="definers-progress-shell__count">{int(active_step or 0)}/{len(resolved_steps)}</em>'
+        f'<em class="definers-progress-shell__count">{int(active_step or 0)}/{len(resolved_steps)}'
+        + (
+            f" · {max(int(activity_completed or 0), 0)}/{int(activity_total)}"
+            if resolved_steps
+            and normalized_state == "running"
+            and activity_total
+            else ""
+        )
+        + "</em>"
         if resolved_steps and normalized_state == "running"
         else f'<em class="definers-progress-shell__count">{len(completed_steps)}/{len(resolved_steps)}</em>'
         if resolved_steps
@@ -161,12 +238,21 @@ def _open_directory(path: str) -> None:
     subprocess.Popen(["xdg-open", path])
 
 
-def open_managed_output_root() -> str:
+def _managed_output_folder_path(section: str | None = None) -> str:
+    from definers.system.output_paths import (
+        managed_output_dir,
+        managed_output_root,
+    )
+
+    if section is None or not str(section).strip():
+        return managed_output_root()
+    return managed_output_dir(section)
+
+
+def open_managed_output_root(section: str | None = None) -> str:
     from pathlib import Path
 
-    from definers.system.output_paths import managed_output_root
-
-    output_root = Path(managed_output_root())
+    output_root = Path(_managed_output_folder_path(section))
     output_root.mkdir(parents=True, exist_ok=True)
     try:
         _open_directory(str(output_root))
@@ -185,22 +271,29 @@ def open_managed_output_root() -> str:
 
 def init_output_folder_controls(
     button_label: str = "Open Outputs Folder",
+    *,
+    section: str | None = None,
 ):
     import gradio as gr
 
-    from definers.system.output_paths import managed_output_root
+    resolved_output_path = _managed_output_folder_path(section)
+    status_detail = (
+        "Artifacts produced by this GUI are saved here."
+        if section is not None and str(section).strip()
+        else "Artifacts produced by the GUI are saved here."
+    )
 
     with gr.Row(elem_classes="definers-output-toolbar"):
         button = gr.Button(button_label, variant="secondary")
         status = gr.Markdown(
             value=_output_folder_markup(
-                managed_output_root(),
-                "Artifacts produced by the GUI are saved here.",
+                resolved_output_path,
+                status_detail,
             ),
             elem_classes="definers-output-toolbar__status",
         )
     button.click(
-        fn=open_managed_output_root,
+        fn=lambda: open_managed_output_root(section),
         outputs=[status],
         show_progress="hidden",
     )
@@ -213,6 +306,10 @@ def progress_update(
     detail: str | None = None,
     steps: tuple[str, ...] | list[str] | None = None,
     active_step: int | None = None,
+    activity_completed: int | None = None,
+    activity_total: int | None = None,
+    bytes_downloaded: int | None = None,
+    bytes_total: int | None = None,
 ):
     import gradio as gr
 
@@ -223,6 +320,10 @@ def progress_update(
             detail,
             steps=steps,
             active_step=active_step,
+            activity_completed=activity_completed,
+            activity_total=activity_total,
+            bytes_downloaded=bytes_downloaded,
+            bytes_total=bytes_total,
         )
     )
 
@@ -330,6 +431,26 @@ def wrap_progress_handler(
                         ),
                         steps=resolved_steps,
                         active_step=running_step,
+                        activity_completed=getattr(
+                            activity_snapshot,
+                            "completed",
+                            None,
+                        ),
+                        activity_total=getattr(
+                            activity_snapshot,
+                            "total",
+                            None,
+                        ),
+                        bytes_downloaded=getattr(
+                            activity_snapshot,
+                            "bytes_downloaded",
+                            None,
+                        ),
+                        bytes_total=getattr(
+                            activity_snapshot,
+                            "bytes_total",
+                            None,
+                        ),
                     ),
                 )
             if task_done:
@@ -351,6 +472,26 @@ def wrap_progress_handler(
                     ),
                     steps=resolved_steps,
                     active_step=running_step,
+                    activity_completed=getattr(
+                        getattr(error, "download_activity_snapshot", None),
+                        "completed",
+                        None,
+                    ),
+                    activity_total=getattr(
+                        getattr(error, "download_activity_snapshot", None),
+                        "total",
+                        None,
+                    ),
+                    bytes_downloaded=getattr(
+                        getattr(error, "download_activity_snapshot", None),
+                        "bytes_downloaded",
+                        None,
+                    ),
+                    bytes_total=getattr(
+                        getattr(error, "download_activity_snapshot", None),
+                        "bytes_total",
+                        None,
+                    ),
                 ),
             )
             raise
@@ -508,6 +649,12 @@ html > body > gradio-app > .gradio-container > .main .contain .block {
     margin-bottom: 18px !important;
 }
 
+html > body span.toast-title.error {
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+}
+
 .icon-button-wrapper {
     background: transparent !important;
 }
@@ -596,6 +743,17 @@ html > body .gradio-container > main {
     margin: 0 auto;
     position: relative;
     z-index: 1;
+}
+
+html > body :is(.toast-wrap .toast, .toast, .toast-body, .toast-title, [role="alertdialog"], [role="alert"]) {
+    background: linear-gradient(180deg, rgba(56, 12, 12, 0.98) 0%, rgba(27, 6, 6, 0.99) 100%) !important;
+    color: #fff3f3 !important;
+    border: 1px solid rgba(255, 120, 120, 0.38) !important;
+    box-shadow: 0 18px 42px rgba(0, 0, 0, 0.52), 0 0 0 1px rgba(255, 120, 120, 0.14) !important;
+}
+
+html > body :is(.toast-wrap .toast *, .toast *, .toast-body *, .toast-title *, [role="alertdialog"] *, [role="alert"] *) {
+    color: #fff3f3 !important;
 }
 
 .controls button {
@@ -1229,9 +1387,11 @@ label + .tab-like-container {
     def init_chat(title: str = "Chatbot", handler=None):
         import gradio as gr
 
-        from definers.ui.chat_handlers import get_chat_response
+        from definers.ui.chat_handlers import get_chat_response_stream
 
-        active_handler = get_chat_response if handler is None else handler
+        active_handler = (
+            get_chat_response_stream if handler is None else handler
+        )
         with gr.Group(elem_classes="definers-chat-shell"):
             chatbot = gr.Chatbot(
                 elem_id="chatbot",

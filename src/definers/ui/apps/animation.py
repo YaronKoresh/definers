@@ -13,13 +13,27 @@ class AnimationApp:
         from definers.cuda import device
         from definers.ml import optimize_prompt_realism
         from definers.system import full_path
+        from definers.system.download_activity import (
+            create_activity_reporter,
+        )
         from definers.text.validation import TextInputValidator
 
         validator = TextInputValidator.default()
         frames_per_chunk = 5
         fps = 20
         steps = 30
+        report = create_activity_reporter(5)
+        report(
+            1,
+            "Validate animation prompt",
+            detail="Checking the prompt and chunk settings.",
+        )
         validated_text = validator.validate(txt)
+        report(
+            2,
+            "Prepare prompt",
+            detail="Optimizing the prompt for animation generation.",
+        )
         validated_text = optimize_prompt_realism(validated_text)
         total_frames = int(dur * fps)
         total_chunks = math.ceil(total_frames / frames_per_chunk)
@@ -28,6 +42,11 @@ class AnimationApp:
             raise gr.Error(
                 "All chunks have been generated. Please combine them now."
             )
+        report(
+            3,
+            "Prepare source frame",
+            detail=f"Preparing chunk {current_chunk_index}/{total_chunks}.",
+        )
         if current_chunk_index == 1:
             input_image = ImageOps.fit(
                 img,
@@ -50,6 +69,11 @@ class AnimationApp:
         generator = torch.Generator(device()).manual_seed(
             int(seed) + current_chunk_index
         )
+        report(
+            4,
+            "Render chunk",
+            detail=f"Generating chunk {current_chunk_index}/{total_chunks}.",
+        )
         output = MODELS["video"](
             prompt=validated_text,
             image=input_image,
@@ -60,6 +84,11 @@ class AnimationApp:
         chunk_path = full_path(
             chunk_state["chunks_path"],
             f"chunk_{current_chunk_index}.gif",
+        )
+        report(
+            5,
+            "Write chunk",
+            detail=f"Saving chunk {current_chunk_index}/{total_chunks}.",
         )
         export_to_gif(output.frames[0], chunk_path, fps=fps)
         chunk_state["chunk_paths"].append(chunk_path)
@@ -79,17 +108,38 @@ class AnimationApp:
         import gradio as gr
         from PIL import Image
 
+        from definers.system.download_activity import (
+            create_activity_reporter,
+        )
+
         fps = 20
-        if not chunk_state["chunk_paths"]:
+        chunk_paths = list(chunk_state["chunk_paths"])
+        if not chunk_paths:
             raise RuntimeError("No chunks to combine.")
+        report = create_activity_reporter(len(chunk_paths) + 2)
+        report(
+            1,
+            "Validate chunk set",
+            detail="Checking the generated animation chunks.",
+        )
         all_frames = []
-        for chunk_path in chunk_state["chunk_paths"]:
+        for index, chunk_path in enumerate(chunk_paths, start=1):
+            report(
+                index + 1,
+                "Collect chunk frames",
+                detail=f"Loading frames from chunk {index}/{len(chunk_paths)}.",
+            )
             with Image.open(chunk_path) as gif:
                 for index in range(gif.n_frames):
                     gif.seek(index)
                     all_frames.append(gif.copy().convert("RGBA"))
         final_gif_path = str(
             Path(chunk_state["chunks_path"]) / "final_animation.gif"
+        )
+        report(
+            len(chunk_paths) + 2,
+            "Write final animation",
+            detail="Saving the combined animation GIF.",
         )
         all_frames[0].save(
             final_gif_path,
@@ -105,13 +155,36 @@ class AnimationApp:
     def reset_state(chunk_state):
         import gradio as gr
 
-        from definers.system.output_paths import managed_output_session_dir
+        from definers.system.download_activity import (
+            create_activity_reporter,
+        )
+        from definers.system.output_paths import (
+            cleanup_managed_output_path,
+            managed_output_session_dir,
+        )
 
+        report = create_activity_reporter(3)
+        report(
+            1,
+            "Clear chunk session",
+            detail="Clearing the current animation chunk state.",
+        )
+        cleanup_managed_output_path(chunk_state.get("chunks_path"))
         chunk_state["current_chunk"] = 1
         chunk_state["chunk_paths"] = []
+        report(
+            2,
+            "Create chunk workspace",
+            detail="Preparing a fresh animation output workspace.",
+        )
         chunk_state["chunks_path"] = managed_output_session_dir(
             "animation",
             stem="chunks",
+        )
+        report(
+            3,
+            "Reset animation controls",
+            detail="Resetting the animation controls to the initial state.",
         )
         return (
             chunk_state,
@@ -182,7 +255,7 @@ class AnimationApp:
                         "Animation ready",
                         "Ready to generate the first chunk.",
                     )
-                    init_output_folder_controls()
+                    init_output_folder_controls(section="animation")
             with gr.Row():
                 generate_button = gr.Button(
                     "Generate Next Chunk",

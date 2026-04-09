@@ -1,5 +1,6 @@
 import logging
 import subprocess
+from importlib import import_module
 
 from definers import (
     file_ops as _file_ops,
@@ -47,6 +48,19 @@ def init_logger(
 
 
 logger = init_logger()
+
+_LAZY_SUBMODULES = {
+    "download_activity",
+    "output_paths",
+}
+
+
+def __getattr__(name: str):
+    if name in _LAZY_SUBMODULES:
+        module = import_module(f"{__name__}.{name}")
+        globals()[name] = module
+        return module
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def _bind_module_attributes(function, module):
@@ -219,6 +233,7 @@ __all__ = (
     "cwd",
     "delete",
     "directory",
+    "download_activity",
     "exist",
     "extract",
     "find_package_paths",
@@ -254,6 +269,7 @@ __all__ = (
     "permit",
     "post_install",
     "pre_install",
+    "output_paths",
     "read",
     "remove",
     "remove_readonly",

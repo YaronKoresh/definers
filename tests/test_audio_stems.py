@@ -7,6 +7,7 @@ import types
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 
 def _load_module(module_name: str, module_path: Path):
@@ -138,6 +139,43 @@ def test_build_separator_kwargs_includes_demucs_shifts():
         "segment_size": 256,
         "overlap": 4,
     }
+
+
+def test_load_audio_separator_class_installs_runtime_hooks(monkeypatch):
+    hook_calls: list[bool] = []
+
+    class FakeSeparator:
+        pass
+
+    fake_audio_separator = types.ModuleType("audio_separator")
+    fake_separator_module = types.ModuleType("audio_separator.separator")
+    fake_separator_module.Separator = FakeSeparator
+
+    monkeypatch.setattr(
+        "definers.model_installation.install_audio_separator_runtime_hooks",
+        lambda: hook_calls.append(True) or True,
+    )
+    monkeypatch.setitem(sys.modules, "audio_separator", fake_audio_separator)
+    monkeypatch.setitem(
+        sys.modules,
+        "audio_separator.separator",
+        fake_separator_module,
+    )
+
+    assert STEMS_MODULE._load_audio_separator_class() is FakeSeparator
+    assert hook_calls == [True]
+
+
+def test_has_local_stem_model_requires_all_companion_artifacts(monkeypatch):
+    checked_models = []
+
+    monkeypatch.setattr(
+        "definers.model_installation.stem_model_artifacts_ready",
+        lambda model_name: checked_models.append(model_name) or True,
+    )
+
+    assert STEMS_MODULE._has_local_stem_model("htdemucs_ft.yaml") is True
+    assert checked_models == ["htdemucs_ft.yaml"]
 
 
 def test_run_separator_stage_batch_reuses_loaded_model_for_cleanup(
@@ -340,6 +378,82 @@ def test_run_separator_stage_prefers_cached_candidates(
     )
 
 
+def test_run_separator_stage_reports_unmaterialized_output_paths(
+    tmp_path: Path,
+    monkeypatch,
+):
+    class FakeSeparator:
+        def __init__(self, **kwargs):
+            self.output_dir = kwargs["output_dir"]
+
+        def load_model(self, model_filename):
+            return None
+
+        def separate(self, input_path):
+            return [f"{Path(str(input_path)).stem}_(Vocals)_ghost.wav"]
+
+    monkeypatch.setattr(
+        STEMS_MODULE,
+        "_load_audio_separator_class",
+        lambda: FakeSeparator,
+    )
+    monkeypatch.setattr(
+        STEMS_MODULE,
+        "_has_local_stem_model",
+        lambda model_name: True,
+    )
+    monkeypatch.setattr(
+        STEMS_MODULE,
+        "_download_runtime_stage_models",
+        lambda model_candidates: tuple(model_candidates),
+    )
+
+    with pytest.raises(RuntimeError) as error_info:
+        STEMS_MODULE._run_separator_stage(
+            "song.wav",
+            STEMS_MODULE.SeparatorModelStage(
+                model_candidates=("ghost.ckpt",),
+                preferred_stems=("vocals",),
+                required=True,
+            ),
+            str(tmp_path / "stage"),
+            44100,
+            shifts=2,
+        )
+
+    assert "not created under" in str(error_info.value)
+    assert "song_(Vocals)_ghost.wav" in str(error_info.value)
+
+
+def test_download_runtime_stage_models_resolves_legacy_aliases(monkeypatch):
+    downloaded_models = []
+
+    monkeypatch.setattr(
+        STEMS_MODULE,
+        "_has_local_stem_model",
+        lambda model_name: False,
+    )
+    monkeypatch.setattr(
+        "definers.model_installation.resolve_stem_model_filename",
+        lambda model_name: {
+            "bs_roformer_vocals_resurrection_unwa.ckpt": "bs_roformer_vocals_gabox.ckpt"
+        }.get(model_name, model_name),
+    )
+    monkeypatch.setattr(
+        "definers.model_installation.download_stem_models",
+        lambda model_names: (
+            downloaded_models.append(tuple(model_names)) or tuple(model_names)
+        ),
+    )
+
+    resolved_models = STEMS_MODULE._download_runtime_stage_models(
+        ("bs_roformer_vocals_resurrection_unwa.ckpt",)
+    )
+
+    assert resolved_models == ("bs_roformer_vocals_gabox.ckpt",)
+    assert downloaded_models == [("bs_roformer_vocals_gabox.ckpt",)]
+
+
 def test_build_mastering_separator_plan_automatic_prefers_bs_roformer_defaults():
     plan = STEMS_MODULE.build_mastering_separator_plan(
         44100,
@@ -369,3 +483,148 @@ def test_build_mastering_separator_plan_explicit_demucs_skips_vocal_pair_stage()
     assert plan.reference_split_stage.model_candidates[0] == (
         "MDX23C-8KFFT-InstVoc_HQ.ckpt"
     )
+
+
+def test_prefetch_mastering_plan_models_prefers_cached_stage_candidates(
+    monkeypatch,
+):
+    downloaded_models = []
+    plan = STEMS_MODULE.MasteringSeparatorPlan(
+        target_sample_rate=44100,
+        quality_flags=(),
+        preprocess_stages=(
+            STEMS_MODULE.SeparatorModelStage(
+                model_candidates=("ghost.ckpt", "good.ckpt"),
+                preferred_stems=("vocals",),
+                required=False,
+            ),
+        ),
+        vocal_pair_stage=STEMS_MODULE.SeparatorModelStage(
+            model_candidates=("pair.ckpt",),
+            preferred_stems=("vocals",),
+            required=True,
+        ),
+        reference_split_stage=STEMS_MODULE.SeparatorModelStage(
+            model_candidates=("reference.ckpt",),
+            preferred_stems=("other",),
+            required=False,
+        ),
+        four_stem_stage=STEMS_MODULE.SeparatorModelStage(
+            model_candidates=("four.ckpt",),
+            preferred_stems=("drums",),
+            required=True,
+        ),
+        vocal_stage=STEMS_MODULE.SeparatorModelStage(
+            model_candidates=("lead.ckpt",),
+            preferred_stems=("vocals",),
+            required=True,
+        ),
+        vocal_restoration_stage=STEMS_MODULE.SeparatorModelStage(
+            model_candidates=("pair.ckpt",),
+            preferred_stems=("vocals",),
+            required=False,
+        ),
+        instrumental_cleanup_stage=STEMS_MODULE.SeparatorModelStage(
+            model_candidates=("cleanup.ckpt",),
+            preferred_stems=("other",),
+            required=False,
+        ),
+    )
+
+    monkeypatch.setattr(
+        STEMS_MODULE,
+        "_has_local_stem_model",
+        lambda model_name: model_name in {"good.ckpt", "pair.ckpt"},
+    )
+    monkeypatch.setattr(
+        STEMS_MODULE,
+        "_download_runtime_stage_models",
+        lambda model_candidates: (
+            downloaded_models.append(tuple(model_candidates))
+            or tuple(model_candidates)
+        ),
+    )
+
+    resolved_models = STEMS_MODULE._prefetch_mastering_plan_models(plan)
+
+    assert downloaded_models == [
+        (
+            "good.ckpt",
+            "pair.ckpt",
+            "reference.ckpt",
+            "four.ckpt",
+            "lead.ckpt",
+            "cleanup.ckpt",
+        )
+    ]
+    assert resolved_models == downloaded_models[0]
+
+
+def test_separate_stem_layers_prefetches_mastering_plan_models(
+    monkeypatch,
+    tmp_path: Path,
+):
+    fake_plan = STEMS_MODULE.MasteringSeparatorPlan(
+        target_sample_rate=44100,
+        quality_flags=(),
+        preprocess_stages=(),
+        vocal_pair_stage=None,
+        reference_split_stage=STEMS_MODULE.SeparatorModelStage(
+            model_candidates=("reference.ckpt",),
+            preferred_stems=("other",),
+            required=False,
+        ),
+        four_stem_stage=STEMS_MODULE.SeparatorModelStage(
+            model_candidates=("four.ckpt",),
+            preferred_stems=("drums",),
+            required=True,
+        ),
+        vocal_stage=STEMS_MODULE.SeparatorModelStage(
+            model_candidates=("lead.ckpt",),
+            preferred_stems=("vocals",),
+            required=True,
+        ),
+        vocal_restoration_stage=STEMS_MODULE.SeparatorModelStage(
+            model_candidates=("restore.ckpt",),
+            preferred_stems=("vocals",),
+            required=False,
+        ),
+        instrumental_cleanup_stage=STEMS_MODULE.SeparatorModelStage(
+            model_candidates=("cleanup.ckpt",),
+            preferred_stems=("other",),
+            required=False,
+        ),
+    )
+    prefetched_plans = []
+
+    monkeypatch.setattr(
+        STEMS_MODULE,
+        "read_audio",
+        lambda audio_path: (44100, np.zeros((2, 32), dtype=np.float32)),
+    )
+    monkeypatch.setattr(
+        STEMS_MODULE,
+        "build_mastering_separator_plan",
+        lambda *args, **kwargs: fake_plan,
+    )
+    monkeypatch.setattr(
+        STEMS_MODULE,
+        "_prefetch_mastering_plan_models",
+        lambda plan: prefetched_plans.append(plan) or (),
+    )
+    monkeypatch.setattr(
+        STEMS_MODULE,
+        "_run_mastering_separator_pipeline",
+        lambda audio_path, output_root, plan, shifts=2: {
+            "vocals": str(Path(output_root) / "vocals.wav")
+        },
+    )
+
+    stem_paths, resolved_output_dir = STEMS_MODULE.separate_stem_layers(
+        "song.wav",
+        output_dir=str(tmp_path / "stage"),
+    )
+
+    assert prefetched_plans == [fake_plan]
+    assert stem_paths == {"vocals": str(tmp_path / "stage" / "vocals.wav")}
+    assert resolved_output_dir == str(tmp_path / "stage")

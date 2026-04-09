@@ -1,9 +1,15 @@
 def ensure_summary_runtime():
     from definers.constants import MODELS, TOKENIZERS
+    from definers.system.download_activity import report_download_activity
 
     if MODELS["summary"] is None or TOKENIZERS["summary"] is None:
         from definers.ml import init_pretrained_model
 
+        report_download_activity(
+            "Load summary model",
+            detail="Initializing the summary runtime.",
+            phase="model",
+        )
         init_pretrained_model("summary")
 
 
@@ -47,9 +53,21 @@ def normalize_prompt_language(prompt):
 
 def summarize(text_to_summarize: str) -> str:
     from definers.constants import MODELS, TOKENIZERS
+    from definers.system.download_activity import create_activity_reporter
 
+    report = create_activity_reporter(2)
     ensure_summary_runtime()
+    report(
+        1,
+        "Encode summary prompt",
+        detail="Encoding the summary prompt.",
+    )
     encoded = encode_summary_prompt(text_to_summarize)
+    report(
+        2,
+        "Generate summary text",
+        detail="Generating the summary output.",
+    )
     generated = MODELS["summary"].generate(
         **encoded,
         **summary_generation_kwargs(),
@@ -59,11 +77,33 @@ def summarize(text_to_summarize: str) -> str:
 
 
 def map_reduce_summary(text: str, max_words: int) -> str:
+    from definers.system.download_activity import (
+        create_activity_reporter,
+        report_download_activity,
+    )
+
     chunk_size = 60
     overlap = 10
+    iteration = 0
     while len(text.split()) > max_words:
+        iteration += 1
+        report_download_activity(
+            "Map-reduce summary pass",
+            detail=f"Running map-reduce pass {iteration}.",
+            phase="step",
+        )
         chunk_summaries = []
-        for chunk_text in summary_chunks(text, chunk_size, overlap):
+        chunk_texts = list(summary_chunks(text, chunk_size, overlap))
+        chunk_report = create_activity_reporter(len(chunk_texts) or 1)
+        for chunk_index, chunk_text in enumerate(chunk_texts, start=1):
+            chunk_report(
+                chunk_index,
+                "Summarize chunks",
+                detail=(
+                    f"Summarizing chunk {chunk_index}/{len(chunk_texts) or 1} "
+                    f"in pass {iteration}."
+                ),
+            )
             chunk_summaries.append(summarize(chunk_text))
         text = " ".join(chunk_summaries)
     return summarize(text)
@@ -71,11 +111,19 @@ def map_reduce_summary(text: str, max_words: int) -> str:
 
 def summary(text: str, max_words: int = 20, min_loops: int = 1) -> str:
     from definers.system import log
+    from definers.system.download_activity import report_download_activity
     from definers.text import strip_nikud
 
     summarized_text = strip_nikud(text)
     words_count = len(summarized_text.split())
+    iteration = 0
     while words_count > max_words or min_loops > 0:
+        iteration += 1
+        report_download_activity(
+            "Iterative summary pass",
+            detail=f"Running summary pass {iteration}.",
+            phase="step",
+        )
         if words_count > 80:
             summarized_text = map_reduce_summary(summarized_text, max_words)
         else:
@@ -87,10 +135,27 @@ def summary(text: str, max_words: int = 20, min_loops: int = 1) -> str:
 
 
 def preprocess_prompt(prompt: str) -> str:
+    from definers.system.download_activity import create_activity_reporter
     from definers.text import simple_text
 
+    report = create_activity_reporter(3)
+    report(
+        1,
+        "Normalize prompt language",
+        detail="Normalizing the prompt language.",
+    )
     processed_prompt = normalize_prompt_language(prompt)
+    report(
+        2,
+        "Clean prompt text",
+        detail="Cleaning the prompt text.",
+    )
     processed_prompt = simple_text(processed_prompt)
+    report(
+        3,
+        "Summarize prompt",
+        detail="Condensing the prompt for generation.",
+    )
     processed_prompt = summary(processed_prompt, max_words=14)
     return simple_text(processed_prompt)
 

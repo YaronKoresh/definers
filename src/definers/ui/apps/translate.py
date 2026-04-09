@@ -11,11 +11,30 @@ class TranslateApp:
     def translate_text(txt, tgt_lang):
         import definers.text as text
         from definers.constants import language_codes
-
-        return text.ai_translate(
-            txt,
-            TranslateApp.target_language_code(tgt_lang, language_codes),
+        from definers.system.download_activity import (
+            create_activity_reporter,
         )
+
+        report = create_activity_reporter(3)
+        report(
+            1,
+            "Validate text",
+            detail="Checking the translation input.",
+        )
+        target_code = TranslateApp.target_language_code(
+            tgt_lang, language_codes
+        )
+        report(
+            2,
+            "Resolve target language",
+            detail=f"Using target language '{target_code}'.",
+        )
+        report(
+            3,
+            "Translate paragraphs",
+            detail="Running the translation workflow.",
+        )
+        return text.ai_translate(txt, target_code)
 
     @staticmethod
     def launch_translate_app():
@@ -39,7 +58,7 @@ class TranslateApp:
                 "Translator ready",
                 "Enter text and choose a target language.",
             )
-            init_output_folder_controls()
+            init_output_folder_controls(section="translate")
             with gr.Row():
                 with gr.Column():
                     txt = gr.Textbox(

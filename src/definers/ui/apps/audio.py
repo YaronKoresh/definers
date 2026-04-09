@@ -124,7 +124,7 @@ def launch_audio_app(
             "Audio workspace ready",
             "Choose a workflow and start processing.",
         )
-        init_output_folder_controls()
+        init_output_folder_controls(section="audio")
 
         def bind_audio_action(
             button,
@@ -1440,6 +1440,26 @@ def launch_audio_app(
                             ),
                             steps=action_steps,
                             active_step=active_step,
+                            activity_completed=getattr(
+                                activity_snapshot,
+                                "completed",
+                                None,
+                            ),
+                            activity_total=getattr(
+                                activity_snapshot,
+                                "total",
+                                None,
+                            ),
+                            bytes_downloaded=getattr(
+                                activity_snapshot,
+                                "bytes_downloaded",
+                                None,
+                            ),
+                            bytes_total=getattr(
+                                activity_snapshot,
+                                "bytes_total",
+                                None,
+                            ),
                         ),
                     }
                 if task_done:
@@ -2076,10 +2096,37 @@ def launch_audio_app(
                 ),
             }
             try:
-                preview_path, preview_text = run_audio_preview_tool(
+                activity_task = create_download_activity_task(
+                    run_audio_preview_tool,
                     audio_path,
                     max_duration,
                     output_format,
+                )
+                yield from poll_activity_updates(
+                    activity_task,
+                    {
+                        preview_btn: gr.update(
+                            value="Building Preview...",
+                            interactive=False,
+                        ),
+                        preview_output_box: gr.update(visible=False),
+                        preview_output: None,
+                        preview_summary: "",
+                        preview_share_links: "",
+                    },
+                    action_label="Create Preview",
+                    action_steps=preview_steps,
+                    detail="Building the preview clip.",
+                    active_step=2,
+                )
+                (
+                    (
+                        preview_path,
+                        preview_text,
+                    ),
+                    _,
+                ) = resolve_download_activity_task(
+                    activity_task,
                 )
                 yield {
                     preview_btn: gr.update(
@@ -2109,7 +2156,14 @@ def launch_audio_app(
                     audio_progress: progress_update(
                         "Create Preview",
                         "error",
-                        str(error),
+                        resolve_activity_detail(
+                            str(error),
+                            getattr(
+                                error,
+                                "download_activity_snapshot",
+                                None,
+                            ),
+                        ),
                         steps=preview_steps,
                         active_step=2,
                     ),
@@ -2172,13 +2226,41 @@ def launch_audio_app(
                 ),
             }
             try:
-                preview_path, split_files, summary_text = run_split_audio_tool(
+                activity_task = create_download_activity_task(
+                    run_split_audio_tool,
                     audio_path,
                     chunk_duration,
                     output_format,
                     chunks_limit,
                     skip_time,
                     target_sample_rate,
+                )
+                yield from poll_activity_updates(
+                    activity_task,
+                    {
+                        split_btn: gr.update(
+                            value="Splitting...",
+                            interactive=False,
+                        ),
+                        split_output_box: gr.update(visible=False),
+                        split_preview_output: None,
+                        split_files_output: None,
+                        split_summary_output: "",
+                    },
+                    action_label="Split Audio",
+                    action_steps=split_steps,
+                    detail="Splitting the audio into chunks.",
+                    active_step=2,
+                )
+                (
+                    (
+                        preview_path,
+                        split_files,
+                        summary_text,
+                    ),
+                    _,
+                ) = resolve_download_activity_task(
+                    activity_task,
                 )
                 yield {
                     split_btn: gr.update(value="Split Audio", interactive=True),
@@ -2204,7 +2286,14 @@ def launch_audio_app(
                     audio_progress: progress_update(
                         "Split Audio",
                         "error",
-                        str(error),
+                        resolve_activity_detail(
+                            str(error),
+                            getattr(
+                                error,
+                                "download_activity_snapshot",
+                                None,
+                            ),
+                        ),
                         steps=split_steps,
                         active_step=2,
                     ),
@@ -2525,13 +2614,39 @@ def launch_audio_app(
                 ),
             }
             try:
-                bpm_key_text, diagnostics_text, report_path = (
-                    run_audio_analysis_tool(
-                        audio_path,
-                        hop_length,
-                        duration_value,
-                        offset_value,
-                    )
+                activity_task = create_download_activity_task(
+                    run_audio_analysis_tool,
+                    audio_path,
+                    hop_length,
+                    duration_value,
+                    offset_value,
+                )
+                yield from poll_activity_updates(
+                    activity_task,
+                    {
+                        analysis_btn: gr.update(
+                            value="Analyzing...",
+                            interactive=False,
+                        ),
+                        analysis_output_box: gr.update(visible=False),
+                        analysis_bpm_key_output: "",
+                        analysis_diagnostics_output: "",
+                        analysis_json_output: None,
+                    },
+                    action_label="Analyze Audio",
+                    action_steps=analysis_steps,
+                    detail="Inspecting tempo, key, and diagnostics.",
+                    active_step=2,
+                )
+                (
+                    (
+                        bpm_key_text,
+                        diagnostics_text,
+                        report_path,
+                    ),
+                    _,
+                ) = resolve_download_activity_task(
+                    activity_task,
                 )
                 yield {
                     analysis_btn: gr.update(
@@ -2561,7 +2676,14 @@ def launch_audio_app(
                     audio_progress: progress_update(
                         "Analyze Audio",
                         "error",
-                        str(error),
+                        resolve_activity_detail(
+                            str(error),
+                            getattr(
+                                error,
+                                "download_activity_snapshot",
+                                None,
+                            ),
+                        ),
                         steps=analysis_steps,
                         active_step=2,
                     ),

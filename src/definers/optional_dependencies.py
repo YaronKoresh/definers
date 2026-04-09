@@ -40,6 +40,7 @@ def _github_archive_install_spec(
 
 
 MODULE_PACKAGE_SPECS: dict[str, tuple[str, ...]] = {
+    "aioquic": ("aioquic>=1.2.0",),
     "aiofiles": ("aiofiles",),
     "aiohttp": ("aiohttp",),
     "audio_separator": ("audio-separator>=0.30.2,<0.31.0",),
@@ -60,6 +61,7 @@ MODULE_PACKAGE_SPECS: dict[str, tuple[str, ...]] = {
     "googledrivedownloader": ("googledrivedownloader>=1.1.0",),
     "gradio": ("gradio>=6.9.0",),
     "huggingface_hub": ("huggingface-hub>=0.20.0",),
+    "httpx": ("httpx[http2]>=0.28.0",),
     "imageio": ("imageio>=2.30.0",),
     "imageio_ffmpeg": ("imageio-ffmpeg>=0.4.0",),
     "langdetect": ("langdetect>=1.0.9",),
@@ -181,6 +183,8 @@ OPTIONAL_DEPENDENCY_GROUP_MODULES: dict[str, tuple[str, ...]] = {
         "fastapi",
         "googledrivedownloader",
         "gradio",
+        "httpx",
+        "aioquic",
         "lxml",
         "matplotlib",
         "playwright",
