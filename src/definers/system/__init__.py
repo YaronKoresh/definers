@@ -4,7 +4,6 @@ import subprocess
 from definers import (
     file_ops as _file_ops,
     os_utils as _os_utils,
-    path_utils as _path_utils,
 )
 from definers.observability import init_logger as _shared_init_logger
 
@@ -50,30 +49,26 @@ def init_logger(
 logger = init_logger()
 
 
-class _CallableModuleProxy:
-    def __init__(self, module, function_name: str):
-        self._module = module
-        self._function_name = function_name
-
-    def __call__(self, *args, **kwargs):
-        return getattr(self._module, self._function_name)(*args, **kwargs)
-
-    def __getattr__(self, name: str):
-        return getattr(self._module, name)
+def _bind_module_attributes(function, module):
+    for attribute_name in dir(module):
+        if attribute_name.startswith("__") or hasattr(function, attribute_name):
+            continue
+        setattr(function, attribute_name, getattr(module, attribute_name))
+    return function
 
 
 normalize_path = _paths.normalize_path
 full_path = _paths.full_path
-paths = _CallableModuleProxy(_paths, "paths")
+paths = _bind_module_attributes(_paths.paths, _paths)
 unique = _paths.unique
 cwd = _paths.cwd
 parent_directory = _paths.parent_directory
 path_end = _paths.path_end
 path_ext = _paths.path_ext
 path_name = _paths.path_name
-add_path = _path_utils.add_path
-find_package_paths = _path_utils.find_package_paths
-is_package_path = _path_utils.is_package_path
+add_path = _paths.add_path
+find_package_paths = _paths.find_package_paths
+is_package_path = _paths.is_package_path
 tmp = _paths.tmp
 
 log = _file_ops.log

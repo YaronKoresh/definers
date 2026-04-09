@@ -1,3 +1,4 @@
+import importlib
 from types import SimpleNamespace
 
 import pytest
@@ -35,6 +36,8 @@ def test_normalize_selected_rows_preserves_clean_value(monkeypatch):
 def test_build_training_plan_markdown_uses_auto_trainer_plan(monkeypatch):
     import definers.ml as ml_module
 
+    trainer_plan_module = importlib.import_module("definers.ml.trainer_plan")
+
     class FakeTrainer:
         def __init__(self, **kwargs):
             self.kwargs = kwargs
@@ -45,7 +48,8 @@ def test_build_training_plan_markdown_uses_auto_trainer_plan(monkeypatch):
     monkeypatch.setattr(ml_module, "AutoTrainer", FakeTrainer)
     monkeypatch.setattr(ml_module, "simple_text", lambda value: value)
     monkeypatch.setattr(
-        "definers.ml.trainer_plan.render_training_plan_markdown",
+        trainer_plan_module,
+        "render_training_plan_markdown",
         lambda plan: f"plan:{plan.mode}:{plan.source_summary}",
     )
 
@@ -72,6 +76,8 @@ def test_build_training_plan_markdown_uses_auto_trainer_plan(monkeypatch):
 def test_handle_training_returns_model_output_and_plan(monkeypatch):
     import definers.ml as ml_module
 
+    trainer_plan_module = importlib.import_module("definers.ml.trainer_plan")
+
     class FakeTrainer:
         def __init__(self, **kwargs):
             self.kwargs = kwargs
@@ -94,7 +100,8 @@ def test_handle_training_returns_model_output_and_plan(monkeypatch):
     monkeypatch.setattr(ml_module, "AutoTrainer", FakeTrainer)
     monkeypatch.setattr(ml_module, "simple_text", lambda value: value)
     monkeypatch.setattr(
-        "definers.ml.trainer_plan.render_training_plan_markdown",
+        trainer_plan_module,
+        "render_training_plan_markdown",
         lambda plan: f"plan:{plan.mode}:{plan.source_summary}",
     )
 

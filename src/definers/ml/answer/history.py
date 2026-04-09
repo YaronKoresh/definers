@@ -6,16 +6,16 @@ class AnswerHistoryPreparer:
         runtime,
         dependency_loader,
     ):
-        from definers.ml.answer_audio_loader import (
+        from definers.ml.answer.audio import (
             AnswerAudioLoader,
         )
-        from definers.ml.answer_content_path_resolver import (
+        from definers.ml.answer.content import (
             AnswerContentPathResolver,
         )
-        from definers.ml.answer_image_loader import (
+        from definers.ml.answer.images import (
             AnswerImageLoader,
         )
-        from definers.ml.answer_text_service import (
+        from definers.ml.answer.text import (
             AnswerTextService,
         )
         from definers.system import get_ext, read

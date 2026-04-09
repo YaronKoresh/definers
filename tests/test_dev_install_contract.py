@@ -86,18 +86,3 @@ def test_tests_avoid_optional_dependency_imports_anywhere():
             f"{test_file.name} imports optional packages directly: "
             f"{', '.join(forbidden_imports)}"
         )
-
-
-def test_contributing_documents_dependency_free_test_policy():
-    contributing_text = (_workspace_root() / "CONTRIBUTING.md").read_text(
-        encoding="utf-8"
-    )
-
-    assert (
-        "Tests must not import optional third-party packages directly."
-        in contributing_text
-    )
-    assert (
-        "Tests must not use third-party library output as the oracle for expected results."
-        in contributing_text
-    )

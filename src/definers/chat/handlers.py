@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from definers.chat.audit_message_builder import (
-    ChatAuditMessageBuilderService,
+    build_chat_audit_message,
 )
 from definers.chat.contracts import (
     Answerer,
@@ -15,14 +15,17 @@ from definers.chat.contracts import (
     ChatRequestNormalizer,
     Logger,
 )
-from definers.chat.handler_factory import ChatRequestHandlerFactory
+from definers.chat.handler_factory import (
+    create_chat_request_handler,
+    handle_chat_request,
+)
 from definers.chat.history_builder import ChatHistoryBuilder
 from definers.chat.request_audit_logger import (
     ChatRequestAuditLogger,
 )
 from definers.chat.request_factory import ChatRequestFactory
 from definers.chat.request_normalizer import (
-    ChatRequestNormalizerService,
+    normalize_chat_request,
 )
 
 
@@ -55,11 +58,3 @@ class ChatRequestHandler:
 
 MEDIA_INSTRUCTION = ChatHistoryBuilder.media_instruction
 create_chat_request = ChatRequestFactory.create_chat_request
-normalize_chat_request = ChatRequestNormalizerService.normalize_chat_request
-build_chat_audit_message = (
-    ChatAuditMessageBuilderService.build_chat_audit_message
-)
-create_chat_request_handler = (
-    ChatRequestHandlerFactory.create_chat_request_handler
-)
-handle_chat_request = ChatRequestHandlerFactory.handle_chat_request

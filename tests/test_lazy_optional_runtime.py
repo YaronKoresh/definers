@@ -1,10 +1,8 @@
 import sys
 import types
 
-from definers.ml.answer_service import AnswerService
-from definers.ml.text_generation import TextGenerationService
-
 from definers.constants import MODELS, TOKENIZERS
+from definers.ml.text.generation import summarize
 from definers.text import translation
 
 
@@ -47,7 +45,7 @@ def test_summarize_bootstraps_summary_runtime(monkeypatch):
     )
 
     try:
-        assert TextGenerationService.summarize("hello") == "summary-output"
+        assert summarize("hello") == "summary-output"
     finally:
         MODELS["summary"] = original_model
         TOKENIZERS["summary"] = original_tokenizer

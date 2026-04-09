@@ -32,7 +32,6 @@ text = "MIT"
 
 [project.scripts]
 definers = "definers.cli:main"
-definers-start = "definers.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/YaronKoresh/definers"

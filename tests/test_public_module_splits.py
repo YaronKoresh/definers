@@ -1,7 +1,3 @@
-from definers.ml.text_api import map_reduce_summary, optimize_prompt_realism
-from definers.system_archives import compress, extract, get_ext, secure_path
-from definers.system_installation import apt_install, install_ffmpeg
-
 import definers.text.system_messages as system_messages
 import definers.text.text_transforms as text_transforms
 import definers.text.translation as translation
@@ -79,6 +75,9 @@ from definers.ml.regression_api import (
     linear_regression,
     predict_linear_regression,
 )
+from definers.ml.text.api import map_reduce_summary, optimize_prompt_realism
+from definers.system import compress, extract, get_ext, secure_path
+from definers.system.installation import apt_install, install_ffmpeg
 
 
 def test_audio_production_facade_reexports_specific_modules():

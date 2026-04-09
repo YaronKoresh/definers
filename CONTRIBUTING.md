@@ -1,16 +1,8 @@
 # Contributing To Definers
 
-This guide is the shortest reliable path for contributing without breaking packaging, focused apps, or optional-runtime flows.
+This is the shortest safe contributor path for the current feature-first codebase.
 
-## Quick Path
-
-1. Install the editable development environment.
-2. Change the smallest feature area that owns the behavior.
-3. Run focused tests first.
-4. Run `poe check` before finishing.
-5. Update docs when behavior, commands, or structure changed.
-
-## Environment Setup
+## Setup
 
 Definers targets Python 3.10 through 3.12.
 
@@ -18,7 +10,7 @@ Definers targets Python 3.10 through 3.12.
 pip install -e ".[dev]"
 ```
 
-Install only the extras your work needs.
+Add extras only for the domain you are touching.
 
 ```bash
 pip install -e ".[dev,audio]"
@@ -28,159 +20,64 @@ pip install -e ".[dev,ml]"
 pip install -e ".[dev,web]"
 ```
 
-If you are working on CUDA-specific code, add the CUDA extra only after the CPU path is already working.
+## Code Rules
 
-## Repo Layout
+- Change the smallest feature package that actually owns the behavior.
+- Prefer concrete module imports over broad package facades.
+- Do not add new wrapper-only services, facades, registries, or proxy layers.
+- Preserve optional-dependency behavior. Missing optional packages must fail cleanly.
+- Remove dead code and old routing layers created by your change.
+- Update tests and docs when commands, imports, runtime behavior, or package layout change.
 
-The codebase is feature-first.
+## Validation
 
-```text
-src/definers/
-  audio/
-  catalogs/
-  chat/
-  cli/
-  data/
-    datasets/
-    text/
-  image/
-  media/
-  ml/
-    answer/
-    text/
-  system/
-  text/
-  ui/
-    apps/
-      train/
-  video/
-```
-
-Use the most specific package that owns the behavior:
-
-- `audio`, `image`, `video`, `text`: domain-facing capabilities
-- `chat`: chat handlers and request shaping
-- `data`: preparation, dataset loaders, vectorization
-- `ml`: training, inference, answer generation, text ML utilities
-- `system`: subprocess, paths, install, filesystem, resilience helpers
-- `ui`: launcher surfaces and focused apps
-- `catalogs`: registries and reference definitions
-- `media`: shared media transfer helpers and compatibility facades
-
-Do not add new layered namespaces when a focused feature package is the correct home.
-
-## Validation Workflow
-
-Run the narrowest validation that proves your change, then run the main project check.
-
-### Main gate
+Run the narrowest proof first, then the main gate.
 
 ```bash
 poe check
-```
-
-### Common focused commands
-
-```bash
-poe test
-poe coverage
-poe lint
-poe format
-poe build
 poe cli-health
 poe ml-health
-```
-
-### Focused pytest examples
-
-```bash
 pytest tests/test_cli.py -q
-pytest tests/test_application_ml_answer_services.py -q
-pytest tests/test_audio_mastering_generation.py -q
+pytest tests/test_application_ml_answer_services.py tests/test_application_ml_answer_history_preparer.py tests/test_answer.py -q
 ```
 
 Rules:
 
-- Prefer focused test slices while iterating.
-- Run broader validation before finishing.
-- Do not ignore failing tests that are directly connected to your change.
-- Tests must not import optional third-party packages directly.
-- Tests must not use third-party library output as the oracle for expected results.
+- Prefer focused pytest slices while iterating.
+- Do not ignore failures directly caused by your change.
+- Tests must not depend on optional third-party packages being installed.
+- Tests must not use third-party library output as the expected-value oracle.
 
-## Coding Expectations
+## Import Rules
 
-- Keep changes small and local to the owning package.
-- Preserve optional-dependency behavior. If a dependency is optional, the code must fail cleanly when it is missing.
-- Prefer explicit imports from the new feature packages over older compatibility paths.
-- Keep public APIs stable unless the change intentionally updates them.
-- Remove dead code created by the change.
-- Avoid duplicate helpers. Reuse the package that already owns the capability.
-- Add or update tests when behavior changes.
-- Keep type information intact and avoid widening interfaces without a reason.
+Use the concrete owner module whenever possible.
 
-## Imports And Compatibility
+Preferred patterns:
 
-Several legacy import aliases still exist to reduce breakage during the architecture transition. They are compatibility layers, not the preferred structure.
-
-For new code:
-
-- prefer `definers.ml.answer` over older long-form module paths
-- prefer `definers.ml.text` for text ML helpers
-- prefer `definers.data.datasets` and `definers.data.text` for moved data utilities
-- prefer `definers.ui.apps.train` for train app code
-
-If you move code again, update both the canonical imports and any compatibility alias points that must continue to work.
-
-## Optional Dependencies
-
-A large part of the project is intentionally segmented.
-
-When changing code that touches optional integrations:
-
-- verify import-time behavior without the dependency
-- verify the error path is actionable
-- avoid importing heavy modules at package import time unless that package already does so by design
-
-Examples include audio toolchains, CUDA-specific paths, web runtimes, and specialized ML packages.
+- `definers.ml.answer.service`
+- `definers.ml.text.generation`
+- `definers.data.datasets`
+- `definers.data.text.vectorizer`
+- `definers.system.paths`
+- `definers.ui.apps.train`
 
 ## RVC Policy
 
-RVC support is fork-based.
+RVC support is fork-only.
 
-Required policy:
+- Use only `YaronKoresh/definers-rvc-files`.
+- Keep the bootstrap LFS-aware.
+- Treat the fork-owned `assets`, `configs`, `docs`, `i18n`, `infer`, `logs`, and `tools` folders as the readiness contract.
+- Do not introduce alternate repositories, upstream GUI projects, or fallback sources into the bootstrap path.
+- If bootstrap behavior changes, validate the model-installation path directly.
 
-- use `YaronKoresh/definers-rvc-files`
-- keep the bootstrap LFS-aware
-- do not reintroduce `lj1995/VoiceConversionWebUI` into `src`
-- if bootstrap behavior changes, test the model-installation path directly
-
-## Documentation Policy
-
-Update docs when any of the following changes:
-
-- install commands
-- CLI or launcher names
-- package layout
-- required environment assumptions
-- model bootstrap source or runtime behavior
-
-Keep docs short, navigable, and concrete. Prefer a tight command path over long narrative sections.
-
-## Pull Request Checklist
+## Checklist
 
 Before finishing, confirm all of the following:
 
-- the change lives in the correct feature package
-- imports use the current package structure
+- the change lives in the correct package
+- imports use the concrete module structure
 - focused tests pass
-- `poe check` passes or any unrelated failure is clearly identified
-- docs are updated if commands, structure, or behavior changed
-- no accidental dependency or bootstrap regression was introduced
-
-## Common Pitfalls
-
-- Importing optional heavy modules at package import time
-- Updating the canonical module path but forgetting the compatibility alias
-- Changing launcher names without updating CLI or docs
-- Reintroducing old layered structure inside new feature packages
-- Assuming local environment tools such as FFmpeg, `sox`, or CUDA are always available
+- `poe check` passes, or any unrelated failure is clearly identified
+- docs are updated if commands, structure, or runtime behavior changed
+- no dependency, install, or bootstrap regression was introduced

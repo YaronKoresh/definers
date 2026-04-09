@@ -4,13 +4,13 @@ import tempfile
 import unittest
 
 import numpy as np
-from definers.ml.text_feature_extractor import TextFeatureExtractor
-from definers.ml.text_feature_reconstructor import (
-    TextFeatureReconstructor,
-)
 
 from definers.data.vectorizers import create_vectorizer
 from definers.ml.regression_predictor import RegressionPredictor
+from definers.ml.text.extract import TextFeatureExtractor
+from definers.ml.text.reconstruct import (
+    TextFeatureReconstructor,
+)
 from definers.ml.training import LinearRegressionTorch
 
 

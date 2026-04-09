@@ -1,59 +1,52 @@
-class VectorizerService:
-    @staticmethod
-    def normalize_texts(texts) -> list[str]:
-        return [str(text) for text in texts]
-
-    @classmethod
-    def create_vectorizer(cls, texts):
-        from definers.data.text_vectorizer import (
-            create_text_vectorizer,
-        )
-
-        normalized_texts = cls.normalize_texts(texts)
-        if not normalized_texts:
-            raise ValueError("texts must not be empty")
-        vectorizer = create_text_vectorizer(token_pattern="(?u)\\b\\w+\\b")
-        vectorizer.fit(normalized_texts)
-        return vectorizer
-
-    @staticmethod
-    def empty_vectorized_rows(vectorizer):
-        import numpy as np
-
-        vocabulary_size = len(getattr(vectorizer, "vocabulary_", {}) or {})
-        return np.empty((0, vocabulary_size))
-
-    @classmethod
-    def vectorize(cls, vectorizer, texts):
-        import numpy as np
-
-        if vectorizer is None or texts is None:
-            return None
-        if isinstance(texts, list) and not texts:
-            return cls.empty_vectorized_rows(vectorizer)
-        tfidf_matrix = vectorizer.transform(cls.normalize_texts(texts))
-        return np.asarray(tfidf_matrix.toarray())
-
-    @staticmethod
-    def invert_vocabulary(vocabulary) -> dict[int, str]:
-        return {index: token for token, index in vocabulary.items()}
-
-    @classmethod
-    def unvectorize(cls, vectorizer, vectorized_data):
-        if vectorizer is None or vectorized_data is None:
-            return None
-        index_to_word = cls.invert_vocabulary(vectorizer.vocabulary_)
-        unvectorized_texts: list[str] = []
-        for row in vectorized_data:
-            words = [
-                index_to_word[index]
-                for index, value in enumerate(row)
-                if value > 0 and index in index_to_word
-            ]
-            unvectorized_texts.append(" ".join(words))
-        return unvectorized_texts
+def normalize_texts(texts) -> list[str]:
+    return [str(text) for text in texts]
 
 
-create_vectorizer = VectorizerService.create_vectorizer
-vectorize = VectorizerService.vectorize
-unvectorize = VectorizerService.unvectorize
+def create_vectorizer(texts):
+    from definers.data.text.vectorizer import (
+        create_text_vectorizer,
+    )
+
+    normalized_texts = normalize_texts(texts)
+    if not normalized_texts:
+        raise ValueError("texts must not be empty")
+    vectorizer = create_text_vectorizer(token_pattern="(?u)\\b\\w+\\b")
+    vectorizer.fit(normalized_texts)
+    return vectorizer
+
+
+def empty_vectorized_rows(vectorizer):
+    import numpy as np
+
+    vocabulary_size = len(getattr(vectorizer, "vocabulary_", {}) or {})
+    return np.empty((0, vocabulary_size))
+
+
+def vectorize(vectorizer, texts):
+    import numpy as np
+
+    if vectorizer is None or texts is None:
+        return None
+    if isinstance(texts, list) and not texts:
+        return empty_vectorized_rows(vectorizer)
+    tfidf_matrix = vectorizer.transform(normalize_texts(texts))
+    return np.asarray(tfidf_matrix.toarray())
+
+
+def invert_vocabulary(vocabulary) -> dict[int, str]:
+    return {index: token for token, index in vocabulary.items()}
+
+
+def unvectorize(vectorizer, vectorized_data):
+    if vectorizer is None or vectorized_data is None:
+        return None
+    index_to_word = invert_vocabulary(vectorizer.vocabulary_)
+    unvectorized_texts: list[str] = []
+    for row in vectorized_data:
+        words = [
+            index_to_word[index]
+            for index, value in enumerate(row)
+            if value > 0 and index in index_to_word
+        ]
+        unvectorized_texts.append(" ".join(words))
+    return unvectorized_texts

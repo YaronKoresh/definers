@@ -1,59 +1,28 @@
 # Definers
 
-Definers is a modular Python toolkit for AI, media, data preparation, runtime safety, and app launchers.
-
-It is organized around focused feature packages instead of a layered architecture, so you can use one narrow slice or grow into broader workflows without changing toolsets.
-
-## Quick Navigation
-
-1. [Install](#install)
-2. [Quick Start](#quick-start)
-3. [Package Layout](#package-layout)
-4. [Apps And Launchers](#apps-and-launchers)
-5. [Development](#development)
-6. [Troubleshooting](#troubleshooting)
-7. [Contributing](#contributing)
-
-## What Definers Covers
-
-- Audio workflows: analysis, DSP, preview, stems, mastering, generation, transcription
-- Image and video workflows: generation helpers, feature extraction, composition, rendering
-- ML and data workflows: dataset preparation, vectorization, training, inference, health checks
-- Runtime and integration utilities: safer command execution, filesystem helpers, retries, transfers
-- App surfaces: CLI launchers, focused GUI flows, Docker app folders
+Definers is a feature-first Python toolkit for ML, media workflows, data preparation, runtime utilities, and launcher surfaces.
 
 ## Install
 
 Definers targets Python 3.10 through 3.12.
 
-| Goal | Command |
-| --- | --- |
-| Base install | `pip install .` |
-| Audio workflows | `pip install ".[audio]"` |
-| Image workflows | `pip install ".[image]"` |
-| Video workflows | `pip install ".[video]"` |
-| ML workflows | `pip install ".[ml]"` |
-| Web and UI workflows | `pip install ".[web]"` |
-| Contributor setup | `pip install -e ".[dev]"` |
-| Full optional stack | `pip install ".[all]"` |
-| CUDA extras | `pip install ".[cuda]" --extra-index-url https://pypi.nvidia.com` |
+```bash
+pip install .
+pip install ".[audio]"
+pip install ".[ml]"
+pip install -e ".[dev]"
+```
 
-Notes:
-
-- Optional dependencies can still be installed lazily at runtime for supported flows.
-- On Windows, `stopes` is intentionally excluded from published extras.
-- `madmom` and `basic-pitch` are installed through the runtime or CLI installer path rather than the published extras.
-- RVC bootstrap is fork-only: Definers clones `YaronKoresh/definers-rvc-files` with LFS-aware logic and does not use `lj1995/VoiceConversionWebUI`.
-
-Useful install commands:
+Optional runtime targets can also be installed explicitly through the CLI.
 
 ```bash
 definers install --list
 definers install audio
 definers install translate --type task
-definers install audio --type model-domain
 definers install rvc --type model-task
 ```
+
+RVC uses only the `YaronKoresh/definers-rvc-files` fork. The runtime bootstrap expects the fork-owned `assets`, `configs`, `docs`, `i18n`, `infer`, `logs`, and `tools` folders. No alternate repository or GUI project is used as an RVC source.
 
 ## Quick Start
 
@@ -61,14 +30,12 @@ definers install rvc --type model-task
 
 ```python
 from definers.data.preparation import prepare_data
-from definers.ml import train
 from definers.ml.text import summarize
 from definers.system import run
 from definers.ui.launchers import launch_installed_project
 
 dataset = prepare_data(features=["./features.csv"], batch_size=32)
 summary = summarize("A long text that needs a short summary.")
-
 run(["ffmpeg", "-i", "input.mp4", "output.wav"])
 launch_installed_project("chat")
 ```
@@ -80,147 +47,68 @@ python -m definers --help
 definers --version
 definers start chat
 definers start audio-mastering
-definers start image-generate
 definers start video-composer
-definers start train
-definers train
 ```
 
-## Package Layout
+## Package Guide
 
-The codebase now follows a feature-first layout.
+Import concrete modules instead of broad compatibility facades.
 
-```text
-src/definers/
-  audio/
-    effects/
-  catalogs/
-  chat/
-  cli/
-  data/
-    datasets/
-    text/
-  image/
-  media/
-  ml/
-    answer/
-    text/
-  system/
-  text/
-  ui/
-    apps/
-      train/
-  video/
-```
+- `definers.audio`: audio analysis, generation, stems, mastering, preview
+- `definers.chat`: request normalization and chat handlers
+- `definers.cli`: command parsing, routing, install commands
+- `definers.data`: preparation, dataset helpers, vectorization, tokenization
+- `definers.image`: image utilities and image workflows
+- `definers.media`: transfer helpers and shared media utilities
+- `definers.ml`: training, inference, answer runtime, text ML helpers
+- `definers.system`: filesystem, process, installation, path, runtime helpers
+- `definers.text`: translation, normalization, hashing, system messages
+- `definers.ui`: launcher entrypoints and app surfaces
+- `definers.video`: rendering and video helpers
 
-Practical navigation guide:
+Preferred import style:
 
-- `definers.audio`: audio-facing public functionality
-- `definers.chat`: chat request normalization and handling
-- `definers.cli`: command parsing and dispatch
-- `definers.data`: preparation, loaders, datasets, vectorization
-- `definers.ml`: training and inference facade plus `ml.answer` and `ml.text`
-- `definers.system`: runtime, path, process, filesystem, install helpers
-- `definers.ui`: launcher and app surfaces
-- `definers.catalogs`: immutable registries and references
-- `definers.media`: transfer helpers and compatibility media aliases
-
-Compatibility aliases still exist for several older import paths, but new code should prefer the concrete package layout above.
-
-## Apps And Launchers
-
-Definers exposes both broad workbenches and narrower focused surfaces.
-
-### Main app entry points
-
-| Surface | Purpose |
-| --- | --- |
-| `chat` | multimodal chat |
-| `audio` | audio task hub |
-| `image` | image task hub |
-| `video` | video task hub |
-| `train` | ML studio |
-| `translate` | translation UI |
-| `animation` | animation flow |
-| `faiss` | FAISS utilities |
-
-### Focused surfaces
-
-- Audio: `audio-mastering`, `audio-vocals`, `audio-cleanup`, `audio-stems`, `audio-analysis`, `audio-create`, `audio-midi`
-- Image: `image-generate`, `image-upscale`, `image-title`
-- Video: `video-composer`, `video-lyrics`, `video-visualizer`
-
-### Docker
-
-Each app under `docker/` contains its own `Dockerfile`, `docker-compose.yml`, and `app.py` entrypoint.
-
-```bash
-cd docker/chat
-docker compose up --build
+```python
+from definers.data.preparation import prepare_data
+from definers.ml.answer.service import AnswerService
+from definers.ml.text.generation import summarize
+from definers.system.paths import normalize_path
+from definers.ui.gui_entrypoints import start
 ```
 
 ## Development
 
-### Local setup
-
 ```bash
 pip install -e ".[dev]"
-```
-
-Install feature extras only when you need them.
-
-```bash
-pip install -e ".[dev,audio]"
-pip install -e ".[dev,image,video]"
-pip install -e ".[dev,ml,web]"
-```
-
-### Main validation
-
-```bash
 poe check
 ```
 
-### Focused commands
-
-| Command | Purpose |
-| --- | --- |
-| `poe test` | run tests |
-| `poe coverage` | run coverage |
-| `poe lint` | Ruff lint |
-| `poe format` | Ruff format |
-| `poe build` | build package |
-| `poe cli-health` | validate CLI routing and launcher wiring |
-| `poe ml-health` | validate ML health and DX flows |
-
-Focused answer-path regression:
+Useful focused commands:
 
 ```bash
+poe cli-health
+poe ml-health
+pytest tests/test_cli.py -q
 pytest tests/test_application_ml_answer_services.py tests/test_application_ml_answer_history_preparer.py tests/test_answer.py -q
 ```
 
-## Troubleshooting
+## Runtime Notes
 
-### FFmpeg or `sox`
+- Optional dependencies must fail cleanly when missing.
+- FFmpeg is required for many audio and video paths.
+- `sox` is optional and some flows degrade when it is unavailable.
+- CUDA should be added only after the CPU path works.
+- Guarded model loading accepts Hugging Face references and direct artifact URLs, and rejects obvious HTML or Git LFS pointer responses.
 
-- Many audio and video flows need FFmpeg on `PATH`.
-- `sox` is optional, but some audio paths degrade or return `None` when it is unavailable.
+## Contributing
 
-### CUDA
-
-Treat CUDA as an advanced install. Get CPU flows working first, then add the CUDA extra once the host environment is proven.
-
-### Heavy installs
-
-Install only the extras you need. The package is intentionally segmented so narrow use does not require the full stack.
-
-### Remote model sources
-
-Prefer Hugging Face repo ids or raw artifact URLs. Definers rejects obvious HTML responses and Git LFS pointer files during guarded model loading.
+Contributor workflow and validation guidance live in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ### RVC
 
-RVC bootstrap is based on the maintained fork in `YaronKoresh/definers-rvc-files`. If you change this flow, keep it fork-based and LFS-aware.
+RVC bootstrap is based on the maintained fork in `YaronKoresh/definers-rvc-files`.
+
+The bootstrap restores the fork folders directly into the Definers package root so the imported RVC modules run as ordinary project modules after initialization.
 
 ## Contributing
 

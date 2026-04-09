@@ -28,6 +28,11 @@ def expect(*args: Any, **kwargs: Any):
 sync_api = ModuleType("playwright.sync_api")
 sync_api.expect = expect
 sync_api.sync_playwright = sync_playwright
+
+playwright = ModuleType("playwright")
+playwright.sync_api = sync_api
+
+sys.modules.setdefault("playwright", playwright)
 sys.modules.setdefault("playwright.sync_api", sync_api)
 
-__all__ = ("expect", "sync_api", "sync_playwright")
+__all__ = ("expect", "playwright", "sync_api", "sync_playwright")

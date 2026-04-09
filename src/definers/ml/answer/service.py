@@ -1,13 +1,13 @@
 class AnswerService:
     @staticmethod
     def answer(history, runtime, dependency_loader=None):
-        from definers.ml.answer_dependency_loader import (
+        from definers.ml.answer.dependencies import (
             AnswerDependencyLoader,
         )
-        from definers.ml.answer_generation_service import (
+        from definers.ml.answer.generation import (
             AnswerGenerationService,
         )
-        from definers.ml.answer_history_preparer import (
+        from definers.ml.answer.history import (
             AnswerHistoryPreparer,
         )
 

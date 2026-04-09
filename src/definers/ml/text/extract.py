@@ -12,7 +12,7 @@ class TextFeatureExtractor:
     def extract(cls, text, vectorizer=None):
         import numpy as np
 
-        from definers.data.text_vectorizer import (
+        from definers.data.text.vectorizer import (
             create_text_vectorizer,
         )
 

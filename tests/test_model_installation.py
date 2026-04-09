@@ -109,3 +109,14 @@ def test_download_rvc_assets_uses_only_enhanced_fork_folders(
 
     assert restored_paths == expected_paths
     assert captured_targets == [tmp_path]
+
+
+def test_enhanced_rvc_fork_folder_paths_default_to_package_root():
+    package_root = Path(model_installation.__file__).resolve().parent
+
+    paths = model_installation.enhanced_rvc_fork_folder_paths()
+
+    assert {path.parent for path in paths} == {package_root}
+    assert {path.name for path in paths} == set(
+        model_installation.ENHANCED_RVC_FORK_FOLDERS
+    )

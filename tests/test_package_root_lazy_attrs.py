@@ -6,13 +6,11 @@ from unittest import mock
 import pytest
 
 TEST_LAZY_SUBMODULES = (
-    "application_data",
     "audio",
     "cuda",
     "logger",
-    "media",
     "ml",
-    "platform",
+    "system",
     "text",
 )
 
@@ -73,7 +71,7 @@ def test_multiple_lazy_attributes_use_package_qualified_import_names():
     original_import_module = importlib.import_module
     sox_module = types.ModuleType("sox")
     text_module = types.ModuleType("definers.text")
-    platform_module = types.ModuleType("definers.system")
+    system_module = types.ModuleType("definers.system")
     imported_names: list[str] = []
 
     def fake_import_module(name: str, package: str | None = None):
@@ -83,51 +81,50 @@ def test_multiple_lazy_attributes_use_package_qualified_import_names():
         if name == "definers.text":
             return text_module
         if name == "definers.system":
-            return platform_module
+            return system_module
         return original_import_module(name, package)
 
     with mock.patch("importlib.import_module", side_effect=fake_import_module):
         import definers
 
         assert definers.text is text_module
-        assert definers.system is platform_module
+        assert definers.system is system_module
 
     assert imported_names.count("definers.text") == 1
     assert imported_names.count("definers.system") == 1
     unload_package_root()
 
 
-def test_application_data_lazy_attribute_exposes_submodules():
+def test_data_package_exposes_submodules_without_root_routing():
+    unload_package_root()
+
+    import definers.data as data_package
+
+    first_value = data_package.arrays
+    second_value = data_package.arrays
+
+    assert first_value is second_value
+    assert first_value.__name__ == "definers.data.arrays"
+    assert data_package.__dict__["arrays"] is first_value
+    unload_package_root()
+
+
+def test_removed_legacy_root_aliases_raise_attribute_error():
     unload_package_root()
 
     import definers
 
-    first_value = definers.data.arrays
-    second_value = definers.data.arrays
-
-    assert first_value is second_value
-    assert first_value.__name__ == "definers.data.arrays"
-    assert definers.data.__dict__["arrays"] is first_value
-    unload_package_root()
-
-
-def test_application_data_patch_target_resolves_after_root_reload():
-    unload_package_root()
-
-    with mock.patch(
-        "definers.data.arrays.two_dim_numpy",
-        return_value="patched",
-    ):
-        import definers
-
-        assert definers.data.arrays.two_dim_numpy([]) == "patched"
+    with pytest.raises(AttributeError, match="application_data"):
+        getattr(definers, "application_data")
+    with pytest.raises(AttributeError, match="platform"):
+        getattr(definers, "platform")
 
     unload_package_root()
 
 
 @pytest.mark.parametrize(
     "attribute_name",
-    ["application_data", "logger", "cuda", "media", "ml"],
+    ["logger", "cuda", "ml", "system"],
 )
 def test_lazy_attribute_caches_module_for_rca_regressions(attribute_name: str):
     unload_package_root()

@@ -24,7 +24,7 @@ class TextFeatureReconstructor:
 
     @classmethod
     def reconstruct(cls, predicted_features, vectorizer=None, vocabulary=None):
-        from definers.data.text_vectorizer import (
+        from definers.data.text.vectorizer import (
             vectorizer_from_vocabulary,
         )
 

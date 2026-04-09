@@ -1,9 +1,9 @@
 from types import SimpleNamespace
 
-from definers.ml.answer_history_preparer import (
+from definers.ml.answer.history import (
     AnswerHistoryPreparer,
 )
-from definers.ml.answer_service import AnswerService
+from definers.ml.answer.service import AnswerService
 
 
 class TrackingDependencyLoader:
@@ -71,9 +71,8 @@ def test_prepare_answer_history_keeps_text_only_path_dependency_free():
 
 
 def test_prepare_answer_history_reuses_image_dependency(monkeypatch):
-    from definers.ml.answer_image_loader import AnswerImageLoader
-
     import definers.system as system_module
+    from definers.ml.answer.images import AnswerImageLoader
 
     image_module = object()
     loader = TrackingDependencyLoader(image_module=image_module)
@@ -131,9 +130,8 @@ def test_prepare_answer_history_reuses_image_dependency(monkeypatch):
 def test_prepare_answer_history_uses_soundfile_without_loading_librosa(
     monkeypatch,
 ):
-    from definers.ml.answer_audio_loader import AnswerAudioLoader
-
     import definers.system as system_module
+    from definers.ml.answer.audio import AnswerAudioLoader
 
     soundfile_module = object()
     loader = TrackingDependencyLoader(
@@ -196,9 +194,8 @@ def test_prepare_answer_history_uses_soundfile_without_loading_librosa(
 def test_prepare_answer_history_falls_back_to_librosa_only_after_failure(
     monkeypatch,
 ):
-    from definers.ml.answer_audio_loader import AnswerAudioLoader
-
     import definers.system as system_module
+    from definers.ml.answer.audio import AnswerAudioLoader
 
     soundfile_module = object()
     librosa_module = object()
@@ -350,10 +347,9 @@ def test_prepare_answer_history_skips_unreadable_text_attachment(monkeypatch):
 def test_prepare_answer_history_handles_mixed_media_partial_failures(
     monkeypatch,
 ):
-    from definers.ml.answer_audio_loader import AnswerAudioLoader
-    from definers.ml.answer_image_loader import AnswerImageLoader
-
     import definers.system as system_module
+    from definers.ml.answer.audio import AnswerAudioLoader
+    from definers.ml.answer.images import AnswerImageLoader
 
     soundfile_module = object()
     librosa_module = object()

@@ -1,19 +1,12 @@
 import sys
 
 
-class CliEntrypoint:
-    @staticmethod
-    def main(argv: list[str] | None = None) -> int:
-        from definers import __version__
+def main(argv: list[str] | None = None) -> int:
+    from definers import __version__
 
-        from .dispatch import run_cli
+    from .dispatch import run_cli
 
-        return run_cli(
-            sys.argv[1:] if argv is None else argv, version=__version__
-        )
-
-
-main = CliEntrypoint.main
+    return run_cli(sys.argv[1:] if argv is None else argv, version=__version__)
 
 
 if __name__ == "__main__":

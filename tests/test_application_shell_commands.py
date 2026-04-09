@@ -1,22 +1,23 @@
 from argparse import Namespace
 
-from definers.cli.command_dispatcher import CliCommandDispatcher
-from definers.cli.command_parser import CliCommandParser
-from definers.cli.command_registry import CliCommandRegistry
+from definers.cli.command_dispatcher import dispatch_cli_command
+from definers.cli.command_parser import parse_cli_command
+from definers.cli.command_registry import (
+    create_cli_command_registry,
+    get_known_cli_names,
+)
 from definers.cli.install_command import InstallCommand
 from definers.cli.lyric_video_command import LyricVideoCommand
 from definers.cli.music_video_command import MusicVideoCommand
-from definers.cli.request_coercer import CliRequestCoercer
+from definers.cli.request_coercer import coerce_cli_request
 from definers.cli.start_command import StartCommand
 from definers.cli.unknown_command import UnknownCommand
 
-COMMAND_REGISTRY = CliCommandRegistry.create_cli_command_registry(
-    ("chat", "video")
-)
+COMMAND_REGISTRY = create_cli_command_registry(("chat", "video"))
 
 
 def test_parse_cli_command_builds_start_command_from_default_start():
-    command = CliCommandParser.parse_cli_command(
+    command = parse_cli_command(
         Namespace(command=None, project="chat"),
         read_lyrics_text=lambda value: value,
         command_registry=COMMAND_REGISTRY,
@@ -29,7 +30,7 @@ def test_parse_cli_command_builds_start_command_from_default_start():
 
 
 def test_parse_cli_command_normalizes_gui_command_names():
-    command = CliCommandParser.parse_cli_command(
+    command = parse_cli_command(
         Namespace(command=" Video ", project=" Chat "),
         read_lyrics_text=lambda value: value,
         command_registry=COMMAND_REGISTRY,
@@ -42,7 +43,7 @@ def test_parse_cli_command_normalizes_gui_command_names():
 
 
 def test_parse_cli_command_builds_lyric_video_command_with_loaded_lyrics():
-    command = CliCommandParser.parse_cli_command(
+    command = parse_cli_command(
         Namespace(
             command="lyric-video",
             audio="a.mp3",
@@ -78,7 +79,7 @@ def test_parse_cli_command_builds_lyric_video_command_with_loaded_lyrics():
 def test_dispatch_cli_command_writes_music_video_result():
     outputs: list[object] = []
 
-    exit_code = CliCommandDispatcher.dispatch_cli_command(
+    exit_code = dispatch_cli_command(
         MusicVideoCommand(audio="a.mp3", width=320, height=240, fps=15),
         start=lambda project: 0,
         music_video=lambda audio, width, height, fps: (
@@ -98,7 +99,7 @@ def test_dispatch_cli_command_writes_music_video_result():
 def test_dispatch_cli_command_handles_unknown_commands():
     outputs: list[object] = []
 
-    exit_code = CliCommandDispatcher.dispatch_cli_command(
+    exit_code = dispatch_cli_command(
         UnknownCommand(name="nope"),
         start=lambda project: 0,
         music_video=lambda audio, width, height, fps: None,
@@ -113,7 +114,7 @@ def test_dispatch_cli_command_handles_unknown_commands():
 def test_dispatch_cli_command_rejects_install_without_handler():
     outputs: list[object] = []
 
-    exit_code = CliCommandDispatcher.dispatch_cli_command(
+    exit_code = dispatch_cli_command(
         InstallCommand(target="audio", target_kind="group", list_only=False),
         start=lambda project: 0,
         music_video=lambda audio, width, height, fps: None,
@@ -126,7 +127,7 @@ def test_dispatch_cli_command_rejects_install_without_handler():
 
 
 def test_parse_cli_command_normalizes_unknown_names():
-    command = CliCommandParser.parse_cli_command(
+    command = parse_cli_command(
         Namespace(command=" Nope ", project="chat"),
         read_lyrics_text=lambda value: value,
         command_registry=COMMAND_REGISTRY,
@@ -140,7 +141,7 @@ def test_parse_cli_command_normalizes_unknown_names():
 
 def test_create_cli_command_registry_rejects_builtin_command_conflicts():
     try:
-        CliCommandRegistry.create_cli_command_registry(("music-video",))
+        create_cli_command_registry(("music-video",))
     except ValueError as exc:
         assert str(exc) == "CLI command name conflict: music-video"
     else:
@@ -148,7 +149,7 @@ def test_create_cli_command_registry_rejects_builtin_command_conflicts():
 
 
 def test_get_known_cli_names_can_exclude_option_flags():
-    assert CliCommandRegistry.get_known_cli_names(
+    assert get_known_cli_names(
         COMMAND_REGISTRY,
         include_options=False,
     ) == (
@@ -161,7 +162,7 @@ def test_get_known_cli_names_can_exclude_option_flags():
 
 
 def test_coerce_cli_request_uses_namespace_defaults():
-    request = CliRequestCoercer.coerce_cli_request(Namespace(command="start"))
+    request = coerce_cli_request(Namespace(command="start"))
 
     assert request.project == "chat"
     assert request.position == "bottom"

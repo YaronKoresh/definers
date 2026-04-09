@@ -232,16 +232,22 @@ def _clone_enhanced_rvc_fork(target_root: str | Path) -> Path:
 
 
 def enhanced_rvc_fork_folder_paths(
-    target_root: str | Path = ".",
+    target_root: str | Path | None = None,
 ) -> tuple[Path, ...]:
-    resolved_target_root = Path(target_root).resolve()
+    resolved_target_root = (
+        Path(__file__).resolve().parent
+        if target_root is None
+        else Path(target_root).resolve()
+    )
     return tuple(
         resolved_target_root / folder_name
         for folder_name in ENHANCED_RVC_FORK_FOLDERS
     )
 
 
-def has_enhanced_rvc_fork_folders(target_root: str | Path = ".") -> bool:
+def has_enhanced_rvc_fork_folders(
+    target_root: str | Path | None = None,
+) -> bool:
     return all(
         folder_path.is_dir()
         for folder_path in enhanced_rvc_fork_folder_paths(target_root)
@@ -249,9 +255,13 @@ def has_enhanced_rvc_fork_folders(target_root: str | Path = ".") -> bool:
 
 
 def download_enhanced_rvc_fork_folders(
-    target_root: str | Path = ".",
+    target_root: str | Path | None = None,
 ) -> tuple[str, ...]:
-    resolved_target_root = Path(target_root).resolve()
+    resolved_target_root = (
+        Path(__file__).resolve().parent
+        if target_root is None
+        else Path(target_root).resolve()
+    )
     resolved_target_root.mkdir(parents=True, exist_ok=True)
 
     with tempfile.TemporaryDirectory() as temporary_directory:
@@ -276,7 +286,7 @@ def download_enhanced_rvc_fork_folders(
 
 
 def ensure_enhanced_rvc_fork_folders(
-    target_root: str | Path = ".",
+    target_root: str | Path | None = None,
 ) -> tuple[str, ...]:
     if has_enhanced_rvc_fork_folders(target_root):
         return tuple(
@@ -286,7 +296,9 @@ def ensure_enhanced_rvc_fork_folders(
     return download_enhanced_rvc_fork_folders(target_root)
 
 
-def download_rvc_assets(target_root: str | Path = ".") -> tuple[str, ...]:
+def download_rvc_assets(
+    target_root: str | Path | None = None,
+) -> tuple[str, ...]:
     return ensure_enhanced_rvc_fork_folders(target_root)
 
 

@@ -2,7 +2,7 @@ from functools import partial
 
 from definers.file_ops import catch
 from definers.ui.gui_registry import register_gui_launchers
-from definers.ui.launchers import create_gui_project_starter
+from definers.ui.launchers import start_project
 
 
 def _gui_translate():
@@ -167,11 +167,12 @@ def start(project: str):
     def on_missing(project_name: str):
         catch(f"Error: No project called '{project_name}' !")
 
-    return create_gui_project_starter(
+    return start_project(
+        project,
         globals(),
         on_missing,
         registry=GUI_LAUNCHERS,
-    ).start(project)
+    )
 
 
 __all__ = [

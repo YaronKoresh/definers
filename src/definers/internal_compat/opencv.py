@@ -232,14 +232,7 @@ def polylines(image, pts, isClosed, color, thickness=1, lineType=None):
 
 
 def putText(
-    image,
-    text,
-    org,
-    fontFace,
-    fontScale,
-    color,
-    thickness=1,
-    lineType=None,
+    image, text, org, fontFace, fontScale, color, thickness=1, lineType=None
 ):
     _ = (text, org, fontFace, fontScale, color, thickness, lineType)
     return image

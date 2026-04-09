@@ -9,10 +9,10 @@ import re
 import shutil
 import subprocess
 import sys
-import sys as _sys
 import tempfile
 import warnings
 from collections import Counter, OrderedDict
+from dataclasses import dataclass
 from pathlib import Path
 from time import sleep, time
 from urllib.parse import urlparse
@@ -22,8 +22,6 @@ import numpy as np
 
 from definers import regex_utils
 from definers.ml.answer.service import AnswerService
-from definers.ml.facade_api import MlFacadeApi
-from definers.ml.facade_runtime import MlFacadeRuntime
 from definers.ml.health_api import (
     get_ml_health_snapshot,
     ml_health_markdown,
@@ -52,46 +50,6 @@ from definers.ml.training import (
     feed as _feed,
     fit as _fit,
 )
-
-_LEGACY_MODULE_ALIASES = {
-    "answer_audio_loader": "answer.audio",
-    "answer_content_path_resolver": "answer.content",
-    "answer_dependency_loader": "answer.dependencies",
-    "answer_generation_service": "answer.generation",
-    "answer_history_preparer": "answer.history",
-    "answer_image_loader": "answer.images",
-    "answer_service": "answer.service",
-    "answer_text_service": "answer.text",
-    "text_api": "text.api",
-    "text_feature_extractor": "text.extract",
-    "text_feature_reconstructor": "text.reconstruct",
-    "text_generation": "text.generation",
-}
-
-
-def _install_legacy_module_aliases() -> None:
-    for alias_name, target_name in _LEGACY_MODULE_ALIASES.items():
-        _sys.modules.setdefault(
-            f"{__name__}.{alias_name}",
-            importlib.import_module(f"{__name__}.{target_name}"),
-        )
-
-
-_install_legacy_module_aliases()
-
-
-def __getattr__(name: str):
-    if name == "trainer_plan":
-        module = importlib.import_module(f"{__name__}.trainer_plan")
-        globals()[name] = module
-        return module
-    target_name = _LEGACY_MODULE_ALIASES.get(name)
-    if target_name is None:
-        raise AttributeError(name)
-    module = importlib.import_module(f"{__name__}.{target_name}")
-    globals()[name] = module
-    return module
-
 
 try:
     from definers.audio import (
@@ -262,55 +220,61 @@ _FAILED_MODEL_LOADS: dict[str, str] = {}
 logger = init_logger("definers.ml")
 
 
+@dataclass(frozen=True, slots=True)
+class _AnswerRuntime:
+    MODELS: object
+    PROCESSORS: object
+
+
+@dataclass(frozen=True, slots=True)
+class _TrainingArrayAdapter:
+    catch: object
+    cupy_to_numpy: object
+    get_max_shapes: object
+    numpy_to_cupy: object
+    reshape_numpy: object
+
+
+def _rvc_package_root() -> str:
+    return str(Path(__file__).resolve().parent.parent)
+
+
 def _training_array_adapter():
-    return MlFacadeRuntime.build_training_array_adapter(
-        catch,
-        cupy_to_numpy,
-        get_max_shapes,
-        numpy_to_cupy,
-        reshape_numpy,
+    return _TrainingArrayAdapter(
+        catch=catch,
+        cupy_to_numpy=cupy_to_numpy,
+        get_max_shapes=get_max_shapes,
+        numpy_to_cupy=numpy_to_cupy,
+        reshape_numpy=reshape_numpy,
     )
 
 
 def _concatenate_training_rows():
-    return MlFacadeRuntime.resolve_training_row_concatenate(np)
-
-
-def _load_optional_rvc_symbol(symbol_name: str, *module_names: str):
-    last_error = None
-    for module_name in module_names:
-        try:
-            module = importlib.import_module(module_name)
-            return getattr(module, symbol_name)
-        except Exception as error:
-            last_error = error
-    logger.error(
-        "RVC dependency unavailable for %s via %s: %s",
-        symbol_name,
-        ", ".join(module_names),
-        last_error,
-    )
-    return None
+    cupy_module = getattr(np, "cuda", None)
+    if cupy_module is not None:
+        concatenate_module = getattr(cupy_module, "cupy", None)
+        if concatenate_module is not None:
+            concatenate = getattr(concatenate_module, "concatenate", None)
+            if concatenate is not None:
+                return concatenate
+    return np.concatenate
 
 
 def answer(history: list, runtime=None, dependency_loader=None):
     if runtime is not None or dependency_loader is not None:
         active_runtime = runtime
         if active_runtime is None:
-            active_runtime = MlFacadeRuntime.build_answer_runtime(
-                MODELS,
-                PROCESSORS,
+            active_runtime = _AnswerRuntime(
+                MODELS=MODELS, PROCESSORS=PROCESSORS
             )
         return AnswerService.answer(
             history,
             runtime=active_runtime,
             dependency_loader=dependency_loader,
         )
-    return MlFacadeApi.answer(
+    return AnswerService.answer(
         history,
-        answer_fn=AnswerService.answer,
-        models=MODELS,
-        processors=PROCESSORS,
+        runtime=_AnswerRuntime(MODELS=MODELS, PROCESSORS=PROCESSORS),
     )
 
 
@@ -347,9 +311,8 @@ def init_model_file(task: str, turbo: bool = True, model_type: str = None):
     )
 
     normalized_task = _normalize_model_task(task)
-    return MlFacadeApi.init_model_file(
+    return _init_model_file(
         normalized_task,
-        init_model_file_fn=_init_model_file,
         turbo=turbo,
         model_type=model_type,
     )
@@ -478,17 +441,12 @@ def _validate_str_param(name: str, value: str) -> str:
 
 
 def extract_text_features(text, vectorizer=None):
-    return MlFacadeApi.extract_text_features(
-        text,
-        extract_text_features_fn=_extract_text_features,
-        vectorizer=vectorizer,
-    )
+    return _extract_text_features(text, vectorizer)
 
 
 def features_to_text(predicted_features, vectorizer=None, vocabulary=None):
-    return MlFacadeApi.features_to_text(
+    return _features_to_text(
         predicted_features,
-        features_to_text_fn=_features_to_text,
         vectorizer=vectorizer,
         vocabulary=vocabulary,
     )
@@ -768,19 +726,20 @@ def init_model_repo(task: str, turbo: bool = True):
             has_enhanced_rvc_fork_folders,
         )
 
-        with cwd():
-            if not has_enhanced_rvc_fork_folders():
-                logger.info(
-                    "Initializing RVC by cloning the enhanced fork with LFS assets."
-                )
-                download_rvc_assets()
-                log("RVC initialization", "Initialization complete.", True)
-            else:
-                log(
-                    "RVC initialization",
-                    "RVC files already exist, skipping initialization.",
-                    True,
-                )
+        rvc_root = _rvc_package_root()
+        if not has_enhanced_rvc_fork_folders(rvc_root):
+            logger.info(
+                "Initializing RVC by cloning the enhanced fork with LFS assets into %s.",
+                rvc_root,
+            )
+            download_rvc_assets(rvc_root)
+            log("RVC initialization", "Initialization complete.", True)
+        else:
+            log(
+                "RVC initialization",
+                "RVC files already exist, skipping initialization.",
+                True,
+            )
         return None
     elif task in ["speech-recognition"]:
         from transformers import pipeline
@@ -1232,6 +1191,7 @@ def SklearnWrapper(sklearn_model, is_classification=False):
 
 
 def rvc_to_onnx(model_path):
+    from definers.ml.rvc import import_rvc_symbol
     from definers.system import secure_path
 
     try:
@@ -1242,22 +1202,29 @@ def rvc_to_onnx(model_path):
     except Exception as e:
         logger.error(f"Unsafe model path in rvc_to_onnx: {e}")
         return None
-    export_onnx = _load_optional_rvc_symbol(
-        "export_onnx",
-        "definers.ml.backends.onnx.export",
-        "definers.infer.modules.onnx.export",
-        "infer.modules.onnx.export",
-    )
-    if export_onnx is None:
-        return None
     try:
         init_pretrained_model("svc")
     except Exception as e:
         catch(e)
         return None
+    try:
+        export_onnx = import_rvc_symbol(
+            "export_onnx",
+            "definers.ml.backends.onnx.export",
+            "definers.infer.modules.onnx.export",
+            "infer.modules.onnx.export",
+        )
+    except Exception as e:
+        catch(e)
+        return None
+    if export_onnx is None:
+        return None
 
     try:
-        export_onnx(model_path, model_path.replace(".pth", "") + ".onnx")
+        export_onnx(
+            model_path,
+            model_path.replace(".pth", "") + ".onnx",
+        )
         logger.info("ONNX export complete.")
         return model_path.replace(".pth", "") + ".onnx"
     except Exception as e:
@@ -1277,10 +1244,10 @@ def export_files_rvc(experiment: str):
         logger.error(f"Invalid experiment name: {e}")
         return []
 
-    now_dir = os.getcwd()
-    now_dir = full_path(secure_path(now_dir))
-    weight_root = os.path.join(now_dir, "assets", "weights")
-    index_root = os.path.join(now_dir, "logs")
+    rvc_root = _rvc_package_root()
+    weight_root = os.path.join(rvc_root, "assets", "weights")
+    index_root = os.path.join(rvc_root, "logs")
+
     exp_path = os.path.join(index_root, experiment)
     latest_checkpoint_filename = find_latest_checkpoint(weight_root, experiment)
     if latest_checkpoint_filename is None:
@@ -1386,6 +1353,7 @@ def find_latest_checkpoint(folder_path: str, model_name: str) -> str | None:
 def train_model_rvc(
     experiment: str, path: str, lvl: int = 1, f0method: str = "crepe"
 ):
+    from definers.ml.rvc import import_rvc_symbol
     from definers.system import secure_path
 
     logger.info(f"Starting RVC training for experiment: {experiment}")
@@ -1401,25 +1369,29 @@ def train_model_rvc(
     except Exception as e:
         logger.error(f"Invalid audio path for training: {e}")
         return None
-    Config = _load_optional_rvc_symbol(
-        "Config",
-        "definers.configs.config",
-        "configs.config",
-    )
-    if Config is None:
-        return None
+    rvc_root = _rvc_package_root()
+    index_root = os.path.join(rvc_root, "logs")
     try:
         init_pretrained_model("svc")
         import torch
     except Exception as e:
         logger.error(f"RVC training dependencies unavailable: {e}")
         return None
+    Config = import_rvc_symbol(
+        "Config",
+        "definers.configs.config",
+        "configs.config",
+    )
+    if Config is None:
+        return None
+
+    def _run_rvc_command(command):
+        with cwd(rvc_root):
+            return run(command)
 
     path = normalize_audio_to_peak(path)
     (path, music) = separate_stems(path)
     path = normalize_audio_to_peak(path)
-    now_dir = os.getcwd()
-    index_root = os.path.join(now_dir, "logs")
     config = Config()
     gpus = (
         "-".join([str(i) for i in range(torch.cuda.device_count())])
@@ -1490,7 +1462,7 @@ def train_model_rvc(
                 exp_path,
             ]
             logger.info("Execute: " + " ".join(cmd_preprocess))
-            run(cmd_preprocess)
+            _run_rvc_command(cmd_preprocess)
         with open(log_file_preprocess) as f_preprocess:
             log_content = f_preprocess.read()
             logger.info("Preprocessing Log:\n" + log_content)
@@ -1524,7 +1496,7 @@ def train_model_rvc(
                     cmd_f0 = f'"{config.python_cmd}" -m infer.modules.train.extract.extract_f0_print "{exp_path}" {n_p} {f0method}'
                     logger.info("Execute: " + cmd_f0)
 
-                    run(shlex.split(cmd_f0))
+                    _run_rvc_command(shlex.split(cmd_f0))
                 else:
                     gpus_rmvpe_split = gpus_rmvpe.split("-")
                     leng = len(gpus_rmvpe_split)
@@ -1535,7 +1507,10 @@ def train_model_rvc(
                     for idx, n_g in enumerate(gpus_rmvpe_split):
                         cmd_f0_rmvpe = f'"{config.python_cmd}" -m infer.modules.train.extract.extract_f0_rmvpe {leng} {idx} {n_g} "{exp_path}" {config.is_half}'
                         logger.info(f"Execute (GPU {n_g}): " + cmd_f0_rmvpe)
-                        p = thread(run, shlex.split(cmd_f0_rmvpe))
+                        p = thread(
+                            _run_rvc_command,
+                            shlex.split(cmd_f0_rmvpe),
+                        )
                         ps.append(p)
                     wait(*ps)
             logger.info("Extracting features...")
@@ -1547,7 +1522,10 @@ def train_model_rvc(
             for idx, n_g in enumerate(gpus.split("-")):
                 cmd_feature_print = f'"{config.python_cmd}" -m infer.modules.train.extract_feature_print {config.device} {leng} {idx} "{exp_path}" v2'
                 logger.info(f"Execute (GPU {n_g}): " + cmd_feature_print)
-                p = thread(run, shlex.split(cmd_feature_print))
+                p = thread(
+                    _run_rvc_command,
+                    shlex.split(cmd_feature_print),
+                )
                 ps.append(p)
             wait(*ps)
         with open(log_file_f0_feature) as f_f0_feature:
@@ -1722,7 +1700,7 @@ def train_model_rvc(
                 "v2",
             ]
             logger.info("Execute: " + " ".join(cmd_train))
-            run(cmd_train)
+            _run_rvc_command(cmd_train)
         with open(log_file_train) as f_train:
             log_content = f_train.read()
             logger.info("Training Log:\n" + log_content)
@@ -1751,6 +1729,7 @@ def train_model_rvc(
 
 
 def convert_vocal_rvc(experiment: str, path: str):
+    from definers.ml.rvc import import_rvc_symbol
     from definers.system import secure_path
 
     logger.info(f"Starting vocal conversion for experiment: {experiment}")
@@ -1765,13 +1744,22 @@ def convert_vocal_rvc(experiment: str, path: str):
     except Exception as e:
         logger.error(f"Invalid audio path for conversion: {e}")
         return None
+    rvc_root = _rvc_package_root()
+    weight_root = os.path.join(rvc_root, "assets", "weights")
+    index_root = os.path.join(rvc_root, "logs")
 
-    Config = _load_optional_rvc_symbol(
+    try:
+        init_pretrained_model("svc")
+    except Exception as e:
+        logger.error(f"Vocal conversion feature unavailable: {e}")
+        return None
+
+    Config = import_rvc_symbol(
         "Config",
         "definers.configs.config",
         "configs.config",
     )
-    VC = _load_optional_rvc_symbol(
+    VC = import_rvc_symbol(
         "VC",
         "definers.ml.backends.vc.modules",
         "definers.infer.modules.vc.modules",
@@ -1780,18 +1768,8 @@ def convert_vocal_rvc(experiment: str, path: str):
     if Config is None or VC is None:
         return None
 
-    try:
-        init_pretrained_model("svc")
-    except Exception as e:
-        logger.error(f"Vocal conversion feature unavailable: {e}")
-        return None
-
     path = normalize_audio_to_peak(path)
     (path, music) = separate_stems(path)
-    now_dir = os.getcwd()
-    now_dir = secure_path(now_dir)
-    index_root = os.path.join(now_dir, "logs")
-    weight_root = os.path.join(now_dir, "assets", "weights")
     config = Config()
     vc = VC(config)
     exp_path = os.path.join(index_root, experiment)
@@ -1822,27 +1800,33 @@ def convert_vocal_rvc(experiment: str, path: str):
     f0_mean_pooling = 0
     rms_mix_rate = 0.0
     try:
-        vc.get_vc(latest_checkpoint_filename, index_rate, f0_mean_pooling)
+        with cwd(rvc_root):
+            vc.get_vc(
+                latest_checkpoint_filename,
+                index_rate,
+                f0_mean_pooling,
+            )
         logger.info("VC model loaded.")
     except Exception as e:
         logger.error(f"Failed to load VC model: {e}")
         catch(e)
         return None
     try:
-        (message, (sr, aud)) = vc.vc_single(
-            sid=0,
-            input_audio_path=path,
-            f0_up_key=semitones,
-            f0_file=None,
-            f0_method="harvest",
-            file_index=idx_path,
-            file_index2=None,
-            index_rate=index_rate,
-            filter_radius=filter_radius,
-            resample_sr=0,
-            rms_mix_rate=rms_mix_rate,
-            protect=protect,
-        )
+        with cwd(rvc_root):
+            (message, (sr, aud)) = vc.vc_single(
+                sid=0,
+                input_audio_path=path,
+                f0_up_key=semitones,
+                f0_file=None,
+                f0_method="harvest",
+                file_index=idx_path,
+                file_index2=None,
+                index_rate=index_rate,
+                filter_radius=filter_radius,
+                resample_sr=0,
+                rms_mix_rate=rms_mix_rate,
+                protect=protect,
+            )
         logger.info(f"Vocal conversion message: {message}")
     except Exception as e:
         logger.error(f"An error occurred during vocal conversion: {e}")

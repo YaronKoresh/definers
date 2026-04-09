@@ -1,4 +1,4 @@
-from definers.cli.command_registry import CliCommandRegistry
+from definers.cli.command_registry import create_cli_command_registry
 from definers.cli.health import (
     collect_cli_health_snapshot,
     run_cli_health_check,
@@ -8,9 +8,7 @@ from definers.cli.runtime import resolve_cli_handlers
 
 
 def test_collect_cli_health_snapshot_reports_registry_metrics():
-    command_registry = CliCommandRegistry.create_cli_command_registry(
-        ["chat", "audio"]
-    )
+    command_registry = create_cli_command_registry(["chat", "audio"])
 
     snapshot = collect_cli_health_snapshot(
         command_registry=command_registry,
@@ -33,7 +31,7 @@ def test_collect_cli_health_snapshot_reports_registry_metrics():
 
 
 def test_validate_cli_health_snapshot_rejects_missing_direct_commands():
-    command_registry = CliCommandRegistry.create_cli_command_registry(["chat"])
+    command_registry = create_cli_command_registry(["chat"])
     snapshot = collect_cli_health_snapshot(
         command_registry=command_registry,
         gui_project_names=("chat", "audio"),

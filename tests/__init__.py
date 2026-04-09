@@ -7,7 +7,7 @@ _original_import = builtins.__import__
 
 
 def _install_optional_module_alias(
-    module_name: str, fallback_module_name: str
+    module_name: str, fallback_module_path: str
 ) -> None:
     if module_name in sys.modules:
         return
@@ -16,14 +16,26 @@ def _install_optional_module_alias(
         return
     except Exception:
         pass
-    sys.modules[module_name] = _original_import_module(
-        f"definers.{fallback_module_name}"
-    )
+    sys.modules[module_name] = _original_import_module(fallback_module_path)
 
 
 def _install_optional_shims() -> None:
-    _install_optional_module_alias("cv2", "opencv_compat")
-    _install_optional_module_alias("datasets", "datasets_compat")
+    _install_optional_module_alias("cv2", "definers.internal_compat.opencv")
+    _install_optional_module_alias(
+        "datasets", "definers.internal_compat.datasets"
+    )
+    _install_optional_module_alias(
+        "googledrivedownloader",
+        "definers.internal_compat.googledrivedownloader",
+    )
+    _install_optional_module_alias(
+        "playwright",
+        "definers.internal_compat.playwright",
+    )
+    _install_optional_module_alias(
+        "refiners",
+        "definers.internal_compat.refiners",
+    )
 
 
 def _is_stub_module(module):
