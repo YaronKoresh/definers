@@ -71,9 +71,9 @@ def apply_rms(y: np.ndarray, rms: float):
 
 def get_lufs(y: np.ndarray, sr: int) -> float:
     try:
-        from .mastering_loudness import get_lufs as _get_lufs
+        from .mastering.loudness import get_lufs as _get_lufs
     except ImportError:
-        from definers.audio.mastering_loudness import get_lufs as _get_lufs
+        from definers.audio.mastering.loudness import get_lufs as _get_lufs
 
     return _get_lufs(y, sr)
 

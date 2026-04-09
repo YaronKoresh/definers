@@ -10,7 +10,14 @@ import pytest
 
 
 def _load_module(module_name: str, module_path: Path):
-    spec = importlib.util.spec_from_file_location(module_name, module_path)
+    spec_kwargs = {}
+    if module_path.name == "__init__.py":
+        spec_kwargs["submodule_search_locations"] = [str(module_path.parent)]
+    spec = importlib.util.spec_from_file_location(
+        module_name,
+        module_path,
+        **spec_kwargs,
+    )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = module
@@ -20,6 +27,7 @@ def _load_module(module_name: str, module_path: Path):
 
 ROOT = Path(__file__).resolve().parents[1]
 AUDIO_ROOT = ROOT / "src" / "definers" / "audio"
+MASTERING_ROOT = AUDIO_ROOT / "mastering"
 
 
 def _install_scipy_stub() -> None:
@@ -149,7 +157,7 @@ def _load_mastering_module(package_name: str):
             log=lambda *_, **__: None,
         )
     mastering_module = _load_module(
-        f"{package_name}.mastering", AUDIO_ROOT / "mastering.py"
+        f"{package_name}.mastering", MASTERING_ROOT / "__init__.py"
     )
     return config_module, mastering_module
 
@@ -157,6 +165,8 @@ def _load_mastering_module(package_name: str):
 CONFIG_MODULE, MASTERING_MODULE = _load_mastering_module(
     "_test_audio_mastering_generation_pkg.audio"
 )
+MASTERING_AUDIO_PACKAGE = MASTERING_MODULE.__package__.rpartition(".")[0]
+MASTERING_PACKAGE = MASTERING_MODULE.__package__
 
 
 def test_default_intensity_remains_neutral_one():
@@ -2010,6 +2020,122 @@ def test_process_keeps_post_clamp_to_final_output_linear_when_recovery_runs(
     assert np.allclose(y_out, final_in_memory)
 
 
+def test_process_stem_mastered_input_skips_multiband_and_trims_hot_output(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    mastering = MASTERING_MODULE.SmartMastering(
+        8000,
+        resampling_target=8000,
+        preset="balanced",
+        target_lufs=-8.0,
+        micro_dynamics_strength=0.0,
+        pre_limiter_saturation_ratio=0.0,
+    )
+    mastering.stem_mastered_input = True
+    source = np.array([0.1, -0.1, 0.2, -0.2], dtype=np.float32)
+    multiband_calls: list[bool] = []
+    loudness_values = iter([-8.0])
+    metrics_values = iter(
+        [
+            types.SimpleNamespace(
+                integrated_lufs=-5.0,
+                max_short_term_lufs=-6.0,
+                max_momentary_lufs=-5.5,
+                crest_factor_db=7.0,
+                stereo_width_ratio=0.2,
+                low_end_mono_ratio=0.95,
+                true_peak_dbfs=-1.0,
+            ),
+            types.SimpleNamespace(
+                integrated_lufs=-8.0,
+                max_short_term_lufs=-9.0,
+                max_momentary_lufs=-8.5,
+                crest_factor_db=7.0,
+                stereo_width_ratio=0.2,
+                low_end_mono_ratio=0.95,
+                true_peak_dbfs=-4.0,
+            ),
+            types.SimpleNamespace(
+                integrated_lufs=-8.0,
+                max_short_term_lufs=-9.0,
+                max_momentary_lufs=-8.5,
+                crest_factor_db=7.0,
+                stereo_width_ratio=0.2,
+                low_end_mono_ratio=0.95,
+                true_peak_dbfs=-4.0,
+            ),
+        ]
+    )
+
+    monkeypatch.setattr(MASTERING_MODULE, "apply_exciter", lambda y, *_: y)
+    monkeypatch.setattr(MASTERING_MODULE, "freq_cut", lambda y, *_, **__: y)
+    monkeypatch.setattr(mastering, "apply_eq", lambda y: y)
+    monkeypatch.setattr(
+        mastering,
+        "multiband_compress",
+        lambda y: multiband_calls.append(True) or y,
+    )
+    monkeypatch.setattr(mastering, "apply_spatial_enhancement", lambda y: y)
+    monkeypatch.setattr(
+        mastering,
+        "apply_low_end_mono_tightening",
+        lambda y: y,
+    )
+    monkeypatch.setattr(
+        mastering,
+        "apply_pre_limiter_saturation",
+        lambda y, dynamic_drive_db=0.0: y,
+    )
+    monkeypatch.setattr(mastering, "apply_micro_dynamics_finish", lambda y: y)
+    monkeypatch.setattr(mastering, "apply_delivery_trim", lambda y: y)
+    monkeypatch.setattr(
+        mastering,
+        "apply_safety_clamp",
+        lambda y, ceil_db=-0.1: y,
+    )
+    monkeypatch.setattr(
+        mastering,
+        "apply_final_headroom_recovery",
+        lambda y: y,
+    )
+    monkeypatch.setattr(
+        MASTERING_MODULE,
+        "get_lufs",
+        lambda y, sr: next(loudness_values),
+    )
+    monkeypatch.setattr(
+        MASTERING_MODULE,
+        "_measure_mastering_loudness",
+        lambda y, sr, **kwargs: next(metrics_values),
+    )
+    monkeypatch.setattr(
+        mastering,
+        "plan_follow_up_action",
+        lambda metrics, contract: types.SimpleNamespace(
+            should_apply=False,
+            gain_db=0.0,
+            soft_clip_ratio=mastering.limiter_soft_clip_ratio,
+            stereo_width_scale=1.0,
+            reasons=(),
+            integrated_gap_db=0.0,
+        ),
+    )
+    monkeypatch.setattr(
+        mastering,
+        "apply_limiter",
+        lambda y, drive_db, ceil_db, **kwargs: y,
+    )
+
+    sr_out, y_out = mastering.process(source, 8000)
+
+    expected_scale = float(10.0 ** (-3.0 / 20.0))
+
+    assert sr_out == 8000
+    assert multiband_calls == []
+    assert np.allclose(y_out, np.vstack([source, source]) * expected_scale)
+    assert np.allclose(mastering.last_stage_signals["final_in_memory"], y_out)
+
+
 def test_process_applies_final_peak_catch_after_character_stage_when_true_peak_is_hot(
     monkeypatch: pytest.MonkeyPatch,
 ):
@@ -2522,7 +2648,7 @@ def test_master_with_report_writes_report_file(
 ):
     report_path = tmp_path / "mastering-report.json"
     output_path = tmp_path / "mastered.wav"
-    io_module_name = f"{MASTERING_MODULE.__package__}.io"
+    io_module_name = f"{MASTERING_AUDIO_PACKAGE}.io"
     original_io_module = sys.modules.get(io_module_name)
 
     fake_report = types.SimpleNamespace(
@@ -2640,11 +2766,9 @@ def test_master_routes_stem_mastering_through_audio_separator_pipeline(
 ):
     report_path = tmp_path / "stem-mastering-report.json"
     output_path = tmp_path / "stem-mastered.wav"
-    io_module_name = f"{MASTERING_MODULE.__package__}.io"
-    stems_module_name = f"{MASTERING_MODULE.__package__}.stems"
-    mastering_stems_module_name = (
-        f"{MASTERING_MODULE.__package__}.mastering_stems"
-    )
+    io_module_name = f"{MASTERING_AUDIO_PACKAGE}.io"
+    stems_module_name = f"{MASTERING_AUDIO_PACKAGE}.stems"
+    mastering_stems_module_name = f"{MASTERING_PACKAGE}.stems"
     original_io_module = sys.modules.get(io_module_name)
     original_stems_module = sys.modules.get(stems_module_name)
     original_mastering_stems_module = sys.modules.get(
@@ -2665,6 +2789,7 @@ def test_master_routes_stem_mastering_through_audio_separator_pipeline(
         ]
     ] = []
     mixed_signal = np.full((2, 8), 0.25, dtype=np.float32)
+    processed_stem_flags: list[bool] = []
 
     fake_report = types.SimpleNamespace(
         preset_name="balanced",
@@ -2686,11 +2811,13 @@ def test_master_routes_stem_mastering_through_audio_separator_pipeline(
             self.true_peak_oversample_factor = 1
             self.delivery_bitrate = None
             self.last_stage_signals = {}
+            self.stem_mastered_input = False
             self.config = CONFIG_MODULE.SmartMasteringConfig.from_preset(
                 kwargs.get("preset")
             )
 
         def process(self, y, sr):
+            processed_stem_flags.append(bool(self.stem_mastered_input))
             processed_inputs.append(np.array(y, copy=True))
             return sr, np.array(y, copy=True)
 
@@ -2819,6 +2946,7 @@ def test_master_routes_stem_mastering_through_audio_separator_pipeline(
         )
     ]
     assert len(processed_inputs) == 1
+    assert processed_stem_flags == [True]
     assert np.allclose(processed_inputs[0], mixed_signal)
 
 
@@ -2826,11 +2954,9 @@ def test_master_auto_selects_preset_before_stem_mastering_helper(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ):
     output_path = tmp_path / "stem-auto-mastered.wav"
-    io_module_name = f"{MASTERING_MODULE.__package__}.io"
-    stems_module_name = f"{MASTERING_MODULE.__package__}.stems"
-    mastering_stems_module_name = (
-        f"{MASTERING_MODULE.__package__}.mastering_stems"
-    )
+    io_module_name = f"{MASTERING_AUDIO_PACKAGE}.io"
+    stems_module_name = f"{MASTERING_AUDIO_PACKAGE}.stems"
+    mastering_stems_module_name = f"{MASTERING_PACKAGE}.stems"
     original_io_module = sys.modules.get(io_module_name)
     original_stems_module = sys.modules.get(stems_module_name)
     original_mastering_stems_module = sys.modules.get(

@@ -34,6 +34,10 @@ _ACTIVE_SCOPE = contextvars.ContextVar(
     "definers_download_activity_scope",
     default=None,
 )
+_ACTIVE_LABEL = contextvars.ContextVar(
+    "definers_download_activity_label",
+    default=None,
+)
 _SNAPSHOT_LOCK = threading.Lock()
 _SNAPSHOTS: dict[str, DownloadActivitySnapshot] = {}
 
@@ -142,6 +146,23 @@ def current_download_activity_scope() -> str | None:
     if not scope_id:
         return None
     return str(scope_id)
+
+
+@contextlib.contextmanager
+def bind_download_activity_label(label: str | None):
+    normalized_label = str(label).strip() or None if label is not None else None
+    token = _ACTIVE_LABEL.set(normalized_label)
+    try:
+        yield normalized_label
+    finally:
+        _ACTIVE_LABEL.reset(token)
+
+
+def current_download_activity_label() -> str | None:
+    label = _ACTIVE_LABEL.get()
+    if not label:
+        return None
+    return str(label)
 
 
 def report_download_activity(

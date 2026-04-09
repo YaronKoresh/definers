@@ -4,13 +4,13 @@ from dataclasses import asdict, dataclass
 
 import numpy as np
 
-from .mastering_contract import MasteringContract
-from .mastering_dynamics import (
+from .contract import MasteringContract
+from .dynamics import (
     apply_pre_limiter_saturation,
     apply_safety_clamp,
 )
-from .mastering_loudness import MasteringLoudnessMetrics
-from .mastering_reference import measure_transient_density
+from .loudness import MasteringLoudnessMetrics
+from .reference import measure_transient_density
 
 
 @dataclass(frozen=True, slots=True)

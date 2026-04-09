@@ -1425,11 +1425,22 @@ class _AudioSeparatorActivityTqdm:
             "byte",
             "bytes",
         }
-        self._item_label = self._description or "audio-separator"
+        activity_label: str | None = None
+        try:
+            from definers.system.download_activity import (
+                current_download_activity_label,
+            )
+
+            activity_label = current_download_activity_label()
+        except Exception:
+            activity_label = None
+        self._item_label = (
+            self._description or activity_label or "audio-separator"
+        )
         self._detail = self._description or (
             "Downloading audio-separator artifact."
             if self._uses_byte_progress
-            else "Running audio-separator task."
+            else None
         )
         self.n = 0
         self.total = self._resolve_total(total, iterable)
@@ -1503,7 +1514,9 @@ class _AudioSeparatorActivityTqdm:
         self, description: object, refresh: bool = True
     ) -> None:
         self._description = str(description or "").strip()
-        self._item_label = self._description or "audio-separator"
+        self._item_label = (
+            self._description or self._item_label or "audio-separator"
+        )
         self._detail = self._description or self._detail
         if refresh:
             self._publish()

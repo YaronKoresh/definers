@@ -639,7 +639,11 @@ class GradioShared:
     }
 }
 
-.audio-container .timestamps time {
+tbody > tr:nth-child(odd) {
+    background: unset !important;
+}
+
+.timestamps time {
     display: flex;
     margin-top: 4mm;
     color: var(--definers-muted);

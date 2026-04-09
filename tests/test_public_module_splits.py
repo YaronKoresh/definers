@@ -11,26 +11,26 @@ from definers.audio import (
     voice,
 )
 from definers.audio.mastering import master
-from definers.audio.mastering_character import (
+from definers.audio.mastering.character import (
     LimiterRecoverySettings,
     apply_low_end_mono_tightening,
     apply_micro_dynamics_finish,
     resolve_limiter_recovery_settings,
 )
-from definers.audio.mastering_contract import (
+from definers.audio.mastering.contract import (
     MasteringContract,
     MasteringContractAssessment,
     assess_mastering_contract,
     resolve_mastering_contract,
 )
-from definers.audio.mastering_delivery import (
+from definers.audio.mastering.delivery import (
     DeliveryProfile,
     DeliveryVerificationResult,
     resolve_delivery_profile,
     save_verified_audio,
     verify_delivery_export,
 )
-from definers.audio.mastering_finalization import (
+from definers.audio.mastering.finalization import (
     FinalizationAction,
     apply_delivery_trim,
     apply_pre_limiter_saturation,
@@ -40,31 +40,31 @@ from definers.audio.mastering_finalization import (
     plan_follow_up_action,
     resolve_final_true_peak_target,
 )
-from definers.audio.mastering_loudness import (
+from definers.audio.mastering.loudness import (
     MasteringLoudnessMetrics,
     measure_low_end_mono_ratio,
     measure_mastering_loudness,
     measure_stereo_width,
     measure_true_peak,
 )
-from definers.audio.mastering_metrics import (
+from definers.audio.mastering.metrics import (
     MasteringReport,
     generate_mastering_report,
 )
-from definers.audio.mastering_presets import (
+from definers.audio.mastering.presets import (
     MasteringPresets,
     balanced,
     edm,
     vocal,
 )
-from definers.audio.mastering_profile import SpectralBalanceProfile
-from definers.audio.mastering_reference import (
+from definers.audio.mastering.profile import SpectralBalanceProfile
+from definers.audio.mastering.reference import (
     ReferenceAnalysis,
     ReferenceMatchAssist,
     analyze_reference,
     reference_match_assist,
 )
-from definers.audio.mastering_stems import (
+from definers.audio.mastering.stems import (
     StemMasteringPlan,
     mix_stem_layers,
     process_stem_layers,

@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import re
 from collections.abc import Mapping, Sequence
+from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -71,8 +72,8 @@ class MasteringSeparatorPlan:
     reference_split_stage: SeparatorModelStage
     four_stem_stage: SeparatorModelStage
     vocal_stage: SeparatorModelStage
-    vocal_restoration_stage: SeparatorModelStage
-    instrumental_cleanup_stage: SeparatorModelStage
+    vocal_restoration_stage: SeparatorModelStage | None
+    instrumental_cleanup_stage: SeparatorModelStage | None
 
 
 def _normalize_model_name(value: str, *, option_name: str) -> str:
@@ -121,6 +122,33 @@ def _resolve_mastering_sample_rate(input_sample_rate: int) -> int:
     return 44100
 
 
+def _has_repair_quality_flags(quality_flags: Sequence[str]) -> bool:
+    return any(
+        str(flag).strip() in {"Low-Quality", "Old-Recording"}
+        for flag in quality_flags
+    )
+
+
+def _separator_activity_scope(
+    item_label: str,
+    *,
+    detail: str | None = None,
+):
+    try:
+        from definers.system.download_activity import (
+            bind_download_activity_label,
+            report_download_activity,
+        )
+    except Exception:
+        return nullcontext()
+    report_download_activity(
+        item_label,
+        detail=detail,
+        phase="step",
+    )
+    return bind_download_activity_label(item_label)
+
+
 def build_mastering_separator_plan(
     input_sample_rate: int,
     *,
@@ -150,11 +178,10 @@ def build_mastering_separator_plan(
     ):
         four_stem_candidates.insert(0, override_model_name)
 
+    use_repair_quality_path = _has_repair_quality_flags(resolved_quality_flags)
+
     preprocess_stages: tuple[SeparatorModelStage, ...] = ()
-    if any(
-        flag in {"Low-Quality", "Old-Recording"}
-        for flag in resolved_quality_flags
-    ):
+    if use_repair_quality_path:
         preprocess_stages = (
             SeparatorModelStage(
                 model_candidates=_normalize_stage_candidates(
@@ -223,22 +250,30 @@ def build_mastering_separator_plan(
             preferred_stems=("vocals",),
             required=True,
         ),
-        vocal_restoration_stage=SeparatorModelStage(
-            model_candidates=_normalize_stage_candidates(
-                ("bs_roformer_vocals_resurrection_unwa.ckpt",)
-            ),
-            preferred_stems=("vocals",),
-            required=False,
+        vocal_restoration_stage=(
+            SeparatorModelStage(
+                model_candidates=_normalize_stage_candidates(
+                    ("bs_roformer_vocals_resurrection_unwa.ckpt",)
+                ),
+                preferred_stems=("vocals",),
+                required=False,
+            )
+            if use_repair_quality_path
+            else None
         ),
-        instrumental_cleanup_stage=SeparatorModelStage(
-            model_candidates=_normalize_stage_candidates(
-                (
-                    "mel_band_roformer_bleed_suppressor_v1.ckpt",
-                    "mel_band_roformer_instrumental_fv7z_gabox.ckpt",
-                )
-            ),
-            preferred_stems=("no bleed", "other", "instrumental"),
-            required=False,
+        instrumental_cleanup_stage=(
+            SeparatorModelStage(
+                model_candidates=_normalize_stage_candidates(
+                    (
+                        "mel_band_roformer_bleed_suppressor_v1.ckpt",
+                        "mel_band_roformer_instrumental_fv7z_gabox.ckpt",
+                    )
+                ),
+                preferred_stems=("no bleed", "other", "instrumental"),
+                required=False,
+            )
+            if use_repair_quality_path
+            else None
         ),
     )
 
@@ -495,6 +530,25 @@ def _select_stage_outputs_for_inputs(
     return selected_outputs
 
 
+def _separator_requires_single_input(error: Exception) -> bool:
+    message = str(error)
+    if "os.PathLike object, not list" in message:
+        return True
+    return "expected str" in message and "not list" in message
+
+
+def _run_loaded_separator_for_each_input(
+    separator: object,
+    input_paths: Sequence[str],
+) -> tuple[str, ...]:
+    output_files: list[str] = []
+    for input_path in input_paths:
+        output_files.extend(
+            _flatten_output_files(separator.separate(str(input_path)))
+        )
+    return tuple(output_files)
+
+
 def _run_separator_stage(
     input_path: str,
     stage: SeparatorModelStage,
@@ -552,7 +606,7 @@ def _run_separator_stage(
 
 def _run_separator_stage_batch(
     input_paths: Mapping[str, str],
-    stage: SeparatorModelStage,
+    stage: SeparatorModelStage | None,
     output_dir: str,
     target_sample_rate: int,
     *,
@@ -560,6 +614,8 @@ def _run_separator_stage_batch(
 ) -> dict[str, str]:
     if not input_paths:
         return {}
+    if stage is None:
+        return dict(input_paths)
 
     Separator = _load_audio_separator_class()
     last_error: Exception | None = None
@@ -588,7 +644,24 @@ def _run_separator_stage_batch(
                 )
             )
             separator.load_model(model_filename=model_candidate)
-            output_files = separator.separate(list(batched_input_paths))
+            batch_input: str | list[str]
+            if len(batched_input_paths) == 1:
+                batch_input = str(batched_input_paths[0])
+            else:
+                batch_input = [
+                    str(input_path) for input_path in batched_input_paths
+                ]
+            try:
+                output_files = separator.separate(batch_input)
+            except Exception as error:
+                if len(batched_input_paths) <= 1:
+                    raise
+                if not _separator_requires_single_input(error):
+                    raise
+                output_files = _run_loaded_separator_for_each_input(
+                    separator,
+                    batched_input_paths,
+                )
             resolved_output_files = _resolve_output_paths(
                 output_files, output_dir
             )
@@ -693,13 +766,15 @@ def _prepare_separator_input_audio(
 
 def _apply_stage_to_single_output(
     source_path: str,
-    stage: SeparatorModelStage,
+    stage: SeparatorModelStage | None,
     stage_name: str,
     output_root: str,
     target_sample_rate: int,
     *,
     shifts: int = 2,
 ) -> str:
+    if stage is None:
+        return source_path
     _model_name, output_files = _run_separator_stage(
         source_path,
         stage,
@@ -762,31 +837,46 @@ def _run_mastering_separator_pipeline(
     *,
     shifts: int = 2,
 ) -> dict[str, str]:
-    working_mix_path = _prepare_separator_input_audio(
-        audio_path,
-        output_root,
-        plan.target_sample_rate,
-    )
-    for stage_index, stage in enumerate(plan.preprocess_stages):
-        working_mix_path = _apply_stage_to_single_output(
-            working_mix_path,
-            stage,
-            f"preprocess_{stage_index}",
+    with _separator_activity_scope(
+        "Prepare separator input",
+        detail="Resampling the source audio for stem separation.",
+    ):
+        working_mix_path = _prepare_separator_input_audio(
+            audio_path,
             output_root,
             plan.target_sample_rate,
-            shifts=shifts,
         )
+    for stage_index, stage in enumerate(plan.preprocess_stages):
+        stage_label = (
+            "Dereverb source" if stage_index == 0 else "Denoise source"
+        )
+        with _separator_activity_scope(
+            stage_label,
+            detail="Running the separator preprocessing stage.",
+        ):
+            working_mix_path = _apply_stage_to_single_output(
+                working_mix_path,
+                stage,
+                f"preprocess_{stage_index}",
+                output_root,
+                plan.target_sample_rate,
+                shifts=shifts,
+            )
 
     isolated_vocal_path: str | None = None
     instrumental_reference_path: str | None = None
     if plan.vocal_pair_stage is not None:
-        _model_name, vocal_pair_outputs = _run_separator_stage(
-            working_mix_path,
-            plan.vocal_pair_stage,
-            str(Path(output_root) / "vocal_pair"),
-            plan.target_sample_rate,
-            shifts=shifts,
-        )
+        with _separator_activity_scope(
+            "Separate vocals and reference",
+            detail="Running the vocal-pair separator stage.",
+        ):
+            _model_name, vocal_pair_outputs = _run_separator_stage(
+                working_mix_path,
+                plan.vocal_pair_stage,
+                str(Path(output_root) / "vocal_pair"),
+                plan.target_sample_rate,
+                shifts=shifts,
+            )
         isolated_vocal_path = _select_stage_output(
             vocal_pair_outputs,
             ("vocals",),
@@ -798,23 +888,31 @@ def _run_mastering_separator_pipeline(
         if isolated_vocal_path is None or instrumental_reference_path is None:
             raise FileNotFoundError("Mastering stem separation failed")
     else:
-        instrumental_reference_path = _apply_stage_to_single_output(
-            working_mix_path,
-            plan.reference_split_stage,
-            "reference_split",
-            output_root,
+        with _separator_activity_scope(
+            "Split instrumental reference",
+            detail="Preparing the instrumental reference for four-stem extraction.",
+        ):
+            instrumental_reference_path = _apply_stage_to_single_output(
+                working_mix_path,
+                plan.reference_split_stage,
+                "reference_split",
+                output_root,
+                plan.target_sample_rate,
+                shifts=shifts,
+            )
+
+    four_stem_input_path = instrumental_reference_path or working_mix_path
+    with _separator_activity_scope(
+        "Separate instrumental stems",
+        detail="Extracting drums, bass, and other stems.",
+    ):
+        _four_stem_model_name, four_stem_outputs = _run_separator_stage(
+            four_stem_input_path,
+            plan.four_stem_stage,
+            str(Path(output_root) / "four_stem"),
             plan.target_sample_rate,
             shifts=shifts,
         )
-
-    four_stem_input_path = instrumental_reference_path or working_mix_path
-    _four_stem_model_name, four_stem_outputs = _run_separator_stage(
-        four_stem_input_path,
-        plan.four_stem_stage,
-        str(Path(output_root) / "four_stem"),
-        plan.target_sample_rate,
-        shifts=shifts,
-    )
     drums_path = _select_stage_output(four_stem_outputs, ("drums",))
     bass_path = _select_stage_output(four_stem_outputs, ("bass",))
     other_path = _select_stage_output(four_stem_outputs, ("other",))
@@ -822,47 +920,71 @@ def _run_mastering_separator_pipeline(
         raise FileNotFoundError("Mastering stem separation failed")
 
     if isolated_vocal_path is None:
-        isolated_vocal_path = _apply_stage_to_single_output(
-            working_mix_path,
-            plan.vocal_stage,
-            "vocal_isolation",
-            output_root,
-            plan.target_sample_rate,
-            shifts=shifts,
-        )
-    restored_vocal_path = _apply_stage_to_single_output(
-        isolated_vocal_path,
-        plan.vocal_restoration_stage,
-        "vocal_restoration",
-        output_root,
-        plan.target_sample_rate,
-        shifts=shifts,
-    )
-    cleaned_stage_paths = _run_separator_stage_batch(
-        {
-            "drums": drums_path,
-            "bass": bass_path,
-            "other": other_path,
-        },
-        plan.instrumental_cleanup_stage,
-        str(Path(output_root) / "instrumental_cleanup"),
-        plan.target_sample_rate,
-        shifts=shifts,
-    )
+        with _separator_activity_scope(
+            "Isolate vocals",
+            detail="Recovering the vocal stem from the prepared mix.",
+        ):
+            isolated_vocal_path = _apply_stage_to_single_output(
+                working_mix_path,
+                plan.vocal_stage,
+                "vocal_isolation",
+                output_root,
+                plan.target_sample_rate,
+                shifts=shifts,
+            )
+    restored_vocal_path = isolated_vocal_path
+    if plan.vocal_restoration_stage is not None:
+        with _separator_activity_scope(
+            "Restore vocals",
+            detail="Applying the optional vocal restoration pass.",
+        ):
+            restored_vocal_path = _apply_stage_to_single_output(
+                isolated_vocal_path,
+                plan.vocal_restoration_stage,
+                "vocal_restoration",
+                output_root,
+                plan.target_sample_rate,
+                shifts=shifts,
+            )
+    cleaned_stage_paths = {
+        "drums": drums_path,
+        "bass": bass_path,
+        "other": other_path,
+    }
+    if plan.instrumental_cleanup_stage is not None:
+        with _separator_activity_scope(
+            "Clean instrumental stems",
+            detail="Applying the optional bleed-suppression cleanup pass.",
+        ):
+            cleaned_stage_paths = _run_separator_stage_batch(
+                {
+                    "drums": drums_path,
+                    "bass": bass_path,
+                    "other": other_path,
+                },
+                plan.instrumental_cleanup_stage,
+                str(Path(output_root) / "instrumental_cleanup"),
+                plan.target_sample_rate,
+                shifts=shifts,
+            )
     cleaned_drums_path = cleaned_stage_paths["drums"]
     cleaned_bass_path = cleaned_stage_paths["bass"]
     cleaned_other_path = cleaned_stage_paths["other"]
 
-    return _write_selected_stage_outputs(
-        {
-            "vocals": restored_vocal_path,
-            "drums": cleaned_drums_path,
-            "bass": cleaned_bass_path,
-            "other": cleaned_other_path,
-        },
-        output_root,
-        plan.target_sample_rate,
-    )
+    with _separator_activity_scope(
+        "Write mastering stems",
+        detail="Saving the aligned stem files for mastering.",
+    ):
+        return _write_selected_stage_outputs(
+            {
+                "vocals": restored_vocal_path,
+                "drums": cleaned_drums_path,
+                "bass": cleaned_bass_path,
+                "other": cleaned_other_path,
+            },
+            output_root,
+            plan.target_sample_rate,
+        )
 
 
 def _run_vocal_pair_separator_pipeline(
@@ -945,7 +1067,11 @@ def separate_stem_layers(
             quality_flags=quality_flags,
             model_name=model_name,
         )
-        _prefetch_mastering_plan_models(plan)
+        with _separator_activity_scope(
+            "Prepare separator models",
+            detail="Resolving the required separator checkpoints before inference.",
+        ):
+            _prefetch_mastering_plan_models(plan)
         stem_paths = _run_mastering_separator_pipeline(
             audio_path,
             resolved_output_dir,

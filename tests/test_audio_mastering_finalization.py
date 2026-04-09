@@ -19,6 +19,7 @@ def _load_module(module_name: str, module_path: Path):
 
 ROOT = Path(__file__).resolve().parents[1]
 AUDIO_ROOT = ROOT / "src" / "definers" / "audio"
+MASTERING_ROOT = AUDIO_ROOT / "mastering"
 
 
 def _install_scipy_stub() -> None:
@@ -56,22 +57,26 @@ def _load_finalization_module(package_name: str):
     package = types.ModuleType(package_name)
     package.__path__ = [str(AUDIO_ROOT)]
     sys.modules[package_name] = package
+    mastering_package_name = f"{package_name}.mastering"
+    mastering_package = types.ModuleType(mastering_package_name)
+    mastering_package.__path__ = [str(MASTERING_ROOT)]
+    sys.modules[mastering_package_name] = mastering_package
     _install_scipy_stub()
     _load_module(
-        f"{package_name}.mastering_loudness",
-        AUDIO_ROOT / "mastering_loudness.py",
+        f"{mastering_package_name}.loudness",
+        MASTERING_ROOT / "loudness.py",
     )
     _load_module(
-        f"{package_name}.mastering_contract",
-        AUDIO_ROOT / "mastering_contract.py",
+        f"{mastering_package_name}.contract",
+        MASTERING_ROOT / "contract.py",
     )
     _load_module(
-        f"{package_name}.mastering_dynamics",
-        AUDIO_ROOT / "mastering_dynamics.py",
+        f"{mastering_package_name}.dynamics",
+        MASTERING_ROOT / "dynamics.py",
     )
     return _load_module(
-        f"{package_name}.mastering_finalization",
-        AUDIO_ROOT / "mastering_finalization.py",
+        f"{mastering_package_name}.finalization",
+        MASTERING_ROOT / "finalization.py",
     )
 
 

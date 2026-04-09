@@ -468,6 +468,10 @@ _DERIVED_FIELD_SPECS: dict[str, dict[str, Any]] = {
         "coeffs": {"volume": 0.05, "effects": -0.02},
         "clip": (0.0, 1.5),
     },
+    "stem_cleanup_strength": {
+        "base": 1.0,
+        "clip": (0.0, 1.5),
+    },
     "stem_tone_enrichment_enabled": {"base": True, "kind": "bool"},
     "stem_tone_enrichment_mix": {
         "base": 0.14,

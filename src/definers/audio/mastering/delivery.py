@@ -6,8 +6,8 @@ from typing import Any
 
 import numpy as np
 
-from .mastering_contract import MasteringContract
-from .mastering_metrics import MasteringReport, generate_mastering_report
+from .contract import MasteringContract
+from .metrics import MasteringReport, generate_mastering_report
 
 _LOSSY_EXTENSIONS = {"aac", "m4a", "mp3", "ogg", "opus", "wma"}
 
@@ -115,6 +115,7 @@ def verify_delivery_export(
     output_signal: np.ndarray,
     sample_rate: int,
     *,
+    final_in_memory_signal: np.ndarray | None = None,
     post_eq_signal: np.ndarray | None = None,
     post_spatial_signal: np.ndarray | None = None,
     post_limiter_signal: np.ndarray | None = None,
@@ -134,6 +135,9 @@ def verify_delivery_export(
     resolved_true_peak_target_dbfs: float | None = None,
     stereo_motion_activity: float | None = None,
     stereo_motion_correlation_guard: float | None = None,
+    export_gain_applied_db: float = 0.0,
+    export_peak_alignment_mode: str | None = None,
+    export_peak_alignment_target_dbfs: float | None = None,
     delivery_trim_attenuation_db: float = 0.0,
     delivery_trim_input_true_peak_dbfs: float | None = None,
     delivery_trim_target_dbfs: float | None = None,
@@ -180,6 +184,7 @@ def verify_delivery_export(
         input_signal,
         output_signal,
         sample_rate,
+        final_in_memory_signal=final_in_memory_signal,
         post_eq_signal=post_eq_signal,
         post_spatial_signal=post_spatial_signal,
         post_limiter_signal=post_limiter_signal,
@@ -200,6 +205,9 @@ def verify_delivery_export(
         resolved_true_peak_target_dbfs=resolved_true_peak_target_dbfs,
         stereo_motion_activity=stereo_motion_activity,
         stereo_motion_correlation_guard=stereo_motion_correlation_guard,
+        export_gain_applied_db=export_gain_applied_db,
+        export_peak_alignment_mode=export_peak_alignment_mode,
+        export_peak_alignment_target_dbfs=export_peak_alignment_target_dbfs,
         delivery_trim_attenuation_db=delivery_trim_attenuation_db,
         delivery_trim_input_true_peak_dbfs=delivery_trim_input_true_peak_dbfs,
         delivery_trim_target_dbfs=delivery_trim_target_dbfs,
@@ -273,6 +281,8 @@ def verify_delivery_export(
 def _apply_linear_export_ceiling(
     signal: np.ndarray,
     ceil_db: float | None,
+    *,
+    allow_positive_gain: bool = True,
 ) -> np.ndarray:
     working_signal = np.nan_to_num(
         np.asarray(signal, dtype=np.float32),
@@ -285,7 +295,38 @@ def _apply_linear_export_ceiling(
 
     limit_linear = float(10.0 ** (float(ceil_db) / 20.0))
     peak = float(np.max(np.abs(working_signal)))
+    if peak <= 0.0:
+        return working_signal
+    if not allow_positive_gain and peak < limit_linear:
+        return working_signal
     return working_signal * (limit_linear / peak)
+
+
+def _measure_export_gain_applied_db(
+    source_signal: np.ndarray,
+    output_signal: np.ndarray,
+) -> float:
+    source_peak = float(
+        np.max(np.abs(np.asarray(source_signal, dtype=np.float32)))
+    )
+    output_peak = float(
+        np.max(np.abs(np.asarray(output_signal, dtype=np.float32)))
+    )
+    if source_peak <= 0.0 or output_peak <= 0.0:
+        return 0.0
+    return float(20.0 * np.log10(output_peak / source_peak))
+
+
+def _resolve_export_peak_alignment_mode(
+    signal: np.ndarray,
+    ceil_db: float | None,
+) -> str | None:
+    if ceil_db is None or not np.isfinite(ceil_db):
+        return None
+    peak = float(np.max(np.abs(np.asarray(signal, dtype=np.float32))))
+    if peak <= 0.0:
+        return None
+    return "align_to_ceil"
 
 
 def _decoded_peak_excess_db(
@@ -369,6 +410,10 @@ def save_verified_audio(
         neginf=0.0,
     )
     working_signal = _apply_linear_export_ceiling(working_signal, ceil_db)
+    export_peak_alignment_mode = _resolve_export_peak_alignment_mode(
+        audio_signal,
+        ceil_db,
+    )
     final_path = destination_path
     verification_result: DeliveryVerificationResult | None = None
 
@@ -387,6 +432,7 @@ def save_verified_audio(
             input_signal,
             working_signal,
             sample_rate,
+            final_in_memory_signal=audio_signal,
             post_eq_signal=post_eq_signal,
             post_spatial_signal=post_spatial_signal,
             post_limiter_signal=post_limiter_signal,
@@ -406,6 +452,16 @@ def save_verified_audio(
             resolved_true_peak_target_dbfs=resolved_true_peak_target_dbfs,
             stereo_motion_activity=stereo_motion_activity,
             stereo_motion_correlation_guard=stereo_motion_correlation_guard,
+            export_gain_applied_db=_measure_export_gain_applied_db(
+                audio_signal,
+                working_signal,
+            ),
+            export_peak_alignment_mode=export_peak_alignment_mode,
+            export_peak_alignment_target_dbfs=(
+                None
+                if ceil_db is None or not np.isfinite(ceil_db)
+                else float(ceil_db)
+            ),
             delivery_trim_attenuation_db=delivery_trim_attenuation_db,
             delivery_trim_input_true_peak_dbfs=delivery_trim_input_true_peak_dbfs,
             delivery_trim_target_dbfs=delivery_trim_target_dbfs,
@@ -432,7 +488,9 @@ def save_verified_audio(
         attenuation_linear = float(10.0 ** (-attenuation_db / 20.0))
         attenuated_signal = working_signal * attenuation_linear
         attenuated_signal = _apply_linear_export_ceiling(
-            attenuated_signal, ceil_db
+            attenuated_signal,
+            ceil_db,
+            allow_positive_gain=False,
         )
         if np.allclose(attenuated_signal, working_signal, atol=1e-8, rtol=0.0):
             break

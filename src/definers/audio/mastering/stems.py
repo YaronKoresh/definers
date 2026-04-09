@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .config import SmartMasteringConfig
+from ..config import SmartMasteringConfig
 
 
 @dataclass(frozen=True, slots=True)
@@ -165,7 +165,7 @@ def _prepare_mixed_stem_layers(
         stem_signal = _as_stereo(signal)
         if int(sample_rate) != resolved_sample_rate:
             if resample_fn is None:
-                from .dsp import resample as _resample
+                from ..dsp import resample as _resample
 
                 resample_fn = _resample
             stem_signal = _as_stereo(
@@ -371,6 +371,12 @@ def resolve_stem_mastering_plan(
     base_config: SmartMasteringConfig,
 ) -> StemMasteringPlan:
     normalized_name = str(stem_name).strip().lower() or "other"
+    base_cleanup_strength = float(
+        np.clip(getattr(base_config, "stem_cleanup_strength", 1.0), 0.0, 1.5)
+    )
+    base_noise_gate_strength = float(
+        np.clip(getattr(base_config, "stem_noise_gate_strength", 1.0), 0.0, 1.5)
+    )
     shared_target_lufs = float(base_config.target_lufs - 3.2)
     shared_ceil_db = float(min(base_config.ceil_db, -1.2))
     shared_drive_db = float(max(base_config.drive_db * 0.78, 0.35))
@@ -422,6 +428,12 @@ def resolve_stem_mastering_plan(
                 "limiter_recovery_style": "tight",
                 "low_end_mono_tightening": "firm",
                 "low_end_mono_tightening_amount": 0.95,
+                "stem_cleanup_strength": float(
+                    np.clip(base_cleanup_strength * 0.58, 0.0, 1.5)
+                ),
+                "stem_noise_gate_strength": float(
+                    np.clip(base_noise_gate_strength * 0.6, 0.0, 1.5)
+                ),
                 "micro_dynamics_strength": float(
                     np.clip(
                         base_config.micro_dynamics_strength * 0.7, 0.0, 0.18
@@ -453,6 +465,12 @@ def resolve_stem_mastering_plan(
                 "stereo_motion_high_amount": 0.0,
                 "low_end_mono_tightening": "firm",
                 "low_end_mono_tightening_amount": 1.0,
+                "stem_cleanup_strength": float(
+                    np.clip(base_cleanup_strength * 0.74, 0.0, 1.5)
+                ),
+                "stem_noise_gate_strength": float(
+                    np.clip(base_noise_gate_strength * 0.72, 0.0, 1.5)
+                ),
                 "micro_dynamics_strength": float(
                     np.clip(
                         base_config.micro_dynamics_strength * 0.55, 0.0, 0.12
@@ -475,6 +493,12 @@ def resolve_stem_mastering_plan(
                 ),
                 "exciter_max_drive": base_config.exciter_max_drive + 0.2,
                 "stereo_width": float(np.clip(shared_width + 0.1, 1.0, 1.3)),
+                "stem_cleanup_strength": float(
+                    np.clip(base_cleanup_strength * 0.78, 0.0, 1.5)
+                ),
+                "stem_noise_gate_strength": float(
+                    np.clip(base_noise_gate_strength * 0.84, 0.0, 1.5)
+                ),
                 "micro_dynamics_strength": float(
                     np.clip(
                         base_config.micro_dynamics_strength + 0.05, 0.0, 0.32
@@ -498,6 +522,12 @@ def resolve_stem_mastering_plan(
                     np.clip(base_config.exciter_mix + 0.05, 0.0, 1.0)
                 ),
                 "stereo_width": float(np.clip(shared_width + 0.05, 0.96, 1.24)),
+                "stem_cleanup_strength": float(
+                    np.clip(base_cleanup_strength * 0.86, 0.0, 1.5)
+                ),
+                "stem_noise_gate_strength": float(
+                    np.clip(base_noise_gate_strength * 0.88, 0.0, 1.5)
+                ),
                 "micro_dynamics_strength": float(
                     np.clip(
                         base_config.micro_dynamics_strength + 0.02, 0.0, 0.25
@@ -518,6 +548,12 @@ def resolve_stem_mastering_plan(
                     np.clip(base_config.exciter_mix + 0.04, 0.0, 1.0)
                 ),
                 "stereo_width": float(np.clip(shared_width + 0.04, 0.98, 1.24)),
+                "stem_cleanup_strength": float(
+                    np.clip(base_cleanup_strength * 0.84, 0.0, 1.5)
+                ),
+                "stem_noise_gate_strength": float(
+                    np.clip(base_noise_gate_strength * 0.88, 0.0, 1.5)
+                ),
                 "micro_dynamics_strength": float(
                     np.clip(
                         base_config.micro_dynamics_strength + 0.03, 0.0, 0.28
@@ -540,6 +576,12 @@ def resolve_stem_mastering_plan(
                     np.clip(base_config.exciter_mix + 0.05, 0.0, 1.0)
                 ),
                 "stereo_width": float(np.clip(shared_width + 0.08, 1.0, 1.28)),
+                "stem_cleanup_strength": float(
+                    np.clip(base_cleanup_strength * 0.82, 0.0, 1.5)
+                ),
+                "stem_noise_gate_strength": float(
+                    np.clip(base_noise_gate_strength * 0.86, 0.0, 1.5)
+                ),
                 "micro_dynamics_strength": float(
                     np.clip(
                         base_config.micro_dynamics_strength + 0.02, 0.0, 0.25
@@ -601,7 +643,21 @@ def process_stem_layers(
 ) -> tuple[int, np.ndarray]:
     separated_output_dir: str | None = None
 
-    def process_single_stem(
+    bind_download_activity_scope = None
+    activity_scope_id: str | None = None
+    try:
+        from definers.system.download_activity import (
+            bind_download_activity_scope as _bind_download_activity_scope,
+            current_download_activity_scope,
+        )
+
+        bind_download_activity_scope = _bind_download_activity_scope
+        activity_scope_id = current_download_activity_scope()
+    except Exception:
+        bind_download_activity_scope = None
+        activity_scope_id = None
+
+    def _run_single_stem(
         stem_name: str,
         stem_path: str,
     ) -> tuple[str, tuple[int, np.ndarray]]:
@@ -631,6 +687,18 @@ def process_stem_layers(
             processed_sample_rate,
             balanced_signal,
         )
+
+    def process_single_stem(
+        stem_name: str,
+        stem_path: str,
+    ) -> tuple[str, tuple[int, np.ndarray]]:
+        if (
+            bind_download_activity_scope is not None
+            and activity_scope_id is not None
+        ):
+            with bind_download_activity_scope(activity_scope_id):
+                return _run_single_stem(stem_name, stem_path)
+        return _run_single_stem(stem_name, stem_path)
 
     try:
         stem_paths, separated_output_dir = separate_stems_fn(

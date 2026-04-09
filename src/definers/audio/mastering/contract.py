@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 
-from .mastering_loudness import MasteringLoudnessMetrics
+from .loudness import MasteringLoudnessMetrics
 
 
 @dataclass(frozen=True, slots=True)

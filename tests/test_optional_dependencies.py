@@ -109,6 +109,48 @@ def test_install_optional_target_uses_madmom_install_override():
     ]
 
 
+def test_ensure_module_runtime_skips_install_when_module_is_available(
+    monkeypatch,
+):
+    installed = []
+
+    monkeypatch.setattr(optional_dependencies, "_COMPLETED_INSTALLS", set())
+    monkeypatch.setattr(optional_dependencies, "_FAILED_INSTALLS", set())
+    monkeypatch.setattr(
+        optional_dependencies.importlib.util,
+        "find_spec",
+        lambda name: object() if name == "audio_separator" else None,
+    )
+
+    result = optional_dependencies.ensure_module_runtime(
+        "audio_separator",
+        installer=lambda package_specs: installed.append(package_specs),
+    )
+
+    assert result is True
+    assert installed == []
+
+
+def test_ensure_module_runtime_installs_when_module_is_missing(monkeypatch):
+    installed = []
+
+    monkeypatch.setattr(optional_dependencies, "_COMPLETED_INSTALLS", set())
+    monkeypatch.setattr(optional_dependencies, "_FAILED_INSTALLS", set())
+    monkeypatch.setattr(
+        optional_dependencies.importlib.util,
+        "find_spec",
+        lambda name: None,
+    )
+
+    result = optional_dependencies.ensure_module_runtime(
+        "audio_separator",
+        installer=lambda package_specs: installed.append(package_specs),
+    )
+
+    assert result is True
+    assert installed == [("audio-separator>=0.30.2,<0.31.0",)]
+
+
 def test_audio_group_install_includes_runtime_github_modules():
     audio_package_specs = optional_dependencies.package_specs_for_group("audio")
     audio_install_specs = optional_dependencies.install_specs_for_group("audio")

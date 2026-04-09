@@ -18,6 +18,7 @@ def _load_module(module_name: str, module_path: Path):
 
 ROOT = Path(__file__).resolve().parents[1]
 AUDIO_ROOT = ROOT / "src" / "definers" / "audio"
+MASTERING_ROOT = AUDIO_ROOT / "mastering"
 _SCIPY_MODULE_NAMES = ("scipy", "scipy.signal")
 
 
@@ -70,26 +71,30 @@ def _load_delivery_modules(package_name: str):
     package = types.ModuleType(package_name)
     package.__path__ = [str(AUDIO_ROOT)]
     sys.modules[package_name] = package
+    mastering_package_name = f"{package_name}.mastering"
+    mastering_package = types.ModuleType(mastering_package_name)
+    mastering_package.__path__ = [str(MASTERING_ROOT)]
+    sys.modules[mastering_package_name] = mastering_package
 
     backup = {name: sys.modules.get(name) for name in _SCIPY_MODULE_NAMES}
     _install_scipy_stub()
 
     try:
         _load_module(
-            f"{package_name}.mastering_loudness",
-            AUDIO_ROOT / "mastering_loudness.py",
+            f"{mastering_package_name}.loudness",
+            MASTERING_ROOT / "loudness.py",
         )
         contract_module = _load_module(
-            f"{package_name}.mastering_contract",
-            AUDIO_ROOT / "mastering_contract.py",
+            f"{mastering_package_name}.contract",
+            MASTERING_ROOT / "contract.py",
         )
         _load_module(
-            f"{package_name}.mastering_metrics",
-            AUDIO_ROOT / "mastering_metrics.py",
+            f"{mastering_package_name}.metrics",
+            MASTERING_ROOT / "metrics.py",
         )
         delivery_module = _load_module(
-            f"{package_name}.mastering_delivery",
-            AUDIO_ROOT / "mastering_delivery.py",
+            f"{mastering_package_name}.delivery",
+            MASTERING_ROOT / "delivery.py",
         )
         return contract_module, delivery_module
     finally:
@@ -152,21 +157,21 @@ def test_save_verified_audio_retries_with_attenuation_until_profile_passes():
         export_ceiling_linear,
         abs=1e-6,
     )
-    assert np.max(np.abs(saved_signals[1])) == pytest.approx(
-        export_ceiling_linear,
-        abs=1e-6,
-    )
+    assert np.max(np.abs(saved_signals[1])) < export_ceiling_linear
     assert np.max(np.abs(final_signal)) == pytest.approx(
         np.max(np.abs(saved_signals[-1]))
     )
     assert verification.report.decoded_metrics is not None
 
 
-def test_save_verified_audio_preserves_signal_without_remastering(
+def test_save_verified_audio_aligns_signal_to_export_ceiling_without_remastering(
     monkeypatch: pytest.MonkeyPatch,
 ):
     saved_signals: list[np.ndarray] = []
     source = np.array([0.12, -0.24, 0.31, -0.28], dtype=np.float32)
+    export_ceiling_linear = float(10.0 ** (-0.1 / 20.0))
+    expected_scale = export_ceiling_linear / float(np.max(np.abs(source)))
+    expected_signal = source * expected_scale
 
     monkeypatch.setattr(
         DELIVERY_MODULE,
@@ -189,7 +194,10 @@ def test_save_verified_audio_preserves_signal_without_remastering(
                 )
                 or kwargs["destination_path"]
             ),
-            read_audio_fn=lambda path: (8000, np.array(source, copy=True)),
+            read_audio_fn=lambda path: (
+                8000,
+                np.array(saved_signals[-1], copy=True),
+            ),
             target_lufs=-10.0,
             ceil_db=-0.1,
             preset_name="balanced",
@@ -200,11 +208,16 @@ def test_save_verified_audio_preserves_signal_without_remastering(
 
     assert final_path == "track.wav"
     assert len(saved_signals) == 1
-    expected_scale = float((10.0 ** (-0.1 / 20.0)) / np.max(np.abs(source)))
-    expected_signal = source * expected_scale
     assert np.allclose(saved_signals[0], expected_signal)
     assert np.allclose(final_signal, expected_signal)
     assert verification.report.output_metrics is not None
+    assert verification.report.delivery_issues == ()
+    assert verification.report.export_peak_alignment_mode == "align_to_ceil"
+    assert (
+        verification.report.export_peak_alignment_target_dbfs
+        == pytest.approx(-0.1)
+    )
+    assert verification.report.export_gain_applied_db > 0.0
 
 
 def test_verify_delivery_export_attaches_stage_metrics_and_contract_assessments():
@@ -232,6 +245,7 @@ def test_verify_delivery_export_attaches_stage_metrics_and_contract_assessments(
         input_signal,
         output_signal,
         8000,
+        final_in_memory_signal=output_signal * 1.08,
         post_eq_signal=output_signal * 0.8,
         post_spatial_signal=output_signal * 0.83,
         post_limiter_signal=output_signal * 0.9,
@@ -271,6 +285,9 @@ def test_verify_delivery_export_attaches_stage_metrics_and_contract_assessments(
         resolved_true_peak_target_dbfs=-1.0,
         stereo_motion_activity=0.22,
         stereo_motion_correlation_guard=0.9,
+        export_gain_applied_db=1.6,
+        export_peak_alignment_mode="align_to_ceil",
+        export_peak_alignment_target_dbfs=-1.0,
         delivery_trim_attenuation_db=0.2,
         delivery_trim_input_true_peak_dbfs=-0.8,
         delivery_trim_target_dbfs=-1.0,
@@ -296,6 +313,9 @@ def test_verify_delivery_export_attaches_stage_metrics_and_contract_assessments(
     assert result.report.post_peak_catch_metrics is not None
     assert result.report.post_delivery_trim_metrics is not None
     assert result.report.post_clamp_metrics is not None
+    assert result.report.final_in_memory_metrics.integrated_lufs > (
+        result.report.output_metrics.integrated_lufs
+    )
     assert result.report.character_stage_decision is not None
     assert len(result.report.peak_catch_events) == 1
     assert result.report.delivery_trim_attenuation_db == pytest.approx(0.2)
@@ -310,6 +330,11 @@ def test_verify_delivery_export_attaches_stage_metrics_and_contract_assessments(
     )
     assert result.report.headroom_recovery_mode == "guarded"
     assert result.report.stereo_motion_activity == pytest.approx(0.22)
+    assert result.report.export_gain_applied_db == pytest.approx(1.6)
+    assert result.report.export_peak_alignment_mode == "align_to_ceil"
+    assert result.report.export_peak_alignment_target_dbfs == pytest.approx(
+        -1.0
+    )
     assert result.report.output_contract_assessment is not None
     assert result.report.decoded_contract_assessment is not None
     assert any("contract" in issue for issue in result.issues)

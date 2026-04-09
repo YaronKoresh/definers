@@ -19,6 +19,7 @@ def _load_module(module_name: str, module_path: Path):
 
 ROOT = Path(__file__).resolve().parents[1]
 AUDIO_ROOT = ROOT / "src" / "definers" / "audio"
+MASTERING_ROOT = AUDIO_ROOT / "mastering"
 _SCIPY_MODULE_NAMES = ("scipy", "scipy.signal", "scipy.io", "scipy.io.wavfile")
 
 
@@ -80,6 +81,10 @@ def _load_reporting_modules(package_name: str):
     package = types.ModuleType(package_name)
     package.__path__ = [str(AUDIO_ROOT)]
     sys.modules[package_name] = package
+    mastering_package_name = f"{package_name}.mastering"
+    mastering_package = types.ModuleType(mastering_package_name)
+    mastering_package.__path__ = [str(MASTERING_ROOT)]
+    sys.modules[mastering_package_name] = mastering_package
     backup = {name: sys.modules.get(name) for name in _SCIPY_MODULE_NAMES}
     _install_scipy_stub()
 
@@ -88,20 +93,20 @@ def _load_reporting_modules(package_name: str):
             f"{package_name}.config", AUDIO_ROOT / "config.py"
         )
         loudness_module = _load_module(
-            f"{package_name}.mastering_loudness",
-            AUDIO_ROOT / "mastering_loudness.py",
+            f"{mastering_package_name}.loudness",
+            MASTERING_ROOT / "loudness.py",
         )
         contract_module = _load_module(
-            f"{package_name}.mastering_contract",
-            AUDIO_ROOT / "mastering_contract.py",
+            f"{mastering_package_name}.contract",
+            MASTERING_ROOT / "contract.py",
         )
         metrics_module = _load_module(
-            f"{package_name}.mastering_metrics",
-            AUDIO_ROOT / "mastering_metrics.py",
+            f"{mastering_package_name}.metrics",
+            MASTERING_ROOT / "metrics.py",
         )
         presets_module = _load_module(
-            f"{package_name}.mastering_presets",
-            AUDIO_ROOT / "mastering_presets.py",
+            f"{mastering_package_name}.presets",
+            MASTERING_ROOT / "presets.py",
         )
         return (
             config_module,
@@ -217,6 +222,7 @@ def test_generate_mastering_report_tracks_gain_deltas():
         input_signal,
         output_signal,
         8000,
+        final_in_memory_signal=output_signal * 0.86,
         post_eq_signal=input_signal * 1.2,
         post_spatial_signal=output_signal * 0.98,
         post_limiter_signal=output_signal * 0.95,
@@ -256,6 +262,9 @@ def test_generate_mastering_report_tracks_gain_deltas():
         resolved_true_peak_target_dbfs=-0.1,
         stereo_motion_activity=0.26,
         stereo_motion_correlation_guard=0.82,
+        export_gain_applied_db=1.75,
+        export_peak_alignment_mode="align_to_ceil",
+        export_peak_alignment_target_dbfs=-0.1,
         delivery_trim_attenuation_db=0.15,
         delivery_trim_input_true_peak_dbfs=0.05,
         delivery_trim_target_dbfs=-0.1,
@@ -282,8 +291,9 @@ def test_generate_mastering_report_tracks_gain_deltas():
     assert report.post_peak_catch_metrics is not None
     assert report.post_delivery_trim_metrics is not None
     assert report.post_clamp_metrics is not None
-    assert report.final_in_memory_metrics.integrated_lufs == pytest.approx(
-        report.output_metrics.integrated_lufs
+    assert (
+        report.final_in_memory_metrics.integrated_lufs
+        < report.output_metrics.integrated_lufs
     )
     assert report.output_contract_assessment is not None
     assert report.decoded_contract_assessment is not None
@@ -299,6 +309,9 @@ def test_generate_mastering_report_tracks_gain_deltas():
     assert report.headroom_recovery_closed_margin_db == pytest.approx(0.28)
     assert report.stereo_motion_activity == pytest.approx(0.26)
     assert report.stereo_motion_correlation_guard == pytest.approx(0.82)
+    assert report.export_gain_applied_db == pytest.approx(1.75)
+    assert report.export_peak_alignment_mode == "align_to_ceil"
+    assert report.export_peak_alignment_target_dbfs == pytest.approx(-0.1)
     assert report.post_spatial_stereo_motion is not None
     assert report.output_stereo_motion is not None
     assert report.resolved_true_peak_target_dbfs == pytest.approx(-0.1)

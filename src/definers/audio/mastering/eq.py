@@ -784,6 +784,20 @@ def apply_stem_cleanup(
             1.0,
         )
     )
+    stem_cleanup_strength = float(
+        np.clip(
+            getattr(
+                self,
+                "stem_cleanup_strength",
+                getattr(self.config, "stem_cleanup_strength", 1.0),
+            ),
+            0.0,
+            1.5,
+        )
+    )
+    cleanup_pressure = float(
+        np.clip(cleanup_pressure * stem_cleanup_strength, 0.0, 1.0)
+    )
     cleanup_pressure = _resolve_stem_cleanup_pressure(
         stem_role,
         cleanup_pressure,

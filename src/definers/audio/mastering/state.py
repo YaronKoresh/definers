@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from .config import SmartMasteringConfig
-from .mastering_profile import SpectralBalanceProfile
+from ..config import SmartMasteringConfig
+from .profile import SpectralBalanceProfile
 
 
 def configure_runtime_state(

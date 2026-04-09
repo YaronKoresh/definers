@@ -4,7 +4,7 @@ from dataclasses import dataclass, replace
 
 import numpy as np
 
-from .utils import generate_bands
+from ..utils import generate_bands
 
 
 @dataclass(frozen=True, slots=True)

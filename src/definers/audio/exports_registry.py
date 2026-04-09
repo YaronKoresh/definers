@@ -16,7 +16,7 @@ AUDIO_EXPORTS = {
     ),
     **_module_exports("config", "SmartMasteringConfig"),
     **_module_exports(
-        "mastering_character",
+        "mastering.character",
         "LimiterRecoverySettings",
         "apply_low_end_mono_tightening",
         "apply_micro_dynamics_finish",
@@ -68,21 +68,21 @@ AUDIO_EXPORTS = {
         "master",
     ),
     **_module_exports(
-        "mastering_stems",
+        "mastering.stems",
         "StemMasteringPlan",
         "mix_stem_layers",
         "process_stem_layers",
         "resolve_stem_mastering_plan",
     ),
     **_module_exports(
-        "mastering_contract",
+        "mastering.contract",
         "MasteringContract",
         "MasteringContractAssessment",
         "assess_mastering_contract",
         "resolve_mastering_contract",
     ),
     **_module_exports(
-        "mastering_finalization",
+        "mastering.finalization",
         "CharacterStageDecision",
         "FinalizationAction",
         "PeakCatchEvent",
@@ -95,7 +95,7 @@ AUDIO_EXPORTS = {
         "resolve_final_true_peak_target",
     ),
     **_module_exports(
-        "mastering_loudness",
+        "mastering.loudness",
         "MasteringLoudnessMetrics",
         "measure_low_end_mono_ratio",
         "measure_mastering_loudness",
@@ -104,13 +104,13 @@ AUDIO_EXPORTS = {
         "measure_true_peak",
     ),
     **_module_exports(
-        "mastering_metrics",
+        "mastering.metrics",
         "MasteringReport",
         "generate_mastering_report",
         "write_mastering_report",
     ),
     **_module_exports(
-        "mastering_reference",
+        "mastering.reference",
         "ReferenceAnalysis",
         "ReferenceMatchAssist",
         "analyze_reference",
@@ -119,7 +119,7 @@ AUDIO_EXPORTS = {
         "reference_match_assist",
     ),
     **_module_exports(
-        "mastering_delivery",
+        "mastering.delivery",
         "DeliveryProfile",
         "DeliveryVerificationResult",
         "resolve_delivery_profile",
@@ -127,7 +127,7 @@ AUDIO_EXPORTS = {
         "verify_delivery_export",
     ),
     **_module_exports(
-        "mastering_presets",
+        "mastering.presets",
         "MasteringPresets",
         "balanced",
         "edm",

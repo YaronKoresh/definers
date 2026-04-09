@@ -4,8 +4,8 @@ from collections.abc import Callable
 
 import numpy as np
 
-from .mastering_contract import MasteringContract
-from .mastering_finalization import CharacterStageDecision, PeakCatchEvent
+from .contract import MasteringContract
+from .finalization import CharacterStageDecision, PeakCatchEvent
 
 
 def _prepare_processing_signal(
@@ -338,6 +338,7 @@ def process(
     log_fn: Callable[..., object],
 ) -> tuple[int, np.ndarray]:
     stage_signals: dict[str, np.ndarray] = {}
+    stem_mastered_input = bool(getattr(self, "stem_mastered_input", False))
     y = _prepare_processing_signal(
         self,
         y,
@@ -358,9 +359,10 @@ def process(
     y = self.apply_eq(y)
     stage_signals["post_eq"] = np.array(y, dtype=np.float32, copy=True)
 
-    log_fn("Mastering", "Applying multiband compression...")
-    self.update_bands(self.spectral_balance_profile.band_intensity)
-    y = self.multiband_compress(y)
+    if not stem_mastered_input:
+        log_fn("Mastering", "Applying multiband compression...")
+        self.update_bands(self.spectral_balance_profile.band_intensity)
+        y = self.multiband_compress(y)
 
     log_fn("Mastering", "Applying exciter...")
     y = _apply_exciter_stage(
@@ -388,9 +390,18 @@ def process(
     log_fn("Mastering", "Preparing finalization...")
     current_lufs = get_lufs_fn(y, self.resampling_target)
     dynamic_drive_db = self.compute_dynamic_drive(current_lufs)
+    if stem_mastered_input:
+        dynamic_drive_db = float(min(dynamic_drive_db, 1.5))
     primary_soft_clip_ratio = self.compute_primary_soft_clip_ratio(
         dynamic_drive_db
     )
+    if stem_mastered_input:
+        primary_soft_clip_ratio = float(
+            min(
+                primary_soft_clip_ratio,
+                max(float(self.limiter_soft_clip_ratio) * 0.6, 0.08),
+            )
+        )
 
     log_fn("Mastering", "Applying pre-limiter saturation...")
     y = self.apply_pre_limiter_saturation(y, dynamic_drive_db=dynamic_drive_db)
@@ -414,7 +425,10 @@ def process(
         true_peak_oversample_factor=self.true_peak_oversample_factor,
         low_end_mono_cutoff_hz=contract.low_end_mono_cutoff_hz,
     )
-    for follow_up_index in range(self.max_follow_up_passes):
+    max_follow_up_passes = (
+        1 if stem_mastered_input else self.max_follow_up_passes
+    )
+    for follow_up_index in range(max_follow_up_passes):
         action = self.plan_follow_up_action(metrics, contract)
         if not action.should_apply:
             break
@@ -580,7 +594,9 @@ def process(
 
     peak_catch_events: list[PeakCatchEvent] = []
     peak_catch_metrics = character_metrics
-    for peak_catch_index in range(3):
+    peak_catch_attempts = 1 if stem_mastered_input else 3
+    peak_catch_soft_clip_ceiling = 0.22 if stem_mastered_input else 0.35
+    for peak_catch_index in range(peak_catch_attempts):
         before_true_peak_dbfs = float(
             getattr(peak_catch_metrics, "true_peak_dbfs", final_ceiling_db)
         )
@@ -604,7 +620,7 @@ def process(
                 + peak_over_db * 0.14
                 + peak_catch_index * 0.03,
                 0.1,
-                0.35,
+                peak_catch_soft_clip_ceiling,
             )
         )
         log_fn("Mastering", "Applying final peak catch...")
@@ -650,6 +666,18 @@ def process(
                     )
                 ),
             )
+        )
+    integrated_over_target_db = float(
+        getattr(peak_catch_metrics, "integrated_lufs", self.target_lufs)
+        - float(contract.target_lufs)
+    )
+    if integrated_over_target_db > contract.target_lufs_tolerance_db + 1e-6:
+        y = y * float(10.0 ** (-integrated_over_target_db / 20.0))
+        peak_catch_metrics = measure_mastering_loudness_fn(
+            y,
+            self.resampling_target,
+            true_peak_oversample_factor=self.true_peak_oversample_factor,
+            low_end_mono_cutoff_hz=contract.low_end_mono_cutoff_hz,
         )
     stage_signals["post_peak_catch"] = np.array(y, dtype=np.float32, copy=True)
     self.last_peak_catch_events = tuple(peak_catch_events)

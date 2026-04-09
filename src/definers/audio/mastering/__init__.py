@@ -9,43 +9,44 @@ from scipy.ndimage import maximum_filter1d, uniform_filter1d
 
 from definers.system import get_ext, tmp
 
-from ..file_ops import log
-from .config import SmartMasteringConfig
-from .dsp import (
+from ...file_ops import log
+from ..config import SmartMasteringConfig
+from ..dsp import (
     decoupled_envelope,
     limiter_smooth_env,
     resample,
 )
-from .effects.exciter import apply_exciter
-from .effects.mixing import stereo
-from .filters import freq_cut
-from .mastering_analysis import measure_spectrum as _measure_spectrum
-from .mastering_character import (
+from ..effects.exciter import apply_exciter
+from ..effects.mixing import stereo
+from ..filters import freq_cut
+from ..utils import get_lufs
+from .analysis import measure_spectrum as _measure_spectrum
+from .character import (
     LimiterRecoverySettings,
     apply_low_end_mono_tightening as _apply_low_end_mono_tightening,
     apply_micro_dynamics_finish as _apply_micro_dynamics_finish,
     resolve_limiter_recovery_settings as _resolve_limiter_recovery_settings,
 )
-from .mastering_contract import (
+from .contract import (
     MasteringContract,
     assess_mastering_contract as _assess_mastering_contract,
     resolve_mastering_contract as _resolve_mastering_contract,
 )
-from .mastering_delivery import save_verified_audio
-from .mastering_dynamics import (
+from .delivery import save_verified_audio
+from .dynamics import (
     apply_limiter as _apply_limiter,
     apply_pre_limiter_saturation as _apply_pre_limiter_saturation,
     apply_safety_clamp as _apply_safety_clamp,
     apply_spatial_enhancement as _apply_spatial_enhancement,
     multiband_compress as _multiband_compress,
 )
-from .mastering_eq import (
+from .eq import (
     apply_eq as _apply_eq,
     apply_stem_cleanup as _apply_stem_cleanup,
     audio_eq,
     smooth_curve as _smooth_curve,
 )
-from .mastering_finalization import (
+from .finalization import (
     apply_delivery_trim as _apply_delivery_trim,
     apply_final_headroom_recovery as _apply_final_headroom_recovery,
     apply_stereo_width_restraint as _apply_stereo_width_restraint,
@@ -54,19 +55,19 @@ from .mastering_finalization import (
     plan_follow_up_action as _plan_follow_up_action,
     resolve_final_true_peak_target as _resolve_final_true_peak_target,
 )
-from .mastering_loudness import (
+from .loudness import (
     measure_mastering_loudness as _measure_mastering_loudness,
     measure_true_peak as _measure_true_peak,
 )
-from .mastering_metrics import (
+from .metrics import (
     MasteringReport,
     write_mastering_report as _write_mastering_report,
 )
-from .mastering_pipeline import (
+from .pipeline import (
     process as _process,
     process_stem as _process_stem,
 )
-from .mastering_profile import (
+from .profile import (
     SpectralBalanceProfile,
     build_spectral_balance_profile as _build_spectral_balance_profile,
     build_target_curve as _build_target_curve,
@@ -75,7 +76,7 @@ from .mastering_profile import (
     update_bands as _update_bands,
     update_profile as _update_profile,
 )
-from .mastering_reference import (
+from .reference import (
     ReferenceAnalysis,
     ReferenceMatchAssist,
     analyze_reference as _analyze_reference,
@@ -84,8 +85,19 @@ from .mastering_reference import (
     measure_transient_density as _measure_transient_density,
     reference_match_assist as _reference_match_assist,
 )
-from .mastering_state import configure_runtime_state
-from .utils import get_lufs
+from .state import configure_runtime_state
+
+
+def _log_with_activity(title: str, message: object) -> None:
+    log(title, message)
+    normalized_message = str(message).strip().rstrip(".")
+    if not normalized_message:
+        return
+    try:
+        from definers.system.download_activity import report_download_activity
+    except Exception:
+        return
+    report_download_activity(normalized_message, phase="step")
 
 
 def _sanitize_audio_for_preset_selection(
@@ -458,6 +470,7 @@ class SmartMastering:
 
         self.config = cfg
         configure_runtime_state(self, sr, cfg)
+        self.stem_mastered_input = False
 
     def measure_spectrum(
         self,
@@ -653,7 +666,7 @@ class SmartMastering:
             apply_exciter_fn=apply_exciter,
             get_lufs_fn=get_lufs,
             measure_mastering_loudness_fn=_measure_mastering_loudness,
-            log_fn=log,
+            log_fn=_log_with_activity,
         )
 
     def process_stem(
@@ -672,7 +685,7 @@ class SmartMastering:
             stereo_fn=stereo,
             freq_cut_fn=freq_cut,
             apply_exciter_fn=apply_exciter,
-            log_fn=log,
+            log_fn=_log_with_activity,
         )
 
 
@@ -704,7 +717,7 @@ def _master_internal(
     **kwargs: object,
 ) -> tuple[str | None, MasteringReport | None]:
     try:
-        from .io import read_audio, save_audio
+        from ..io import read_audio, save_audio
 
         report_path = kwargs.pop(
             "report_path", f"{output_path}.report.json" if output_path else None
@@ -761,8 +774,8 @@ def _master_internal(
         if stem_mastering:
             from definers.system import delete
 
-            from .mastering_stems import process_stem_layers
-            from .stems import separate_stem_layers
+            from ..stems import separate_stem_layers
+            from .stems import process_stem_layers
 
             base_mastering = SmartMastering(
                 input_sample_rate,
@@ -792,6 +805,7 @@ def _master_internal(
                 mastered_stems_bitrate=bitrate,
                 mastered_stems_compression_level=compression_level,
             )
+            resolved_mastering_kwargs["stem_mastered_input"] = True
 
         return _render_master_output(
             input_path,
@@ -854,7 +868,9 @@ def _render_master_output(
 
     from definers.system import tmp
 
+    stem_mastered_input = bool(kwargs.pop("stem_mastered_input", False))
     mastering = SmartMastering(processing_sample_rate, **kwargs)
+    mastering.stem_mastered_input = stem_mastered_input
     sr_mastered, y_mastered = mastering.process(
         processing_signal,
         processing_sample_rate,

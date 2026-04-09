@@ -5,8 +5,8 @@ from dataclasses import asdict, dataclass
 
 import numpy as np
 
-from .config import SmartMasteringConfig
-from .mastering_loudness import (
+from ..config import SmartMasteringConfig
+from .loudness import (
     MasteringLoudnessMetrics,
     measure_mastering_loudness,
 )

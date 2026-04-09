@@ -123,6 +123,25 @@ def _load_stems_module(package_name: str):
 STEMS_MODULE = _load_stems_module("_test_audio_stems_pkg.audio")
 
 
+def test_build_mastering_separator_plan_skips_optional_repair_stages_for_clean_material():
+    plan = STEMS_MODULE.build_mastering_separator_plan(44100)
+
+    assert plan.preprocess_stages == ()
+    assert plan.vocal_restoration_stage is None
+    assert plan.instrumental_cleanup_stage is None
+
+
+def test_build_mastering_separator_plan_enables_repair_stages_for_flagged_material():
+    plan = STEMS_MODULE.build_mastering_separator_plan(
+        44100,
+        quality_flags=("Low-Quality", "Old-Recording"),
+    )
+
+    assert len(plan.preprocess_stages) == 2
+    assert plan.vocal_restoration_stage is not None
+    assert plan.instrumental_cleanup_stage is not None
+
+
 def test_build_separator_kwargs_includes_demucs_shifts():
     kwargs = STEMS_MODULE._build_separator_kwargs(
         "output",
@@ -252,6 +271,75 @@ def test_run_separator_stage_batch_reuses_loaded_model_for_cleanup(
         "shifts": 4,
         "overlap": 0.25,
         "segments_enabled": True,
+    }
+
+
+def test_run_separator_stage_batch_falls_back_to_single_input_calls(
+    tmp_path: Path,
+    monkeypatch,
+):
+    loaded_models: list[str] = []
+    separate_calls: list[object] = []
+
+    class FakeSeparator:
+        def __init__(self, **kwargs):
+            self.output_dir = kwargs["output_dir"]
+
+        def load_model(self, model_filename):
+            loaded_models.append(model_filename)
+
+        def separate(self, input_paths):
+            separate_calls.append(input_paths)
+            if isinstance(input_paths, list):
+                raise TypeError(
+                    "expected str, bytes or os.PathLike object, not list"
+                )
+            output_path = (
+                Path(self.output_dir)
+                / f"{Path(str(input_paths)).stem}_(No_Bleed)_cleanup.wav"
+            )
+            output_path.write_text("cleanup", encoding="utf-8")
+            return [str(output_path)]
+
+    monkeypatch.setattr(
+        STEMS_MODULE,
+        "_load_audio_separator_class",
+        lambda: FakeSeparator,
+    )
+    monkeypatch.setattr(
+        STEMS_MODULE,
+        "_has_local_stem_model",
+        lambda model_name: True,
+    )
+    monkeypatch.setattr(
+        STEMS_MODULE,
+        "_download_runtime_stage_models",
+        lambda model_candidates: tuple(model_candidates),
+    )
+
+    selected_outputs = STEMS_MODULE._run_separator_stage_batch(
+        {
+            "drums": "drums.wav",
+            "bass": "bass.wav",
+        },
+        STEMS_MODULE.SeparatorModelStage(
+            model_candidates=("cleanup.ckpt",),
+            preferred_stems=("no bleed",),
+            required=False,
+        ),
+        str(tmp_path / "cleanup"),
+        44100,
+    )
+
+    assert loaded_models == ["cleanup.ckpt"]
+    assert separate_calls == [
+        ["drums.wav", "bass.wav"],
+        "drums.wav",
+        "bass.wav",
+    ]
+    assert selected_outputs == {
+        "drums": str(tmp_path / "cleanup" / "drums_(No_Bleed)_cleanup.wav"),
+        "bass": str(tmp_path / "cleanup" / "bass_(No_Bleed)_cleanup.wav"),
     }
 
 

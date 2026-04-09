@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .config import SmartMasteringConfig
+from ..config import SmartMasteringConfig
 
 
 class MasteringPresets:

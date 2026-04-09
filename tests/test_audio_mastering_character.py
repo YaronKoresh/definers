@@ -18,7 +18,7 @@ def _load_module(module_name: str, module_path: Path):
 ROOT = Path(__file__).resolve().parents[1]
 CHARACTER_MODULE = _load_module(
     "_test_audio_mastering_character",
-    ROOT / "src" / "definers" / "audio" / "mastering_character.py",
+    ROOT / "src" / "definers" / "audio" / "mastering" / "character.py",
 )
 
 

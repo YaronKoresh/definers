@@ -9,17 +9,17 @@ from typing import Any
 import numpy as np
 from scipy import signal
 
-from .mastering_contract import (
+from .contract import (
     MasteringContract,
     MasteringContractAssessment,
     assess_mastering_contract,
 )
-from .mastering_finalization import CharacterStageDecision, PeakCatchEvent
-from .mastering_loudness import (
+from .finalization import CharacterStageDecision, PeakCatchEvent
+from .loudness import (
     MasteringLoudnessMetrics,
     measure_mastering_loudness,
 )
-from .mastering_reference import measure_stereo_motion
+from .reference import measure_stereo_motion
 
 
 def _measure_metric_batch(
@@ -110,6 +110,9 @@ class MasteringReport:
     stereo_motion_correlation_guard: float | None
     post_spatial_stereo_motion: float | None
     output_stereo_motion: float | None
+    export_gain_applied_db: float
+    export_peak_alignment_mode: str | None
+    export_peak_alignment_target_dbfs: float | None
     delivery_trim_attenuation_db: float
     delivery_trim_input_true_peak_dbfs: float | None
     delivery_trim_target_dbfs: float | None
@@ -142,6 +145,7 @@ def generate_mastering_report(
     output_signal: np.ndarray,
     sample_rate: int,
     *,
+    final_in_memory_signal: np.ndarray | None = None,
     post_eq_signal: np.ndarray | None = None,
     post_spatial_signal: np.ndarray | None = None,
     post_limiter_signal: np.ndarray | None = None,
@@ -163,6 +167,9 @@ def generate_mastering_report(
     resolved_true_peak_target_dbfs: float | None = None,
     stereo_motion_activity: float | None = None,
     stereo_motion_correlation_guard: float | None = None,
+    export_gain_applied_db: float = 0.0,
+    export_peak_alignment_mode: str | None = None,
+    export_peak_alignment_target_dbfs: float | None = None,
     delivery_trim_attenuation_db: float = 0.0,
     delivery_trim_input_true_peak_dbfs: float | None = None,
     delivery_trim_target_dbfs: float | None = None,
@@ -189,6 +196,11 @@ def generate_mastering_report(
         "input": (input_signal, sample_rate),
         "output": (output_signal, sample_rate),
     }
+    if final_in_memory_signal is not None:
+        metric_jobs["final_in_memory"] = (
+            final_in_memory_signal,
+            sample_rate,
+        )
     if post_eq_signal is not None:
         metric_jobs["post_eq"] = (post_eq_signal, sample_rate)
     if post_spatial_signal is not None:
@@ -228,7 +240,10 @@ def generate_mastering_report(
     post_peak_catch_metrics = measured_metrics.get("post_peak_catch")
     post_delivery_trim_metrics = measured_metrics.get("post_delivery_trim")
     post_clamp_metrics = measured_metrics.get("post_clamp")
-    final_in_memory_metrics = output_metrics
+    final_in_memory_metrics = measured_metrics.get(
+        "final_in_memory",
+        output_metrics,
+    )
     post_spatial_stereo_motion = (
         None
         if post_spatial_signal is None
@@ -314,6 +329,9 @@ def generate_mastering_report(
         stereo_motion_correlation_guard=stereo_motion_correlation_guard,
         post_spatial_stereo_motion=post_spatial_stereo_motion,
         output_stereo_motion=output_stereo_motion,
+        export_gain_applied_db=float(export_gain_applied_db),
+        export_peak_alignment_mode=export_peak_alignment_mode,
+        export_peak_alignment_target_dbfs=export_peak_alignment_target_dbfs,
         delivery_trim_attenuation_db=float(delivery_trim_attenuation_db),
         delivery_trim_input_true_peak_dbfs=delivery_trim_input_true_peak_dbfs,
         delivery_trim_target_dbfs=delivery_trim_target_dbfs,

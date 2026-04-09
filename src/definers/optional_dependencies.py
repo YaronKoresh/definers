@@ -228,6 +228,16 @@ def normalize_module_name(module_name: str | None) -> str:
     return str(module_name).strip().split(".", 1)[0].replace("-", "_")
 
 
+def module_runtime_available(module_name: str | None) -> bool:
+    normalized_name = normalize_module_name(module_name)
+    if not normalized_name:
+        return False
+    try:
+        return importlib.util.find_spec(normalized_name) is not None
+    except (ImportError, ModuleNotFoundError, ValueError):
+        return False
+
+
 def package_specs_for_module(module_name: str | None) -> tuple[str, ...]:
     normalized_name = normalize_module_name(module_name)
     return MODULE_PACKAGE_SPECS.get(normalized_name, ())
@@ -436,6 +446,8 @@ def ensure_module_runtime(
     *,
     installer: Callable[[tuple[str, ...]], None] | None = None,
 ) -> bool:
+    if module_runtime_available(module_name):
+        return True
     return install_package_specs(
         install_specs_for_module(module_name),
         installer=installer,
@@ -596,6 +608,7 @@ __all__ = [
     "install_optional_target",
     "install_import_hook",
     "install_package_specs",
+    "module_runtime_available",
     "module_target_names",
     "normalize_module_name",
     "optional_runtime_targets",

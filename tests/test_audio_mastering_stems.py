@@ -6,6 +6,14 @@ from pathlib import Path
 
 import numpy as np
 
+from definers.system.download_activity import (
+    bind_download_activity_scope,
+    clear_download_activity_scope,
+    create_download_activity_scope,
+    get_download_activity_snapshot,
+    report_download_activity,
+)
+
 
 def _load_module(module_name: str, module_path: Path):
     spec = importlib.util.spec_from_file_location(module_name, module_path)
@@ -18,6 +26,7 @@ def _load_module(module_name: str, module_path: Path):
 
 ROOT = Path(__file__).resolve().parents[1]
 AUDIO_ROOT = ROOT / "src" / "definers" / "audio"
+MASTERING_ROOT = AUDIO_ROOT / "mastering"
 
 
 def _load_mastering_stems_module(package_name: str):
@@ -34,13 +43,17 @@ def _load_mastering_stems_module(package_name: str):
     package = types.ModuleType(package_name)
     package.__path__ = [str(AUDIO_ROOT)]
     sys.modules[package_name] = package
+    mastering_package_name = f"{package_name}.mastering"
+    mastering_package = types.ModuleType(mastering_package_name)
+    mastering_package.__path__ = [str(MASTERING_ROOT)]
+    sys.modules[mastering_package_name] = mastering_package
 
     config_module = _load_module(
         f"{package_name}.config", AUDIO_ROOT / "config.py"
     )
     mastering_stems_module = _load_module(
-        f"{package_name}.mastering_stems",
-        AUDIO_ROOT / "mastering_stems.py",
+        f"{mastering_package_name}.stems",
+        MASTERING_ROOT / "stems.py",
     )
     return config_module, mastering_stems_module
 
@@ -64,6 +77,14 @@ def test_resolve_stem_mastering_plan_scales_roles_differently():
     assert vocals.overrides["exciter_mix"] > bass.overrides["exciter_mix"]
     assert bass.overrides["exciter_mix"] > 0.5
     assert drums.overrides["target_lufs"] < base.target_lufs
+    assert (
+        drums.overrides["stem_cleanup_strength"]
+        < vocals.overrides["stem_cleanup_strength"]
+    )
+    assert (
+        drums.overrides["stem_noise_gate_strength"]
+        < vocals.overrides["stem_noise_gate_strength"]
+    )
 
 
 def test_resolve_stem_mastering_plan_clips_exciter_mix_and_staggers_drive():
@@ -276,6 +297,57 @@ def test_process_stem_layers_forwards_quality_flags_to_separator():
     assert separator_calls == [
         ("song.wav", "mastering", 2, ("Low-Quality", "Old-Recording"))
     ]
+
+
+def test_process_stem_layers_rebinds_activity_scope_for_worker_threads(
+    monkeypatch,
+):
+    base = CONFIG_MODULE.SmartMasteringConfig.balanced()
+    scope_id = create_download_activity_scope()
+
+    def process_stem(signal, sample_rate, mastering_kwargs):
+        report_download_activity(
+            f"Stem {mastering_kwargs['stem_role']}",
+            phase="step",
+        )
+        return sample_rate, np.array(signal, copy=True)
+
+    monkeypatch.setattr(
+        MASTERING_STEMS_MODULE,
+        "_resolve_parallel_stem_workers",
+        lambda stem_count: 2,
+    )
+
+    with bind_download_activity_scope(scope_id):
+        MASTERING_STEMS_MODULE.process_stem_layers(
+            "song.wav",
+            base_config=base,
+            base_mastering_kwargs={"preset": "balanced"},
+            process_stem_fn=process_stem,
+            separate_stems_fn=lambda audio_path, model_name, shifts, quality_flags=(): (
+                {
+                    "drums": "drums.wav",
+                    "vocals": "vocals.wav",
+                },
+                "temp-demucs-dir",
+            ),
+            read_audio_fn=lambda path: (
+                8000,
+                np.full(
+                    (2, 32),
+                    0.2 if path == "drums.wav" else 0.1,
+                    dtype=np.float32,
+                ),
+            ),
+            delete_fn=lambda path: None,
+            save_mastered_stems=False,
+        )
+
+    snapshot = get_download_activity_snapshot(scope_id)
+    clear_download_activity_scope(scope_id)
+
+    assert snapshot is not None
+    assert snapshot.item_label in {"Stem drums", "Stem vocals"}
 
 
 def test_apply_stem_mix_balance_gives_drums_a_clear_level_lead():

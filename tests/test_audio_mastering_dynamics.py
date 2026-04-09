@@ -20,7 +20,7 @@ def _load_module(module_name: str, module_path: Path):
 ROOT = Path(__file__).resolve().parents[1]
 DYNAMICS_MODULE = _load_module(
     "_test_audio_mastering_dynamics",
-    ROOT / "src" / "definers" / "audio" / "mastering_dynamics.py",
+    ROOT / "src" / "definers" / "audio" / "mastering" / "dynamics.py",
 )
 
 
