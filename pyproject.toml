@@ -119,7 +119,7 @@ cuda = [
     "nvidia-ml-py>=13.590.48",
     "distributed-ucxx-cu12==0.48.0",
     "raft-dask-cu12==26.2.0",
-    "rapids-dask-dependency==26.2.0",
+    "rapids-dask-dependency==26.4.0",
     "rmm-cu12==26.2.0",
     "ucx-py-cu12==0.45.0",
     "ucxx-cu12==0.48.0",
