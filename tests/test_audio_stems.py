@@ -140,6 +140,10 @@ def test_build_mastering_separator_plan_enables_repair_stages_for_flagged_materi
     assert len(plan.preprocess_stages) == 2
     assert plan.vocal_restoration_stage is not None
     assert plan.instrumental_cleanup_stage is not None
+    assert plan.instrumental_cleanup_stage.model_candidates == (
+        "mel_band_roformer_bleed_suppressor_v1.ckpt",
+        "mel_band_roformer_instrumental_bleedless_v2_gabox.ckpt",
+    )
 
 
 def test_build_separator_kwargs_includes_demucs_shifts():

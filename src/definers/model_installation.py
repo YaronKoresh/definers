@@ -55,12 +55,11 @@ STEM_MODEL_FILES = (
     "hdemucs_mmi.yaml",
     "MDX23C-8KFFT-InstVoc_HQ.ckpt",
     "deverb_bs_roformer_8_384dim_10depth.ckpt",
-    "deverb_bs_roformer_8_256dim_8depth.ckpt",
     "dereverb_mel_band_roformer_anvuew_sdr_19.1729.ckpt",
     "denoise_mel_band_roformer_aufr33_aggr_sdr_27.9768.ckpt",
     "denoise_mel_band_roformer_aufr33_sdr_27.9959.ckpt",
     "mel_band_roformer_bleed_suppressor_v1.ckpt",
-    "mel_band_roformer_instrumental_fv7z_gabox.ckpt",
+    "mel_band_roformer_instrumental_bleedless_v2_gabox.ckpt",
 )
 _LEGACY_STEM_MODEL_ALIASES: dict[str, tuple[str, ...]] = {
     "bs_roformer_vocals_resurrection_unwa.ckpt": (
@@ -73,6 +72,15 @@ _LEGACY_STEM_MODEL_ALIASES: dict[str, tuple[str, ...]] = {
         "mel_band_roformer_instrumental_gabox.ckpt",
         "mel_band_roformer_instrumental_becruily.ckpt",
         "MDX23C-8KFFT-InstVoc_HQ.ckpt",
+    ),
+    "deverb_bs_roformer_8_256dim_8depth.ckpt": (
+        "deverb_bs_roformer_8_384dim_10depth.ckpt",
+    ),
+    "mel_band_roformer_instrumental_fv7z_gabox.ckpt": (
+        "mel_band_roformer_instrumental_bleedless_v2_gabox.ckpt",
+        "mel_band_roformer_instrumental_bleedless_v1_gabox.ckpt",
+        "mel_band_roformer_denoise_debleed_gabox.ckpt",
+        "mel_band_roformer_instrumental_instv7_gabox.ckpt",
     ),
 }
 UPSCALE_FILES: tuple[tuple[str, str, str], ...] = (
@@ -163,6 +171,7 @@ MODEL_DOMAIN_TASKS: dict[str, tuple[str, ...]] = {
 _MODEL_INSTALL_LOCK = threading.RLock()
 _COMPLETED_MODEL_INSTALLS: set[str] = set()
 _FAILED_MODEL_INSTALLS: set[str] = set()
+_MODEL_INSTALL_ERRORS: dict[str, str] = {}
 _HUGGINGFACE_PATCH_LOCK = threading.RLock()
 _WHISPER_PATCH_LOCK = threading.RLock()
 _HUGGINGFACE_ORIGINAL_HF_HUB_DOWNLOAD: Callable[..., object] | None = None
@@ -255,9 +264,37 @@ def resolve_model_target_names(
         return _model_targets_for_domain(target)
     if normalized_kind == "model-task":
         normalized_target = _normalize_model_task_name(target)
-        if normalized_target in MODEL_TASK_DOWNLOADERS:
+        if normalized_target in MODEL_TASKS:
             return (normalized_target,)
     return ()
+
+
+def _format_model_install_error(error: BaseException) -> str:
+    message = str(error).strip()
+    if not message:
+        return error.__class__.__name__
+    return f"{error.__class__.__name__}: {message}"
+
+
+def model_install_error(
+    target: str,
+    *,
+    kind: str = "model-domain",
+) -> str | None:
+    resolved_targets = resolve_model_target_names(target, kind=kind)
+    if not resolved_targets:
+        return None
+    with _MODEL_INSTALL_LOCK:
+        messages = tuple(
+            dict.fromkeys(
+                _MODEL_INSTALL_ERRORS[task_name]
+                for task_name in resolved_targets
+                if task_name in _MODEL_INSTALL_ERRORS
+            )
+        )
+    if not messages:
+        return None
+    return "; ".join(messages)
 
 
 def _ensure_huggingface_hub() -> None:
@@ -521,7 +558,7 @@ def _direct_download_artifact(
     total: int | None = None,
     force_download: bool = False,
 ) -> str:
-    from definers.media.web_transfer import download_file
+    from definers.media.transfer import download_file
 
     target_path.parent.mkdir(parents=True, exist_ok=True)
     if not force_download and _artifact_is_ready(target_path):
@@ -1763,7 +1800,7 @@ def _download_whisper_model_artifact(
     root: str,
     in_memory: bool,
 ) -> bytes | str:
-    from definers.media.web_transfer import download_file
+    from definers.media.transfer import download_file
 
     download_root = Path(root).expanduser().resolve()
     download_root.mkdir(parents=True, exist_ok=True)
@@ -2153,7 +2190,12 @@ def _install_model_task(task_name: str) -> None:
         detail="Preparing model assets.",
         phase="model",
     )
-    MODEL_TASK_DOWNLOADERS[task_name]()
+    downloader = MODEL_TASK_DOWNLOADERS.get(task_name)
+    if downloader is None:
+        raise RuntimeError(
+            f"model downloader is not registered for {task_name}"
+        )
+    downloader()
 
 
 def _run_model_task_install(
@@ -2168,12 +2210,16 @@ def _run_model_task_install(
             return False
     try:
         installer(task_name)
-    except Exception:
+    except Exception as error:
         with _MODEL_INSTALL_LOCK:
             _FAILED_MODEL_INSTALLS.add(task_name)
+            _MODEL_INSTALL_ERRORS[task_name] = _format_model_install_error(
+                error
+            )
         return False
     with _MODEL_INSTALL_LOCK:
         _COMPLETED_MODEL_INSTALLS.add(task_name)
+        _MODEL_INSTALL_ERRORS.pop(task_name, None)
     return True
 
 
@@ -2200,6 +2246,7 @@ __all__ = [
     "ENHANCED_RVC_FORK_OWNER",
     "ENHANCED_RVC_FORK_REPO",
     "MODEL_DOMAIN_TASKS",
+    "MODEL_TASKS",
     "MODEL_TASK_DOWNLOADERS",
     "STEM_MODEL_FILES",
     "TEXT_GENERATION_ALLOW_PATTERNS",
@@ -2217,6 +2264,7 @@ __all__ = [
     "install_fast_huggingface_download_hooks",
     "install_model_target",
     "load_stable_whisper_model",
+    "model_install_error",
     "model_domain_names",
     "model_runtime_targets",
     "model_task_names",

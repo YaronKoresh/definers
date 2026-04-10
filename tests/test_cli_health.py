@@ -1,10 +1,10 @@
-from definers.cli.command_registry import create_cli_command_registry
+from definers.cli.application.catalog import create_cli_command_registry
+from definers.cli.application.runtime import resolve_cli_handlers
 from definers.cli.health import (
     collect_cli_health_snapshot,
     run_cli_health_check,
     validate_cli_health_snapshot,
 )
-from definers.cli.runtime import resolve_cli_handlers
 
 
 def test_collect_cli_health_snapshot_reports_registry_metrics():
@@ -18,14 +18,19 @@ def test_collect_cli_health_snapshot_reports_registry_metrics():
     assert snapshot.command_names == (
         "audio",
         "chat",
+        "install",
         "lyric-video",
         "music-video",
         "start",
     )
     assert snapshot.gui_project_names == ("audio", "chat")
     assert snapshot.direct_gui_command_names == ("audio", "chat")
-    assert snapshot.media_command_names == ("lyric-video", "music-video")
-    assert snapshot.command_count == 5
+    assert snapshot.media_command_names == (
+        "install",
+        "lyric-video",
+        "music-video",
+    )
+    assert snapshot.command_count == 6
     assert snapshot.gui_project_count == 2
     assert snapshot.known_names_with_options[-2:] == ("--help", "--version")
 
@@ -49,6 +54,7 @@ def test_run_cli_health_check_matches_live_registry():
     snapshot = run_cli_health_check()
 
     assert "start" in snapshot.command_names
+    assert "install" in snapshot.command_names
     assert "music-video" in snapshot.command_names
     assert "lyric-video" in snapshot.command_names
     assert "chat" in snapshot.gui_project_names

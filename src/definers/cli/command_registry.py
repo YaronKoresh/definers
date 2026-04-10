@@ -1,56 +1,17 @@
-from collections.abc import Iterable, Mapping
-
-from definers.cli.cli_command_definition import (
-    CliCommandDefinition,
+from definers.cli.application.catalog import (
+    create_cli_command_registry,
+    get_known_cli_names,
+    iter_cli_command_definitions,
+    normalize_cli_name,
+    normalize_gui_commands,
+    resolve_cli_command_definition,
 )
 
-
-def normalize_cli_name(value: str | None) -> str | None:
-    if value is None:
-        return None
-    normalized = value.strip().lower()
-    return normalized or None
-
-
-def normalize_gui_commands(gui_commands: Iterable[str]) -> frozenset[str]:
-    return frozenset(
-        normalized
-        for command in gui_commands
-        if (normalized := normalize_cli_name(command)) is not None
-    )
-
-
-def create_cli_command_registry(
-    gui_commands: Iterable[str],
-) -> dict[str, CliCommandDefinition]:
-    registry = {
-        "start": CliCommandDefinition(name="start", kind="start"),
-        "music-video": CliCommandDefinition(
-            name="music-video",
-            kind="music-video",
-        ),
-        "lyric-video": CliCommandDefinition(
-            name="lyric-video",
-            kind="lyric-video",
-        ),
-    }
-    for command in sorted(normalize_gui_commands(gui_commands)):
-        if command in registry:
-            raise ValueError(f"CLI command name conflict: {command}")
-        registry[command] = CliCommandDefinition(
-            name=command,
-            kind="start",
-            project=command,
-        )
-    return registry
-
-
-def get_known_cli_names(
-    command_registry: Mapping[str, CliCommandDefinition],
-    *,
-    include_options: bool = True,
-) -> tuple[str, ...]:
-    known_names = tuple(command_registry)
-    if not include_options:
-        return known_names
-    return known_names + ("--help", "--version")
+__all__ = (
+    "create_cli_command_registry",
+    "get_known_cli_names",
+    "iter_cli_command_definitions",
+    "normalize_cli_name",
+    "normalize_gui_commands",
+    "resolve_cli_command_definition",
+)

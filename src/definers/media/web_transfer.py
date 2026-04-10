@@ -1,16 +1,16 @@
+from __future__ import annotations
+
 import asyncio
-import base64
 import contextlib
 import importlib.util
 import io
 import logging
 import math
 import mmap
+import multiprocessing
 import os
-import random
 import shutil
 import ssl
-import sys
 import tempfile
 import threading
 import urllib.request
@@ -23,278 +23,192 @@ from concurrent.futures import (
 )
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Protocol
 from urllib.parse import urlsplit
 
-from definers.constants import user_agents
-from definers.resilience import (
-    CircuitBreaker,
-    CircuitBreakerOpenException,
-    ExponentialBackoffDelay,
-    RetryPolicy,
-    execute_with_resilience_async,
+from definers.media.transfer.api import (
+    add_to_path_windows,
+    broadcast_path_change,
+    download_and_unzip,
+    download_file,
+    execute_async_operation,
+    extract_text,
+    google_drive_download,
+    linked_url,
+    validate_network_url,
+)
+from definers.media.transfer.orchestrators import (
+    ResourceRetrievalOrchestrator,
+    TransferExecutionPolicy,
+    create_http_orchestrator,
+    create_zip_orchestrator,
+)
+from definers.media.transfer.policy import (
+    HttpTransferCapabilities,
+    HttpTransferPolicy,
+    create_http_transfer_strategy,
+    http_transfer_capabilities,
+    http_transfer_policy,
 )
 from definers.system import log
 from definers.system.download_activity import report_download_activity
 
-try:
-    from lxml.cssselect import CSSSelector
-    from lxml.html import fromstring
-except ImportError:
-    CSSSelector = None
-    fromstring = None
+
+def _read_bool_env(name: str, default: bool) -> bool:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
+    normalized_value = str(raw_value).strip().lower()
+    if normalized_value in {"1", "true", "yes", "on"}:
+        return True
+    if normalized_value in {"0", "false", "no", "off"}:
+        return False
+    return default
 
 
-def google_drive_download(id, dest, unzip=True):
-    from googledrivedownloader import download_file_from_google_drive
-
-    item_label = Path(str(dest)).name or str(dest)
-    report_download_activity(
-        item_label,
-        detail="Downloading artifact from Google Drive.",
-        phase="artifact",
-    )
+def _read_positive_int_env(name: str, default: int) -> int:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return default
     try:
-        download_file_from_google_drive(
-            file_id=id, dest_path=dest, unzip=unzip, showsize=False
-        )
-        report_download_activity(
-            item_label,
-            detail=(
-                "Downloaded and extracted the Google Drive artifact."
-                if unzip
-                else "Downloaded the Google Drive artifact."
-            ),
-            phase="extract" if unzip else "artifact",
-            completed=1,
-            total=1,
-        )
-    except Exception as e:
-        log("google_drive_download failed", e)
-        return None
-
-
-def linked_url(url):
-    host = url.split("?")[0]
-    if "?" in url:
-        param = "?" + url.split("?")[1]
-    else:
-        param = ""
-    html_string = f'''\n         <!DOCTYPE html>\n        <html>\n            <head>\n                <meta charset="UTF-8">\n                <base href="{host}" target="_top">\n                <a href="{param}"></a>\n            </head>\n            <body onload='document.querySelector("a").click()'></body>\n        </html>\n    '''
-    html_bytes = html_string.encode("utf-8")
-    base64_encoded_html = base64.b64encode(html_bytes).decode("utf-8")
-    data_url = f"data:text/html;charset=utf-8;base64,{base64_encoded_html}"
-    return data_url
-
-
-def extract_text(url, selector):
-    from playwright.sync_api import expect, sync_playwright
-
-    if CSSSelector is None or fromstring is None:
-        raise ImportError("lxml with cssselect is required for extract_text")
-
-    xpath = CSSSelector(selector).path
-    log("URL", url)
-    html_string = None
-    with sync_playwright() as playwright:
-        browser_app = playwright.firefox.launch(headless=True)
-        browser = browser_app.new_context(
-            locale="en-US",
-            timezone_id="America/New_York",
-            user_agent=random.choice(user_agents["firefox"]),
-            color_scheme="dark",
-        )
-        page = browser.new_page()
-        page.goto(url, referer="https://duckduckgo.com/", timeout=18 * 1000)
-        expect(page.locator(selector)).not_to_be_empty()
-        page.wait_for_timeout(2000)
-        html_string = page.content()
-        browser.close()
-        browser_app.close()
-    if html_string is None:
-        return None
-    if not str(html_string).strip():
-        return ""
-    try:
-        html = fromstring(html_string)
+        return max(int(str(raw_value).strip()), 1)
     except Exception:
-        return ""
-    elems = html.xpath(xpath)
-    elems = [
-        el.text_content().strip() for el in elems if el.text_content().strip()
-    ]
-    if len(elems) == 0:
-        return ""
-    return elems[0]
+        return default
 
 
-@runtime_checkable
-class NetworkTransferStrategy(Protocol):
-    async def execute_transfer(
-        self, source_uri: str, target_node: Path
-    ) -> bool: ...
+def _parallel_download_workers() -> int:
+    cpu_count = max(int(os.cpu_count() or 1), 1)
+    return _read_positive_int_env(
+        "DEFINERS_DOWNLOAD_MAX_WORKERS",
+        cpu_count * 12,
+    )
+
+
+def _download_chunk_size_bytes() -> int:
+    return _read_positive_int_env(
+        "DEFINERS_DOWNLOAD_CHUNK_SIZE_BYTES",
+        1024 * 1024,
+    )
+
+
+def _parallel_download_min_size_bytes() -> int:
+    return _read_positive_int_env(
+        "DEFINERS_DOWNLOAD_MIN_PARALLEL_SIZE_BYTES",
+        256 * 1024,
+    )
+
+
+def _parallel_download_part_size_bytes() -> int:
+    return _read_positive_int_env(
+        "DEFINERS_DOWNLOAD_PART_SIZE_BYTES",
+        1024 * 1024,
+    )
+
+
+def _download_mmap_min_size_bytes() -> int:
+    return _read_positive_int_env(
+        "DEFINERS_DOWNLOAD_MMAP_MIN_SIZE_BYTES",
+        4 * 1024 * 1024,
+    )
+
+
+def _download_enable_process_workers() -> bool:
+    return _read_bool_env(
+        "DEFINERS_DOWNLOAD_ENABLE_PROCESS_WORKERS",
+        False,
+    )
+
+
+def _download_process_workers() -> int:
+    requested_workers = _read_positive_int_env(
+        "DEFINERS_DOWNLOAD_PROCESS_WORKERS",
+        max(int(os.cpu_count() or 1), 1),
+    )
+    if _download_enable_process_workers():
+        return requested_workers
+    with contextlib.suppress(Exception):
+        if getattr(multiprocessing.current_process(), "daemon", False):
+            return 1
+    return min(requested_workers, _parallel_download_workers())
+
+
+def _download_min_process_size_bytes() -> int:
+    return _read_positive_int_env(
+        "DEFINERS_DOWNLOAD_MIN_PROCESS_SIZE_BYTES",
+        8 * 1024 * 1024,
+    )
+
+
+def _download_enable_multiplexing() -> bool:
+    return _read_bool_env(
+        "DEFINERS_DOWNLOAD_ENABLE_MULTIPLEXING",
+        True,
+    )
+
+
+def _download_enable_http3() -> bool:
+    return _read_bool_env("DEFINERS_DOWNLOAD_ENABLE_HTTP3", True)
+
+
+def _download_http_protocol() -> str:
+    normalized_value = (
+        str(os.getenv("DEFINERS_DOWNLOAD_HTTP_PROTOCOL", "auto"))
+        .strip()
+        .lower()
+    )
+    if normalized_value in {"auto", "http1", "http2", "http3"}:
+        return normalized_value
+    return "auto"
+
+
+def _download_max_multiplexed_streams() -> int:
+    return _read_positive_int_env(
+        "DEFINERS_DOWNLOAD_MAX_MULTIPLEXED_STREAMS",
+        32,
+    )
 
 
 def _content_length(value: object) -> int | None:
     try:
-        resolved_length = int(str(value))
+        return max(int(str(value).strip()), 0)
     except Exception:
         return None
-    return resolved_length if resolved_length >= 0 else None
 
 
 def _header_value(response: object, header_name: str) -> str | None:
-    try:
-        headers = getattr(response, "headers", None)
-        if headers is None:
-            return None
-        value = getattr(headers, "get", lambda _name, _default=None: None)(
-            header_name
-        )
-    except Exception:
-        return None
-    if value is None:
-        return None
-    normalized_value = str(value).strip()
-    return normalized_value or None
-
-
-def _content_range_length(response: object) -> int | None:
-    content_range = _header_value(response, "Content-Range")
-    if not content_range or "/" not in content_range:
-        return None
-    total_length_text = content_range.rsplit("/", 1)[-1].strip()
-    if total_length_text == "*":
-        return None
-    return _content_length(total_length_text)
-
-
-def _configured_positive_int_env(variable_name: str) -> int | None:
-    configured_value = os.environ.get(variable_name, "").strip()
-    if not configured_value:
-        return None
-    try:
-        resolved_value = int(configured_value)
-    except ValueError:
-        return None
-    return resolved_value if resolved_value > 0 else None
-
-
-def _download_chunk_size_bytes() -> int:
-    configured_value = _configured_positive_int_env(
-        "DEFINERS_DOWNLOAD_CHUNK_SIZE_BYTES"
-    )
-    if configured_value is not None:
-        return configured_value
-    return 1048576
-
-
-def _parallel_download_workers() -> int:
-    configured_workers = _configured_positive_int_env(
-        "DEFINERS_DOWNLOAD_MAX_WORKERS"
-    )
-    if configured_workers is not None:
-        return configured_workers
-    cpu_count = os.cpu_count() or 8
-    return max(32, min(96, cpu_count * 12))
-
-
-def _parallel_download_min_size_bytes() -> int:
-    configured_value = _configured_positive_int_env(
-        "DEFINERS_DOWNLOAD_MIN_PARALLEL_SIZE_BYTES"
-    )
-    if configured_value is not None:
-        return configured_value
-    return 262144
-
-
-def _parallel_download_part_size_bytes() -> int:
-    configured_value = _configured_positive_int_env(
-        "DEFINERS_DOWNLOAD_PART_SIZE_BYTES"
-    )
-    if configured_value is not None:
-        return configured_value
-    return 1048576
-
-
-def _configured_bool_env(variable_name: str) -> bool | None:
-    configured_value = os.environ.get(variable_name, "").strip().lower()
-    if not configured_value:
-        return None
-    if configured_value in {"1", "true", "yes", "on"}:
-        return True
-    if configured_value in {"0", "false", "no", "off"}:
-        return False
+    headers = getattr(response, "headers", None)
+    getter = getattr(headers, "get", None)
+    if callable(getter):
+        for candidate_name in (
+            header_name,
+            header_name.lower(),
+            header_name.upper(),
+        ):
+            value = getter(candidate_name)
+            if value is None:
+                continue
+            normalized_value = str(value).strip()
+            if normalized_value:
+                return normalized_value
+    if isinstance(headers, dict):
+        normalized_header_name = header_name.strip().lower()
+        for current_name, current_value in headers.items():
+            if str(current_name).strip().lower() != normalized_header_name:
+                continue
+            normalized_value = str(current_value).strip()
+            if normalized_value:
+                return normalized_value
     return None
 
 
-def _download_http_protocol() -> str:
-    configured_value = (
-        os.environ.get("DEFINERS_DOWNLOAD_HTTP_PROTOCOL", "auto")
-        .strip()
-        .lower()
+def _content_range_length(response: object) -> int | None:
+    return _content_range_length_from_value(
+        _header_value(response, "Content-Range")
     )
-    if configured_value in {"http1", "http2", "http3"}:
-        return configured_value
-    return "auto"
-
-
-def _download_enable_multiplexing() -> bool:
-    configured_value = _configured_bool_env(
-        "DEFINERS_DOWNLOAD_ENABLE_MULTIPLEXING"
-    )
-    return True if configured_value is None else configured_value
-
-
-def _download_enable_http3() -> bool:
-    configured_value = _configured_bool_env("DEFINERS_DOWNLOAD_ENABLE_HTTP3")
-    return True if configured_value is None else configured_value
-
-
-def _download_process_workers() -> int:
-    configured_workers = _configured_positive_int_env(
-        "DEFINERS_DOWNLOAD_PROCESS_WORKERS"
-    )
-    if configured_workers is not None:
-        return configured_workers
-    cpu_count = os.cpu_count() or 8
-    return max(2, min(8, cpu_count))
-
-
-def _download_min_process_size_bytes() -> int:
-    configured_value = _configured_positive_int_env(
-        "DEFINERS_DOWNLOAD_MIN_PROCESS_SIZE_BYTES"
-    )
-    if configured_value is not None:
-        return configured_value
-    return 33554432
-
-
-def _download_max_multiplexed_streams() -> int:
-    configured_value = _configured_positive_int_env(
-        "DEFINERS_DOWNLOAD_MAX_MULTIPLEXED_STREAMS"
-    )
-    if configured_value is not None:
-        return configured_value
-    return max(16, min(64, _parallel_download_workers()))
-
-
-def _download_mmap_min_size_bytes() -> int:
-    configured_value = _configured_positive_int_env(
-        "DEFINERS_DOWNLOAD_MMAP_MIN_SIZE_BYTES"
-    )
-    if configured_value is not None:
-        return configured_value
-    return 1048576
 
 
 def _aiohttp_read_bufsize_bytes(chunk_size_bytes: int) -> int:
-    configured_value = _configured_positive_int_env(
-        "DEFINERS_DOWNLOAD_AIOHTTP_READ_BUFSIZE_BYTES"
-    )
-    if configured_value is not None:
-        return configured_value
-    return max(int(chunk_size_bytes), 4194304)
+    return max(4 * 1024 * 1024, max(int(chunk_size_bytes), 1) * 8)
 
 
 def _create_aiohttp_client_session(
@@ -318,11 +232,7 @@ def _module_available(module_name: str) -> bool:
 
 
 def _http2_runtime_ready() -> bool:
-    return (
-        _download_enable_multiplexing()
-        and _module_available("httpx")
-        and _module_available("h2")
-    )
+    return _download_enable_multiplexing() and _module_available("httpx")
 
 
 def _http3_runtime_ready() -> bool:
@@ -331,6 +241,16 @@ def _http3_runtime_ready() -> bool:
         and _download_enable_http3()
         and _module_available("aioquic")
     )
+
+
+class TransferStrategyUnsupportedError(RuntimeError):
+    pass
+
+
+class NetworkTransferStrategy(Protocol):
+    async def execute_transfer(
+        self, source_uri: str, target_node: Path
+    ) -> bool: ...
 
 
 def _transfer_item_label(source_uri: str, target_node: Path) -> str:
@@ -392,6 +312,156 @@ def _header_pairs_value(
         if normalized_value:
             return normalized_value
     return None
+
+
+class HttpChunkedTransferStrategy:
+    strategy_name = "http1-chunked"
+
+    def __init__(
+        self,
+        chunk_size_bytes: int | None = None,
+        request_timeout_seconds: float = 30,
+    ):
+        self.chunk_size_bytes = (
+            _download_chunk_size_bytes()
+            if chunk_size_bytes is None
+            else max(int(chunk_size_bytes), 1)
+        )
+        self.request_timeout_seconds = float(request_timeout_seconds)
+
+    def _create_staging_target(self, target_node: Path) -> Path:
+        target_node.parent.mkdir(parents=True, exist_ok=True)
+        file_descriptor, staging_path = tempfile.mkstemp(
+            prefix=f"{target_node.name}.",
+            suffix=".part",
+            dir=target_node.parent,
+        )
+        os.close(file_descriptor)
+        return Path(staging_path)
+
+    def _commit_staging_target(
+        self, staging_node: Path, target_node: Path
+    ) -> None:
+        target_node.parent.mkdir(parents=True, exist_ok=True)
+        os.replace(staging_node, target_node)
+
+    def _cleanup_staging_target(self, staging_node: Path) -> None:
+        staging_node.unlink(missing_ok=True)
+
+    async def execute_transfer(
+        self, source_uri: str, target_node: Path
+    ) -> bool:
+        resolved_target_node = Path(target_node)
+        try:
+            import aiofiles
+            import aiohttp
+        except ImportError:
+            await asyncio.to_thread(
+                self._execute_transfer_sync,
+                source_uri,
+                resolved_target_node,
+            )
+            return True
+        staging_node = self._create_staging_target(resolved_target_node)
+        try:
+            request_timeout = aiohttp.ClientTimeout(
+                total=self.request_timeout_seconds
+            )
+            async with _create_aiohttp_client_session(
+                aiohttp,
+                chunk_size_bytes=self.chunk_size_bytes,
+            ) as session:
+                async with session.get(
+                    source_uri, timeout=request_timeout
+                ) as network_response:
+                    network_response.raise_for_status()
+                    total_bytes = _content_length(
+                        getattr(
+                            getattr(network_response, "headers", {}),
+                            "get",
+                            lambda _key, _default=None: None,
+                        )("Content-Length")
+                    )
+                    async with aiofiles.open(
+                        staging_node, "wb"
+                    ) as persistent_storage:
+                        downloaded_bytes = 0
+                        if hasattr(network_response, "content") and hasattr(
+                            network_response.content,
+                            "iter_chunked",
+                        ):
+                            async for (
+                                data_chunk
+                            ) in network_response.content.iter_chunked(
+                                self.chunk_size_bytes
+                            ):
+                                await persistent_storage.write(data_chunk)
+                                downloaded_bytes += len(data_chunk)
+                                _transfer_progress(
+                                    source_uri,
+                                    resolved_target_node,
+                                    detail="Streaming artifact bytes.",
+                                    phase="transfer",
+                                    bytes_downloaded=downloaded_bytes,
+                                    bytes_total=total_bytes,
+                                )
+                        else:
+                            payload = await network_response.read()
+                            await persistent_storage.write(payload)
+                            _transfer_progress(
+                                source_uri,
+                                resolved_target_node,
+                                detail="Streaming artifact bytes.",
+                                phase="transfer",
+                                bytes_downloaded=len(payload),
+                                bytes_total=total_bytes,
+                            )
+            await asyncio.to_thread(
+                self._commit_staging_target,
+                staging_node,
+                resolved_target_node,
+            )
+        except Exception:
+            await asyncio.to_thread(self._cleanup_staging_target, staging_node)
+            raise
+        return True
+
+    def _execute_transfer_sync(
+        self, source_uri: str, target_node: Path
+    ) -> None:
+        resolved_target_node = Path(target_node)
+        staging_node = self._create_staging_target(resolved_target_node)
+        try:
+            with urllib.request.urlopen(
+                source_uri, timeout=self.request_timeout_seconds
+            ) as response:
+                total_bytes = _content_length(
+                    getattr(
+                        getattr(response, "headers", {}),
+                        "get",
+                        lambda _key, _default=None: None,
+                    )("Content-Length")
+                )
+                with open(staging_node, "wb") as persistent_storage:
+                    downloaded_bytes = 0
+                    while True:
+                        data_chunk = response.read(self.chunk_size_bytes)
+                        if not data_chunk:
+                            break
+                        persistent_storage.write(data_chunk)
+                        downloaded_bytes += len(data_chunk)
+                        _transfer_progress(
+                            source_uri,
+                            resolved_target_node,
+                            detail="Streaming artifact bytes.",
+                            phase="transfer",
+                            bytes_downloaded=downloaded_bytes,
+                            bytes_total=total_bytes,
+                        )
+            self._commit_staging_target(staging_node, resolved_target_node)
+        except Exception:
+            self._cleanup_staging_target(staging_node)
+            raise
 
 
 def _multipart_part_directory(staging_node: Path) -> Path:
@@ -639,22 +709,6 @@ def _download_range_part_file(
 
 
 @dataclass(frozen=True, slots=True)
-class HttpTransferCapabilities:
-    protocol_preference: str
-    http_range_requests: bool
-    parallel_connections: bool
-    separate_process_workers: bool
-    http2_multiplexing: bool
-    http2_runtime_ready: bool
-    http3_multiplexing: bool
-    http3_runtime_ready: bool
-    quic_udp: bool
-    max_parallel_connections: int
-    max_process_workers: int
-    max_multiplexed_streams: int
-
-
-@dataclass(frozen=True, slots=True)
 class HttpRemoteProbeResult:
     total_bytes: int | None
     supports_ranges: bool
@@ -666,167 +720,6 @@ class Http3ResponsePayload:
     status_code: int
     headers: tuple[tuple[bytes, bytes], ...]
     body: bytes
-
-
-def http_transfer_capabilities() -> HttpTransferCapabilities:
-    max_parallel_connections = _parallel_download_workers()
-    max_process_workers = min(
-        max_parallel_connections, _download_process_workers()
-    )
-    max_multiplexed_streams = min(
-        max_parallel_connections,
-        _download_max_multiplexed_streams(),
-    )
-    return HttpTransferCapabilities(
-        protocol_preference=_download_http_protocol(),
-        http_range_requests=True,
-        parallel_connections=max_parallel_connections > 1,
-        separate_process_workers=max_process_workers > 1,
-        http2_multiplexing=_download_enable_multiplexing(),
-        http2_runtime_ready=_http2_runtime_ready(),
-        http3_multiplexing=(
-            _download_enable_multiplexing() and _download_enable_http3()
-        ),
-        http3_runtime_ready=_http3_runtime_ready(),
-        quic_udp=(
-            _download_enable_multiplexing()
-            and _download_enable_http3()
-            and _http3_runtime_ready()
-        ),
-        max_parallel_connections=max_parallel_connections,
-        max_process_workers=max_process_workers,
-        max_multiplexed_streams=max_multiplexed_streams,
-    )
-
-
-class TransferStrategyUnsupportedError(RuntimeError):
-    pass
-
-
-class HttpChunkedTransferStrategy:
-    def __init__(
-        self,
-        chunk_size_bytes: int | None = None,
-        request_timeout_seconds: float = 30,
-    ):
-        self.chunk_size_bytes = (
-            _download_chunk_size_bytes()
-            if chunk_size_bytes is None
-            else max(int(chunk_size_bytes), 1)
-        )
-        self.request_timeout_seconds = request_timeout_seconds
-
-    def _create_staging_target(self, target_node: Path) -> Path:
-        target_node.parent.mkdir(parents=True, exist_ok=True)
-        file_descriptor, staging_path = tempfile.mkstemp(
-            prefix=f"{target_node.name}.",
-            suffix=".part",
-            dir=target_node.parent,
-        )
-        os.close(file_descriptor)
-        return Path(staging_path)
-
-    def _cleanup_staging_target(self, staging_node: Path) -> None:
-        staging_node.unlink(missing_ok=True)
-
-    def _commit_staging_target(
-        self, staging_node: Path, target_node: Path
-    ) -> None:
-        os.replace(staging_node, target_node)
-
-    async def execute_transfer(
-        self, source_uri: str, target_node: Path
-    ) -> bool:
-        try:
-            import aiofiles
-            import aiohttp
-        except ImportError:
-            await asyncio.to_thread(
-                self._execute_transfer_sync, source_uri, target_node
-            )
-            return True
-        staging_node = self._create_staging_target(target_node)
-        request_timeout = aiohttp.ClientTimeout(
-            total=self.request_timeout_seconds
-        )
-        try:
-            async with _create_aiohttp_client_session(
-                aiohttp,
-                chunk_size_bytes=self.chunk_size_bytes,
-            ) as session:
-                async with session.get(
-                    source_uri, timeout=request_timeout
-                ) as network_response:
-                    network_response.raise_for_status()
-                    total_bytes = _content_length(
-                        getattr(
-                            getattr(network_response, "headers", {}),
-                            "get",
-                            lambda _key, _default=None: None,
-                        )("Content-Length")
-                    )
-                    async with aiofiles.open(
-                        staging_node, "wb"
-                    ) as persistent_storage:
-                        downloaded_bytes = 0
-                        async for (
-                            data_chunk
-                        ) in network_response.content.iter_chunked(
-                            self.chunk_size_bytes
-                        ):
-                            await persistent_storage.write(data_chunk)
-                            downloaded_bytes += len(data_chunk)
-                            _transfer_progress(
-                                source_uri,
-                                target_node,
-                                detail="Streaming artifact bytes.",
-                                phase="transfer",
-                                bytes_downloaded=downloaded_bytes,
-                                bytes_total=total_bytes,
-                            )
-            await asyncio.to_thread(
-                self._commit_staging_target, staging_node, target_node
-            )
-        except Exception:
-            await asyncio.to_thread(self._cleanup_staging_target, staging_node)
-            raise
-        return True
-
-    def _execute_transfer_sync(
-        self, source_uri: str, target_node: Path
-    ) -> None:
-        staging_node = self._create_staging_target(target_node)
-        try:
-            with urllib.request.urlopen(
-                source_uri, timeout=self.request_timeout_seconds
-            ) as response:
-                total_bytes = _content_length(
-                    getattr(
-                        getattr(response, "headers", {}),
-                        "get",
-                        lambda _key, _default=None: None,
-                    )("Content-Length")
-                )
-                with open(staging_node, "wb") as persistent_storage:
-                    downloaded_bytes = 0
-                    while True:
-                        data_chunk = response.read(self.chunk_size_bytes)
-                        if not data_chunk:
-                            break
-                        persistent_storage.write(data_chunk)
-                        downloaded_bytes += len(data_chunk)
-                        _transfer_progress(
-                            source_uri,
-                            target_node,
-                            detail="Streaming artifact bytes.",
-                            phase="transfer",
-                            bytes_downloaded=downloaded_bytes,
-                            bytes_total=total_bytes,
-                        )
-            self._commit_staging_target(staging_node, target_node)
-        except Exception:
-            self._cleanup_staging_target(staging_node)
-            raise
 
 
 class ParallelHttpRangeTransferStrategy(HttpChunkedTransferStrategy):
@@ -2019,217 +1912,3 @@ class ZipExtractTransferStrategy:
         memory_buffer = io.BytesIO(payload)
         with zipfile.ZipFile(memory_buffer) as archive_context:
             self._extract_archive(archive_context, target_node)
-
-
-@dataclass(frozen=True, slots=True)
-class TransferExecutionPolicy:
-    max_retries: int = 3
-    base_delay_seconds: float = 0.5
-
-    def retry_policy(self) -> RetryPolicy:
-        return RetryPolicy(
-            max_retries=self.max_retries,
-            delay_strategy=ExponentialBackoffDelay(
-                base_delay=self.base_delay_seconds
-            ),
-        )
-
-
-class ResourceRetrievalOrchestrator:
-    def __init__(
-        self,
-        strategy: NetworkTransferStrategy,
-        circuit_breaker: CircuitBreaker | None = None,
-        max_retries: int = 3,
-        base_delay_seconds: float = 0.5,
-    ):
-        self.strategy = strategy
-        self.circuit_breaker = circuit_breaker or CircuitBreaker(
-            failure_threshold=3, recovery_timeout=30
-        )
-        self.execution_policy = TransferExecutionPolicy(
-            max_retries=max_retries,
-            base_delay_seconds=base_delay_seconds,
-        )
-
-    def _log_retry(
-        self,
-        attempt_number: int,
-        total_attempts: int,
-        error: BaseException,
-    ) -> None:
-        logging.getLogger(__name__).warning(
-            "Retry attempt %d/%d failed: %s",
-            attempt_number,
-            total_attempts,
-            error,
-        )
-
-    async def process(self, source_uri: str, target_node: str | Path) -> bool:
-        target_path_object = Path(target_node)
-
-        try:
-            return await execute_with_resilience_async(
-                self.strategy.execute_transfer,
-                source_uri,
-                target_path_object,
-                circuit_breaker=self.circuit_breaker,
-                retry_policy=self.execution_policy.retry_policy(),
-                on_retry=self._log_retry,
-            )
-        except CircuitBreakerOpenException as circuit_open_fault:
-            logging.getLogger(__name__).error(
-                "Transfer blocked by open circuit: %s", str(circuit_open_fault)
-            )
-            return False
-        except Exception as execution_fault:
-            logging.getLogger(__name__).error(
-                "Transfer fault: %s", str(execution_fault)
-            )
-            return False
-
-
-def create_http_orchestrator() -> ResourceRetrievalOrchestrator:
-    return ResourceRetrievalOrchestrator(create_http_transfer_strategy())
-
-
-def create_zip_orchestrator() -> ResourceRetrievalOrchestrator:
-    return ResourceRetrievalOrchestrator(
-        ZipExtractTransferStrategy(
-            download_strategy=create_http_transfer_strategy()
-        )
-    )
-
-
-def create_http_transfer_strategy() -> NetworkTransferStrategy:
-    capabilities = http_transfer_capabilities()
-    base_strategy = ParallelProcessHttpRangeTransferStrategy()
-    if capabilities.protocol_preference == "http1":
-        return base_strategy
-    strategies: list[NetworkTransferStrategy] = []
-    if capabilities.protocol_preference == "http3":
-        strategies.append(Http3MultiplexedRangeTransferStrategy())
-        strategies.append(Http2MultiplexedRangeTransferStrategy())
-    elif capabilities.protocol_preference == "http2":
-        strategies.append(Http2MultiplexedRangeTransferStrategy())
-        if capabilities.http3_runtime_ready:
-            strategies.append(Http3MultiplexedRangeTransferStrategy())
-    else:
-        strategies.append(Http2MultiplexedRangeTransferStrategy())
-        if capabilities.http3_runtime_ready:
-            strategies.append(Http3MultiplexedRangeTransferStrategy())
-    strategies.append(base_strategy)
-    if len(strategies) == 1:
-        return strategies[0]
-    return AdaptiveHttpTransferStrategy(strategies)
-
-
-def execute_async_operation(coroutine: Any) -> Any:
-    try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        return asyncio.run(coroutine)
-    operation_outcome: dict[str, Any] = {"result": None, "error": None}
-
-    def runner() -> None:
-        try:
-            operation_outcome["result"] = asyncio.run(coroutine)
-        except Exception as runner_fault:
-            operation_outcome["error"] = runner_fault
-
-    execution_thread = threading.Thread(target=runner, daemon=False)
-    execution_thread.start()
-    execution_thread.join()
-    if operation_outcome["error"] is not None:
-        raise operation_outcome["error"]
-    return operation_outcome["result"]
-
-
-def validate_network_url(url: str) -> None:
-    from definers.constants import MAX_INPUT_LENGTH
-
-    if not isinstance(url, str):
-        raise ValueError("url must be a string")
-    if len(url) > MAX_INPUT_LENGTH:
-        raise ValueError(f"url too long ({len(url)} > {MAX_INPUT_LENGTH})")
-    if not (url.startswith("http://") or url.startswith("https://")):
-        raise ValueError(f"unsupported URL scheme: {url}")
-
-
-def download_file(
-    url: str,
-    destination: str,
-    executor: Callable[[Any], Any] = execute_async_operation,
-    orchestrator_factory: Callable[
-        [], ResourceRetrievalOrchestrator
-    ] = create_http_orchestrator,
-) -> str | None:
-    validate_network_url(url)
-
-    async def async_runner() -> bool:
-        orchestrator = orchestrator_factory()
-        return await orchestrator.process(url, destination)
-
-    success = executor(async_runner())
-    return destination if success else None
-
-
-def download_and_unzip(
-    url: str,
-    extract_to: str,
-    executor: Callable[[Any], Any] = execute_async_operation,
-    orchestrator_factory: Callable[
-        [], ResourceRetrievalOrchestrator
-    ] = create_zip_orchestrator,
-) -> bool:
-    validate_network_url(url)
-
-    async def async_runner() -> bool:
-        orchestrator = orchestrator_factory()
-        return await orchestrator.process(url, extract_to)
-
-    return executor(async_runner())
-
-
-def broadcast_path_change():
-    if sys.platform != "win32":
-        return
-    import ctypes
-    from ctypes import wintypes
-
-    send_message_timeout = ctypes.windll.user32.SendMessageTimeoutW
-    send_message_timeout(
-        65535, 26, 0, "Environment", 2, 5000, ctypes.byref(wintypes.DWORD())
-    )
-
-
-def add_to_path_windows(
-    folder_path: str, broadcaster: Callable[[], None] | None = None
-) -> None:
-    if sys.platform != "win32":
-        return
-    import winreg
-
-    folder_path = os.path.normpath(folder_path).strip('"')
-    path_change_broadcaster = (
-        broadcast_path_change if broadcaster is None else broadcaster
-    )
-    try:
-        key = winreg.OpenKey(
-            winreg.HKEY_CURRENT_USER, "Environment", 0, winreg.KEY_ALL_ACCESS
-        )
-        try:
-            (current_path, _) = winreg.QueryValueEx(key, "PATH")
-        except FileNotFoundError:
-            current_path = ""
-        parts = [p.strip('"') for p in current_path.split(";") if p.strip()]
-        if folder_path not in parts:
-            parts.insert(0, folder_path)
-            new_path = ";".join(parts)
-            winreg.SetValueEx(key, "PATH", 0, winreg.REG_EXPAND_SZ, new_path)
-            os.environ["PATH"] = folder_path + os.pathsep + os.environ["PATH"]
-            path_change_broadcaster()
-            print(f"Added to PATH: {folder_path}")
-        winreg.CloseKey(key)
-    except Exception as e:
-        print(f"Error updating PATH: {e}")

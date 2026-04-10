@@ -28,7 +28,7 @@ class TestInstallFfmpegWindows(unittest.TestCase):
 
     @patch("definers.system.is_admin_windows", return_value=True)
     @patch("subprocess.run", side_effect=[FileNotFoundError, MagicMock()])
-    @patch("definers.media.web_transfer.download_file")
+    @patch("definers.media.transfer.download_file")
     @patch("zipfile.ZipFile")
     @patch("shutil.move")
     @patch("shutil.rmtree")

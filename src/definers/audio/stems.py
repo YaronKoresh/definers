@@ -268,7 +268,7 @@ def build_mastering_separator_plan(
                 model_candidates=_normalize_stage_candidates(
                     (
                         "mel_band_roformer_bleed_suppressor_v1.ckpt",
-                        "mel_band_roformer_instrumental_fv7z_gabox.ckpt",
+                        "mel_band_roformer_instrumental_bleedless_v2_gabox.ckpt",
                     )
                 ),
                 preferred_stems=("no bleed", "other", "instrumental"),

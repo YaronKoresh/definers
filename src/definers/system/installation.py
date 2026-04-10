@@ -84,7 +84,7 @@ def _faiss_python_cmake_args():
 
 def install_ffmpeg_windows():
     from definers import system as system_module
-    from definers.media.web_transfer import download_file
+    from definers.media.transfer import download_file
 
     print("[INFO] Running FFmpeg installer for Windows...")
     if not system_module.is_admin_windows():
@@ -256,7 +256,7 @@ def install_ffmpeg():
 
 def install_audio_effects():
     from definers import system as system_module
-    from definers.media.web_transfer import (
+    from definers.media.transfer import (
         add_to_path_windows,
         download_and_unzip,
         download_file,
@@ -321,7 +321,7 @@ def install_audio_effects():
 
 def pip_install(packs):
     from definers import system as system_module
-    from definers.media.web_transfer import download_file
+    from definers.media.transfer import download_file
 
     packs_arr = packs.strip().split()
     for index, pack in enumerate(packs_arr):

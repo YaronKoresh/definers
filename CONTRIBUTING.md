@@ -29,6 +29,21 @@ pip install -e ".[dev,web]"
 - Remove dead code and old routing layers created by your change.
 - Update tests and docs when commands, imports, runtime behavior, or package layout change.
 
+## Architecture Rules
+
+- Keep the repository feature-owned. Move logic toward the real owner package instead of adding another shared gateway.
+- Treat `definers` as a stable lazy public API, not as a place to mirror the entire source tree.
+- Use package facades for discovery and compatibility, but put behavior changes in direct owner modules.
+- Temporary compatibility shims are allowed only when they protect a real public import or patch-target path during migration.
+- Remove routing-only wrappers after consumers move. Do not keep them once they stop protecting compatibility.
+
+## CLI And Transfer Rules
+
+- CLI changes should preserve the single authoritative command-definition source in `definers.cli.command_registry` instead of creating a second parser or registry path.
+- Preserve stable command names and defaults unless the change also updates docs, tests, and migration notes.
+- Download changes should keep runtime policy separate from concrete transport strategy.
+- Restricted runtimes such as daemon hosts must remain safe by default.
+
 ## Validation
 
 Run the narrowest proof first, then the main gate.
@@ -54,12 +69,26 @@ Use the concrete owner module whenever possible.
 
 Preferred patterns:
 
+- `definers.cli.application.catalog`
+- `definers.media.transfer`
 - `definers.ml.answer.service`
 - `definers.ml.text.generation`
 - `definers.data.datasets`
 - `definers.data.text.vectorizer`
 - `definers.system.paths`
 - `definers.ui.apps.train`
+
+## Documentation Rules
+
+When you touch a maintained docs page, keep it useful enough for the next reader to act without reverse-engineering the code.
+
+At minimum, the owning page should make clear:
+
+- what the area owns
+- which entry points are stable
+- the normal workflow or usage path
+- important defaults, configuration values, or environment variables
+- the main runtime limits or failure modes
 
 ## RVC Policy
 

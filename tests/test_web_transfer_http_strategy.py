@@ -10,10 +10,12 @@ from definers.media.web_transfer import (
     AdaptiveHttpTransferStrategy,
     HttpChunkedTransferStrategy,
     HttpTransferCapabilities,
+    HttpTransferPolicy,
     ParallelHttpRangeTransferStrategy,
     ParallelProcessHttpRangeTransferStrategy,
     create_http_transfer_strategy,
     http_transfer_capabilities,
+    http_transfer_policy,
 )
 from definers.system.download_activity import (
     bind_download_activity_scope,
@@ -434,6 +436,102 @@ def test_http_transfer_capabilities_report_all_parallel_modes(
     assert capabilities.max_parallel_connections == 48
     assert capabilities.max_process_workers == 6
     assert capabilities.max_multiplexed_streams == 24
+
+
+def test_http_transfer_capabilities_disable_process_workers_in_daemon_runtime(
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv(
+        "DEFINERS_DOWNLOAD_ENABLE_PROCESS_WORKERS",
+        raising=False,
+    )
+    monkeypatch.setattr(
+        web_transfer_module,
+        "_parallel_download_workers",
+        lambda: 48,
+    )
+    monkeypatch.setattr(
+        web_transfer_module.multiprocessing,
+        "current_process",
+        lambda: type("Proc", (), {"daemon": True})(),
+    )
+
+    capabilities = http_transfer_capabilities()
+
+    assert capabilities.separate_process_workers is False
+    assert capabilities.max_process_workers == 1
+
+
+def test_download_process_workers_env_override_reenables_process_pool(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("DEFINERS_DOWNLOAD_ENABLE_PROCESS_WORKERS", "1")
+    monkeypatch.setenv("DEFINERS_DOWNLOAD_PROCESS_WORKERS", "7")
+    monkeypatch.setattr(
+        web_transfer_module.multiprocessing,
+        "current_process",
+        lambda: type("Proc", (), {"daemon": True})(),
+    )
+
+    assert web_transfer_module._download_process_workers() == 7
+
+
+def test_http_transfer_policy_uses_threaded_base_strategy_in_restricted_runtime(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        web_transfer_module,
+        "http_transfer_capabilities",
+        lambda: HttpTransferCapabilities(
+            protocol_preference="http1",
+            http_range_requests=True,
+            parallel_connections=True,
+            separate_process_workers=False,
+            http2_multiplexing=False,
+            http2_runtime_ready=False,
+            http3_multiplexing=False,
+            http3_runtime_ready=False,
+            quic_udp=False,
+            max_parallel_connections=48,
+            max_process_workers=1,
+            max_multiplexed_streams=24,
+        ),
+    )
+
+    policy = http_transfer_policy()
+
+    assert isinstance(policy, HttpTransferPolicy)
+    assert policy.runtime_class == "restricted"
+    assert policy.base_strategy_name == "http1-range-threaded"
+    assert policy.strategy_names == ("http1-range-threaded",)
+
+
+def test_create_http_transfer_strategy_uses_threaded_base_when_process_pool_disabled(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        web_transfer_module,
+        "http_transfer_capabilities",
+        lambda: HttpTransferCapabilities(
+            protocol_preference="http1",
+            http_range_requests=True,
+            parallel_connections=True,
+            separate_process_workers=False,
+            http2_multiplexing=False,
+            http2_runtime_ready=False,
+            http3_multiplexing=False,
+            http3_runtime_ready=False,
+            quic_udp=False,
+            max_parallel_connections=48,
+            max_process_workers=1,
+            max_multiplexed_streams=24,
+        ),
+    )
+
+    strategy = create_http_transfer_strategy()
+
+    assert isinstance(strategy, ParallelHttpRangeTransferStrategy)
+    assert not isinstance(strategy, ParallelProcessHttpRangeTransferStrategy)
 
 
 def test_create_http_transfer_strategy_prefers_http3_when_requested(

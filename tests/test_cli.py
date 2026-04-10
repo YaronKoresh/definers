@@ -329,6 +329,41 @@ def test_known_model_task_install_failure_is_not_reported_as_unknown(
     assert output_lines == ["failed to install model-task stems"]
 
 
+def test_known_model_task_install_failure_reports_reason_when_available(
+    monkeypatch,
+):
+    import definers.cli.install as cli_install
+
+    monkeypatch.setattr(
+        cli_install,
+        "resolve_model_target_names",
+        lambda target, *, kind: ("stems",),
+    )
+    monkeypatch.setattr(
+        cli_install,
+        "install_model_target",
+        lambda target, *, kind: False,
+    )
+    monkeypatch.setattr(
+        cli_install,
+        "model_install_error",
+        lambda target, *, kind: "RuntimeError: download bridge failed",
+    )
+
+    output_lines = []
+    code = cli_install.run_optional_install_command(
+        "stems",
+        target_kind="model-task",
+        list_only=False,
+        output=output_lines.append,
+    )
+
+    assert code == 1
+    assert output_lines == [
+        "failed to install model-task stems: RuntimeError: download bridge failed"
+    ]
+
+
 def test_start_dispatch_uses_registry_resolution(monkeypatch):
     import definers.ui.gui_entrypoints as gui_entrypoints
 

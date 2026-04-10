@@ -1,13 +1,17 @@
 from collections.abc import Callable, Mapping
 
+from definers.cli.application.catalog import (
+    normalize_cli_name,
+    resolve_cli_command_definition,
+)
 from definers.cli.cli_command_definition import (
+    DEFAULT_START_PROJECT,
     CliCommandDefinition,
 )
 from definers.cli.cli_request import CliRequest
 from definers.cli.command_execution_metadata import (
     CommandExecutionMetadata,
 )
-from definers.cli.command_registry import normalize_cli_name
 from definers.cli.install_command import InstallCommand
 from definers.cli.lyric_video_command import LyricVideoCommand
 from definers.cli.music_video_command import MusicVideoCommand
@@ -30,26 +34,10 @@ def parse_cli_command(
 ):
     request = coerce_cli_request(args)
     command = normalize_cli_name(request.command)
-    project = normalize_cli_name(request.project) or "chat"
-    if command in (None, "start"):
-        return StartCommand(
-            project=project,
-            metadata=CommandExecutionMetadata(
-                requested_name=request.command,
-                resolved_name="start",
-            ),
-        )
-    if command == "install":
-        return InstallCommand(
-            target=request.install_target,
-            target_kind=request.install_kind,
-            list_only=bool(request.install_list),
-            metadata=CommandExecutionMetadata(
-                requested_name=request.command,
-                resolved_name="install",
-            ),
-        )
-    definition = command_registry.get(command)
+    definition = resolve_cli_command_definition(
+        command_registry,
+        request.command,
+    )
     if definition is None:
         return UnknownCommand(
             name=command,
@@ -62,9 +50,20 @@ def parse_cli_command(
         requested_name=request.command,
         resolved_name=definition.name,
     )
+    if definition.kind == "install":
+        return InstallCommand(
+            target=request.install_target,
+            target_kind=request.install_kind,
+            list_only=bool(request.install_list),
+            metadata=metadata,
+        )
     if definition.kind == "start":
         return StartCommand(
-            project=definition.project or command,
+            project=(
+                definition.project
+                or normalize_cli_name(request.project)
+                or DEFAULT_START_PROJECT
+            ),
             metadata=metadata,
         )
     if definition.kind == "music-video":

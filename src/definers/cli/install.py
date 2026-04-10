@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from definers.model_installation import (
     install_model_target,
+    model_install_error,
     model_runtime_targets,
     resolve_model_target_names,
 )
@@ -49,7 +50,16 @@ def run_optional_install_command(
             )
             return 1
         if not install_model_target(normalized_target, kind=target_kind):
-            output(f"failed to install {target_kind} {normalized_target}")
+            failure_detail = model_install_error(
+                normalized_target,
+                kind=target_kind,
+            )
+            if failure_detail:
+                output(
+                    f"failed to install {target_kind} {normalized_target}: {failure_detail}"
+                )
+            else:
+                output(f"failed to install {target_kind} {normalized_target}")
             return 1
         output(f"installed {target_kind} {normalized_target}")
         return 0

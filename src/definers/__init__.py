@@ -89,6 +89,7 @@ sox = load_sox_module()
 
 _LAZY_SUBMODULES = {
     "audio",
+    "chat",
     "cuda",
     "data",
     "file_ops",

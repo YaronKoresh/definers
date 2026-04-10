@@ -254,7 +254,7 @@ def write_on_image(
 ):
     from PIL import Image, ImageDraw, ImageFont
 
-    from definers.media.web_transfer import google_drive_download
+    from definers.media import web_transfer as web_transfer_module
     from definers.system.output_paths import managed_output_path
 
     font_path = managed_output_path(
@@ -263,7 +263,7 @@ def write_on_image(
         unique=False,
     )
     if not os.path.exists(font_path):
-        google_drive_download(
+        web_transfer_module.google_drive_download(
             "1C48KkYWQDYu7ypbNtSXAUJ6kuzoZ42sI",
             font_path,
         )

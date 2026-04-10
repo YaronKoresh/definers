@@ -19,6 +19,13 @@ It brings together workflow-grade audio, text, image, video, data preparation, r
 - System and runtime workflows for installation, process control, download handling, and compatibility.
 - Focused launcher surfaces for domain-specific applications instead of a single overloaded interface.
 
+## Architecture Direction
+
+- The repository is standardizing on feature-owned packages instead of broad routing layers.
+- `import definers` is a stable lazy discovery surface, not a signal to eagerly import every optional runtime.
+- Package facades such as `definers.data`, `definers.chat`, `definers.text`, and `definers.media` stay lazy discovery surfaces, while implementation work belongs in concrete owner modules.
+- CLI, launcher, and download behavior are being tightened around explicit contracts so runtime behavior stays predictable in local, CI, and hosted environments.
+
 ## Documentation
 
 - Start with [docs/README.md](docs/README.md).

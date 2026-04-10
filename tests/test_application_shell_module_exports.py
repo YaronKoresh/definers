@@ -1,9 +1,9 @@
 from argparse import Namespace
 
+from definers.cli.application.catalog import create_cli_command_registry
 from definers.cli.cli_request import CliRequest
 from definers.cli.command_dispatcher import dispatch_cli_command
 from definers.cli.command_parser import parse_cli_command
-from definers.cli.command_registry import create_cli_command_registry
 from definers.cli.lyric_video_command import LyricVideoCommand
 from definers.cli.music_video_command import MusicVideoCommand
 from definers.cli.start_command import StartCommand

@@ -179,7 +179,7 @@ class RepositorySyncService:
 
     @staticmethod
     def download_function():
-        from definers.media.web_transfer import download_file
+        from definers.media.transfer import download_file
 
         return download_file
 

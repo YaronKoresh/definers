@@ -1,11 +1,11 @@
 from argparse import Namespace
 
-from definers.cli.command_dispatcher import dispatch_cli_command
-from definers.cli.command_parser import parse_cli_command
-from definers.cli.command_registry import (
+from definers.cli.application import (
     create_cli_command_registry,
     get_known_cli_names,
 )
+from definers.cli.command_dispatcher import dispatch_cli_command
+from definers.cli.command_parser import parse_cli_command
 from definers.cli.install_command import InstallCommand
 from definers.cli.lyric_video_command import LyricVideoCommand
 from definers.cli.music_video_command import MusicVideoCommand
@@ -154,11 +154,17 @@ def test_get_known_cli_names_can_exclude_option_flags():
         include_options=False,
     ) == (
         "start",
+        "install",
         "music-video",
         "lyric-video",
         "chat",
         "video",
     )
+
+
+def test_create_cli_command_registry_includes_install_command():
+    assert "install" in COMMAND_REGISTRY
+    assert COMMAND_REGISTRY["install"].kind == "install"
 
 
 def test_coerce_cli_request_uses_namespace_defaults():

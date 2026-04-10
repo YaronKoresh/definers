@@ -209,7 +209,7 @@ except Exception:
     features_to_video = None
     write_video = None
 try:
-    from definers.media.web_transfer import (
+    from definers.media.transfer import (
         download_file,
         google_drive_download,
     )

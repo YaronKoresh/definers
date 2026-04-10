@@ -1,24 +1,11 @@
+from __future__ import annotations
+
 import hashlib
+import importlib
 import os
 import random
 import string
 import sys
-
-from definers.database import Database
-from definers.system import read
-from definers.text.system_messages import set_system_message
-from definers.text.text_transforms import (
-    camel_case,
-    language,
-    simple_text,
-    strip_nikud,
-)
-from definers.text.translation import (
-    ai_translate as _ai_translate,
-    duck_translate,
-    google_translate,
-    translate_with_code_using,
-)
 
 __all__ = [
     "Database",
@@ -39,6 +26,29 @@ __all__ = [
     "strip_nikud",
     "translate_with_code",
 ]
+
+_TEXT_EXPORTS = {
+    "Database": "definers.database",
+    "camel_case": "definers.text.text_transforms",
+    "duck_translate": "definers.text.translation",
+    "google_translate": "definers.text.translation",
+    "language": "definers.text.text_transforms",
+    "read": "definers.system",
+    "set_system_message": "definers.text.system_messages",
+    "simple_text": "definers.text.text_transforms",
+    "strip_nikud": "definers.text.text_transforms",
+    "translate_with_code_using": "definers.text.translation",
+}
+
+
+def _load_text_export(name: str):
+    module_name = _TEXT_EXPORTS.get(name)
+    if module_name is None:
+        raise AttributeError(name)
+    module = importlib.import_module(module_name)
+    value = getattr(module, name)
+    globals()[name] = value
+    return value
 
 
 def random_string(min_len: int = 50, max_len: int = 60) -> str:
@@ -64,7 +74,10 @@ def string_to_bytes(value: object) -> bytes:
 
 
 def file_to_sha3_512(path: str, salt_num: int | None = None) -> str | None:
-    content = read(path)
+    reader = globals().get("read")
+    if reader is None:
+        reader = _load_text_export("read")
+    content = reader(path)
     if content is not None:
         return string_to_sha3_512(content, salt_num)
     return None
@@ -86,8 +99,20 @@ def string_to_sha3_512(
 
 
 def ai_translate(text: str, lang: str = "en") -> str:
-    return _ai_translate(text, lang=lang)
+    translation = importlib.import_module("definers.text.translation")
+    return translation.ai_translate(text, lang=lang)
 
 
 def translate_with_code(text_to_translate: str, lang: str) -> str:
-    return translate_with_code_using(text_to_translate, lang, ai_translate)
+    translator = globals().get("translate_with_code_using")
+    if translator is None:
+        translator = _load_text_export("translate_with_code_using")
+    return translator(text_to_translate, lang, ai_translate)
+
+
+def __getattr__(name: str):
+    return _load_text_export(name)
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()).union(_TEXT_EXPORTS).union(__all__))

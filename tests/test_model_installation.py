@@ -64,11 +64,72 @@ def test_resolve_model_target_names_includes_known_stems_task():
     ) == ("stems",)
 
 
+def test_resolve_model_target_names_uses_declared_task_list_for_model_tasks(
+    monkeypatch,
+):
+    monkeypatch.setattr(model_installation, "MODEL_TASK_DOWNLOADERS", {})
+
+    assert model_installation.resolve_model_target_names(
+        "stems",
+        kind="model-task",
+    ) == ("stems",)
+
+
 def test_resolve_model_target_names_supports_domain_aliases():
     assert model_installation.resolve_model_target_names(
         "language",
         kind="model-domain",
     ) == ("answer", "summary", "translate")
+
+
+def test_stem_model_defaults_drop_removed_deverb_checkpoint():
+    assert (
+        "deverb_bs_roformer_8_256dim_8depth.ckpt"
+        not in model_installation.STEM_MODEL_FILES
+    )
+
+
+def test_stem_model_defaults_drop_removed_fv7z_checkpoint():
+    assert (
+        "mel_band_roformer_instrumental_fv7z_gabox.ckpt"
+        not in model_installation.STEM_MODEL_FILES
+    )
+
+
+def test_resolve_stem_model_filename_maps_legacy_deverb_checkpoint(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        model_installation,
+        "supported_audio_separator_model_files",
+        lambda: frozenset({"deverb_bs_roformer_8_384dim_10depth.ckpt"}),
+    )
+
+    assert (
+        model_installation.resolve_stem_model_filename(
+            "deverb_bs_roformer_8_256dim_8depth.ckpt"
+        )
+        == "deverb_bs_roformer_8_384dim_10depth.ckpt"
+    )
+
+
+def test_resolve_stem_model_filename_maps_legacy_fv7z_checkpoint(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        model_installation,
+        "supported_audio_separator_model_files",
+        lambda: frozenset(
+            {"mel_band_roformer_instrumental_bleedless_v2_gabox.ckpt"}
+        ),
+    )
+
+    assert (
+        model_installation.resolve_stem_model_filename(
+            "mel_band_roformer_instrumental_fv7z_gabox.ckpt"
+        )
+        == "mel_band_roformer_instrumental_bleedless_v2_gabox.ckpt"
+    )
 
 
 def test_install_model_target_rejects_unknown_model_target():
@@ -79,6 +140,29 @@ def test_install_model_target_rejects_unknown_model_target():
             installer=lambda target: None,
         )
         is False
+    )
+
+
+def test_install_model_target_records_failure_reason_for_missing_downloader(
+    monkeypatch,
+):
+    monkeypatch.setattr(model_installation, "_COMPLETED_MODEL_INSTALLS", set())
+    monkeypatch.setattr(model_installation, "_FAILED_MODEL_INSTALLS", set())
+    monkeypatch.setattr(model_installation, "_MODEL_INSTALL_ERRORS", {})
+    monkeypatch.setattr(model_installation, "MODEL_TASK_DOWNLOADERS", {})
+
+    result = model_installation.install_model_target(
+        "stems",
+        kind="model-task",
+    )
+
+    assert result is False
+    assert (
+        model_installation.model_install_error(
+            "stems",
+            kind="model-task",
+        )
+        == "RuntimeError: model downloader is not registered for stems"
     )
 
 
@@ -803,7 +887,7 @@ def test_hf_file_download_prefers_fast_direct_download(monkeypatch, tmp_path):
     monkeypatch.setenv("DEFINERS_FAST_HF_DOWNLOADS", "1")
     monkeypatch.setenv("DEFINERS_HF_MODEL_DIR", str(tmp_path))
     monkeypatch.setattr(
-        "definers.media.web_transfer.download_file",
+        "definers.media.transfer.download_file",
         fake_download_file,
     )
 
@@ -846,7 +930,7 @@ def test_hf_snapshot_download_prefers_fast_direct_snapshot_download(
         ),
     )
     monkeypatch.setattr(
-        "definers.media.web_transfer.download_file",
+        "definers.media.transfer.download_file",
         fake_download_file,
     )
 
@@ -983,7 +1067,7 @@ def test_install_fast_huggingface_download_hooks_patches_imported_aliases(
         lambda repo_id, revision=None: ("config.json",),
     )
     monkeypatch.setattr(
-        "definers.media.web_transfer.download_file",
+        "definers.media.transfer.download_file",
         lambda source_url, destination_path: (
             download_calls.append((source_url, destination_path))
             or destination_path
