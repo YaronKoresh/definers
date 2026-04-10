@@ -1,3 +1,8 @@
+from definers.runtime_numpy import get_numpy_module
+
+np = get_numpy_module()
+
+
 def has_parameter(values) -> bool:
     return values is not None and not (
         isinstance(values, list)
@@ -31,8 +36,6 @@ def dataset_slice(
 
 
 def batched_column_values(data, label_names):
-    import numpy as np
-
     features_batch = []
     labels_batch = []
     batch_size = 0

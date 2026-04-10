@@ -1,15 +1,13 @@
 from __future__ import annotations
 
-import importlib
 import random
 from pathlib import Path
 
+from definers.runtime_numpy import get_array_module
+
 
 def load_numeric_backend():
-    try:
-        return importlib.import_module("cupy")
-    except Exception:
-        return importlib.import_module("numpy")
+    return get_array_module()
 
 
 def music_video(audio_path, width=1920, height=1080, fps=30):

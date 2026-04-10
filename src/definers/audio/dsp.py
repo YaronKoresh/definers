@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-import numpy as np
+from definers.runtime_numpy import get_numpy_module
+
+np = get_numpy_module()
 from scipy.ndimage import median_filter
 
 from ..file_ops import log

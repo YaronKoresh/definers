@@ -3,7 +3,9 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass
 
-import numpy as np
+from definers.runtime_numpy import get_numpy_module
+
+np = get_numpy_module()
 
 from ..config import SmartMasteringConfig
 from .loudness import (

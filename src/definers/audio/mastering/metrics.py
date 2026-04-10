@@ -6,7 +6,9 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-import numpy as np
+from definers.runtime_numpy import get_numpy_module
+
+np = get_numpy_module()
 from scipy import signal
 
 from .contract import (

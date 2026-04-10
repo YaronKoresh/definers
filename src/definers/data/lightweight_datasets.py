@@ -3,7 +3,9 @@ from __future__ import annotations
 import math
 import random
 
-import numpy as np
+from definers.runtime_numpy import get_array_module
+
+np = get_array_module()
 
 
 class LightweightTensorDataset:

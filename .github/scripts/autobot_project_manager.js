@@ -13,9 +13,10 @@ const {
 } = require("./autobot_labels");
 
 const MIN_RELEASE_SIZE = 3;
-const MAX_AI_LABELS = 12;
+const MAX_AUTOBOT_LABELS = 12;
 const BUMP_ORDER = { none: 0, patch: 1, minor: 2, major: 3 };
-const BOT_COMMENT_SIGNATURE = "<!-- autobot-ai-summary -->";
+const BOT_COMMENT_SIGNATURE = "<!-- autobot-summary -->";
+const LEGACY_BOT_COMMENT_SIGNATURE = "<!-- autobot-ai-summary -->";
 const MILESTONE_COMMENT_SIGNATURE = "<!-- autobot-milestone-update -->";
 const VALID_LABELS = new Set(Object.keys(LABEL_DEFINITIONS));
 
@@ -53,10 +54,10 @@ function trimLowSignalLabels(labels) {
   const versionCritical = VERSION_SENSITIVE_LABELS.filter((label) => uniqueLabels.includes(label));
   const primary = uniqueLabels.filter((label) => !SECONDARY_LABELS.includes(label) && !versionCritical.includes(label));
   const secondary = uniqueLabels.filter((label) => SECONDARY_LABELS.includes(label));
-  const cappedPrimary = [...versionCritical, ...primary].slice(0, MAX_AI_LABELS);
-  const remainingSlots = Math.max(MAX_AI_LABELS - cappedPrimary.length, 0);
+  const cappedPrimary = [...versionCritical, ...primary].slice(0, MAX_AUTOBOT_LABELS);
+  const remainingSlots = Math.max(MAX_AUTOBOT_LABELS - cappedPrimary.length, 0);
   const cappedSecondary = secondary.slice(0, remainingSlots);
-  return [...cappedPrimary, ...cappedSecondary].slice(0, MAX_AI_LABELS);
+  return [...cappedPrimary, ...cappedSecondary].slice(0, MAX_AUTOBOT_LABELS);
 }
 
 function parseVersionTag(rawVersion) {
@@ -75,6 +76,40 @@ function formatVersionTag(version) {
 
 function maxBump(current, next) {
   return BUMP_ORDER[next] > BUMP_ORDER[current] ? next : current;
+}
+
+function normalizeBumpType(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  return Object.prototype.hasOwnProperty.call(BUMP_ORDER, normalized) ? normalized : "none";
+}
+
+function parseDeterministicSemver(raw) {
+  if (!raw) return null;
+  const source = typeof raw === "string" ? String(raw).trim() : raw;
+  if (!source) return null;
+  let parsed = source;
+  if (typeof source === "string") {
+    if (["major", "minor", "patch", "none"].includes(source.toLowerCase())) {
+      parsed = { decision: source.toLowerCase() };
+    } else {
+      try {
+        parsed = JSON.parse(source);
+      } catch (error) {
+        return null;
+      }
+    }
+  }
+  if (!parsed || typeof parsed !== "object") return null;
+  const decision = normalizeBumpType(parsed.decision);
+  if (decision === "none") return null;
+  return {
+    decision,
+    hardRule: Boolean(parsed.hardRule),
+    hardSignals: Array.isArray(parsed.hardSignals) ? parsed.hardSignals : [],
+    majorScore: Number(parsed.majorScore) || 0,
+    minorScore: Number(parsed.minorScore) || 0,
+    patchScore: Number(parsed.patchScore) || 0
+  };
 }
 
 function bumpForLabels(labels) {
@@ -121,7 +156,7 @@ function buildMilestoneMetadataDescription(description, baseVersion, managedTitl
   return rows.join("\n").trim();
 }
 
-function parseAILabels(raw) {
+function parseAutobotLabels(raw) {
   if (!raw) return [];
   try {
     const cleaned = String(raw).replace(/```json\s*/gi, "").replace(/```\s*/gi, "").trim();
@@ -136,32 +171,33 @@ function parseAILabels(raw) {
   return [];
 }
 
-function resolvePrLabelDelta({ action, previousBotLabels, currentPrLabels, aiLabelsRaw }) {
+function resolvePrLabelDelta(input) {
+  const { action, previousBotLabels, currentPrLabels, autobotLabelsRaw } = input;
   const previousLabels = uniqueValidLabels(previousBotLabels);
   const currentLabels = uniqueValidLabels(currentPrLabels);
-  const rawAiLabels = String(aiLabelsRaw || "").trim();
-  const parsedAiLabels = trimLowSignalLabels(parseAILabels(rawAiLabels)).slice(0, MAX_AI_LABELS);
-  const hasFreshPrLabelResult = rawAiLabels !== "";
+  const rawAutobotLabels = String(autobotLabelsRaw ?? input.aiLabelsRaw ?? "").trim();
+  const parsedAutobotLabels = trimLowSignalLabels(parseAutobotLabels(rawAutobotLabels)).slice(0, MAX_AUTOBOT_LABELS);
+  const hasFreshPrLabelResult = rawAutobotLabels !== "";
 
-  let nextAiLabels = [];
+  let nextAutobotLabels = [];
   if (hasFreshPrLabelResult) {
-    nextAiLabels = parsedAiLabels;
+    nextAutobotLabels = parsedAutobotLabels;
   } else if (action === "synchronize" && previousLabels.length > 0) {
-    nextAiLabels = previousLabels;
+    nextAutobotLabels = previousLabels;
   }
 
   const labelsToRemove = hasFreshPrLabelResult
-    ? previousLabels.filter((label) => currentLabels.includes(label) && !nextAiLabels.includes(label))
+    ? previousLabels.filter((label) => currentLabels.includes(label) && !nextAutobotLabels.includes(label))
     : [];
-  const labelsToAdd = nextAiLabels.filter((label) => !currentLabels.includes(label));
+  const labelsToAdd = nextAutobotLabels.filter((label) => !currentLabels.includes(label));
 
   return {
     currentPrLabels: currentLabels,
     hasFreshPrLabelResult,
     labelsToAdd,
     labelsToRemove,
-    nextAiLabels,
-    parsedAiLabels,
+    nextAutobotLabels,
+    parsedAutobotLabels,
     previousBotLabels: previousLabels
   };
 }
@@ -191,18 +227,51 @@ function extractBotMetadata(body) {
   }
 }
 
+function getManagedLabelsFromMetadata(metadata) {
+  const storedLabels = Array.isArray(metadata?.autobotLabels)
+    ? metadata.autobotLabels
+    : Array.isArray(metadata?.aiLabels)
+      ? metadata.aiLabels
+      : [];
+  return storedLabels.map((label) => normalizeLabelName(label));
+}
+
+function isManagedBotCommentBody(body) {
+  const text = String(body || "");
+  return text.includes(BOT_COMMENT_SIGNATURE) || text.includes(LEGACY_BOT_COMMENT_SIGNATURE);
+}
+
+function semverDecisionFromMetadata(metadata) {
+  if (!metadata || typeof metadata !== "object") return "none";
+  const directDecision = normalizeBumpType(metadata.semverDecision);
+  if (directDecision !== "none") return directDecision;
+  return normalizeBumpType(metadata.deterministicSemver?.decision);
+}
+
 async function getComments({ github, owner, repo, issueNumber }) {
   return github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: issueNumber });
 }
 
 async function getExistingBotComment({ github, owner, repo, issueNumber }) {
   const comments = await getComments({ github, owner, repo, issueNumber });
-  return comments.find((comment) => comment.user.type === "Bot" && comment.body.includes(BOT_COMMENT_SIGNATURE));
+  return comments.find((comment) => comment.user.type === "Bot" && isManagedBotCommentBody(comment.body));
 }
 
 async function getExistingBotCommentForIssue({ github, owner, repo, issueNumber }) {
   const comments = await getComments({ github, owner, repo, issueNumber });
-  return comments.find((comment) => comment.user.type === "Bot" && comment.body.includes(BOT_COMMENT_SIGNATURE));
+  return comments.find((comment) => comment.user.type === "Bot" && isManagedBotCommentBody(comment.body));
+}
+
+async function getBotMetadataForIssue({ github, owner, repo, issueNumber, metadataCache }) {
+  if (metadataCache?.has(issueNumber)) {
+    return metadataCache.get(issueNumber);
+  }
+  const existingBotComment = await getExistingBotCommentForIssue({ github, owner, repo, issueNumber });
+  const metadata = existingBotComment ? extractBotMetadata(existingBotComment.body) : {};
+  if (metadataCache) {
+    metadataCache.set(issueNumber, metadata);
+  }
+  return metadata;
 }
 
 async function getExistingMilestoneComment({ github, owner, repo, issueNumber }) {
@@ -377,32 +446,51 @@ function getItemLabelNames(item) {
   return (item.labels || []).map((label) => normalizeLabelName(label.name));
 }
 
-function resolveRequiredBump(releaseItems, currentLabelNames) {
-  const releaseBump = releaseItems.reduce((bump, item) => {
-    const itemLabels = getItemLabelNames(item);
-    const itemBump = bumpForLabels(itemLabels);
-    return maxBump(bump, itemBump);
-  }, bumpForLabels(currentLabelNames));
+async function resolveReleaseItemBump({ github, owner, repo, item, currentIssueNumber, currentSemverDecision, metadataCache }) {
+  if (item?.number === currentIssueNumber) {
+    const normalizedCurrentDecision = normalizeBumpType(currentSemverDecision);
+    if (normalizedCurrentDecision !== "none") {
+      return normalizedCurrentDecision;
+    }
+  }
+  const metadata = await getBotMetadataForIssue({ github, owner, repo, issueNumber: item.number, metadataCache });
+  const metadataDecision = semverDecisionFromMetadata(metadata);
+  if (metadataDecision !== "none") {
+    return metadataDecision;
+  }
+  return bumpForLabels(getItemLabelNames(item));
+}
+
+async function resolveRequiredBump({ github, owner, repo, releaseItems, currentLabelNames, currentIssueNumber, currentSemverDecision, metadataCache }) {
+  let releaseBump = normalizeBumpType(currentSemverDecision);
+  if (releaseBump === "none") {
+    releaseBump = bumpForLabels(currentLabelNames);
+  }
+  for (const item of releaseItems) {
+    const itemBump = await resolveReleaseItemBump({
+      github,
+      owner,
+      repo,
+      item,
+      currentIssueNumber,
+      currentSemverDecision,
+      metadataCache
+    });
+    releaseBump = maxBump(releaseBump, itemBump);
+  }
   return releaseBump === "none" ? "patch" : releaseBump;
 }
 
-function buildPrCommentBody({ aiSummaryForComment, pullRequest, nextAiLabels, aiCooldownActive, aiCooldownUntil, prSummaryTier }) {
-  const appliedLabels = nextAiLabels.map((label) => `\`${label}\``).join(" ") || "_none_";
-  const cooldownNotice = aiCooldownActive && prSummaryTier && prSummaryTier !== "zero_ai"
-    ? [
-        "> Autobot skipped optional AI synthesis for this run because GitHub Models returned temporary throttling.",
-        `> The analysis below comes from deterministic code-diff evidence only. Richer AI synthesis can resume after ${aiCooldownUntil || "the cooldown expires"}.`
-      ]
-    : [];
+function buildPrCommentBody({ summaryForComment, pullRequest, nextAutobotLabels }) {
+  const appliedLabels = nextAutobotLabels.map((label) => `\`${label}\``).join(" ") || "_none_";
   return [
     "# Autobot — Changes Analysis",
     "",
     `> **PR #${pullRequest.number}** · ${pullRequest.head.ref} → ${pullRequest.base.ref} · ${new Date().toISOString().split("T")[0]}`,
-    ...(cooldownNotice.length > 0 ? ["", ...cooldownNotice] : []),
     "",
     "---",
     "",
-    aiSummaryForComment,
+    summaryForComment,
     "",
     "---",
     "",
@@ -417,7 +505,7 @@ function buildPrCommentBody({ aiSummaryForComment, pullRequest, nextAiLabels, ai
   ].join("\n");
 }
 
-async function selectivelyConsolidateSupersededMilestones({ github, owner, repo, targetMilestone, targetBump, currentIssueNumber }) {
+async function selectivelyConsolidateSupersededMilestones({ github, owner, repo, targetMilestone, targetBump, currentIssueNumber, metadataCache }) {
   if (!isVersionTag(targetMilestone.title)) {
     return { milestone: targetMilestone, consolidatedMilestones: [], migratedPullRequests: [], retainedMilestones: [] };
   }
@@ -440,7 +528,15 @@ async function selectivelyConsolidateSupersededMilestones({ github, owner, repo,
       if (item.number === currentIssueNumber) continue;
       const itemLabels = getItemLabelNames(item);
       if (!hasReleaseRelevantLabel(itemLabels)) continue;
-      const itemBump = bumpForLabels(itemLabels);
+      const itemBump = await resolveReleaseItemBump({
+        github,
+        owner,
+        repo,
+        item,
+        currentIssueNumber,
+        currentSemverDecision: "none",
+        metadataCache
+      });
       if (BUMP_ORDER[itemBump] > BUMP_ORDER[targetBump]) continue;
       const existingBotCommentForItem = await getExistingBotCommentForIssue({ github, owner, repo, issueNumber: item.number });
       if (!existingBotCommentForItem) continue;
@@ -483,59 +579,68 @@ function buildMilestoneComment({ milestoneChanged, previousMilestoneTitle, final
     noteLines.push(`Retained older milestones for manual review: ${consolidation.retainedMilestones.map((item) => `**${item.title}** (${item.remainingCount} remaining)`).join(", ")}`);
     noteLines.push("");
   }
-  noteLines.push("This only moves compatible open AI-managed PRs. Issues, closed items, manual milestones, and incompatible PRs stay where they are.");
+  noteLines.push("This only moves compatible open Autobot-managed PRs. Issues, closed items, manual milestones, and incompatible PRs stay where they are.");
   return noteLines.join("\n");
 }
 
-async function prepareProjectState({ github, owner, repo, context, issueNumber, aiSummary, aiLabelsRaw, aiCooldownActive, aiCooldownUntil, prSummaryTier, stateFile }) {
+async function prepareProjectState(input) {
+  const {
+    github,
+    owner,
+    repo,
+    context,
+    issueNumber,
+    summaryText,
+    autobotLabelsRaw,
+    deterministicSemverRaw,
+    stateFile
+  } = input;
   const payload = context.payload;
   const isPR = context.eventName === "pull_request";
   const livePrIssue = isPR ? await github.rest.issues.get({ owner, repo, issue_number: issueNumber }) : null;
-  const aiSummaryForComment = String(aiSummary || "").replace(/\nEND_OF_REPORT\s*$/m, "").trim();
+  const summaryForComment = String(summaryText ?? input.aiSummary ?? "").replace(/\nEND_OF_REPORT\s*$/m, "").trim();
   const payloadIssue = payload.issue || {};
   const currentPrLabels = isPR ? labelNamesFromIssue(livePrIssue?.data) : [];
   const existingIssueLabels = labelNamesFromIssue(payloadIssue);
-  const rawAiLabels = String(aiLabelsRaw || "").trim();
-  const parsedAiLabels = trimLowSignalLabels(parseAILabels(rawAiLabels)).slice(0, MAX_AI_LABELS);
+  const rawAutobotLabels = String(autobotLabelsRaw ?? input.aiLabelsRaw ?? "").trim();
+  const parsedAutobotLabels = trimLowSignalLabels(parseAutobotLabels(rawAutobotLabels)).slice(0, MAX_AUTOBOT_LABELS);
+  const deterministicSemver = isPR ? parseDeterministicSemver(deterministicSemverRaw) : null;
 
   let issueLabelsToAdd = [];
   let previousBotLabels = [];
-  let nextAiLabels = [];
+  let nextAutobotLabels = [];
   let labelsToRemove = [];
   let labelsToAdd = [];
   let commentBody = "";
 
   if (!isPR) {
     const fallbackSupportLabels = issueFallbackSupportLabels(payloadIssue);
-    const inferredIssueLabels = parsedAiLabels.length > 0
-      ? uniqueValidLabels([...existingIssueLabels, ...parsedAiLabels, ...fallbackSupportLabels])
+    const inferredIssueLabels = parsedAutobotLabels.length > 0
+      ? uniqueValidLabels([...existingIssueLabels, ...parsedAutobotLabels, ...fallbackSupportLabels])
       : uniqueValidLabels([...existingIssueLabels, ...inferIssueLabels(payloadIssue)]);
     issueLabelsToAdd = inferredIssueLabels.filter((label) => !existingIssueLabels.includes(label));
   }
 
   const existingBotComment = isPR ? await getExistingBotComment({ github, owner, repo, issueNumber }) : null;
-  previousBotLabels = existingBotComment ? (extractBotMetadata(existingBotComment.body).aiLabels || []).map(normalizeLabelName) : [];
+  previousBotLabels = existingBotComment ? getManagedLabelsFromMetadata(extractBotMetadata(existingBotComment.body)) : [];
   if (isPR) {
     const prLabelDelta = resolvePrLabelDelta({
       action: payload.action,
       currentPrLabels,
       previousBotLabels,
-      aiLabelsRaw: rawAiLabels
+      autobotLabelsRaw: rawAutobotLabels
     });
     previousBotLabels = prLabelDelta.previousBotLabels;
-    nextAiLabels = prLabelDelta.nextAiLabels;
+    nextAutobotLabels = prLabelDelta.nextAutobotLabels;
     labelsToRemove = prLabelDelta.labelsToRemove;
     labelsToAdd = prLabelDelta.labelsToAdd;
   }
 
-  if (isPR && aiSummaryForComment) {
+  if (isPR && summaryForComment) {
     commentBody = buildPrCommentBody({
-      aiSummaryForComment,
+      summaryForComment,
       pullRequest: payload.pull_request,
-      nextAiLabels,
-      aiCooldownActive,
-      aiCooldownUntil,
-      prSummaryTier
+      nextAutobotLabels
     });
   }
 
@@ -547,7 +652,9 @@ async function prepareProjectState({ github, owner, repo, context, issueNumber, 
     issueLabelsToAdd,
     labelsToRemove,
     labelsToAdd,
-    nextAiLabels,
+    nextAutobotLabels,
+    deterministicSemver,
+    semverDecision: deterministicSemver?.decision || bumpForLabels(nextAutobotLabels),
     commentBody
   };
   writeState(stateFile, state);
@@ -576,7 +683,19 @@ async function syncPreparedProjectState({ github, owner, repo, issueNumber, stat
       await addLabelsToIssue({ github, owner, repo, issueNumber, labels: state.labelsToAdd });
     }
     if (state.commentBody) {
-      await upsertBotComment({ github, owner, repo, issueNumber, body: state.commentBody, metadata: { aiLabels: state.nextAiLabels, maxAiLabels: MAX_AI_LABELS } });
+      await upsertBotComment({
+        github,
+        owner,
+        repo,
+        issueNumber,
+        body: state.commentBody,
+        metadata: {
+          autobotLabels: state.nextAutobotLabels,
+          maxAutobotLabels: MAX_AUTOBOT_LABELS,
+          semverDecision: normalizeBumpType(state.semverDecision),
+          deterministicSemver: state.deterministicSemver || null
+        }
+      });
     }
   }
 
@@ -592,6 +711,13 @@ async function syncProjectMilestone({ github, owner, repo, context, issueNumber 
   const isPR = context.eventName === "pull_request";
   const freshIssue = await github.rest.issues.get({ owner, repo, issue_number: issueNumber });
   const currentLabelNames = freshIssue.data.labels.map((label) => normalizeLabelName(label.name));
+  const currentBotComment = isPR ? await getExistingBotComment({ github, owner, repo, issueNumber }) : null;
+  const currentBotMetadata = currentBotComment ? extractBotMetadata(currentBotComment.body) : {};
+  const currentSemverDecision = semverDecisionFromMetadata(currentBotMetadata);
+  const metadataCache = new Map();
+  if (isPR && currentBotComment) {
+    metadataCache.set(issueNumber, currentBotMetadata);
+  }
   const releaseRelevant = hasReleaseRelevantLabel(currentLabelNames);
   if (!isPR) {
     if (freshIssue.data.milestone && !releaseRelevant) {
@@ -620,13 +746,22 @@ async function syncProjectMilestone({ github, owner, repo, context, issueNumber 
   const previewMilestoneWithBase = await ensureMilestoneBaseVersion({ github, owner, repo, milestone });
   const previewManagedMilestones = await listManagedSemverMilestones({ github, owner, repo, targetMilestone: previewMilestoneWithBase.milestone });
   const previewReleaseItems = await listReleaseItemsForMilestones({ github, owner, repo, milestones: previewManagedMilestones });
-  const previewRequiredBump = resolveRequiredBump(previewReleaseItems, currentLabelNames);
+  const previewRequiredBump = await resolveRequiredBump({
+    github,
+    owner,
+    repo,
+    releaseItems: previewReleaseItems,
+    currentLabelNames,
+    currentIssueNumber: issueNumber,
+    currentSemverDecision,
+    metadataCache
+  });
   const targetVersion = computeTargetVersion(previewMilestoneWithBase.baseVersion, previewRequiredBump);
   if (isVersionTag(targetVersion) && compareVersions(targetVersion, milestone.title) > 0) {
     milestone = await getOrCreateMilestoneByTitle({ github, owner, repo, title: targetVersion });
     milestone = await seedMilestoneMetadata({ github, owner, repo, milestone, baseVersion: previewMilestoneWithBase.baseVersion, managedTitle: targetVersion });
   }
-  const consolidation = await selectivelyConsolidateSupersededMilestones({ github, owner, repo, targetMilestone: milestone, targetBump: previewRequiredBump, currentIssueNumber: issueNumber });
+  const consolidation = await selectivelyConsolidateSupersededMilestones({ github, owner, repo, targetMilestone: milestone, targetBump: previewRequiredBump, currentIssueNumber: issueNumber, metadataCache });
   milestone = consolidation.milestone;
   const milestoneChanged = !freshIssue.data.milestone || freshIssue.data.milestone.number !== milestone.number;
   if (milestoneChanged) {
@@ -634,11 +769,11 @@ async function syncProjectMilestone({ github, owner, repo, context, issueNumber 
   }
   const items = await github.paginate(github.rest.issues.listForRepo, { owner, repo, milestone: milestone.number, state: "all" });
   const releaseItems = items.filter((item) => item.pull_request && hasReleaseRelevantLabel(item.labels));
-  const currentPrIsBreaking = currentLabelNames.includes("breaking-change");
+  const currentPrRequiresMajorRelease = currentSemverDecision === "major" || currentLabelNames.includes("breaking-change");
   const existingMajorAlertComment = await getExistingMajorAlertComment({ github, owner, repo, issueNumber });
-  if (currentPrIsBreaking && isPR) {
+  if (currentPrRequiresMajorRelease && isPR) {
     if (!existingMajorAlertComment) {
-      await github.rest.issues.createComment({ owner, repo, issue_number: issueNumber, body: `🚨 **MAJOR RELEASE ALERT** 🚨\n\n@${owner} This PR triggers a **major** version bump due to breaking changes detected by AI analysis.` });
+      await github.rest.issues.createComment({ owner, repo, issue_number: issueNumber, body: `🚨 **MAJOR RELEASE ALERT** 🚨\n\n@${owner} This PR triggers a **major** version bump based on deterministic release-impact analysis.` });
     }
   } else if (existingMajorAlertComment) {
     await github.rest.issues.deleteComment({ owner, repo, comment_id: existingMajorAlertComment.id });
@@ -646,7 +781,16 @@ async function syncProjectMilestone({ github, owner, repo, context, issueNumber 
   const milestoneWithBase = await ensureMilestoneBaseVersion({ github, owner, repo, milestone });
   const shouldRespectManualMilestone = milestoneWithBase.manualTitleLocked || (issueHadMilestoneBeforeAutobot && !milestoneWithBase.hadManagedMarker && !isVersionTag(milestoneWithBase.milestone.title));
   if (shouldRespectManualMilestone) return;
-  const requiredBump = resolveRequiredBump(releaseItems, currentLabelNames);
+  const requiredBump = await resolveRequiredBump({
+    github,
+    owner,
+    repo,
+    releaseItems,
+    currentLabelNames,
+    currentIssueNumber: issueNumber,
+    currentSemverDecision,
+    metadataCache
+  });
   const computedTitle = computeTargetVersion(milestoneWithBase.baseVersion, requiredBump);
   const newTitle = compareVersions(computedTitle, milestoneWithBase.milestone.title) > 0 ? computedTitle : milestoneWithBase.milestone.title;
   if (newTitle !== milestoneWithBase.milestone.title) {
@@ -688,7 +832,20 @@ async function finalizeClosedPullRequestRelease({ github, owner, repo, context }
   }
   const closedItems = await github.paginate(github.rest.issues.listForRepo, { owner, repo, milestone: freshMilestone.data.number, state: "closed" });
   const closedReleaseItems = closedItems.filter((item) => item.pull_request && hasReleaseRelevantLabel(item.labels));
-  const hasBreaking = closedReleaseItems.some((item) => hasLabelName(item.labels, "breaking-change"));
+  const metadataCache = new Map();
+  const closedReleaseBumps = [];
+  for (const item of closedReleaseItems) {
+    closedReleaseBumps.push(await resolveReleaseItemBump({
+      github,
+      owner,
+      repo,
+      item,
+      currentIssueNumber: payload.pull_request.number,
+      currentSemverDecision: "none",
+      metadataCache
+    }));
+  }
+  const hasBreaking = closedReleaseBumps.some((bump) => bump === "major");
   const hasForcedType = closedReleaseItems.some((item) => item.labels.some((label) => FORCE_RELEASE_TYPES.includes(normalizeLabelName(label.name))));
   if (closedReleaseItems.length < MIN_RELEASE_SIZE && !hasForcedType && !hasBreaking) return;
   let targetVersion = freshMilestone.data.title;
@@ -718,9 +875,13 @@ module.exports = {
   hasReleaseRelevantLabel,
   inferIssueLabels,
   normalizeLabelName,
+  parseDeterministicSemver,
   prepareProjectState,
   buildPrCommentBody,
+  resolveRequiredBump,
   resolvePrLabelDelta,
+  resolveReleaseItemBump,
+  semverDecisionFromMetadata,
   syncPreparedProjectState,
   syncProjectMilestone
 };

@@ -981,7 +981,9 @@ def run_audio_analysis_tool(
     duration: float | int | None,
     offset: float,
 ) -> tuple[str, str, str]:
-    import numpy as np
+    from definers.runtime_numpy import get_numpy_module
+
+    np = get_numpy_module()
 
     from definers.audio import analyze_audio, analyze_audio_features
 

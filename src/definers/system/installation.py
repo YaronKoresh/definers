@@ -523,9 +523,10 @@ def pre_install():
 
 
 def post_install():
-    import numpy as _np
-
     from definers import cuda as _cuda
+    from definers.runtime_numpy import ensure_no_nep50_warning, get_numpy_module
+
+    _np = get_numpy_module()
 
     try:
         import torch.fx.experimental.proxy_tensor as proxy_mod
@@ -534,8 +535,7 @@ def post_install():
             proxy_mod.get_proxy_mode = lambda: None
     except Exception:
         pass
-    if not hasattr(_np, "_no_nep50_warning"):
-        _np._no_nep50_warning = lambda *a, **_kw: None
+    ensure_no_nep50_warning(_np)
     _cuda.free()
 
 

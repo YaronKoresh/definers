@@ -17,6 +17,7 @@ def test_package_specs_for_ml_group_cover_runtime_gap_packages():
 
     assert "scikit-learn>=1.3.0" in specs
     assert "transformers>=4.36.0" in specs
+    assert "tokenizers>=0.15.0" not in specs
     assert all("fairseq" not in spec for spec in specs)
     assert all("hydra-core" not in spec for spec in specs)
 
@@ -24,10 +25,11 @@ def test_package_specs_for_ml_group_cover_runtime_gap_packages():
 def test_runtime_specs_for_pypi_optional_modules_omit_vcs_links():
     expected_specs = {
         "aioquic": "aioquic>=1.2.0",
-        "audio_separator": "audio-separator>=0.30.2,<0.31.0",
+        "audio_separator": "audio-separator>=0.30.2,<0.32.0",
         "basic_pitch": "basic-pitch>=0.4.0",
         "httpx": "httpx[http2]>=0.28.0",
         "madmom": "madmom>=0.16.1",
+        "moviepy": "moviepy>=2.0.0",
         "refiners": "refiners>=0.4.0",
         "stable_whisper": "stable-ts>=2.19.1",
         "stopes": 'stopes>=2.2.1; sys_platform != "win32"',
@@ -148,16 +150,18 @@ def test_ensure_module_runtime_installs_when_module_is_missing(monkeypatch):
     )
 
     assert result is True
-    assert installed == [("audio-separator>=0.30.2,<0.31.0",)]
+    assert installed == [("audio-separator>=0.30.2,<0.32.0",)]
 
 
 def test_audio_group_install_includes_runtime_github_modules():
     audio_package_specs = optional_dependencies.package_specs_for_group("audio")
     audio_install_specs = optional_dependencies.install_specs_for_group("audio")
 
-    assert "audio-separator>=0.30.2,<0.31.0" in audio_package_specs
+    assert "audio-separator>=0.30.2,<0.32.0" in audio_package_specs
     assert "basic-pitch>=0.4.0" not in audio_package_specs
     assert "madmom>=0.16.1" not in audio_package_specs
+    assert "numba>=0.57.0" not in audio_package_specs
+    assert "resampy>=0.4.2" not in audio_package_specs
     assert (
         "basic-pitch @ https://github.com/YaronKoresh/basic-pitch/archive/830590229b32e30faebf1626f046bb9d0b80def7.tar.gz"
         in audio_install_specs
@@ -196,9 +200,18 @@ def test_runtime_specs_trim_redundant_web_and_ml_packages():
     assert optional_dependencies.package_specs_for_module("hydra") == ()
 
     gradio_specs = optional_dependencies.package_specs_for_module("gradio")
+    librosa_specs = optional_dependencies.package_specs_for_module("librosa")
+    moviepy_specs = optional_dependencies.package_specs_for_module("moviepy")
+    transformers_specs = optional_dependencies.package_specs_for_module(
+        "transformers"
+    )
 
     assert gradio_specs == ("gradio>=6.9.0",)
     assert all("gradio-client" not in spec for spec in gradio_specs)
+    assert all("numba" not in spec for spec in librosa_specs)
+    assert all("resampy" not in spec for spec in librosa_specs)
+    assert all("imageio-ffmpeg" not in spec for spec in moviepy_specs)
+    assert all("tokenizers" not in spec for spec in transformers_specs)
 
 
 def test_optional_runtime_targets_list_groups_tasks_and_modules():

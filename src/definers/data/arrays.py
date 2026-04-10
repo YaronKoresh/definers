@@ -8,7 +8,7 @@ def torch_module():
 
 
 def runtime_numpy_modules():
-    from definers.data.runtime_patches import init_cupy_numpy
+    from definers.runtime_numpy import init_cupy_numpy
 
     return init_cupy_numpy()
 
@@ -38,25 +38,40 @@ def log(*args) -> None:
 
 
 def cupy_to_numpy(value: object) -> object:
+    np_module, numpy_module = runtime_numpy_modules()
+    if np_module is numpy_module or not is_cupy_value(value):
+        return value
+    asnumpy = getattr(np_module, "asnumpy", None)
+    if not callable(asnumpy):
+        return value
     try:
-        import cupy as cp
-
-        return cp.asnumpy(value)
+        return numpy_module.asarray(asnumpy(value))
     except Exception:
         return value
 
 
 def numpy_to_cupy(value: object) -> object:
+    np_module, numpy_module = runtime_numpy_modules()
+    if np_module is numpy_module:
+        return value
+    asarray = getattr(np_module, "asarray", None)
+    if not callable(asarray):
+        return value
     try:
-        import cupy as cp
-
-        return cp.array(value)
+        return asarray(value)
     except Exception:
         return value
 
 
 def is_cupy_value(value: object) -> bool:
-    return "cupy" in str(type(value))
+    np_module, numpy_module = runtime_numpy_modules()
+    if np_module is numpy_module:
+        return False
+    return type(value).__module__.split(".", 1)[0] == getattr(
+        np_module,
+        "__name__",
+        "",
+    )
 
 
 def is_array_value(value: object) -> bool:
@@ -77,7 +92,7 @@ def coerce_existing_array(value):
         value.dtype, numpy_module.str_
     ) or numpy_module.issubdtype(value.dtype, numpy_module.bytes_):
         return cupy_to_numpy(str_to_numpy(numpy_to_str(value)))
-    if not np_module.issubdtype(value.dtype, np_module.number):
+    if not numpy_module.issubdtype(value.dtype, numpy_module.number):
         raise TypeError(f"CuPy array of dtype {value.dtype} is not supported.")
     return numpy_module.asarray(cupy_to_numpy(value))
 
@@ -95,7 +110,7 @@ def coerce_numpy_array(value):
         return coerce_existing_array(value)
     if isinstance(value, (list, tuple)):
         return numpy_module.array(value)
-    if np_module.issubdtype(type(value), numpy_module.number):
+    if numpy_module.issubdtype(type(value), numpy_module.number):
         return numpy_module.array([value])
     try:
         return numpy_module.array(value).astype(float)

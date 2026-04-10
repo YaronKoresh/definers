@@ -7,7 +7,9 @@ from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 
-import numpy as np
+from definers.runtime_numpy import get_numpy_module
+
+np = get_numpy_module()
 
 from definers.constants import MODELS
 from definers.logger import init_logger

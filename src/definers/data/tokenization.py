@@ -1,3 +1,6 @@
+from definers.runtime_numpy import get_numpy_module
+
+
 def runtime():
     import definers.data.arrays as arrays_module
 
@@ -5,7 +8,7 @@ def runtime():
 
 
 def row_to_text(row) -> str:
-    import numpy as np
+    np = get_numpy_module()
 
     features_strings: list[str] = []
     for value in row.values():
@@ -60,7 +63,7 @@ def tokenize_and_pad(rows, tokenizer=None):
 
 
 def tokenize_or_vectorize(data, tokenizer=None):
-    import numpy as np
+    np = get_numpy_module()
 
     if data is None:
         return data

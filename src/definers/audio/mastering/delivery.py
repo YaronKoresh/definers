@@ -4,7 +4,9 @@ from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any
 
-import numpy as np
+from definers.runtime_numpy import get_numpy_module
+
+np = get_numpy_module()
 
 from .contract import MasteringContract
 from .metrics import MasteringReport, generate_mastering_report

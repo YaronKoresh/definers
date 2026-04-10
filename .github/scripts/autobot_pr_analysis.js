@@ -1,20 +1,14 @@
 const fs = require("fs");
 
+const { scoreDeterministicEvidence } = require("./autobot_deterministic_scorer");
+
 const SNAPSHOT_FILE = "/tmp/autobot_pr_snapshot.json";
-const MAX_FILES_PER_WINDOW = 20;
-const MAX_PATCH_CHARS_PER_WINDOW = 7000;
+const MAX_AUTOBOT_LABELS = 12;
 const MAX_PATCH_CHARS_PER_FILE = 700;
-const MAX_HIGHLIGHTED_FILES_PER_WINDOW = 6;
-const MAX_PATCH_SNIPPETS_PER_WINDOW = 4;
-const MAX_BATCH_SUMMARY_REQUESTS = 2;
-const MAX_SUMMARY_BATCH_CONTENT_CHARS = 6400;
-const MAX_SINGLE_AI_WINDOWS = 2;
 const MAX_TOP_DIRECTORIES = 8;
 const MAX_TOP_FILES = 10;
-const HIGH_VOLUME_FILES = 120;
-const HIGH_VOLUME_CHANGES = 12000;
-const HIGH_VOLUME_WINDOWS = 5;
-const WINDOW_SEPARATOR = "\n\n═══════════════════════════════════════════\n\n";
+const MIN_BEHAVIORAL_ADDITION_LINES = 80;
+const MIN_PUBLIC_CONTRACT_MOVES = 3;
 const MAINTENANCE_ONLY_CATEGORIES = new Set(["documentation", "test", "workflow", "github", "config", "dependencies"]);
 const VERSION_CRITICAL_LABELS = ["breaking-change", "security", "api", "database", "schema", "compatibility", "migration", "feature-flag", "runtime", "performance"];
 const LABEL_ORDER = [
@@ -45,6 +39,12 @@ const LABEL_ORDER = [
   "cleanup",
   "chore"
 ];
+const ACCESSIBILITY_TEXT_PATTERN = /\baria-|accessib|a11y|screen reader|keyboard nav/;
+const AUTOMATION_TEXT_PATTERN = /\b(autobot|automation|label|triage|milestone|release)\b/;
+const FEATURE_FLAG_TEXT_PATTERN = /feature[\s-]?flag|kill switch|rollout/;
+const LOCALIZATION_TEXT_PATTERN = /\bi18n\b|\bl10n\b|\blocale\b|\btranslations?\b|\bgettext\b/;
+const RUNTIME_SUPPORT_TEXT_PATTERN = /\brequires-python\b|\bpython 3\.\d+\b|\bcuda\b|\bffmpeg\b|\bubuntu\b|\bwindows\b|\blinux\b|\bmacos\b|\bnvidia\b|\bplatform_system\b/;
+const SECURITY_SECRET_TEXT_PATTERN = /authorization:\s*bearer|\b(access token|bearer token|secret|secrets|credential|permissions?)\b/;
 
 function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, "utf8"));
@@ -111,7 +111,6 @@ function matchesWorkflowScriptPath(normalizedPath) {
 
 function isAutobotClassificationInfrastructure(normalizedPath) {
   return /^\.github\/scripts\/autobot[^/]*\.js$/.test(normalizedPath)
-    && normalizedPath !== ".github/scripts/autobot_ai.js"
     || normalizedPath === ".github/workflows/autobot.yml"
     || normalizedPath === "tests/test_autobot_workflow.py";
 }
@@ -276,6 +275,40 @@ function classifyFile(filename) {
   return [...categories];
 }
 
+function isBehavioralSurfaceFile(file) {
+  return file.categories.includes("source") || file.categories.includes("ui");
+}
+
+function isPublicPackageContractPath(normalizedPath) {
+  return /^src\/[^/]+\/(?:__init__\.py|[^/]+\.py|[^/]+\/__init__\.py|[^/]+\/[^/]+\.py)$/.test(normalizedPath);
+}
+
+function countBehavioralSurfaceAdditions(filesWithContext) {
+  return filesWithContext.filter((file) => file.status === "added" && isBehavioralSurfaceFile(file)).length;
+}
+
+function countPublicContractMoves(filesWithContext) {
+  return filesWithContext.filter((file) => {
+    if (!["removed", "renamed"].includes(file.status)) {
+      return false;
+    }
+    return isPublicPackageContractPath(String(file.filename || "").toLowerCase());
+  }).length;
+}
+
+function hasCapabilityExpansionSignal({ behavioralSurfaceAdditions, totalAdditions, totalChanges }) {
+  return behavioralSurfaceAdditions >= 2
+    || behavioralSurfaceAdditions >= 1 && (totalAdditions >= MIN_BEHAVIORAL_ADDITION_LINES || totalChanges >= MIN_BEHAVIORAL_ADDITION_LINES * 2);
+}
+
+function hasStructuralPublicBreakingSignal({ behavioralSurfaceAdditions, publicContractMoves, filesWithContext }) {
+  if (publicContractMoves < MIN_PUBLIC_CONTRACT_MOVES) {
+    return false;
+  }
+  const touchesPublicPackageInitializer = filesWithContext.some((file) => /^src\/[^/]+\/(?:__init__\.py|[^/]+\/__init__\.py)$/.test(String(file.filename || "").toLowerCase()));
+  return touchesPublicPackageInitializer || behavioralSurfaceAdditions > 0;
+}
+
 function deriveSignals(file) {
   const normalizedPath = String(file.filename || "").toLowerCase();
   const patch = String(file.patch || "").toLowerCase();
@@ -341,182 +374,428 @@ function deriveSignals(file) {
   return [...signals];
 }
 
-function formatWindow(windowFiles, windowCount, index, options = {}) {
-  const highlightedFileLimit = options.highlightedFileLimit ?? MAX_HIGHLIGHTED_FILES_PER_WINDOW;
-  const patchSnippetLimit = options.patchSnippetLimit ?? MAX_PATCH_SNIPPETS_PER_WINDOW;
-  const coverageLevel = options.coverageLevel ?? (patchSnippetLimit > 0 ? "full" : "compact");
-  const highlightedFiles = [...windowFiles]
-    .sort((left, right) => right.score - left.score || left.filename.localeCompare(right.filename))
-    .slice(0, highlightedFileLimit);
-  const detailedPatchFiles = patchSnippetLimit > 0
-    ? highlightedFiles.filter((file) => file.rawPatchAvailable).slice(0, patchSnippetLimit)
-    : [];
-  const omittedFileCount = Math.max(windowFiles.length - highlightedFiles.length, 0);
-
-  return [
-    `WINDOW ${index + 1}/${windowCount}`,
-    `Coverage level: ${coverageLevel}`,
-    `Files in window: ${windowFiles.length}`,
-    "Highlighted files:",
-    highlightedFiles.map((file) => `- ${file.filename} [${file.status.toUpperCase()}] (+${file.additions} -${file.deletions})${file.rawPatchAvailable ? "" : " [patch unavailable]"}`).join("\n"),
-    omittedFileCount > 0 ? `Additional lower-signal files not expanded in this window: ${omittedFileCount}` : "All files in this window are highlighted.",
-    detailedPatchFiles.length > 0 ? "Detailed patch snippets:" : "Detailed patch snippets: none available in this window.",
-    detailedPatchFiles.map((file) => [
-      `FILE: ${file.filename}`,
-      `STATUS: ${file.status.toUpperCase()} (+${file.additions} -${file.deletions})`,
-      file.patch
-    ].join("\n")).join("\n\n")
-  ].filter(Boolean).join("\n\n");
+function isDocsSitePath(normalizedPath) {
+  return /^docs\//.test(normalizedPath);
 }
 
-function formatMinimalWindow(windowFiles, windowCount, index) {
-  const topFiles = [...windowFiles]
-    .sort((left, right) => right.score - left.score || left.filename.localeCompare(right.filename))
-    .slice(0, 3);
-  const windowDirs = [...new Set(windowFiles.map((file) => topDirectoryForFile(file.filename)))].slice(0, 4);
-
-  return [
-    `WINDOW ${index + 1}/${windowCount}`,
-    "Coverage level: minimal",
-    `Files in window: ${windowFiles.length}`,
-    `Top directories: ${windowDirs.join(", ") || "(none)"}`,
-    `Top files: ${topFiles.map((file) => `${file.filename} [${file.status.toUpperCase()}] (+${file.additions} -${file.deletions})`).join("; ") || "(none)"}`
-  ].join("\n");
+function isExamplePath(normalizedPath) {
+  return /(^|\/)(examples?|samples?|demo)(\/|$)/.test(normalizedPath);
 }
 
-function buildSummaryBatches(entries) {
-  const batches = [];
-  let currentBatch = [];
-  let currentBatchChars = 0;
+function isDevcontainerPath(normalizedPath) {
+  return /^\.devcontainer\//.test(normalizedPath)
+    || /(^|\/)devcontainer\.json$/.test(normalizedPath);
+}
 
-  for (const entry of [...entries].sort((left, right) => left.index - right.index)) {
-    const separatorLength = currentBatch.length > 0 ? WINDOW_SEPARATOR.length : 0;
-    const wouldOverflow = currentBatch.length > 0 && currentBatchChars + separatorLength + entry.selectedContent.length > MAX_SUMMARY_BATCH_CONTENT_CHARS;
+function isInfrastructurePath(normalizedPath) {
+  return /(^|\/)(infra|infrastructure|deploy|k8s|kubernetes|terraform|helm)(\/|$)/.test(normalizedPath)
+    || /\.(tf|tfvars)$/.test(normalizedPath)
+    || /chart\.ya?ml$/.test(normalizedPath);
+}
 
-    if (wouldOverflow) {
-      batches.push(currentBatch);
-      currentBatch = [];
-      currentBatchChars = 0;
+function patchLinesWithPrefix(patch, prefix) {
+  return String(patch || "")
+    .split("\n")
+    .filter((line) => line.startsWith(prefix) && !line.startsWith(`${prefix}${prefix}${prefix}`));
+}
+
+function hasPatchLineMatch(file, prefix, pattern) {
+  return patchLinesWithPrefix(file.patch, prefix).some((line) => pattern.test(line.toLowerCase()));
+}
+
+function isDestructiveFileChange(file) {
+  const normalizedPath = String(file.filename || "").toLowerCase();
+  const patch = String(file.patch || "").toLowerCase();
+  return ["removed", "renamed"].includes(file.status)
+    || hasBreakingChangeEvidence(patch)
+    || hasPatchLineMatch(file, "-", /\b(remove|drop|delete|deprecat|disable|rename|migrate)\b/)
+    || isPublicPackageContractPath(normalizedPath) && Number(file.deletions || 0) > Number(file.additions || 0);
+}
+
+function inferEvidenceScope(file) {
+  const normalizedPath = String(file.filename || "").toLowerCase();
+  if (
+    isPublicPackageContractPath(normalizedPath)
+    || hasApiPathEvidence(normalizedPath)
+    || /\.(proto|graphql|gql)$/.test(normalizedPath)
+    || matchesUiPath(normalizedPath)
+  ) {
+    return "public";
+  }
+  if (file.categories.some((category) => ["documentation", "test", "workflow", "github", "config", "dependencies", "docker", "tooling"].includes(category))) {
+    return "repo";
+  }
+  return "subsystem";
+}
+
+function addEvidenceItem(evidenceMap, ruleId, options = {}) {
+  const rawOccurrenceCount = options.occurrenceCount === undefined
+    ? 1
+    : Number(options.occurrenceCount);
+  const occurrenceCount = Number.isFinite(rawOccurrenceCount)
+    ? Math.max(rawOccurrenceCount, 0)
+    : 1;
+  if (occurrenceCount < 1) {
+    return;
+  }
+  const scope = options.scope || "";
+  const confidence = options.confidence || "";
+  const polarity = options.polarity || "";
+  const key = [ruleId, scope, confidence, polarity].join("|");
+  let entry = evidenceMap.get(key);
+
+  if (!entry) {
+    entry = {
+      ruleId,
+      occurrenceCount: 0,
+      metadata: {
+        sampleFiles: []
+      }
+    };
+    if (scope) entry.scope = scope;
+    if (confidence) entry.confidence = confidence;
+    if (polarity) entry.polarity = polarity;
+    evidenceMap.set(key, entry);
+  }
+
+  entry.occurrenceCount += occurrenceCount;
+
+  for (const sampleFile of options.sampleFiles || []) {
+    if (!sampleFile || entry.metadata.sampleFiles.includes(sampleFile)) {
+      continue;
+    }
+    if (entry.metadata.sampleFiles.length >= 5) {
+      break;
+    }
+    entry.metadata.sampleFiles.push(sampleFile);
+  }
+}
+
+function finalizeEvidenceItems(evidenceMap) {
+  return [...evidenceMap.values()]
+    .map((entry) => {
+      const normalizedEntry = {
+        ruleId: entry.ruleId,
+        occurrenceCount: entry.occurrenceCount
+      };
+      if (entry.scope) normalizedEntry.scope = entry.scope;
+      if (entry.confidence) normalizedEntry.confidence = entry.confidence;
+      if (entry.polarity) normalizedEntry.polarity = entry.polarity;
+      if (entry.metadata.sampleFiles.length > 0) {
+        normalizedEntry.metadata = entry.metadata;
+      }
+      return normalizedEntry;
+    })
+    .sort((left, right) => right.occurrenceCount - left.occurrenceCount || left.ruleId.localeCompare(right.ruleId));
+}
+
+function compareRankedLabelEntries(left, right) {
+  if (right.score !== left.score) {
+    return right.score - left.score;
+  }
+  const leftRank = LABEL_ORDER.indexOf(left.label);
+  const rightRank = LABEL_ORDER.indexOf(right.label);
+  const normalizedLeftRank = leftRank === -1 ? LABEL_ORDER.length : leftRank;
+  const normalizedRightRank = rightRank === -1 ? LABEL_ORDER.length : rightRank;
+  return normalizedLeftRank - normalizedRightRank || left.label.localeCompare(right.label);
+}
+
+function rankScoredLabels(labelScores, propertyName) {
+  return Object.values(labelScores)
+    .filter((entry) => Boolean(entry[propertyName]))
+    .sort(compareRankedLabelEntries)
+    .map((entry) => entry.label);
+}
+
+function mergeRankedLabels(primaryLabels, secondaryLabels, limit) {
+  const mergedLabels = [];
+  for (const label of [...primaryLabels, ...secondaryLabels]) {
+    if (!label || mergedLabels.includes(label)) {
+      continue;
+    }
+    mergedLabels.push(label);
+    if (mergedLabels.length >= limit) {
+      break;
+    }
+  }
+  return mergedLabels;
+}
+
+function buildDeterministicEvidence(filesWithContext, context) {
+  const evidenceMap = new Map();
+  const documentationFiles = [];
+  const docsSiteFiles = [];
+  const exampleFiles = [];
+  const addedTestFiles = [];
+  const removedTestFiles = [];
+  const workflowFiles = [];
+  const ciFiles = [];
+  const githubFiles = [];
+  const automationFiles = [];
+  const configFiles = [];
+  const dependencyExpansionFiles = [];
+  const dependencyTighteningFiles = [];
+  const dockerExpansionFiles = [];
+  const dockerDroppedFiles = [];
+  const devcontainerFiles = [];
+  const toolingFiles = [];
+  const infrastructureFiles = [];
+  const uiFiles = [];
+  const accessibilityFiles = [];
+  const localizationFiles = [];
+  const securityAuthFiles = [];
+  const securitySecretFiles = [];
+  const destructiveApiFiles = [];
+  const additiveApiFiles = [];
+  const destructiveSchemaFiles = [];
+  const additiveSchemaFiles = [];
+  const destructiveDatabaseFiles = [];
+  const additiveDatabaseFiles = [];
+  const migrationFiles = [];
+  const compatibilityDropFiles = [];
+  const compatibilityShimFiles = [];
+  const featureFlagFiles = [];
+  const featureFlagContractFiles = [];
+  const runtimeSupportAddedFiles = [];
+  const runtimeSupportDroppedFiles = [];
+  const runtimePolicyFiles = [];
+  const performanceFiles = [];
+  const cleanupFiles = [];
+  const publicRemovedFiles = [];
+  const publicRenamedFiles = [];
+  const publicAddedFiles = [];
+  const behavioralAdditionFiles = [];
+
+  for (const file of filesWithContext) {
+    const normalizedPath = String(file.filename || "").toLowerCase();
+    const patch = String(file.patch || "").toLowerCase();
+    const categories = new Set(file.categories);
+    const signals = new Set(file.signals);
+    const scope = inferEvidenceScope(file);
+    const destructive = isDestructiveFileChange(file);
+    const runtimeAdded = hasPatchLineMatch(file, "+", RUNTIME_SUPPORT_TEXT_PATTERN) && !hasPatchLineMatch(file, "-", RUNTIME_SUPPORT_TEXT_PATTERN);
+    const runtimeDropped = hasPatchLineMatch(file, "-", RUNTIME_SUPPORT_TEXT_PATTERN) && !hasPatchLineMatch(file, "+", RUNTIME_SUPPORT_TEXT_PATTERN);
+
+    if (categories.has("documentation")) {
+      if (isDocsSitePath(normalizedPath)) {
+        docsSiteFiles.push(file.filename);
+      } else if (isExamplePath(normalizedPath)) {
+        exampleFiles.push(file.filename);
+      } else {
+        documentationFiles.push(file.filename);
+      }
     }
 
-    currentBatch.push(entry);
-    currentBatchChars += (currentBatch.length > 1 ? WINDOW_SEPARATOR.length : 0) + entry.selectedContent.length;
-  }
-
-  if (currentBatch.length > 0) {
-    batches.push(currentBatch);
-  }
-
-  return batches;
-}
-
-function downgradeWindowCoverage(entries) {
-  const candidates = entries
-    .map((entry, index) => {
-      if (entry.selectedVariant === "full") {
-        return { index, nextVariant: "compact", nextContent: entry.compact, savings: entry.full.length - entry.compact.length, score: entry.score };
+    if (categories.has("test")) {
+      if (file.status === "removed") {
+        removedTestFiles.push(file.filename);
+      } else {
+        addedTestFiles.push(file.filename);
       }
-      if (entry.selectedVariant === "compact") {
-        return { index, nextVariant: "minimal", nextContent: entry.minimal, savings: entry.compact.length - entry.minimal.length, score: entry.score };
-      }
-      return null;
-    })
-    .filter(Boolean)
-    .sort((left, right) => right.savings - left.savings || left.score - right.score || left.index - right.index);
+    }
 
-  const candidate = candidates[0];
-  if (!candidate || candidate.savings <= 0) {
-    return false;
+    if (categories.has("workflow")) {
+      workflowFiles.push(file.filename);
+      if (signals.has("ci")) {
+        ciFiles.push(file.filename);
+      }
+    }
+
+    if (categories.has("github")) {
+      githubFiles.push(file.filename);
+    }
+
+    if (signals.has("automation") || AUTOMATION_TEXT_PATTERN.test(`${normalizedPath}\n${patch}`)) {
+      automationFiles.push(file.filename);
+    }
+
+    if (categories.has("config")) {
+      configFiles.push(file.filename);
+    }
+
+    if (categories.has("dependencies")) {
+      if (runtimeDropped || destructive) {
+        dependencyTighteningFiles.push(file.filename);
+      } else {
+        dependencyExpansionFiles.push(file.filename);
+      }
+    }
+
+    if (categories.has("docker")) {
+      if (runtimeDropped || destructive && !runtimeAdded) {
+        dockerDroppedFiles.push(file.filename);
+      } else {
+        dockerExpansionFiles.push(file.filename);
+      }
+    }
+
+    if (categories.has("tooling")) {
+      if (isDevcontainerPath(normalizedPath)) {
+        devcontainerFiles.push(file.filename);
+      } else {
+        toolingFiles.push(file.filename);
+      }
+    }
+
+    if (isInfrastructurePath(normalizedPath)) {
+      infrastructureFiles.push(file.filename);
+    }
+
+    if (categories.has("ui")) {
+      uiFiles.push(file.filename);
+      if (ACCESSIBILITY_TEXT_PATTERN.test(patch)) {
+        accessibilityFiles.push(file.filename);
+      }
+      if (LOCALIZATION_TEXT_PATTERN.test(patch)) {
+        localizationFiles.push(file.filename);
+      }
+    }
+
+    if (signals.has("security")) {
+      if (SECURITY_SECRET_TEXT_PATTERN.test(patch)) {
+        securitySecretFiles.push(file.filename);
+      } else {
+        securityAuthFiles.push(file.filename);
+      }
+    }
+
+    if (signals.has("api") && (hasApiPathEvidence(normalizedPath) || isPublicPackageContractPath(normalizedPath))) {
+      if (destructive) {
+        destructiveApiFiles.push(file.filename);
+      } else {
+        additiveApiFiles.push(file.filename);
+      }
+    }
+
+    if (signals.has("schema") && (hasSchemaEvidence(normalizedPath, "") || isPublicPackageContractPath(normalizedPath))) {
+      if (destructive) {
+        destructiveSchemaFiles.push(file.filename);
+      } else {
+        additiveSchemaFiles.push(file.filename);
+      }
+    }
+
+    if (signals.has("database") && hasDatabaseEvidence(normalizedPath, patch)) {
+      if (destructive || /\b(drop|alter)\s+table\b/.test(patch)) {
+        destructiveDatabaseFiles.push(file.filename);
+      } else {
+        additiveDatabaseFiles.push(file.filename);
+      }
+    }
+
+    if (signals.has("migration")) {
+      migrationFiles.push(file.filename);
+    }
+
+    if (signals.has("compatibility")) {
+      if (destructive || runtimeDropped) {
+        compatibilityDropFiles.push(file.filename);
+      } else {
+        compatibilityShimFiles.push(file.filename);
+      }
+    }
+
+    if (signals.has("feature-flag") || FEATURE_FLAG_TEXT_PATTERN.test(patch)) {
+      if (destructive) {
+        featureFlagContractFiles.push(file.filename);
+      } else {
+        featureFlagFiles.push(file.filename);
+      }
+    }
+
+    if (signals.has("runtime")) {
+      if (runtimeDropped) {
+        runtimeSupportDroppedFiles.push(file.filename);
+      } else if (runtimeAdded || categories.has("docker") || categories.has("dependencies")) {
+        runtimeSupportAddedFiles.push(file.filename);
+      } else {
+        runtimePolicyFiles.push(file.filename);
+      }
+    }
+
+    if (signals.has("performance")) {
+      performanceFiles.push(file.filename);
+    }
+
+    if (file.status === "removed" && !isPublicPackageContractPath(normalizedPath) && !categories.has("test")) {
+      cleanupFiles.push(file.filename);
+    }
+
+    if (isPublicPackageContractPath(normalizedPath)) {
+      if (file.status === "removed") {
+        publicRemovedFiles.push(file.filename);
+      }
+      if (file.status === "renamed") {
+        publicRenamedFiles.push(file.filename);
+      }
+      if (file.status === "added" && isBehavioralSurfaceFile(file)) {
+        publicAddedFiles.push(file.filename);
+      }
+    }
+
+    if (file.status === "added" && isBehavioralSurfaceFile(file)) {
+      behavioralAdditionFiles.push(file.filename);
+    }
   }
 
-  entries[candidate.index].selectedVariant = candidate.nextVariant;
-  entries[candidate.index].selectedContent = candidate.nextContent;
-  return true;
-}
+  const publicCapabilityFiles = publicAddedFiles.length > 0
+    ? publicAddedFiles
+    : publicRemovedFiles.length + publicRenamedFiles.length > 0
+      ? behavioralAdditionFiles.filter((filename) => /^src\/[^/]+\//.test(String(filename).toLowerCase()))
+      : [];
 
-function buildOverflowWindow(entries, windowCount) {
-  const overflowFiles = entries.flatMap((entry) => entry.files);
-  const topOverflowFiles = overflowFiles
-    .slice()
-    .sort((left, right) => scoreFile(right) - scoreFile(left) || left.filename.localeCompare(right.filename))
-    .slice(0, 8);
-  const overflowDirs = [...new Set(overflowFiles.map((file) => topDirectoryForFile(file.filename)))].slice(0, 8);
+  addEvidenceItem(evidenceMap, "documentation-surface", { occurrenceCount: documentationFiles.length, scope: "repo", confidence: "structural", sampleFiles: documentationFiles });
+  addEvidenceItem(evidenceMap, "docs-site-surface", { occurrenceCount: docsSiteFiles.length, scope: "repo", confidence: "structural", sampleFiles: docsSiteFiles });
+  addEvidenceItem(evidenceMap, "examples-surface", { occurrenceCount: exampleFiles.length, scope: "repo", confidence: "structural", sampleFiles: exampleFiles });
+  addEvidenceItem(evidenceMap, "tests-added", { occurrenceCount: addedTestFiles.length, scope: "repo", confidence: "structural", sampleFiles: addedTestFiles });
+  addEvidenceItem(evidenceMap, "tests-removed", { occurrenceCount: removedTestFiles.length, scope: "repo", confidence: "structural", sampleFiles: removedTestFiles });
+  addEvidenceItem(evidenceMap, "workflow-orchestration-change", { occurrenceCount: workflowFiles.length, scope: "repo", confidence: "structural", sampleFiles: workflowFiles });
+  addEvidenceItem(evidenceMap, "ci-execution-change", { occurrenceCount: ciFiles.length, scope: "repo", confidence: "structural", sampleFiles: ciFiles });
+  addEvidenceItem(evidenceMap, "github-management-change", { occurrenceCount: githubFiles.length, scope: "repo", confidence: "structural", sampleFiles: githubFiles });
+  addEvidenceItem(evidenceMap, "automation-bot-change", { occurrenceCount: automationFiles.length, scope: "repo", confidence: "corroborated", sampleFiles: automationFiles });
+  addEvidenceItem(evidenceMap, "config-surface-change", { occurrenceCount: configFiles.length, scope: "repo", confidence: "structural", sampleFiles: configFiles });
+  addEvidenceItem(evidenceMap, "dependency-capability-expansion", { occurrenceCount: dependencyExpansionFiles.length, scope: "repo", confidence: "corroborated", sampleFiles: dependencyExpansionFiles });
+  addEvidenceItem(evidenceMap, "dependency-compatibility-tightening", { occurrenceCount: dependencyTighteningFiles.length, scope: "repo", confidence: "corroborated", sampleFiles: dependencyTighteningFiles });
+  addEvidenceItem(evidenceMap, "docker-runtime-expansion", { occurrenceCount: dockerExpansionFiles.length, scope: "repo", confidence: "structural", sampleFiles: dockerExpansionFiles });
+  addEvidenceItem(evidenceMap, "docker-runtime-drop", { occurrenceCount: dockerDroppedFiles.length, scope: "repo", confidence: "structural", sampleFiles: dockerDroppedFiles });
+  addEvidenceItem(evidenceMap, "devcontainer-surface-change", { occurrenceCount: devcontainerFiles.length, scope: "repo", confidence: "structural", sampleFiles: devcontainerFiles });
+  addEvidenceItem(evidenceMap, "tooling-surface-change", { occurrenceCount: toolingFiles.length, scope: "repo", confidence: "structural", sampleFiles: toolingFiles });
+  addEvidenceItem(evidenceMap, "infrastructure-surface-change", { occurrenceCount: infrastructureFiles.length, scope: "repo", confidence: "structural", sampleFiles: infrastructureFiles });
+  addEvidenceItem(evidenceMap, "ui-surface-change", { occurrenceCount: uiFiles.length, scope: "public", confidence: "corroborated", sampleFiles: uiFiles });
+  addEvidenceItem(evidenceMap, "accessibility-improvement", { occurrenceCount: accessibilityFiles.length, scope: "public", confidence: "corroborated", sampleFiles: accessibilityFiles });
+  addEvidenceItem(evidenceMap, "localization-change", { occurrenceCount: localizationFiles.length, scope: "public", confidence: "corroborated", sampleFiles: localizationFiles });
+  addEvidenceItem(evidenceMap, "security-auth-change", { occurrenceCount: securityAuthFiles.length, scope: "repo", confidence: "corroborated", sampleFiles: securityAuthFiles });
+  addEvidenceItem(evidenceMap, "security-secret-handling", { occurrenceCount: securitySecretFiles.length, scope: "repo", confidence: "corroborated", sampleFiles: securitySecretFiles });
+  addEvidenceItem(evidenceMap, "destructive-api-contract", { occurrenceCount: destructiveApiFiles.length, scope: "public", confidence: "structural", sampleFiles: destructiveApiFiles });
+  addEvidenceItem(evidenceMap, "additive-api-contract", { occurrenceCount: additiveApiFiles.length, scope: "public", confidence: "structural", sampleFiles: additiveApiFiles });
+  addEvidenceItem(evidenceMap, "destructive-schema-contract", { occurrenceCount: destructiveSchemaFiles.length, scope: "public", confidence: "structural", sampleFiles: destructiveSchemaFiles });
+  addEvidenceItem(evidenceMap, "additive-schema-contract", { occurrenceCount: additiveSchemaFiles.length, scope: "public", confidence: "structural", sampleFiles: additiveSchemaFiles });
+  addEvidenceItem(evidenceMap, "destructive-database-change", { occurrenceCount: destructiveDatabaseFiles.length, scope: "public", confidence: "corroborated", sampleFiles: destructiveDatabaseFiles });
+  addEvidenceItem(evidenceMap, "additive-database-change", { occurrenceCount: additiveDatabaseFiles.length, scope: "subsystem", confidence: "corroborated", sampleFiles: additiveDatabaseFiles });
+  addEvidenceItem(evidenceMap, "explicit-migration-marker", { occurrenceCount: migrationFiles.length, scope: "public", confidence: "corroborated", sampleFiles: migrationFiles });
+  addEvidenceItem(evidenceMap, "compatibility-drop", { occurrenceCount: compatibilityDropFiles.length, scope: "public", confidence: "corroborated", sampleFiles: compatibilityDropFiles });
+  addEvidenceItem(evidenceMap, "compatibility-shim", { occurrenceCount: compatibilityShimFiles.length, scope: "public", confidence: "corroborated", sampleFiles: compatibilityShimFiles });
+  addEvidenceItem(evidenceMap, "feature-flag-added", { occurrenceCount: featureFlagFiles.length, scope: "public", confidence: "corroborated", sampleFiles: featureFlagFiles });
+  addEvidenceItem(evidenceMap, "feature-flag-contract-change", { occurrenceCount: featureFlagContractFiles.length, scope: "public", confidence: "corroborated", sampleFiles: featureFlagContractFiles });
+  addEvidenceItem(evidenceMap, "runtime-support-added", { occurrenceCount: runtimeSupportAddedFiles.length, scope: "public", confidence: "corroborated", sampleFiles: runtimeSupportAddedFiles });
+  addEvidenceItem(evidenceMap, "runtime-support-dropped", { occurrenceCount: runtimeSupportDroppedFiles.length, scope: "public", confidence: "corroborated", sampleFiles: runtimeSupportDroppedFiles });
+  addEvidenceItem(evidenceMap, "runtime-policy-change", { occurrenceCount: runtimePolicyFiles.length, scope: "repo", confidence: "corroborated", sampleFiles: runtimePolicyFiles });
+  addEvidenceItem(evidenceMap, "performance-optimization", { occurrenceCount: performanceFiles.length, scope: "subsystem", confidence: "corroborated", sampleFiles: performanceFiles });
+  addEvidenceItem(evidenceMap, "cleanup-removal", { occurrenceCount: cleanupFiles.length, scope: "subsystem", confidence: "structural", sampleFiles: cleanupFiles });
+  addEvidenceItem(evidenceMap, "removed-public-export", { occurrenceCount: publicRemovedFiles.length, scope: "public", confidence: "structural", sampleFiles: publicRemovedFiles });
+  addEvidenceItem(evidenceMap, "renamed-public-module", { occurrenceCount: publicRenamedFiles.length, scope: "public", confidence: "structural", sampleFiles: publicRenamedFiles });
+  addEvidenceItem(evidenceMap, "added-public-capability", { occurrenceCount: publicCapabilityFiles.length, scope: "public", confidence: "structural", sampleFiles: publicCapabilityFiles });
 
-  return {
-    index: entries[0]?.index ?? windowCount,
-    files: overflowFiles,
-    score: 0,
-    selectedVariant: "minimal",
-    selectedContent: [
-      "WINDOW OVERFLOW",
-      "Coverage level: minimal",
-      `Overflow windows: ${entries.length}`,
-      `Top directories: ${overflowDirs.join(", ") || "(none)"}`,
-      `Top files: ${topOverflowFiles.map((file) => `${file.filename} [${file.status.toUpperCase()}] (+${file.additions} -${file.deletions})`).join("; ") || "(none)"}`
-    ].join("\n")
-  };
-}
+  if (context.capabilityExpansionSignal) {
+    addEvidenceItem(evidenceMap, "feature-capability-added", {
+      occurrenceCount: Math.max(context.behavioralSurfaceAdditions, behavioralAdditionFiles.length, 1),
+      scope: behavioralAdditionFiles.some((filename) => /(^|\/)(ui|components?|views?|templates|frontend)(\/|$)/.test(String(filename).toLowerCase())) ? "public" : "subsystem",
+      confidence: "corroborated",
+      sampleFiles: behavioralAdditionFiles
+    });
+  }
 
-function summarizeCoverage(entries) {
-  return entries.reduce((counts, entry) => {
-    counts[entry.selectedVariant] = (counts[entry.selectedVariant] || 0) + 1;
-    return counts;
-  }, { full: 0, compact: 0, minimal: 0 });
-}
-
-function buildSummaryBatchPrompt({ batchEntries, batchIndex, batchCount, totalFiles, totalAdditions, totalDeletions, topDirectories, orderedSignals, candidateLabels }) {
-  const coverageCounts = summarizeCoverage(batchEntries);
-  const globalContext = [
-    `Total files: ${totalFiles}`,
-    `Total additions: ${totalAdditions}`,
-    `Total deletions: ${totalDeletions}`,
-    `Top directories: ${topDirectories.join(", ") || "(none)"}`,
-    `Deterministic signals: ${orderedSignals.join(", ") || "(none)"}`,
-    `Candidate labels: ${candidateLabels.join(", ") || "(none)"}`
-  ].join("\n");
-
-  return [
-    "You are a principal software engineer analyzing one batch of rolling windows from a large pull request.",
-    "You are working under a strict request budget, so use the global context and the supplied windows instead of inferring missing detail.",
-    "Each batch contains windows in full, compact, or minimal form to stay within prompt budget.",
-    "Use only the evidence shown in this batch. Compact and minimal windows are only partially analyzed.",
-    "Do not invent hidden behavior, missing files, or unsupported motivations.",
-    "",
-    "OUTPUT REQUIREMENTS:",
-    "- Output MUST be valid Markdown.",
-    "- Do NOT wrap the report in triple backticks.",
-    "- Keep the result between 700 and 1600 characters.",
-    "- Preserve explicit signals related to breaking changes, compatibility, migration, api, runtime, database, schema, security, performance, ui, workflow, tooling, tests, and documentation when supported.",
-    "- End your response with the exact final line: END_OF_REPORT",
-    "",
-    "Use EXACTLY this structure:",
-    "",
-    "## Window Batch Analysis",
-    "",
-    "### Batch Scope",
-    "2-4 sentences.",
-    "",
-    "### Release Signals",
-    "2-5 bullets.",
-    "",
-    "### Risks And Checks",
-    "2-5 bullets.",
-    "",
-    "### Classification Signals",
-    "2-6 bullets listing direct technical signals useful for downstream label selection.",
-    "",
-    "BATCH METRICS",
-    `Batch number: ${batchIndex + 1}`,
-    `Total batches: ${batchCount}`,
-    `Windows in batch: ${batchEntries.length}`,
-    `Coverage mix: full=${coverageCounts.full || 0}, compact=${coverageCounts.compact || 0}, minimal=${coverageCounts.minimal || 0}`,
-    "",
-    "GLOBAL CONTEXT",
-    globalContext,
-    "",
-    "WINDOWS",
-    batchEntries.map((entry) => entry.selectedContent).join(WINDOW_SEPARATOR)
-  ].join("\n");
+  return finalizeEvidenceItems(evidenceMap);
 }
 
 async function collectPullRequestSnapshot({ github, owner, repo, pullRequest }) {
@@ -549,8 +828,7 @@ async function collectPullRequestSnapshot({ github, owner, repo, pullRequest }) 
   return snapshot;
 }
 
-function analyzePullRequestSnapshotData(snapshot, options = {}) {
-  const writeArtifacts = options.writeArtifacts !== false;
+function analyzePullRequestSnapshotData(snapshot) {
   const filesWithContext = snapshot.files.map((file) => {
     const fileWithContext = {
       filename: file.filename,
@@ -580,9 +858,26 @@ function analyzePullRequestSnapshotData(snapshot, options = {}) {
     }
     const directory = topDirectoryForFile(fileWithContext.filename);
     directoryScores.set(directory, (directoryScores.get(directory) || 0) + fileWithContext.score);
-    for (const signal of fileWithContext.signals) {
-      signalSet.add(signal);
-    }
+    fileWithContext.signals.forEach(signal => signalSet.add(signal));
+  }
+
+  const behavioralSurfaceAdditions = countBehavioralSurfaceAdditions(filesWithContext);
+  const publicContractMoves = countPublicContractMoves(filesWithContext);
+  const capabilityExpansionSignal = hasCapabilityExpansionSignal({
+    behavioralSurfaceAdditions,
+    totalAdditions,
+    totalChanges
+  });
+  const structuralPublicBreakingSignal = hasStructuralPublicBreakingSignal({
+    behavioralSurfaceAdditions,
+    publicContractMoves,
+    filesWithContext
+  });
+  if (capabilityExpansionSignal) {
+    signalSet.add("enhancement");
+  }
+  if (structuralPublicBreakingSignal) {
+    signalSet.add("breaking-change");
   }
 
   const orderedSignals = sortLabels([...signalSet]);
@@ -604,7 +899,19 @@ function analyzePullRequestSnapshotData(snapshot, options = {}) {
   const hasBehavioralSurfaceChange = Boolean(
     categoryCounts.get("source") || categoryCounts.get("ui")
   );
-  const zeroAiEligible = filesWithContext.length > 0 && [...categoryCounts.keys()].every((category) => MAINTENANCE_ONLY_CATEGORIES.has(category)) && !VERSION_CRITICAL_LABELS.some((label) => signalSet.has(label));
+  const maintenanceOnlyEligible = filesWithContext.length > 0 && [...categoryCounts.keys()].every((category) => MAINTENANCE_ONLY_CATEGORIES.has(category)) && !VERSION_CRITICAL_LABELS.some((label) => signalSet.has(label));
+  const evidenceItems = buildDeterministicEvidence(filesWithContext, {
+    behavioralSurfaceAdditions,
+    capabilityExpansionSignal,
+    structuralPublicBreakingSignal
+  });
+  const scoring = scoreDeterministicEvidence({
+    evidenceItems,
+    options: { maxLabels: MAX_AUTOBOT_LABELS }
+  });
+  const scorerEmittedLabels = scoring.emittedLabels.map((entry) => entry.label);
+  const scorerRetainedLabels = rankScoredLabels(scoring.labelScores, "retained");
+  const primaryScorerLabels = scoring.primaryLabels.map((entry) => entry.label);
 
   const deterministicLabelSet = new Set();
   for (const signal of orderedSignals) {
@@ -625,7 +932,7 @@ function analyzePullRequestSnapshotData(snapshot, options = {}) {
     deterministicLabelSet.add("dx");
   }
   if (filesWithContext.some((file) => file.status === "removed")) deterministicLabelSet.add("cleanup");
-  if (zeroAiEligible) {
+  if (maintenanceOnlyEligible) {
     if (categoryCounts.get("documentation")) deterministicLabelSet.add("documentation");
     if (categoryCounts.get("test")) deterministicLabelSet.add("test");
     if (categoryCounts.get("workflow") || signalSet.has("workflow")) deterministicLabelSet.add("workflow");
@@ -639,7 +946,7 @@ function analyzePullRequestSnapshotData(snapshot, options = {}) {
   for (const signal of orderedSignals) {
     candidateLabelSet.add(signal);
   }
-  if (!zeroAiEligible) {
+  if (!maintenanceOnlyEligible) {
     if (titleSignals.bug && hasBehavioralSurfaceChange) {
       candidateLabelSet.add("bug");
     }
@@ -665,115 +972,47 @@ function analyzePullRequestSnapshotData(snapshot, options = {}) {
     }
   }
 
-  const deterministicLabels = sortLabels([...deterministicLabelSet]).slice(0, 6);
-  const candidateLabels = sortLabels([...candidateLabelSet]).slice(0, 18);
-
-  const windows = [];
-  let currentWindow = [];
-  let currentWindowPatchChars = 0;
-
-  for (const file of filesWithContext) {
-    const patchSize = file.patch.length;
-    const shouldStartNewWindow = currentWindow.length > 0 && (
-      currentWindow.length >= MAX_FILES_PER_WINDOW ||
-      currentWindowPatchChars + patchSize > MAX_PATCH_CHARS_PER_WINDOW
-    );
-
-    if (shouldStartNewWindow) {
-      windows.push(currentWindow);
-      currentWindow = [];
-      currentWindowPatchChars = 0;
-    }
-
-    currentWindow.push(file);
-    currentWindowPatchChars += patchSize;
-  }
-
-  if (currentWindow.length > 0) {
-    windows.push(currentWindow);
-  }
-
-  const windowCandidates = windows.map((windowFiles, index) => ({
-    index,
-    files: windowFiles,
-    score: windowFiles.reduce((sum, file) => sum + file.score, 0),
-    full: formatWindow(windowFiles, windows.length, index, { coverageLevel: "full" }),
-    compact: formatWindow(windowFiles, windows.length, index, { highlightedFileLimit: 4, patchSnippetLimit: 0, coverageLevel: "compact" }),
-    minimal: formatMinimalWindow(windowFiles, windows.length, index)
-  }));
-  const windowEntries = windowCandidates.map((candidate) => ({
-    ...candidate,
-    selectedVariant: "full",
-    selectedContent: candidate.full
-  }));
-
-  let summaryBatches = buildSummaryBatches(windowEntries);
-  while (summaryBatches.length > MAX_BATCH_SUMMARY_REQUESTS && downgradeWindowCoverage(windowEntries)) {
-    summaryBatches = buildSummaryBatches(windowEntries);
-  }
-
-  if (summaryBatches.length > MAX_BATCH_SUMMARY_REQUESTS) {
-    const overflowEntries = summaryBatches.slice(MAX_BATCH_SUMMARY_REQUESTS - 1).flat();
-    summaryBatches = [
-      ...summaryBatches.slice(0, MAX_BATCH_SUMMARY_REQUESTS - 1),
-      [buildOverflowWindow(overflowEntries, windows.length)]
-    ];
-  }
-
-  const highVolume = totalChanges >= HIGH_VOLUME_CHANGES || filesWithContext.length >= HIGH_VOLUME_FILES || windows.length > HIGH_VOLUME_WINDOWS;
-  const summaryTier = zeroAiEligible ? "zero_ai" : highVolume ? "capped_batch_ai" : "single_ai";
-  const directWindowEntries = [...windowEntries]
-    .sort((left, right) => right.score - left.score || left.index - right.index)
-    .slice(0, MAX_SINGLE_AI_WINDOWS)
-    .sort((left, right) => left.index - right.index);
-  const summaryBatchCount = summaryTier === "capped_batch_ai" ? summaryBatches.length : 0;
-  const estimatedAiRequests = summaryTier === "zero_ai" ? 0 : summaryTier === "single_ai" ? 1 : summaryBatchCount + 1;
-
-  if (writeArtifacts) {
-    for (const [batchIndex, batchEntries] of summaryBatches.entries()) {
-      const prompt = buildSummaryBatchPrompt({
-        batchEntries,
-        batchIndex,
-        batchCount: summaryBatches.length,
-        totalFiles: filesWithContext.length,
-        totalAdditions,
-        totalDeletions,
-        topDirectories,
-        orderedSignals,
-        candidateLabels
-      });
-      writeText(`/tmp/summary_batch_${batchIndex + 1}.txt`, prompt);
-    }
-  }
-
-  const directWindowContent = directWindowEntries.length > 0
-    ? directWindowEntries.map((entry) => entry.compact).join(WINDOW_SEPARATOR)
-    : "No diff windows selected.";
-  if (writeArtifacts) {
-    writeText("/tmp/pr_single_ai_windows.txt", directWindowContent);
-  }
+  const deterministicLabels = mergeRankedLabels(
+    scorerEmittedLabels,
+    sortLabels([...deterministicLabelSet]),
+    MAX_AUTOBOT_LABELS
+  );
+  const candidateLabels = mergeRankedLabels(
+    scorerRetainedLabels,
+    sortLabels([...candidateLabelSet]),
+    18
+  );
 
   function buildDeterministicSummary() {
-    const whatChangedSentences = zeroAiEligible
+    const whatChangedSentences = maintenanceOnlyEligible
       ? [
           `This pull request changes ${filesWithContext.length} files (+${totalAdditions} -${totalDeletions}) and stays within narrow maintenance surfaces: ${maintenanceCategoriesList.join(", ") || "none"}.`,
           `The highest-signal areas are ${topDirectories.join(", ") || "(root)"}, and the deterministic scan did not find API, schema, database, runtime, security, or breaking-change signals.`
         ]
       : [
           `This pull request changes ${filesWithContext.length} files (+${totalAdditions} -${totalDeletions}) across ${topDirectories.join(", ") || "(root)"} with category mix ${categorySummary || "(none)"}.`,
+          capabilityExpansionSignal
+            ? `Added behavioral source or UI surfaces were detected across ${behavioralSurfaceAdditions} path${behavioralSurfaceAdditions === 1 ? "" : "s"}.`
+            : null,
+          structuralPublicBreakingSignal
+            ? `Public package import surfaces were renamed or removed across ${publicContractMoves} path${publicContractMoves === 1 ? "" : "s"}, so consumer updates may be required.`
+            : null,
           orderedSignals.length > 0
             ? `Deterministic high-signal areas include ${orderedSignals.join(", ")}.`
             : "The deterministic scan did not find strong release-critical signals, so any deeper classification depends on the selected diff windows or batch analyses."
-        ];
-    const releaseBullets = zeroAiEligible
+        ].filter(Boolean);
+    const releaseBullets = maintenanceOnlyEligible
       ? ["Likely not release-relevant because the diff is limited to narrow maintenance areas."]
       : orderedSignals.length > 0
         ? [
             `Release-relevant signals detected: ${orderedSignals.join(", ")}.`,
+            structuralPublicBreakingSignal
+              ? "Structural public package moves indicate a likely breaking import or integration surface."
+              : null,
             `Highest-signal files: ${topFiles.slice(0, 3).map((file) => file.filename).join(", ") || "(none)"}.`
-          ]
+          ].filter(Boolean)
         : ["No direct version-critical path signals were detected by the deterministic scan."];
-    const riskBullets = zeroAiEligible
+    const riskBullets = maintenanceOnlyEligible
       ? [
           `Review ${topFiles.slice(0, 3).map((file) => file.filename).join(", ") || "the touched files"} for wording, workflow, or expectation drift.`,
           categoryCounts.get("workflow")
@@ -795,6 +1034,8 @@ function analyzePullRequestSnapshotData(snapshot, options = {}) {
     if (categoryCounts.get("workflow") || signalSet.has("workflow")) classificationSignals.push("Workflow or orchestration logic changed.");
     if (categoryCounts.get("config")) classificationSignals.push("Configuration surfaces changed.");
     if (categoryCounts.get("dependencies")) classificationSignals.push("Dependency or manifest files changed.");
+    if (behavioralSurfaceAdditions > 0) classificationSignals.push(`Added behavioral source or UI files: ${behavioralSurfaceAdditions}.`);
+    if (publicContractMoves > 0) classificationSignals.push(`Renamed or removed public package paths: ${publicContractMoves}.`);
     if (orderedSignals.length > 0) classificationSignals.push(`Deterministic release signals: ${orderedSignals.join(", ")}.`);
     if (classificationSignals.length === 0) classificationSignals.push("Deterministic path analysis did not isolate a narrow label family.");
     classificationSignals.push(`Top directories: ${topDirectories.join(", ") || "(root)"}.`);
@@ -818,13 +1059,13 @@ function analyzePullRequestSnapshotData(snapshot, options = {}) {
   const deterministicSummary = buildDeterministicSummary();
   const evidenceScaffold = [
     "PR EVIDENCE",
-    `Summary tier: ${summaryTier}`,
-    `Estimated AI requests: ${estimatedAiRequests}`,
+    `Scored semver decision: ${scoring.semver.decision}`,
+    `Scored emitted labels: ${scorerEmittedLabels.join(", ") || "(none)"}`,
+    `Scored primary labels: ${primaryScorerLabels.join(", ") || "(none)"}`,
+    `Evidence items: ${evidenceItems.length}`,
     `Files changed: ${filesWithContext.length}`,
     `Additions: ${totalAdditions}`,
     `Deletions: ${totalDeletions}`,
-    `Windows discovered: ${windows.length}`,
-    `Batch requests planned: ${summaryBatchCount}`,
     `Category mix: ${categorySummary || "(none)"}`,
     `Top directories: ${topDirectories.join(", ") || "(root)"}`,
     `Candidate labels: ${candidateLabels.join(", ") || "(none)"}`,
@@ -833,25 +1074,22 @@ function analyzePullRequestSnapshotData(snapshot, options = {}) {
     "Top files:",
     formatBulletLines(topFiles.map((file) => `${file.filename} [${file.status.toUpperCase()}] (+${file.additions} -${file.deletions})`), "(none)")
   ].join("\n");
-  if (writeArtifacts) {
-    writeText("/tmp/pr_evidence.txt", evidenceScaffold);
-  }
 
-  const totalSelectedWindowChars = directWindowEntries.reduce((sum, entry) => sum + entry.compact.length, 0);
   return {
     has_changes: filesWithContext.length > 0 ? "true" : "false",
     files_changed: String(filesWithContext.length),
     additions: String(totalAdditions),
     deletions: String(totalDeletions),
-    windows_count: String(windows.length),
-    windows_included: String(windowEntries.length),
-    windows_omitted: String(Math.max(windows.length - directWindowEntries.length, 0)),
-    summary_batch_count: String(summaryBatchCount),
-    summary_prompt_chars: String(totalSelectedWindowChars),
-    summary_tier: summaryTier,
-    estimated_ai_requests: String(estimatedAiRequests),
     candidate_labels_json: JSON.stringify(candidateLabels),
     deterministic_labels_json: JSON.stringify(deterministicLabels),
+    deterministic_primary_labels_json: JSON.stringify(primaryScorerLabels),
+    deterministic_evidence_json: JSON.stringify(evidenceItems),
+    deterministic_evidence_count: String(evidenceItems.length),
+    deterministic_category_scores_json: JSON.stringify(scoring.categoryScores),
+    deterministic_impact_scores_json: JSON.stringify(scoring.impactScores),
+    deterministic_label_scores_json: JSON.stringify(scoring.labelScores),
+    deterministic_semver_json: JSON.stringify(scoring.semver),
+    deterministic_semver_decision: String(scoring.semver.decision),
     deterministic_summary: deterministicSummary,
     evidence_chars: String(evidenceScaffold.length)
   };
@@ -862,9 +1100,7 @@ function analyzePullRequestSnapshot() {
 }
 
 module.exports = {
-  MAX_BATCH_SUMMARY_REQUESTS,
   SNAPSHOT_FILE,
-  WINDOW_SEPARATOR,
   analyzePullRequestSnapshot,
   analyzePullRequestSnapshotData,
   collectPullRequestSnapshot

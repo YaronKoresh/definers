@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
-import numpy as np
+from definers.runtime_numpy import get_numpy_module
+
+np = get_numpy_module()
 
 from ..utils import generate_bands
 

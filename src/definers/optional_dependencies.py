@@ -43,7 +43,7 @@ MODULE_PACKAGE_SPECS: dict[str, tuple[str, ...]] = {
     "aioquic": ("aioquic>=1.2.0",),
     "aiofiles": ("aiofiles",),
     "aiohttp": ("aiohttp",),
-    "audio_separator": ("audio-separator>=0.30.2,<0.31.0",),
+    "audio_separator": ("audio-separator>=0.30.2,<0.32.0",),
     "basic_pitch": (BASIC_PITCH_PACKAGE_SPEC,),
     "cssselect": ("cssselect>=1.2.0",),
     "cv2": ("opencv-contrib-python-headless>=4.8.0",),
@@ -67,8 +67,6 @@ MODULE_PACKAGE_SPECS: dict[str, tuple[str, ...]] = {
     "langdetect": ("langdetect>=1.0.9",),
     "librosa": (
         "librosa>=0.10.0",
-        "numba>=0.57.0",
-        "resampy>=0.4.2",
         "soundfile>=0.12.0",
     ),
     "lxml": (
@@ -78,11 +76,7 @@ MODULE_PACKAGE_SPECS: dict[str, tuple[str, ...]] = {
     "madmom": ("madmom>=0.16.1",),
     "matplotlib": ("matplotlib>=3.7.0",),
     "midi2audio": ("midi2audio",),
-    "moviepy": (
-        "moviepy>=1.0.3",
-        "imageio>=2.30.0",
-        "imageio-ffmpeg>=0.4.0",
-    ),
+    "moviepy": ("moviepy>=2.0.0",),
     "nltk": ("nltk>=3.8.0",),
     "onnx": ("onnx>=1.14.0",),
     "onnxruntime": ("onnxruntime",),
@@ -110,7 +104,6 @@ MODULE_PACKAGE_SPECS: dict[str, tuple[str, ...]] = {
     ),
     "transformers": (
         "transformers>=4.36.0",
-        "tokenizers>=0.15.0",
         "sentencepiece>=0.1.99",
         "torch>=2.1.0",
     ),
@@ -147,7 +140,6 @@ OPTIONAL_DEPENDENCY_GROUP_MODULES: dict[str, tuple[str, ...]] = {
     ),
     "image": (
         "imageio",
-        "imageio_ffmpeg",
         "cv2",
         "pillow_heif",
         "skimage",
@@ -156,7 +148,6 @@ OPTIONAL_DEPENDENCY_GROUP_MODULES: dict[str, tuple[str, ...]] = {
     "video": (
         "edlib",
         "imageio",
-        "imageio_ffmpeg",
         "moviepy",
         "cv2",
         "skimage",
@@ -170,7 +161,6 @@ OPTIONAL_DEPENDENCY_GROUP_MODULES: dict[str, tuple[str, ...]] = {
         "safetensors",
         "sklearn",
         "sentencepiece",
-        "tokenizers",
         "transformers",
     ),
     "nlp": (

@@ -1,3 +1,6 @@
+from definers.runtime_numpy import get_array_module
+
+
 def normalize_texts(texts) -> list[str]:
     return [str(text) for text in texts]
 
@@ -16,14 +19,14 @@ def create_vectorizer(texts):
 
 
 def empty_vectorized_rows(vectorizer):
-    import numpy as np
+    np = get_array_module()
 
     vocabulary_size = len(getattr(vectorizer, "vocabulary_", {}) or {})
     return np.empty((0, vocabulary_size))
 
 
 def vectorize(vectorizer, texts):
-    import numpy as np
+    np = get_array_module()
 
     if vectorizer is None or texts is None:
         return None

@@ -8,8 +8,9 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "autobot.yml"
-AI_HELPER = ROOT / ".github" / "scripts" / "autobot_ai.js"
 LABELS_HELPER = ROOT / ".github" / "scripts" / "autobot_labels.js"
+ISSUE_INTAKE_HELPER = ROOT / ".github" / "scripts" / "autobot_issue_intake.js"
+SCORER_HELPER = ROOT / ".github" / "scripts" / "autobot_deterministic_scorer.js"
 PR_ANALYSIS_HELPER = ROOT / ".github" / "scripts" / "autobot_pr_analysis.js"
 PROJECT_MANAGER_HELPER = (
     ROOT / ".github" / "scripts" / "autobot_project_manager.js"
@@ -21,12 +22,12 @@ def read_workflow() -> str:
     return WORKFLOW.read_text(encoding="utf-8")
 
 
-def read_ai_helper() -> str:
-    return AI_HELPER.read_text(encoding="utf-8")
-
-
 def read_labels_helper() -> str:
     return LABELS_HELPER.read_text(encoding="utf-8")
+
+
+def read_scorer_helper() -> str:
+    return SCORER_HELPER.read_text(encoding="utf-8")
 
 
 def read_pr_analysis_helper() -> str:
@@ -220,10 +221,10 @@ def test_major_release_alert_is_scoped_to_breaking_prs() -> None:
     helper = read_project_manager_helper()
 
     assert (
-        'const currentPrIsBreaking = currentLabelNames.includes("breaking-change");'
+        'const currentPrRequiresMajorRelease = currentSemverDecision === "major" || currentLabelNames.includes("breaking-change");'
         in helper
     )
-    assert "if (currentPrIsBreaking && isPR) {" in helper
+    assert "if (currentPrRequiresMajorRelease && isPR) {" in helper
     assert "} else if (existingMajorAlertComment) {" in helper
 
 
@@ -258,17 +259,10 @@ def test_pr_summary_uses_tiered_budget_routing() -> None:
 
     assert "collectPullRequestSnapshot" in workflow
     assert "analyzePullRequestSnapshot" in workflow
-    assert "const MAX_BATCH_SUMMARY_REQUESTS = 2;" in helper
-    assert "function buildSummaryBatches(entries) {" in helper
-    assert (
-        "writeText(`/tmp/summary_batch_${batchIndex + 1}.txt`, prompt);"
-        in helper
-    )
-    assert (
-        'const summaryTier = zeroAiEligible ? "zero_ai" : highVolume ? "capped_batch_ai" : "single_ai";'
-        in helper
-    )
-    assert "estimated_ai_requests: String(estimatedAiRequests)," in helper
+    assert "function buildSummaryBatches(entries) {" not in helper
+    assert "writeText(`/tmp/summary_batch_" not in helper
+    assert "estimated_ai_requests: String(estimatedAiRequests)," not in helper
+    assert "summary_tier: summaryTier," not in helper
     assert "deterministic_summary: deterministicSummary," in helper
     assert "function deriveTitleSignals(prSignalText) {" in helper
     assert "const titleSignals = deriveTitleSignals(prSignalText);" in helper
@@ -276,93 +270,71 @@ def test_pr_summary_uses_tiered_budget_routing() -> None:
 
 def test_large_pr_path_caps_batch_summaries_and_merges_final_summary() -> None:
     workflow = read_workflow()
-    helper = read_prompts_helper()
 
-    assert "- name: AI — Generate Batch Summary 1" in workflow
-    assert "- name: AI — Generate Batch Summary 2" in workflow
-    assert "- name: AI — Generate Batch Summary 10" not in workflow
-    assert "- name: Build Final PR Summary Prompt" in workflow
-    assert "- name: AI — Generate Final PR Summary" in workflow
-    assert "- name: Parse Final PR Summary" in workflow
+    assert "- name: AI — Generate Batch Summary 1" not in workflow
+    assert "- name: AI — Generate Batch Summary 2" not in workflow
+    assert "- name: Build Final PR Summary Prompt" not in workflow
+    assert "- name: AI — Generate Final PR Summary" not in workflow
+    assert "- name: Parse Final PR Summary" not in workflow
     assert (
-        "- Add a final metadata line exactly in this form: AUTOBOT_LABEL_HINTS:"
-        in helper
-    )
-    assert (
-        "- Return 0-12 labels in that metadata line, ordered from most to least relevant."
-        in helper
-    )
-    assert 'labelHintsReady: labelHints ? "true" : "false"' in helper
-
-
-def test_workflow_uses_helper_backed_ai_steps_and_cooldown_resolution() -> None:
-    workflow = read_workflow()
-
-    assert "autobot_ai.js" in workflow
-    assert "runManagedInference" in workflow
-    assert "- name: Resolve AI Cooldown State" in workflow
-    assert "ai-inference@v2" not in workflow
-    assert (
-        "AI_COOLDOWN_UNTIL: ${{ steps.ai-cooldown-state.outputs.until }}"
+        "AUTOBOT_SUMMARY_TEXT: ${{ steps.collect.outputs.deterministic_summary || steps.issue-summary-prompt.outputs.fallback_summary }}"
         in workflow
     )
+
+
+def test_workflow_removes_live_ai_steps_and_models_permissions() -> None:
+    workflow = read_workflow()
+
+    assert "autobot_ai.js" not in workflow
+    assert "runManagedInference" not in workflow
+    assert "- name: Resolve AI Cooldown State" not in workflow
+    assert "ai-inference@v2" not in workflow
+    assert "models: read" not in workflow
 
 
 def test_zero_ai_prs_skip_final_pr_summary_step() -> None:
     workflow = read_workflow()
     helper = read_pr_analysis_helper()
 
-    assert "steps.collect.outputs.summary_tier != 'zero_ai'" in workflow
+    assert "steps.collect.outputs.summary_tier != 'zero_ai'" not in workflow
     assert (
         "deterministic_labels_json: JSON.stringify(deterministicLabels),"
         in helper
     )
-    assert "summary_tier: summaryTier," in helper
+    assert "summary_tier: summaryTier," not in helper
 
 
-def test_fallback_label_prompt_uses_parsed_pr_summary_and_candidate_labels() -> (
-    None
-):
+def test_workflow_passes_deterministic_semver_into_project_state() -> None:
     workflow = read_workflow()
-    helper = read_prompts_helper()
 
     assert (
-        "AI_PR_SUMMARY: ${{ steps.parse-pr-summary.outputs.summary_body }}"
+        "PR_DETERMINISTIC_SEMVER: ${{ steps.collect.outputs.deterministic_semver_json }}"
         in workflow
     )
     assert (
-        "CANDIDATE_LABELS: ${{ steps.collect.outputs.candidate_labels_json }}"
+        "deterministicSemverRaw: process.env.PR_DETERMINISTIC_SEMVER,"
         in workflow
     )
+
+
+def test_workflow_uses_deterministic_labels_without_ai_prompt_layer() -> None:
+    workflow = read_workflow()
+
     assert (
-        "AI_COMPACT_SUMMARY: ${{ steps.ai-compact.outputs.response }}"
-        not in workflow
+        "AUTOBOT_LABELS_JSON: ${{ steps.collect.outputs.deterministic_labels_json }}"
+        in workflow
     )
-    assert (
-        "steps.parse-pr-summary.outputs.label_hints_ready != 'true'" in workflow
-    )
-    assert (
-        '"Classify the pull request from the compact Autobot summary."'
-        in helper
-    )
+    assert "Build Label Prompt" not in workflow
+    assert "AI — Classify Labels" not in workflow
+    assert "parse-pr-summary" not in workflow
 
 
 def test_final_summary_prompt_preserves_classification_signals() -> None:
     helper = read_prompts_helper()
 
-    assert "### Classification Signals" in helper
-    assert (
-        "Preserve explicit breaking-change, compatibility, migration, API, database, schema, runtime, security, UI, workflow, tooling, test, and documentation signals"
-        in helper
-    )
-    assert (
-        "If the evidence implies incompatible behavior or a major version impact, say that explicitly."
-        in helper
-    )
-    assert (
-        "The AUTOBOT_LABEL_HINTS line directly drives label sync and semver decisions"
-        in helper
-    )
+    assert "### Likely Classification" in helper
+    assert "Deterministic scorer labels:" in helper
+    assert "Deterministic semantic-impact signal:" in helper
 
 
 def test_synchronize_with_fresh_analysis_reconciles_against_live_pr_labels() -> (
@@ -370,22 +342,23 @@ def test_synchronize_with_fresh_analysis_reconciles_against_live_pr_labels() -> 
 ):
     helper = read_project_manager_helper()
 
+    assert "function resolvePrLabelDelta(input) {" in helper
     assert (
-        "function resolvePrLabelDelta({ action, previousBotLabels, currentPrLabels, aiLabelsRaw }) {"
+        "const { action, previousBotLabels, currentPrLabels, autobotLabelsRaw } = input;"
         in helper
     )
     assert "const currentLabels = uniqueValidLabels(currentPrLabels);" in helper
     assert "deriveSummarySignalLabels" not in helper
-    assert 'const hasFreshPrLabelResult = rawAiLabels !== "";' in helper
+    assert 'const hasFreshPrLabelResult = rawAutobotLabels !== "";' in helper
     assert "if (hasFreshPrLabelResult) {" in helper
-    assert "nextAiLabels = parsedAiLabels;" in helper
+    assert "nextAutobotLabels = parsedAutobotLabels;" in helper
     assert (
         '} else if (action === "synchronize" && previousLabels.length > 0) {'
         in helper
     )
     assert "const labelsToRemove = hasFreshPrLabelResult" in helper
     assert (
-        "const labelsToAdd = nextAiLabels.filter((label) => !currentLabels.includes(label));"
+        "const labelsToAdd = nextAutobotLabels.filter((label) => !currentLabels.includes(label));"
         in helper
     )
     assert (
@@ -400,16 +373,11 @@ def test_synchronize_with_fresh_analysis_reconciles_against_live_pr_labels() -> 
 
 def test_issue_label_fallback_uses_reduced_default_label_set() -> None:
     labels = read_labels_helper()
-    prompts = read_prompts_helper()
 
     assert "const DEFAULT_ISSUE_LABELS = [" in labels
     assert '"improvement",' in labels
     assert '"proposal",' in labels
     assert '"workflow",' in labels
-    assert (
-        "DEFAULT_ISSUE_LABELS.filter((label) => LABEL_GUIDANCE[label])"
-        in prompts
-    )
 
 
 def test_issue_summary_exposes_deterministic_fallback() -> None:
@@ -420,7 +388,7 @@ def test_issue_summary_exposes_deterministic_fallback() -> None:
     assert "return {" in helper
     assert "fallbackSummary," in helper
     assert (
-        "AI_ISSUE_SUMMARY: ${{ steps.ai-issue-summary.outputs.response || steps.issue-summary-prompt.outputs.fallback_summary }}"
+        "AUTOBOT_SUMMARY_TEXT: ${{ steps.collect.outputs.deterministic_summary || steps.issue-summary-prompt.outputs.fallback_summary }}"
         in workflow
     )
 
@@ -437,34 +405,23 @@ def test_summary_comment_is_source_agnostic() -> None:
     )
 
 
-def test_summary_comment_includes_cached_cooldown_wait_notice() -> None:
+def test_summary_comment_no_longer_uses_workflow_cooldown_path() -> None:
     workflow = read_workflow()
     helper = read_project_manager_helper()
 
     assert (
         "AI_COOLDOWN_UNTIL: ${{ steps.ai-cooldown-state.outputs.until }}"
-        in workflow
+        not in workflow
     )
     assert (
         'const cooldownNotice = aiCooldownActive && prSummaryTier && prSummaryTier !== "zero_ai"'
-        in helper
+        not in helper
     )
-    assert "GitHub Models returned temporary throttling" in helper
-    assert "deterministic code-diff evidence only" in helper
+    assert "GitHub Models returned temporary throttling" not in helper
 
 
-def test_ai_helper_tracks_48_hour_rate_limit_cooldown() -> None:
-    helper = read_ai_helper()
-
-    assert "const DEFAULT_COOLDOWN_HOURS = 48;" in helper
-    assert 'const COOLDOWN_LABEL_NAME = "autobot-ai-cooldown";' in helper
-    assert (
-        'const AI_ENDPOINT = "https://models.github.ai/inference/chat/completions";'
-        in helper
-    )
-    assert "if (response.status === 429) {" in helper
-    assert "await upsertCooldownLabel({" in helper
-    assert "Try again after that time." in helper
+def test_ai_helper_file_is_removed_from_repo() -> None:
+    assert not (ROOT / ".github" / "scripts" / "autobot_ai.js").exists()
 
 
 def test_stale_major_release_alert_is_removed_when_pr_is_not_breaking() -> None:
@@ -481,11 +438,11 @@ def test_stale_major_release_alert_is_removed_when_pr_is_not_breaking() -> None:
     )
 
 
-def test_workflow_prefers_ai_labels_before_deterministic_fallback() -> None:
+def test_workflow_uses_deterministic_labels_as_only_live_source() -> None:
     workflow = read_workflow()
 
     assert (
-        "AI_LABELS_RAW: ${{ steps.parse-pr-summary.outputs.label_hints || steps.ai-labels.outputs.response || steps.collect.outputs.deterministic_labels_json }}"
+        "AUTOBOT_LABELS_JSON: ${{ steps.collect.outputs.deterministic_labels_json }}"
         in workflow
     )
 
@@ -509,18 +466,108 @@ def test_version_bump_map_covers_every_supported_label() -> None:
 
 def test_autobot_uses_expanded_label_cap() -> None:
     project_helper = read_project_manager_helper()
-    prompt_helper = read_prompts_helper()
+    analysis_helper = read_pr_analysis_helper()
 
-    assert "const MAX_AI_LABELS = 12;" in project_helper
-    assert "const MAX_AI_LABELS = 12;" in prompt_helper
+    assert "const MAX_AUTOBOT_LABELS = 12;" in project_helper
+    assert "const MAX_AUTOBOT_LABELS = 12;" in analysis_helper
+
+
+def test_pr_analysis_exports_deterministic_scored_outputs() -> None:
+    helper = read_pr_analysis_helper()
+
     assert (
-        "`Return a valid JSON array with up to ${MAX_AI_LABELS} lowercase label names.`,"
-        in prompt_helper
+        'const { scoreDeterministicEvidence } = require("./autobot_deterministic_scorer");'
+        in helper
     )
     assert (
-        "`- Return at most ${MAX_AI_LABELS} labels, ordered from most to least relevant.`,"
-        in prompt_helper
+        "function buildDeterministicEvidence(filesWithContext, context) {"
+        in helper
     )
+    assert (
+        "deterministic_evidence_json: JSON.stringify(evidenceItems)," in helper
+    )
+    assert (
+        "deterministic_category_scores_json: JSON.stringify(scoring.categoryScores),"
+        in helper
+    )
+    assert (
+        "deterministic_impact_scores_json: JSON.stringify(scoring.impactScores),"
+        in helper
+    )
+    assert (
+        "deterministic_label_scores_json: JSON.stringify(scoring.labelScores),"
+        in helper
+    )
+    assert (
+        "deterministic_semver_json: JSON.stringify(scoring.semver)," in helper
+    )
+
+
+def test_deterministic_scorer_exports_core_contract() -> None:
+    helper = read_scorer_helper()
+    thresholds = read_js_module_export(SCORER_HELPER, "LABEL_THRESHOLDS")
+    semver_thresholds = read_js_module_export(
+        SCORER_HELPER, "SEMVER_THRESHOLDS"
+    )
+    categories = read_js_module_export(SCORER_HELPER, "CATEGORY_DEFINITIONS")
+    rules = read_js_module_export(SCORER_HELPER, "EVIDENCE_RULES")
+
+    assert "scoreDeterministicEvidence" in helper
+    assert thresholds == {"retain": 0.35, "emit": 0.55, "primary": 0.72}
+    assert semver_thresholds == {"major": 0.72, "minor": 0.58, "patch": 0}
+    assert "public-contract" in categories
+    assert "runtime-platform" in categories
+    assert "removed-public-export" in rules
+    assert "runtime-support-added" in rules
+
+
+def test_deterministic_scorer_marks_removed_public_export_as_major() -> None:
+    result = run_js_helper_function(
+        SCORER_HELPER,
+        "scoreDeterministicEvidence",
+        {"evidenceItems": [{"ruleId": "removed-public-export"}]},
+    )
+
+    emitted_labels = {entry["label"] for entry in result["emittedLabels"]}
+
+    assert result["semver"]["decision"] == "major"
+    assert result["semver"]["hardRule"] is True
+    assert "breaking-change" in emitted_labels
+    assert result["impactScores"]["major-public-contract"]["score"] >= 0.72
+
+
+def test_deterministic_scorer_marks_runtime_support_add_as_minor() -> None:
+    result = run_js_helper_function(
+        SCORER_HELPER,
+        "scoreDeterministicEvidence",
+        {"evidenceItems": [{"ruleId": "runtime-support-added"}]},
+    )
+
+    emitted_labels = {entry["label"] for entry in result["emittedLabels"]}
+
+    assert result["semver"]["decision"] == "minor"
+    assert "runtime" in emitted_labels
+    assert result["impactScores"]["minor-runtime-support-add"]["score"] > 0
+
+
+def test_deterministic_scorer_keeps_docs_and_tests_patch_only() -> None:
+    result = run_js_helper_function(
+        SCORER_HELPER,
+        "scoreDeterministicEvidence",
+        {
+            "evidenceItems": [
+                {"ruleId": "documentation-surface"},
+                {"ruleId": "tests-added"},
+            ]
+        },
+    )
+
+    emitted_labels = {entry["label"] for entry in result["emittedLabels"]}
+
+    assert result["semver"]["decision"] == "patch"
+    assert "documentation" in emitted_labels
+    assert "test" in emitted_labels
+    assert "breaking-change" not in emitted_labels
 
 
 def test_pr_label_delta_retains_more_than_six_labels_when_supported() -> None:
@@ -531,7 +578,7 @@ def test_pr_label_delta_retains_more_than_six_labels_when_supported() -> None:
             "action": "opened",
             "currentPrLabels": [],
             "previousBotLabels": [],
-            "aiLabelsRaw": json.dumps(
+            "autobotLabelsRaw": json.dumps(
                 [
                     "breaking-change",
                     "enhancement",
@@ -547,12 +594,11 @@ def test_pr_label_delta_retains_more_than_six_labels_when_supported() -> None:
                     "workflow",
                 ]
             ),
-            "aiSummary": "",
         },
     )
 
-    assert len(result["nextAiLabels"]) == 12
-    assert result["nextAiLabels"] == [
+    assert len(result["nextAutobotLabels"]) == 12
+    assert result["nextAutobotLabels"] == [
         "breaking-change",
         "enhancement",
         "security",
@@ -576,12 +622,12 @@ def test_pr_label_delta_does_not_backfill_from_summary_text() -> None:
             "action": "opened",
             "currentPrLabels": ["bug"],
             "previousBotLabels": [],
-            "aiLabelsRaw": json.dumps(["bug"]),
-            "aiSummary": "## Autobot Summary\n\n### What Changed\nThis adds a new feature and introduces breaking changes for existing consumers.\n\n### Release Relevance\n- The summary explicitly calls out a minor version impact for the new capability.\n- The old contract is backward-incompatible and requires migration, so this is a major version impact.\n\n### Risks And Testing\n- Consumers must update.\n\n### Classification Signals\n- New feature added.\n- Breaking change for consumers.",
+            "autobotLabelsRaw": json.dumps(["bug"]),
+            "summaryText": "## Autobot Summary\n\n### What Changed\nThis adds a new feature and introduces breaking changes for existing consumers.\n\n### Release Relevance\n- The summary explicitly calls out a minor version impact for the new capability.\n- The old contract is backward-incompatible and requires migration, so this is a major version impact.\n\n### Risks And Testing\n- Consumers must update.\n\n### Classification Signals\n- New feature added.\n- Breaking change for consumers.",
         },
     )
 
-    assert result["nextAiLabels"] == ["bug"]
+    assert result["nextAutobotLabels"] == ["bug"]
     assert result["labelsToAdd"] == []
 
 
@@ -598,7 +644,7 @@ def test_sync_prepared_project_state_retries_invalid_new_label_addition() -> (
                 "labelsToRemove": [],
                 "labelsToAdd": ["docker", "workflow"],
                 "commentBody": "",
-                "nextAiLabels": ["docker", "workflow"],
+                "nextAutobotLabels": ["docker", "workflow"],
             },
             handle,
         )
@@ -704,49 +750,204 @@ def test_workflow_uses_smaller_helper_backed_project_steps() -> None:
 
 def test_workflow_uses_helper_backed_prompt_steps() -> None:
     workflow = read_workflow()
+    helper = read_prompts_helper()
 
-    assert "buildFinalPrSummaryPrompt" in workflow
-    assert "parseFinalPrSummary" in workflow
     assert "buildIssueSummaryArtifacts" in workflow
-    assert "buildLabelPrompt" in workflow
     assert "autobot_prompts.js" in workflow
+    assert "buildFinalPrSummaryPrompt" not in helper
+    assert "parseFinalPrSummary" not in helper
+    assert "buildLabelPrompt" not in helper
 
 
-def test_parse_final_pr_summary_rejects_raw_ai_error_text() -> None:
-    result = run_js_helper_function(
-        PROMPTS_HELPER,
-        "parseFinalPrSummary",
-        "Too many requests. For more on scraping GitHub and how it may affect your rights, please review our Terms of Service.",
-    )
+def test_prompt_helper_exports_only_deterministic_issue_summary_builder() -> (
+    None
+):
+    helper = read_prompts_helper()
 
-    assert result == {
-        "summaryBody": "",
-        "labelHints": "",
-        "labelHintsReady": "false",
-    }
+    assert "module.exports = {" in helper
+    assert "buildIssueSummaryArtifacts" in helper
+    assert "parseFinalPrSummary" not in helper
 
 
-def test_pr_comment_body_uses_neutral_cooldown_notice() -> None:
+def test_pr_comment_body_stays_deterministic_and_has_no_cooldown_notice() -> (
+    None
+):
     result = run_js_helper_function(
         PROJECT_MANAGER_HELPER,
         "buildPrCommentBody",
         {
-            "aiSummaryForComment": "## Autobot Summary\n\n### What Changed\nDeterministic fallback.",
+            "summaryForComment": "## Autobot Summary\n\n### What Changed\nDeterministic fallback.",
             "pullRequest": {
                 "number": 12,
                 "head": {"ref": "feature/refine-autobot"},
                 "base": {"ref": "main"},
             },
-            "nextAiLabels": ["workflow"],
-            "aiCooldownActive": True,
-            "aiCooldownUntil": "2026-04-09T00:00:00.000Z",
-            "prSummaryTier": "single_ai",
+            "nextAutobotLabels": ["workflow"],
         },
     )
 
-    assert "GitHub Models returned temporary throttling" in result
-    assert "scraping GitHub" not in result
-    assert "Terms of Service" not in result
+    assert "GitHub Models returned temporary throttling" not in result
+    assert "Deterministic fallback." in result
+
+
+def test_parse_deterministic_semver_accepts_json_payload() -> None:
+    result = run_js_helper_function(
+        PROJECT_MANAGER_HELPER,
+        "parseDeterministicSemver",
+        json.dumps(
+            {
+                "decision": "major",
+                "hardRule": True,
+                "hardSignals": ["removed-public-export"],
+                "majorScore": 1,
+                "minorScore": 0.2,
+                "patchScore": 0,
+            }
+        ),
+    )
+
+    assert result == {
+        "decision": "major",
+        "hardRule": True,
+        "hardSignals": ["removed-public-export"],
+        "majorScore": 1,
+        "minorScore": 0.2,
+        "patchScore": 0,
+    }
+
+
+def test_resolve_required_bump_prefers_metadata_semver_over_labels() -> None:
+    script = """
+const fs = require("fs");
+const helper = require(process.argv[1]);
+const payload = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+const commentsByIssue = payload.commentsByIssue || {};
+const github = {
+    paginate: async (_method, params) => commentsByIssue[String(params.issue_number)] || [],
+    rest: { issues: { listComments: async () => ({ data: [] }) } }
+};
+
+(async () => {
+    const result = await helper.resolveRequiredBump({
+        github,
+        owner: "owner",
+        repo: "repo",
+        releaseItems: payload.releaseItems,
+        currentLabelNames: payload.currentLabelNames,
+        currentIssueNumber: payload.currentIssueNumber,
+        currentSemverDecision: payload.currentSemverDecision,
+        metadataCache: new Map(),
+    });
+    process.stdout.write(JSON.stringify(result));
+})().catch((error) => {
+    process.stderr.write(String(error && error.stack || error));
+    process.exit(1);
+});
+""".strip()
+
+    result = run_js_async_script(
+        PROJECT_MANAGER_HELPER,
+        script,
+        {
+            "currentLabelNames": ["documentation"],
+            "currentIssueNumber": 10,
+            "currentSemverDecision": "patch",
+            "releaseItems": [
+                {
+                    "number": 11,
+                    "labels": [{"name": "documentation"}],
+                }
+            ],
+            "commentsByIssue": {
+                "11": [
+                    {
+                        "user": {"type": "Bot"},
+                        "body": '<!-- autobot-ai-summary -->\n<!-- autobot-metadata:{"semverDecision":"major"} -->\n# Autobot',
+                    }
+                ]
+            },
+        },
+    )
+
+    assert result == "major"
+
+
+def test_sync_prepared_project_state_persists_semver_metadata() -> None:
+    with tempfile.NamedTemporaryFile(
+        mode="w", encoding="utf-8", suffix=".json", delete=False
+    ) as handle:
+        json.dump(
+            {
+                "action": "opened",
+                "isPR": True,
+                "labelsToRemove": [],
+                "labelsToAdd": [],
+                "commentBody": "# Autobot — Changes Analysis",
+                "nextAutobotLabels": ["breaking-change"],
+                "semverDecision": "major",
+                "deterministicSemver": {
+                    "decision": "major",
+                    "hardRule": True,
+                    "hardSignals": ["removed-public-export"],
+                    "majorScore": 1,
+                    "minorScore": 0,
+                    "patchScore": 0,
+                },
+            },
+            handle,
+        )
+        state_path = Path(handle.name)
+
+    script = """
+const fs = require("fs");
+const helper = require(process.argv[1]);
+const payload = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+let createdCommentBody = "";
+const github = {
+    rest: {
+        issues: {
+            listComments: async () => ({ data: [] }),
+            createComment: async ({ body }) => {
+                createdCommentBody = body;
+                return { data: {} };
+            },
+            updateComment: async () => ({ data: {} }),
+            addLabels: async () => ({ data: [] }),
+            getLabel: async () => ({ data: { name: "breaking-change" } }),
+            createLabel: async () => ({ data: { name: "breaking-change" } }),
+            removeLabel: async () => ({ data: {} }),
+        }
+    },
+    paginate: async () => []
+};
+
+(async () => {
+    await helper.syncPreparedProjectState({
+        github,
+        owner: "owner",
+        repo: "repo",
+        issueNumber: 12,
+        stateFile: payload.stateFile,
+    });
+    process.stdout.write(JSON.stringify(createdCommentBody));
+})().catch((error) => {
+    process.stderr.write(String(error && error.stack || error));
+    process.exit(1);
+});
+""".strip()
+
+    try:
+        result = run_js_async_script(
+            PROJECT_MANAGER_HELPER,
+            script,
+            {"stateFile": str(state_path)},
+        )
+    finally:
+        state_path.unlink(missing_ok=True)
+
+    assert result.startswith("<!-- autobot-summary -->")
+    assert '"semverDecision":"major"' in result
+    assert '"deterministicSemver":{"decision":"major"' in result
 
 
 def test_pr_label_delta_replaces_stale_labels_on_synchronize() -> None:
@@ -770,13 +971,13 @@ def test_pr_label_delta_replaces_stale_labels_on_synchronize() -> None:
                 "schema",
                 "compatibility",
             ],
-            "aiLabelsRaw": json.dumps(
+            "autobotLabelsRaw": json.dumps(
                 ["api", "ui", "workflow", "automation", "github"]
             ),
         },
     )
 
-    assert set(result["nextAiLabels"]) == {
+    assert set(result["nextAutobotLabels"]) == {
         "api",
         "ui",
         "workflow",
@@ -809,12 +1010,12 @@ def test_pr_label_delta_clears_previous_labels_when_fresh_result_is_empty() -> (
             "action": "synchronize",
             "currentPrLabels": ["breaking-change", "security"],
             "previousBotLabels": ["breaking-change", "security", "api"],
-            "aiLabelsRaw": "[]",
+            "autobotLabelsRaw": "[]",
         },
     )
 
     assert result["hasFreshPrLabelResult"] is True
-    assert result["nextAiLabels"] == []
+    assert result["nextAutobotLabels"] == []
     assert result["labelsToRemove"] == ["breaking-change", "security"]
     assert result["labelsToAdd"] == []
 
@@ -840,13 +1041,13 @@ def test_pr_label_delta_readds_label_missing_from_live_pr_state() -> None:
                 "workflow",
                 "github",
             ],
-            "aiLabelsRaw": json.dumps(
+            "autobotLabelsRaw": json.dumps(
                 ["api", "ui", "automation", "test", "workflow", "github"]
             ),
         },
     )
 
-    assert set(result["nextAiLabels"]) == {
+    assert set(result["nextAutobotLabels"]) == {
         "api",
         "ui",
         "automation",
@@ -884,6 +1085,27 @@ def test_issue_fallback_labels_keep_explicit_proposals_specific() -> None:
     assert result == ["enhancement", "proposal"]
 
 
+def test_issue_intake_exposes_scorer_backed_evidence_and_semver() -> None:
+    result = run_js_helper_function(
+        ISSUE_INTAKE_HELPER,
+        "analyzeIssueIntake",
+        {
+            "title": "Proposal: RFC for plugin API roadmap",
+            "body": "This proposal outlines a future API roadmap and requests feedback before implementation.",
+        },
+    )
+
+    evidence_rules = {item["ruleId"] for item in result["evidenceItems"]}
+
+    assert {
+        "issue-enhancement-request",
+        "issue-proposal-request",
+        "issue-api-context",
+    }.issubset(evidence_rules)
+    assert "proposal" in result["deterministicLabels"]
+    assert result["deterministicSemver"]["minorScore"] > 0
+
+
 def test_issue_fallback_labels_keep_documentation_issues_narrow() -> None:
     result = run_js_helper_function(
         PROJECT_MANAGER_HELPER,
@@ -895,6 +1117,21 @@ def test_issue_fallback_labels_keep_documentation_issues_narrow() -> None:
     )
 
     assert result == ["documentation"]
+
+
+def test_issue_fallback_labels_surface_runtime_context_without_primary_family() -> (
+    None
+):
+    result = run_js_helper_function(
+        PROJECT_MANAGER_HELPER,
+        "inferIssueLabels",
+        {
+            "title": "Windows CUDA runtime support matrix",
+            "body": "Need clarity on Python 3.12, Windows, and CUDA compatibility for local installs.",
+        },
+    )
+
+    assert result == ["runtime"]
 
 
 def test_pr_analysis_detects_ui_without_version_false_positives() -> None:
@@ -965,7 +1202,7 @@ def test_pr_analysis_detects_direct_security_and_api_evidence() -> None:
             title="Harden GitHub models API auth",
             files=[
                 build_snapshot_file(
-                    ".github/scripts/autobot_ai.js",
+                    ".github/scripts/github_models_api.js",
                     """
 +const AI_ENDPOINT = \"https://models.github.ai/inference/chat/completions\";
 +const headers = { Authorization: `Bearer ${token}` };
@@ -1067,6 +1304,282 @@ def test_pr_analysis_ignores_runtime_words_in_documentation_only_changes() -> (
 
     assert deterministic_labels == {"documentation"}
     assert "runtime" not in candidate_labels
+
+
+def test_pr_analysis_detects_structural_package_reorg_as_breaking_change() -> (
+    None
+):
+    result = run_pr_analysis(
+        build_snapshot(
+            title="Reorganize package layout and update docs",
+            files=[
+                build_snapshot_file(
+                    "src/definers/__init__.py",
+                    """
+-from .presentation import launch_chat
++from .ui import launch_chat
+""".strip(),
+                    status="renamed",
+                    additions=24,
+                    deletions=24,
+                ),
+                build_snapshot_file(
+                    "src/definers/presentation/__init__.py",
+                    """
+-from .apps.chat_app import build_chat_app
+""".strip(),
+                    status="removed",
+                    additions=0,
+                    deletions=42,
+                ),
+                build_snapshot_file(
+                    "src/definers/application_data.py",
+                    """
+-LEGACY_LAYOUT = True
+""".strip(),
+                    status="removed",
+                    additions=0,
+                    deletions=76,
+                ),
+                build_snapshot_file(
+                    "src/definers/ui/apps/chat_app.py",
+                    """
++def build_chat_app():
++    return object()
+""".strip(),
+                    status="added",
+                    additions=120,
+                    deletions=0,
+                ),
+                build_snapshot_file(
+                    "README.md",
+                    """
++Updated package layout notes.
+""".strip(),
+                    status="modified",
+                    additions=18,
+                    deletions=2,
+                ),
+            ],
+        )
+    )
+
+    deterministic_labels = parse_result_labels(
+        result, "deterministic_labels_json"
+    )
+    candidate_labels = parse_result_labels(result, "candidate_labels_json")
+
+    assert "breaking-change" in deterministic_labels
+    assert "enhancement" in deterministic_labels
+    assert "breaking-change" in candidate_labels
+    assert "enhancement" in candidate_labels
+    assert "documentation" in candidate_labels
+
+
+def test_pr_analysis_deterministic_fallback_preserves_more_than_six_labels() -> (
+    None
+):
+    result = run_pr_analysis(
+        build_snapshot(
+            title="Reorganize package layout and tighten release automation",
+            files=[
+                build_snapshot_file(
+                    ".github/workflows/autobot.yml",
+                    """
++on:
++  pull_request:
++    types: [opened, synchronize]
++jobs:
++  autobot:
++    runs-on: ubuntu-latest
++    steps:
++      - uses: actions/checkout@v6
+""".strip(),
+                    status="modified",
+                    additions=44,
+                    deletions=10,
+                ),
+                build_snapshot_file(
+                    "docker/audio/Dockerfile",
+                    """
++FROM python:3.14-slim
++RUN apt-get update && apt-get install -y ffmpeg
+""".strip(),
+                    status="modified",
+                    additions=16,
+                    deletions=3,
+                ),
+                build_snapshot_file(
+                    "README.md",
+                    """
++Document the new package layout.
+""".strip(),
+                    status="modified",
+                    additions=22,
+                    deletions=1,
+                ),
+                build_snapshot_file(
+                    "tests/test_public_module_splits.py",
+                    """
++def test_public_imports_remain_stable():
++    assert True
+""".strip(),
+                    status="modified",
+                    additions=20,
+                    deletions=0,
+                ),
+                build_snapshot_file(
+                    "src/definers/__init__.py",
+                    """
+-from .presentation import launch_chat
++from .ui import launch_chat
+""".strip(),
+                    status="renamed",
+                    additions=18,
+                    deletions=18,
+                ),
+                build_snapshot_file(
+                    "src/definers/presentation/__init__.py",
+                    """
+-from .apps.chat_app import build_chat_app
+""".strip(),
+                    status="removed",
+                    additions=0,
+                    deletions=38,
+                ),
+                build_snapshot_file(
+                    "src/definers/application_data.py",
+                    """
+-LEGACY_LAYOUT = True
+""".strip(),
+                    status="removed",
+                    additions=0,
+                    deletions=72,
+                ),
+                build_snapshot_file(
+                    "src/definers/ui/apps/chat_app.py",
+                    """
++def build_chat_app():
++    return object()
+""".strip(),
+                    status="added",
+                    additions=108,
+                    deletions=0,
+                ),
+            ],
+        )
+    )
+
+    deterministic_labels = json.loads(str(result["deterministic_labels_json"]))
+
+    assert len(deterministic_labels) >= 7
+    assert {
+        "breaking-change",
+        "enhancement",
+        "runtime",
+        "documentation",
+        "test",
+        "workflow",
+        "docker",
+    }.issubset(set(deterministic_labels))
+
+
+def test_pr_analysis_emits_scored_major_outputs_for_public_reorg() -> None:
+    result = run_pr_analysis(
+        build_snapshot(
+            title="Reorganize package layout and update docs",
+            files=[
+                build_snapshot_file(
+                    "src/definers/__init__.py",
+                    """
+-from .presentation import launch_chat
++from .ui import launch_chat
+""".strip(),
+                    status="renamed",
+                    additions=24,
+                    deletions=24,
+                ),
+                build_snapshot_file(
+                    "src/definers/presentation/__init__.py",
+                    """
+-from .apps.chat_app import build_chat_app
+""".strip(),
+                    status="removed",
+                    additions=0,
+                    deletions=42,
+                ),
+                build_snapshot_file(
+                    "src/definers/ui/apps/chat_app.py",
+                    """
++def build_chat_app():
++    return object()
+""".strip(),
+                    status="added",
+                    additions=120,
+                    deletions=0,
+                ),
+            ],
+        )
+    )
+
+    evidence_items = json.loads(str(result["deterministic_evidence_json"]))
+    impact_scores = json.loads(str(result["deterministic_impact_scores_json"]))
+    semver = json.loads(str(result["deterministic_semver_json"]))
+    primary_labels = json.loads(
+        str(result["deterministic_primary_labels_json"])
+    )
+    evidence_rules = {item["ruleId"] for item in evidence_items}
+
+    assert semver["decision"] == "major"
+    assert "removed-public-export" in evidence_rules
+    assert "renamed-public-module" in evidence_rules
+    assert "added-public-capability" in evidence_rules
+    assert impact_scores["major-public-contract"]["score"] >= 0.72
+    assert "breaking-change" in primary_labels
+
+
+def test_pr_analysis_emits_patch_scored_outputs_for_docs_and_tests_only() -> (
+    None
+):
+    result = run_pr_analysis(
+        build_snapshot(
+            title="Refresh docs and regression coverage",
+            files=[
+                build_snapshot_file(
+                    "README.md",
+                    """
++Document the refreshed local setup flow.
+""".strip(),
+                    additions=14,
+                ),
+                build_snapshot_file(
+                    "tests/test_setup_docs.py",
+                    """
++def test_docs_example_stays_current():
++    assert True
+""".strip(),
+                    additions=22,
+                ),
+            ],
+        )
+    )
+
+    evidence_items = json.loads(str(result["deterministic_evidence_json"]))
+    category_scores = json.loads(
+        str(result["deterministic_category_scores_json"])
+    )
+    semver = json.loads(str(result["deterministic_semver_json"]))
+    deterministic_labels = parse_result_labels(
+        result, "deterministic_labels_json"
+    )
+    evidence_rules = {item["ruleId"] for item in evidence_items}
+
+    assert semver["decision"] == "patch"
+    assert "documentation-surface" in evidence_rules
+    assert "tests-added" in evidence_rules
+    assert category_scores["documentation-examples"]["score"] > 0
+    assert category_scores["test-surface"]["score"] > 0
+    assert deterministic_labels == {"documentation", "test"}
 
 
 def test_pr_analysis_ignores_version_critical_label_words_inside_autobot_infrastructure() -> (

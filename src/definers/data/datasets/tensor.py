@@ -1,3 +1,8 @@
+from definers.runtime_numpy import get_numpy_module
+
+np = get_numpy_module()
+
+
 class DatasetTensorBuilder:
     @staticmethod
     def is_string_array(value, numpy_module) -> bool:
@@ -78,8 +83,6 @@ class DatasetTensorBuilder:
         try:
             import torch
         except Exception:
-            import numpy as np
-
             return np.stack(
                 [
                     runtime.cupy_to_numpy(
@@ -123,8 +126,6 @@ class DatasetTensorBuilder:
 
     @classmethod
     def files_to_dataset(cls, features_paths, labels_paths=None):
-        import numpy as np
-
         import definers.data.loaders as loaders_module
 
         runtime = loaders_module._runtime()

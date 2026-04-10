@@ -6,7 +6,9 @@ from dataclasses import asdict, dataclass
 from functools import cache, lru_cache
 from typing import Any
 
-import numpy as np
+from definers.runtime_numpy import get_numpy_module
+
+np = get_numpy_module()
 from scipy import signal
 
 _ABSOLUTE_GATE_LUFS = -70.0

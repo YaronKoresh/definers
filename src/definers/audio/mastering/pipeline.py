@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-import numpy as np
+from definers.runtime_numpy import get_numpy_module
+
+np = get_numpy_module()
 
 from .contract import MasteringContract
 from .finalization import CharacterStageDecision, PeakCatchEvent

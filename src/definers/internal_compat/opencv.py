@@ -4,8 +4,11 @@ import colorsys
 import pickle
 from pathlib import Path
 
-import numpy as np
 from PIL import Image
+
+from definers.runtime_numpy import get_numpy_module
+
+np = get_numpy_module()
 
 COLOR_BGR2GRAY = 6
 COLOR_GRAY2BGR = 8

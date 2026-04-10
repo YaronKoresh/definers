@@ -5,7 +5,9 @@ import re
 from collections import Counter
 from collections.abc import Mapping
 
-import numpy as np
+from definers.runtime_numpy import get_array_module
+
+np = get_array_module()
 
 
 class DenseFeatureMatrix:

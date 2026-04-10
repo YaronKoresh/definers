@@ -22,11 +22,9 @@ from definers.image.helpers import (
     save_image,
     write_on_image,
 )
+from definers.runtime_numpy import get_array_module, get_numpy_module
 
-try:
-    np = importlib.import_module("cupy")
-except Exception:
-    np = importlib.import_module("numpy")
+np = get_array_module()
 
 
 def init_upscale():
@@ -69,7 +67,7 @@ def init_upscale():
         MODELS["upscale"] = upscaler
         return
 
-    import numpy as np
+    np = get_numpy_module()
     import pillow_heif
     from PIL import Image
     from refiners.foundationals.latent_diffusion.stable_diffusion_1.multi_upscaler import (

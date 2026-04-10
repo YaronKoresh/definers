@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import numpy as np
+from definers.runtime_numpy import get_numpy_module
+
+np = get_numpy_module()
 
 from definers.constants import MADMOM_AVAILABLE
 from definers.image.helpers import get_max_resolution

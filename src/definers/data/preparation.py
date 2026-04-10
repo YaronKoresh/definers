@@ -41,7 +41,7 @@ def data_runtime():
 
     import definers.data.arrays as arrays_module
     import definers.data.loaders as loaders_module
-    import definers.data.runtime_patches as runtime_patches
+    import definers.runtime_numpy as runtime_patches
 
     _, numpy_module = runtime_patches.init_cupy_numpy()
     return SimpleNamespace(

@@ -1,3 +1,8 @@
+from definers.runtime_numpy import get_numpy_module
+
+np = get_numpy_module()
+
+
 class TextFeatureReconstructor:
     @staticmethod
     def catch(error: Exception) -> None:
@@ -10,8 +15,6 @@ class TextFeatureReconstructor:
 
     @staticmethod
     def rank_tokens(predicted_features, feature_names) -> list[str]:
-        import numpy as np
-
         weighted_tokens = []
         flattened_features = np.asarray(predicted_features).reshape(-1)
         for index, value in enumerate(flattened_features):

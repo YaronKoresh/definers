@@ -3,7 +3,9 @@ from __future__ import annotations
 from collections import deque
 from collections.abc import Callable
 
-import numpy as np
+from definers.runtime_numpy import get_numpy_module
+
+np = get_numpy_module()
 from scipy import signal
 
 

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
-import numpy as np
+from definers.runtime_numpy import get_numpy_module
+
+np = get_numpy_module()
 
 
 def measure_spectrum(

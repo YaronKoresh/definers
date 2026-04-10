@@ -4,7 +4,9 @@ import math
 from dataclasses import dataclass
 from typing import Any
 
-import numpy as np
+from definers.runtime_numpy import get_numpy_module
+
+np = get_numpy_module()
 
 from .dependencies import librosa_module
 

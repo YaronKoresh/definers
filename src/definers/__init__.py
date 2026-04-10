@@ -8,8 +8,21 @@ from types import ModuleType
 from typing import Any
 
 from .optional_dependencies import install_import_hook
+from .runtime_numpy import (
+    bootstrap_runtime_numpy,
+    get_array_module,
+    get_numpy_module,
+    is_cupy_backend,
+    patch_numpy_runtime,
+    runtime_backend_info,
+    runtime_backend_name,
+)
 
 install_import_hook()
+try:
+    bootstrap_runtime_numpy()
+except Exception:
+    pass
 
 
 def _resolve_version() -> str:
@@ -25,6 +38,8 @@ class MissingTransformer:
 
 
 class MissingSoxModule:
+    __definers_missing_sox__ = True
+
     Transformer = MissingTransformer
 
     def __getattr__(self, name: str) -> Any:
@@ -66,7 +81,7 @@ def load_sox_module() -> ModuleType | MissingSoxModule:
 
 
 def has_sox() -> bool:
-    return not isinstance(sox, MissingSoxModule)
+    return not getattr(sox, "__definers_missing_sox__", False)
 
 
 __version__ = _resolve_version()
@@ -83,6 +98,7 @@ _LAZY_SUBMODULES = {
     "ml",
     "model_installation",
     "optional_dependencies",
+    "runtime_numpy",
     "system",
     "text",
     "ui",
@@ -90,11 +106,39 @@ _LAZY_SUBMODULES = {
 }
 
 
+def _load_lazy_submodule(name: str) -> Any:
+    module_name = f"{__name__}.{name}"
+    module = importlib.import_module(module_name)
+    sys.modules.setdefault(module_name, module)
+    globals()[name] = module
+    return module
+
+
+class _DefinersModule(ModuleType):
+    def __getattribute__(self, name: str) -> Any:
+        if name in _LAZY_SUBMODULES:
+            namespace = ModuleType.__getattribute__(self, "__dict__")
+            package_name = ModuleType.__getattribute__(self, "__name__")
+            module_name = f"{package_name}.{name}"
+            loaded_module = sys.modules.get(module_name)
+            cached_module = namespace.get(name)
+            if loaded_module is not None:
+                if cached_module is not loaded_module:
+                    namespace[name] = loaded_module
+                return loaded_module
+            if isinstance(cached_module, ModuleType):
+                if (
+                    ModuleType.__getattribute__(cached_module, "__name__")
+                    == module_name
+                ):
+                    sys.modules[module_name] = cached_module
+                    return cached_module
+        return ModuleType.__getattribute__(self, name)
+
+
 def __getattr__(name: str) -> Any:
     if name in _LAZY_SUBMODULES:
-        module = importlib.import_module(f"{__name__}.{name}")
-        globals()[name] = module
-        return module
+        return _load_lazy_submodule(name)
     raise AttributeError(name)
 
 
@@ -104,7 +148,17 @@ def __dir__() -> list[str]:
 
 __all__ = (
     "__version__",
+    "bootstrap_runtime_numpy",
+    "get_array_module",
     "has_sox",
+    "get_numpy_module",
+    "is_cupy_backend",
     "load_sox_module",
+    "patch_numpy_runtime",
+    "runtime_backend_info",
+    "runtime_backend_name",
     "sox",
 )
+
+
+sys.modules[__name__].__class__ = _DefinersModule

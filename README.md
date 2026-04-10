@@ -1,123 +1,38 @@
 # Definers
 
-Definers is a feature-first Python toolkit for ML, media workflows, data preparation, runtime utilities, and launcher surfaces.
+Definers is a modular Python platform for teams that build AI, media, and data products and want one serious codebase instead of a pile of disconnected utilities.
 
-## Install
+It brings together workflow-grade audio, text, image, video, data preparation, runtime compatibility, and launcher surfaces behind a concrete module structure that is designed to stay credible under real project pressure.
 
-Definers targets Python 3.10 through 3.14.
+## What Definers Is Built For
 
-```bash
-pip install .
-pip install ".[audio]"
-pip install ".[ml]"
-pip install -e ".[dev]"
-```
+- Shipping AI and media workflows without rewriting the surrounding infrastructure every time the stack changes.
+- Keeping CPU-only environments usable while still unlocking GPU-backed acceleration where the runtime can support it.
+- Giving teams one place for preparation, inference, automation, and runtime.
 
-Optional runtime targets can also be installed explicitly through the CLI.
+## Capability Areas
 
-```bash
-definers install --list
-definers install audio
-definers install translate --type task
-definers install rvc --type model-task
-```
+- Audio workflows for mastering, stems, analysis, cleanup, and generation.
+- Data workflows for preparation, tokenization, vectorization, and dataset assembly.
+- ML workflows for text processing, training, inference, and retrieval-oriented features.
+- Image and video workflows for generation, composition, enhancement, and rendering.
+- System and runtime workflows for installation, process control, download handling, and compatibility.
+- Focused launcher surfaces for domain-specific applications instead of a single overloaded interface.
 
-RVC uses only the `YaronKoresh/definers-rvc-files` fork. The runtime bootstrap expects the fork-owned `assets`, `configs`, `docs`, `i18n`, `infer`, `logs`, and `tools` folders. No alternate repository or GUI project is used as an RVC source.
+## Documentation
 
-## Quick Start
+- Start with [docs/README.md](docs/README.md).
+- Installation and first-run guidance lives in [docs/getting-started/installation.md](docs/getting-started/installation.md) and [docs/getting-started/quickstart.md](docs/getting-started/quickstart.md).
+- Runtime compatibility guidance lives in [docs/runtime/numpy-cupy-compat.md](docs/runtime/numpy-cupy-compat.md).
+- Capability guides are grouped under [docs/capabilities](docs/capabilities).
+- CLI and package reference notes live under [docs/reference](docs/reference).
 
-### Python
+## Project Standards
 
-```python
-from definers.data.preparation import prepare_data
-from definers.ml.text import summarize
-from definers.system import run
-from definers.ui.launchers import launch_installed_project
-
-dataset = prepare_data(features=["./features.csv"], batch_size=32)
-summary = summarize("A long text that needs a short summary.")
-run(["ffmpeg", "-i", "input.mp4", "output.wav"])
-launch_installed_project("chat")
-```
-
-### CLI
-
-```bash
-python -m definers --help
-definers --version
-definers start chat
-definers start audio-mastering
-definers start video-composer
-```
-
-## Package Guide
-
-Import concrete modules instead of broad compatibility facades.
-
-- `definers.audio`: audio analysis, generation, stems, mastering, preview
-- `definers.chat`: request normalization and chat handlers
-- `definers.cli`: command parsing, routing, install commands
-- `definers.data`: preparation, dataset helpers, vectorization, tokenization
-- `definers.image`: image utilities and image workflows
-- `definers.media`: transfer helpers and shared media utilities
-- `definers.ml`: training, inference, answer runtime, text ML helpers
-- `definers.system`: filesystem, process, installation, path, runtime helpers
-- `definers.text`: translation, normalization, hashing, system messages
-- `definers.ui`: launcher entrypoints and app surfaces
-- `definers.video`: rendering and video helpers
-
-Preferred import style:
-
-```python
-from definers.data.preparation import prepare_data
-from definers.ml.answer.service import AnswerService
-from definers.ml.text.generation import summarize
-from definers.system.paths import normalize_path
-from definers.ui.gui_entrypoints import start
-```
-
-## Development
-
-```bash
-pip install -e ".[dev]"
-poe check
-```
-
-Useful focused commands:
-
-```bash
-poe cli-health
-poe ml-health
-pytest tests/test_cli.py -q
-pytest tests/test_application_ml_answer_services.py tests/test_application_ml_answer_history_preparer.py tests/test_answer.py -q
-```
-
-## Runtime Notes
-
-- Optional dependencies must fail cleanly when missing.
-- FFmpeg is required for many audio and video paths.
-- `sox` is optional and some flows degrade when it is unavailable.
-- CUDA should be added only after the CPU path works.
-- Guarded model loading accepts Hugging Face references and direct artifact URLs, and rejects obvious HTML or Git LFS pointer responses.
-
-## Contributing
-
-Contributor workflow and validation guidance live in [CONTRIBUTING.md](CONTRIBUTING.md).
-
-### RVC
-
-RVC bootstrap is based on the maintained fork in `YaronKoresh/definers-rvc-files`.
-
-The bootstrap restores the fork folders directly into the Definers package root so the imported RVC modules run as ordinary project modules after initialization.
-
-## Contributing
-
-Contributor workflow now lives in [CONTRIBUTING.md](CONTRIBUTING.md). Use it for setup, validation, code-layout expectations, and pull request rules.
+- Python support targets 3.10 through 3.14.
+- The package is structured to keep runtime policy, optional dependencies, and user-facing launchers explicit.
+- Contributor workflow and validation guidance live in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
 Definers is licensed under the MIT License. See [LICENSE](LICENSE).
-
-## Maintainer
-
-Definers is owned and maintained by Yaron Koresh.

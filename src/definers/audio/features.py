@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import importlib
 
-import numpy as np
+from definers.runtime_numpy import get_numpy_module
+
+np = get_numpy_module()
 
 from definers.logger import init_logger
 from definers.system.paths import full_path, tmp

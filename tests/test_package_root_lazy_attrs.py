@@ -95,6 +95,20 @@ def test_multiple_lazy_attributes_use_package_qualified_import_names():
     unload_package_root()
 
 
+def test_lazy_attribute_refreshes_after_submodule_sys_modules_churn():
+    unload_package_root()
+
+    import definers
+
+    first_data_module = definers.data
+    sys.modules.pop("definers.data", None)
+
+    assert definers.data is first_data_module
+    assert definers.data is importlib.import_module("definers.data")
+    assert sys.modules["definers.data"] is definers.data
+    unload_package_root()
+
+
 def test_data_package_exposes_submodules_without_root_routing():
     unload_package_root()
 

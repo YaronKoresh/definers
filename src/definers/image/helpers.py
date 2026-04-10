@@ -1,14 +1,11 @@
-import importlib
 import math
 import os
 from pathlib import Path
 
-try:
-    np = importlib.import_module("cupy")
-except Exception:
-    np = importlib.import_module("numpy")
+from definers.runtime_numpy import get_array_module, get_numpy_module
 
-import numpy as _np
+np = get_array_module()
+_np = get_numpy_module()
 
 
 def _fallback_local_binary_pattern(gray_image, radius: int):

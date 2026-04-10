@@ -17,8 +17,10 @@ from pathlib import Path
 from time import sleep, time
 from urllib.parse import urlparse
 
-import numpy as _np
-import numpy as np
+from definers.runtime_numpy import get_array_module, get_numpy_module
+
+_np = get_numpy_module()
+np = get_array_module()
 
 from definers import regex_utils
 from definers.ml.answer.service import AnswerService

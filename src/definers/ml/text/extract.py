@@ -1,3 +1,8 @@
+from definers.runtime_numpy import get_numpy_module
+
+np = get_numpy_module()
+
+
 class TextFeatureExtractor:
     @staticmethod
     def catch(error: Exception) -> None:
@@ -10,8 +15,6 @@ class TextFeatureExtractor:
 
     @classmethod
     def extract(cls, text, vectorizer=None):
-        import numpy as np
-
         from definers.data.text.vectorizer import (
             create_text_vectorizer,
         )

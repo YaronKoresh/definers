@@ -1,12 +1,9 @@
-import importlib
 from pathlib import Path
 
 from definers.constants import STYLES_DB
+from definers.runtime_numpy import get_array_module, get_numpy_module
 
-try:
-    np = importlib.import_module("cupy")
-except Exception:
-    np = importlib.import_module("numpy")
+np = get_array_module()
 
 
 def _ui_update(**kwargs):
@@ -337,7 +334,7 @@ def apply_global_overlays(
 
 
 def normalize_arr(a):
-    import numpy as np
+    np = get_numpy_module()
 
     if hasattr(a, "size") and a.size == 0:
         return a

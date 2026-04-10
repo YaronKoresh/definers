@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import os
 
-import numpy as np
+from definers.runtime_numpy import get_numpy_module
+
+np = get_numpy_module()
 
 import definers.file_ops as file_ops
 from definers.system import get_ext

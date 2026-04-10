@@ -44,12 +44,3 @@ def test_pyproject_declares_python_314_support():
     assert 'requires-python = ">=3.10,<3.15"' in pyproject_text
     assert '"Programming Language :: Python :: 3.13"' in pyproject_text
     assert '"Programming Language :: Python :: 3.14"' in pyproject_text
-
-
-def test_docs_advertise_python_314_support():
-    assert "Definers targets Python 3.10 through 3.14." in read_doc_text(
-        "README.md"
-    )
-    assert "Definers targets Python 3.10 through 3.14." in read_doc_text(
-        "CONTRIBUTING.md"
-    )

@@ -9,7 +9,6 @@ permissions:
   contents: write
   issues: write
   pull-requests: write
-  models: read
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.issue.number || github.ref }}
   cancel-in-progress: true
@@ -51,126 +50,6 @@ jobs:
             for (const [name, value] of Object.entries(outputs)) {
               core.setOutput(name, value);
             }
-      - name: AI — Generate Batch Summary 1
-        if: github.event_name == 'pull_request' && github.event.action != 'closed' && steps.collect.outputs.summary_tier == 'capped_batch_ai' && fromJSON(steps.collect.outputs.summary_batch_count || '0') >= 1
-        id: ai-summary-batch-1
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const helperPath = `${process.env.GITHUB_WORKSPACE || process.cwd()}/.github/scripts/autobot_ai.js`;
-            const { runManagedInference } = require(helperPath);
-            const { owner, repo } = context.repo;
-            const result = await runManagedInference({
-              github,
-              owner,
-              repo,
-              token: process.env.GITHUB_TOKEN,
-              promptFile: "/tmp/summary_batch_1.txt",
-              model: "openai/gpt-4o",
-              maxTokens: 800,
-              source: "batch-summary-1"
-            });
-            core.setOutput("response", result.content || "");
-            core.setOutput("status", String(result.status || 0));
-            core.setOutput("rate_limited", result.rateLimited ? "true" : "false");
-            core.setOutput("cooldown_until", result.cooldownUntil || "");
-            core.setOutput("error_message", result.errorMessage || "");
-      - name: AI — Generate Batch Summary 2
-        if: github.event_name == 'pull_request' && github.event.action != 'closed' && steps.collect.outputs.summary_tier == 'capped_batch_ai' && fromJSON(steps.collect.outputs.summary_batch_count || '0') >= 2
-        id: ai-summary-batch-2
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const helperPath = `${process.env.GITHUB_WORKSPACE || process.cwd()}/.github/scripts/autobot_ai.js`;
-            const { runManagedInference } = require(helperPath);
-            const { owner, repo } = context.repo;
-            const result = await runManagedInference({
-              github,
-              owner,
-              repo,
-              token: process.env.GITHUB_TOKEN,
-              promptFile: "/tmp/summary_batch_2.txt",
-              model: "openai/gpt-4o",
-              maxTokens: 800,
-              source: "batch-summary-2"
-            });
-            core.setOutput("response", result.content || "");
-            core.setOutput("status", String(result.status || 0));
-            core.setOutput("rate_limited", result.rateLimited ? "true" : "false");
-            core.setOutput("cooldown_until", result.cooldownUntil || "");
-            core.setOutput("error_message", result.errorMessage || "");
-      - name: Build Final PR Summary Prompt
-        if: >-
-          github.event_name == 'pull_request' &&
-          github.event.action != 'closed' &&
-          steps.collect.outputs.has_changes == 'true' &&
-          steps.collect.outputs.summary_tier != 'zero_ai'
-        id: final-pr-summary-prompt
-        env:
-          SUMMARY_TIER: ${{ steps.collect.outputs.summary_tier }}
-          CANDIDATE_LABELS: ${{ steps.collect.outputs.candidate_labels_json }}
-          AI_BATCH_SUMMARY_1: ${{ steps.ai-summary-batch-1.outputs.response }}
-          AI_BATCH_SUMMARY_2: ${{ steps.ai-summary-batch-2.outputs.response }}
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const helperPath = `${process.env.GITHUB_WORKSPACE || process.cwd()}/.github/scripts/autobot_prompts.js`;
-            const { buildFinalPrSummaryPrompt } = require(helperPath);
-            const outputs = buildFinalPrSummaryPrompt({
-              summaryTier: process.env.SUMMARY_TIER,
-              candidateLabelsRaw: process.env.CANDIDATE_LABELS,
-              batchSummaries: [
-                process.env.AI_BATCH_SUMMARY_1,
-                process.env.AI_BATCH_SUMMARY_2
-              ]
-            });
-            for (const [name, value] of Object.entries(outputs)) {
-              core.setOutput(name, value);
-            }
-      - name: AI — Generate Final PR Summary
-        if: steps.final-pr-summary-prompt.outputs.ready == 'true'
-        id: ai-pr-summary
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const helperPath = `${process.env.GITHUB_WORKSPACE || process.cwd()}/.github/scripts/autobot_ai.js`;
-            const { runManagedInference } = require(helperPath);
-            const { owner, repo } = context.repo;
-            const result = await runManagedInference({
-              github,
-              owner,
-              repo,
-              token: process.env.GITHUB_TOKEN,
-              promptFile: "/tmp/final_pr_summary_prompt.txt",
-              model: "openai/gpt-4o",
-              maxTokens: 1100,
-              source: "final-pr-summary"
-            });
-            core.setOutput("response", result.content || "");
-            core.setOutput("status", String(result.status || 0));
-            core.setOutput("rate_limited", result.rateLimited ? "true" : "false");
-            core.setOutput("cooldown_until", result.cooldownUntil || "");
-            core.setOutput("error_message", result.errorMessage || "");
-      - name: Parse Final PR Summary
-        if: steps.final-pr-summary-prompt.outputs.ready == 'true'
-        id: parse-pr-summary
-        env:
-          AI_PR_SUMMARY_RAW: ${{ steps.ai-pr-summary.outputs.response }}
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const helperPath = `${process.env.GITHUB_WORKSPACE || process.cwd()}/.github/scripts/autobot_prompts.js`;
-            const { parseFinalPrSummary } = require(helperPath);
-            const outputs = parseFinalPrSummary(process.env.AI_PR_SUMMARY_RAW || "");
-            core.setOutput("summary_body", outputs.summaryBody);
-            core.setOutput("label_hints", outputs.labelHints);
-            core.setOutput("label_hints_ready", outputs.labelHintsReady);
       - name: Build Issue Summary Prompt
         if: >-
           github.event_name == 'issues' &&
@@ -184,109 +63,13 @@ jobs:
             const outputs = buildIssueSummaryArtifacts({ issue: context.payload.issue });
             core.setOutput("fallback_summary", outputs.fallbackSummary);
             core.setOutput("ready", outputs.ready);
-      - name: AI — Generate Issue Summary
-        if: steps.issue-summary-prompt.outputs.ready == 'true'
-        id: ai-issue-summary
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const helperPath = `${process.env.GITHUB_WORKSPACE || process.cwd()}/.github/scripts/autobot_ai.js`;
-            const { runManagedInference } = require(helperPath);
-            const { owner, repo } = context.repo;
-            const result = await runManagedInference({
-              github,
-              owner,
-              repo,
-              token: process.env.GITHUB_TOKEN,
-              promptFile: "/tmp/issue_summary_prompt.txt",
-              model: "openai/gpt-4o",
-              maxTokens: 1400,
-              source: "issue-summary"
-            });
-            core.setOutput("response", result.content || "");
-            core.setOutput("status", String(result.status || 0));
-            core.setOutput("rate_limited", result.rateLimited ? "true" : "false");
-            core.setOutput("cooldown_until", result.cooldownUntil || "");
-            core.setOutput("error_message", result.errorMessage || "");
-      - name: Build Label Prompt
-        if: >-
-          steps.issue-summary-prompt.outputs.ready == 'true' ||
-          (
-            github.event_name == 'pull_request' &&
-            github.event.action != 'closed' &&
-            steps.collect.outputs.summary_tier != 'zero_ai' &&
-            steps.parse-pr-summary.outputs.summary_body != '' &&
-            steps.parse-pr-summary.outputs.label_hints_ready != 'true'
-          )
-        id: label-prompt
-        env:
-          AI_PR_SUMMARY: ${{ steps.parse-pr-summary.outputs.summary_body }}
-          AI_ISSUE_SUMMARY: ${{ steps.ai-issue-summary.outputs.response || steps.issue-summary-prompt.outputs.fallback_summary }}
-          CANDIDATE_LABELS: ${{ steps.collect.outputs.candidate_labels_json }}
-          EVENT_KIND: ${{ github.event_name }}
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const helperPath = `${process.env.GITHUB_WORKSPACE || process.cwd()}/.github/scripts/autobot_prompts.js`;
-            const { buildLabelPrompt } = require(helperPath);
-            const outputs = buildLabelPrompt({
-              eventName: process.env.EVENT_KIND,
-              prSummary: process.env.AI_PR_SUMMARY,
-              issueSummary: process.env.AI_ISSUE_SUMMARY,
-              candidateLabelsRaw: process.env.CANDIDATE_LABELS
-            });
-            core.setOutput("prompt_chars", outputs.promptChars);
-            core.setOutput("ready", outputs.ready);
-      - name: AI — Classify Labels
-        if: steps.label-prompt.outputs.ready == 'true'
-        id: ai-labels
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const helperPath = `${process.env.GITHUB_WORKSPACE || process.cwd()}/.github/scripts/autobot_ai.js`;
-            const { runManagedInference } = require(helperPath);
-            const { owner, repo } = context.repo;
-            const result = await runManagedInference({
-              github,
-              owner,
-              repo,
-              token: process.env.GITHUB_TOKEN,
-              promptFile: "/tmp/label_prompt.txt",
-              model: "openai/gpt-4o",
-              maxTokens: 300,
-              source: "label-classifier"
-            });
-            core.setOutput("response", result.content || "");
-            core.setOutput("status", String(result.status || 0));
-            core.setOutput("rate_limited", result.rateLimited ? "true" : "false");
-            core.setOutput("cooldown_until", result.cooldownUntil || "");
-            core.setOutput("error_message", result.errorMessage || "");
-      - name: Resolve AI Cooldown State
-        if: github.event.action != 'closed'
-        id: ai-cooldown-state
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const helperPath = `${process.env.GITHUB_WORKSPACE || process.cwd()}/.github/scripts/autobot_ai.js`;
-            const { getCooldownState } = require(helperPath);
-            const { owner, repo } = context.repo;
-            const cooldown = await getCooldownState({ github, owner, repo, clearExpired: true });
-            core.setOutput("active", cooldown.active ? "true" : "false");
-            core.setOutput("until", cooldown.until || "");
-            core.setOutput("message", cooldown.message || "");
       - name: Prepare Project State
         if: github.event.action != 'closed'
         env:
           PROJECT_STATE_FILE: /tmp/autobot_project_state.json
-          AI_SUMMARY: ${{ steps.parse-pr-summary.outputs.summary_body || steps.collect.outputs.deterministic_summary || steps.ai-issue-summary.outputs.response || steps.issue-summary-prompt.outputs.fallback_summary }}
-          AI_LABELS_RAW: ${{ steps.parse-pr-summary.outputs.label_hints || steps.ai-labels.outputs.response || steps.collect.outputs.deterministic_labels_json }}
-          AI_COOLDOWN_ACTIVE: ${{ steps.ai-cooldown-state.outputs.active }}
-          AI_COOLDOWN_UNTIL: ${{ steps.ai-cooldown-state.outputs.until }}
-          PR_SUMMARY_TIER: ${{ steps.collect.outputs.summary_tier }}
+          AUTOBOT_SUMMARY_TEXT: ${{ steps.collect.outputs.deterministic_summary || steps.issue-summary-prompt.outputs.fallback_summary }}
+          AUTOBOT_LABELS_JSON: ${{ steps.collect.outputs.deterministic_labels_json }}
+          PR_DETERMINISTIC_SEMVER: ${{ steps.collect.outputs.deterministic_semver_json }}
         uses: actions/github-script@v8
         with:
           script: |
@@ -299,11 +82,9 @@ jobs:
               repo,
               context,
               issueNumber: context.issue.number,
-              aiSummary: process.env.AI_SUMMARY,
-              aiLabelsRaw: process.env.AI_LABELS_RAW,
-              aiCooldownActive: String(process.env.AI_COOLDOWN_ACTIVE || "") === "true",
-              aiCooldownUntil: process.env.AI_COOLDOWN_UNTIL,
-              prSummaryTier: process.env.PR_SUMMARY_TIER,
+              summaryText: process.env.AUTOBOT_SUMMARY_TEXT,
+              autobotLabelsRaw: process.env.AUTOBOT_LABELS_JSON,
+              deterministicSemverRaw: process.env.PR_DETERMINISTIC_SEMVER,
               stateFile: process.env.PROJECT_STATE_FILE
             });
       - name: Sync Prepared Project State

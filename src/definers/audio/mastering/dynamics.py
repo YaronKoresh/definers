@@ -3,7 +3,9 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-import numpy as np
+from definers.runtime_numpy import get_numpy_module
+
+np = get_numpy_module()
 
 
 def _moving_average_last_axis(

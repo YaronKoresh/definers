@@ -1,8 +1,8 @@
-from definers.data.runtime_patches import init_cupy_numpy
 from definers.image.helpers import (
     _extract_visual_features,
     _reconstruct_visual_frame,
 )
+from definers.runtime_numpy import init_cupy_numpy
 from definers.system import catch
 
 np, _np = init_cupy_numpy()

@@ -4,7 +4,9 @@ import math
 import os
 from pathlib import Path
 
-import numpy as np
+from definers.runtime_numpy import get_numpy_module
+
+np = get_numpy_module()
 
 from definers.audio.dependencies import librosa_module
 from definers.logger import init_logger

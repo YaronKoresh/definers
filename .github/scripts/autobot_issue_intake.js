@@ -1,3 +1,18 @@
+const { scoreDeterministicEvidence } = require("./autobot_deterministic_scorer");
+
+const ISSUE_RELEASE_RELEVANT_LABELS = new Set([
+  "bug",
+  "runtime",
+  "api",
+  "database",
+  "schema",
+  "compatibility",
+  "migration",
+  "security",
+  "performance",
+  "breaking-change"
+]);
+
 function normalizeIssue(issue) {
   const title = String(issue?.title || "").trim();
   const body = String(issue?.body || "").trim();
@@ -19,6 +34,20 @@ function pushUnique(items, value) {
   if (value && !items.includes(value)) {
     items.push(value);
   }
+}
+
+function pushEvidenceItem(items, ruleId) {
+  if (ruleId && !items.some((item) => item.ruleId === ruleId)) {
+    items.push({ ruleId });
+  }
+}
+
+function scoredLabelNames(entries) {
+  return (entries || []).map((entry) => String(entry?.label || "").trim()).filter(Boolean);
+}
+
+function hasScoredLabel(scoring, label, flagName = "emitted") {
+  return Boolean(scoring?.labelScores?.[label]?.[flagName]);
 }
 
 function analyzeIssueIntake(issue) {
@@ -108,14 +137,48 @@ function analyzeIssueIntake(issue) {
     pushUnique(evidenceSignals, "The intake frames the request as a targeted improvement or gap closure.");
   }
 
+  const evidenceItems = [];
+  if (documentationSignal) {
+    pushEvidenceItem(evidenceItems, "issue-documentation-report");
+  } else if (bugSignal) {
+    pushEvidenceItem(evidenceItems, "issue-bug-report");
+  } else if (enhancementSignal || proposalSignal || improvementSignal) {
+    pushEvidenceItem(evidenceItems, "issue-enhancement-request");
+    if (proposalSignal) {
+      pushEvidenceItem(evidenceItems, "issue-proposal-request");
+    } else if (improvementSignal) {
+      pushEvidenceItem(evidenceItems, "issue-improvement-request");
+    }
+  }
+  if (runtimeSignal) {
+    pushEvidenceItem(evidenceItems, "issue-runtime-context");
+  }
+  if (apiSignal) {
+    pushEvidenceItem(evidenceItems, "issue-api-context");
+  }
+
+  const deterministicScoring = scoreDeterministicEvidence({ evidenceItems });
+  const deterministicLabels = scoredLabelNames(deterministicScoring.emittedLabels);
+  const deterministicPrimaryLabels = scoredLabelNames(deterministicScoring.primaryLabels);
+
   return {
     title: normalized.title,
     body: normalized.body,
     text: normalized.text,
-    labels,
+    labels: labels.length > 0
+      ? labels
+      : [
+          ...(hasScoredLabel(deterministicScoring, "runtime", "retained") ? ["runtime"] : []),
+          ...(hasScoredLabel(deterministicScoring, "api", "retained") ? ["api"] : [])
+        ],
     evidenceSignals,
+    evidenceItems,
     likelyClassification,
-    releaseRelevant: /\b(bug|regression|security|runtime|breaking|migration|database|schema|api)\b/.test(normalized.text)
+    deterministicLabels,
+    deterministicPrimaryLabels,
+    deterministicSemver: deterministicScoring.semver,
+    releaseRelevant: deterministicLabels.some((label) => ISSUE_RELEASE_RELEVANT_LABELS.has(label))
+      || /\b(bug|regression|security|runtime|breaking|migration|database|schema|api)\b/.test(normalized.text)
   };
 }
 

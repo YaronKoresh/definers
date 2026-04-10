@@ -3,7 +3,9 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-import numpy as np
+from definers.runtime_numpy import get_numpy_module
+
+np = get_numpy_module()
 
 from definers.constants import MODELS, language_codes
 from definers.logger import init_logger

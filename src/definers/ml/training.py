@@ -4,7 +4,9 @@ import os
 from time import time
 from typing import Any
 
-import numpy as np
+from definers.runtime_numpy import get_array_module
+
+np = get_array_module()
 
 from definers.ml.contracts import (
     ArrayConcatenatePort,
