@@ -341,6 +341,7 @@ def process(
 ) -> tuple[int, np.ndarray]:
     stage_signals: dict[str, np.ndarray] = {}
     stem_mastered_input = bool(getattr(self, "stem_mastered_input", False))
+    preserve_stem_mix_tone = stem_mastered_input
     y = _prepare_processing_signal(
         self,
         y,
@@ -357,8 +358,11 @@ def process(
         high_cut=self.filter_high_cut,
     )
 
-    log_fn("Mastering", "Applying equalizer...")
-    y = self.apply_eq(y)
+    if preserve_stem_mix_tone:
+        log_fn("Mastering", "Preserving stem-mastered tonal balance...")
+    else:
+        log_fn("Mastering", "Applying equalizer...")
+        y = self.apply_eq(y)
     stage_signals["post_eq"] = np.array(y, dtype=np.float32, copy=True)
 
     if not stem_mastered_input:
@@ -366,13 +370,14 @@ def process(
         self.update_bands(self.spectral_balance_profile.band_intensity)
         y = self.multiband_compress(y)
 
-    log_fn("Mastering", "Applying exciter...")
-    y = _apply_exciter_stage(
-        self,
-        y,
-        stereo_fn=stereo_fn,
-        apply_exciter_fn=apply_exciter_fn,
-    )
+    if not preserve_stem_mix_tone:
+        log_fn("Mastering", "Applying exciter...")
+        y = _apply_exciter_stage(
+            self,
+            y,
+            stereo_fn=stereo_fn,
+            apply_exciter_fn=apply_exciter_fn,
+        )
 
     log_fn("Mastering", "Applying filtering...")
     y = freq_cut_fn(
@@ -382,12 +387,14 @@ def process(
         high_cut=self.filter_high_cut,
     )
 
-    log_fn("Mastering", "Applying stereo enhancement...")
-    y = self.apply_spatial_enhancement(y)
+    if not preserve_stem_mix_tone:
+        log_fn("Mastering", "Applying stereo enhancement...")
+        y = self.apply_spatial_enhancement(y)
     stage_signals["post_spatial"] = np.array(y, dtype=np.float32, copy=True)
 
-    log_fn("Mastering", "Applying low-end mono tightening...")
-    y = self.apply_low_end_mono_tightening(y)
+    if not preserve_stem_mix_tone:
+        log_fn("Mastering", "Applying low-end mono tightening...")
+        y = self.apply_low_end_mono_tightening(y)
 
     log_fn("Mastering", "Applying premaster true-peak trim...")
     y = self.apply_pre_limiter_true_peak_trim(y)
@@ -396,7 +403,7 @@ def process(
     current_lufs = get_lufs_fn(y, self.resampling_target)
     dynamic_drive_db = self.compute_dynamic_drive(current_lufs)
     if stem_mastered_input:
-        dynamic_drive_db = float(min(dynamic_drive_db, 1.5))
+        dynamic_drive_db = float(min(dynamic_drive_db, 0.75))
     primary_soft_clip_ratio = self.compute_primary_soft_clip_ratio(
         dynamic_drive_db
     )
@@ -404,12 +411,16 @@ def process(
         primary_soft_clip_ratio = float(
             min(
                 primary_soft_clip_ratio,
-                max(float(self.limiter_soft_clip_ratio) * 0.6, 0.08),
+                max(float(self.limiter_soft_clip_ratio) * 0.35, 0.05),
             )
         )
 
-    log_fn("Mastering", "Applying pre-limiter saturation...")
-    y = self.apply_pre_limiter_saturation(y, dynamic_drive_db=dynamic_drive_db)
+    if not stem_mastered_input:
+        log_fn("Mastering", "Applying pre-limiter saturation...")
+        y = self.apply_pre_limiter_saturation(
+            y,
+            dynamic_drive_db=dynamic_drive_db,
+        )
 
     log_fn("Mastering", "Applying limiter...")
 
@@ -485,9 +496,10 @@ def process(
     character_source = np.array(y, dtype=np.float32, copy=True)
     character_reasons: list[str] = []
     character_applied = (
-        float(getattr(self, "micro_dynamics_strength", 0.0)) > 0.0
+        not stem_mastered_input
+        and float(getattr(self, "micro_dynamics_strength", 0.0)) > 0.0
     )
-    if float(getattr(self, "micro_dynamics_strength", 0.0)) > 0.0:
+    if character_applied:
         character_candidate = self.apply_micro_dynamics_finish(y)
         character_metrics = measure_mastering_loudness_fn(
             character_candidate,

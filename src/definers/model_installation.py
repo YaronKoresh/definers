@@ -245,6 +245,21 @@ def _model_targets_for_domain(domain: str) -> tuple[str, ...]:
     return MODEL_DOMAIN_TASKS.get(normalized_domain, ())
 
 
+def resolve_model_target_names(
+    target: str,
+    *,
+    kind: str = "model-domain",
+) -> tuple[str, ...]:
+    normalized_kind = _normalize_model_task_name(kind)
+    if normalized_kind == "model-domain":
+        return _model_targets_for_domain(target)
+    if normalized_kind == "model-task":
+        normalized_target = _normalize_model_task_name(target)
+        if normalized_target in MODEL_TASK_DOWNLOADERS:
+            return (normalized_target,)
+    return ()
+
+
 def _ensure_huggingface_hub() -> None:
     if not ensure_module_runtime("huggingface_hub"):
         raise RuntimeError("huggingface_hub is required to download models")
@@ -2168,18 +2183,7 @@ def install_model_target(
     kind: str = "model-domain",
     installer: Callable[[str], None] | None = None,
 ) -> bool:
-    normalized_kind = _normalize_model_task_name(kind)
-    if normalized_kind == "model-domain":
-        resolved_targets = _model_targets_for_domain(target)
-    elif normalized_kind == "model-task":
-        normalized_target = _normalize_model_task_name(target)
-        resolved_targets = (
-            (normalized_target,)
-            if normalized_target in MODEL_TASK_DOWNLOADERS
-            else ()
-        )
-    else:
-        return False
+    resolved_targets = resolve_model_target_names(target, kind=kind)
     if not resolved_targets:
         return False
     active_installer = _install_model_task if installer is None else installer
@@ -2216,6 +2220,7 @@ __all__ = [
     "model_domain_names",
     "model_runtime_targets",
     "model_task_names",
+    "resolve_model_target_names",
     "resolve_stem_model_filename",
     "stem_model_dir",
     "stem_model_artifacts_ready",

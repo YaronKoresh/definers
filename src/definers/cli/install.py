@@ -3,6 +3,7 @@ from __future__ import annotations
 from definers.model_installation import (
     install_model_target,
     model_runtime_targets,
+    resolve_model_target_names,
 )
 from definers.optional_dependencies import (
     install_optional_target,
@@ -42,10 +43,13 @@ def run_optional_install_command(
         output("install target is required unless --list is used")
         return 1
     if target_kind in {"model-domain", "model-task"}:
-        if not install_model_target(normalized_target, kind=target_kind):
+        if not resolve_model_target_names(normalized_target, kind=target_kind):
             output(
                 f"unknown {target_kind} target {normalized_target}; run 'definers install --list' to inspect available targets"
             )
+            return 1
+        if not install_model_target(normalized_target, kind=target_kind):
+            output(f"failed to install {target_kind} {normalized_target}")
             return 1
         output(f"installed {target_kind} {normalized_target}")
         return 0

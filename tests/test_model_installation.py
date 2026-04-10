@@ -57,6 +57,20 @@ def test_install_model_target_supports_domain_aliases():
     assert installed == ["answer", "summary", "translate"]
 
 
+def test_resolve_model_target_names_includes_known_stems_task():
+    assert model_installation.resolve_model_target_names(
+        "stems",
+        kind="model-task",
+    ) == ("stems",)
+
+
+def test_resolve_model_target_names_supports_domain_aliases():
+    assert model_installation.resolve_model_target_names(
+        "language",
+        kind="model-domain",
+    ) == ("answer", "summary", "translate")
+
+
 def test_install_model_target_rejects_unknown_model_target():
     assert (
         model_installation.install_model_target(

@@ -227,7 +227,12 @@ def _prepare_mixed_stem_layers(
         aligned_layers[stem_name] = (sample_rate, attenuated_signal)
         mixed += attenuated_signal
 
-    mixed = np.clip(mixed, -1.0, 1.0).astype(np.float32, copy=False)
+    mixed = np.nan_to_num(
+        mixed,
+        nan=0.0,
+        posinf=0.0,
+        neginf=0.0,
+    ).astype(np.float32, copy=False)
 
     safe_headroom_db = float(max(mix_headroom_db, 0.0))
     peak = float(np.max(np.abs(mixed))) if mixed.size else 0.0

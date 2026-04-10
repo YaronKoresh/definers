@@ -2141,6 +2141,162 @@ def test_process_stem_mastered_input_skips_multiband_and_trims_hot_output(
     assert np.allclose(mastering.last_stage_signals["final_in_memory"], y_out)
 
 
+def test_process_stem_mastered_input_preserves_tonal_stages_for_final_glue(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    mastering = MASTERING_MODULE.SmartMastering(
+        8000,
+        resampling_target=8000,
+        preset="balanced",
+        target_lufs=-8.0,
+        micro_dynamics_strength=0.14,
+        pre_limiter_saturation_ratio=0.08,
+    )
+    mastering.stem_mastered_input = True
+    source = np.array([0.1, -0.1, 0.2, -0.2], dtype=np.float32)
+    stage_calls: list[object] = []
+    metrics_values = iter(
+        [
+            types.SimpleNamespace(
+                integrated_lufs=-8.0,
+                max_short_term_lufs=-9.0,
+                max_momentary_lufs=-8.5,
+                crest_factor_db=7.0,
+                stereo_width_ratio=0.2,
+                low_end_mono_ratio=0.95,
+                true_peak_dbfs=-4.0,
+            ),
+            types.SimpleNamespace(
+                integrated_lufs=-8.0,
+                max_short_term_lufs=-9.0,
+                max_momentary_lufs=-8.5,
+                crest_factor_db=7.0,
+                stereo_width_ratio=0.2,
+                low_end_mono_ratio=0.95,
+                true_peak_dbfs=-4.0,
+            ),
+        ]
+    )
+
+    monkeypatch.setattr(
+        MASTERING_MODULE,
+        "apply_exciter",
+        lambda y, *_: stage_calls.append("exciter") or y,
+    )
+    monkeypatch.setattr(
+        MASTERING_MODULE,
+        "freq_cut",
+        lambda y, *_, **__: stage_calls.append("filter") or y,
+    )
+    monkeypatch.setattr(
+        mastering,
+        "apply_eq",
+        lambda y: stage_calls.append("eq") or (y * 2.0),
+    )
+    monkeypatch.setattr(
+        mastering,
+        "multiband_compress",
+        lambda y: stage_calls.append("multiband") or y,
+    )
+    monkeypatch.setattr(
+        mastering,
+        "apply_spatial_enhancement",
+        lambda y: stage_calls.append("spatial") or (y * 1.1),
+    )
+    monkeypatch.setattr(
+        mastering,
+        "apply_low_end_mono_tightening",
+        lambda y: stage_calls.append("mono") or (y * 0.9),
+    )
+    monkeypatch.setattr(
+        mastering,
+        "apply_pre_limiter_saturation",
+        lambda y, dynamic_drive_db=0.0: stage_calls.append("saturation") or y,
+    )
+    monkeypatch.setattr(
+        mastering,
+        "apply_micro_dynamics_finish",
+        lambda y: stage_calls.append("micro") or y,
+    )
+    monkeypatch.setattr(
+        mastering,
+        "apply_delivery_trim",
+        lambda y: stage_calls.append("delivery") or y,
+    )
+    monkeypatch.setattr(
+        mastering,
+        "apply_safety_clamp",
+        lambda y, ceil_db=-0.1: stage_calls.append("clamp") or y,
+    )
+    monkeypatch.setattr(
+        mastering,
+        "apply_final_headroom_recovery",
+        lambda y: stage_calls.append("headroom") or y,
+    )
+    monkeypatch.setattr(
+        MASTERING_MODULE,
+        "get_lufs",
+        lambda y, sr: -8.0,
+    )
+    monkeypatch.setattr(
+        MASTERING_MODULE,
+        "_measure_mastering_loudness",
+        lambda y, sr, **kwargs: next(metrics_values),
+    )
+    monkeypatch.setattr(
+        mastering,
+        "plan_follow_up_action",
+        lambda metrics, contract: types.SimpleNamespace(
+            should_apply=False,
+            gain_db=0.0,
+            soft_clip_ratio=mastering.limiter_soft_clip_ratio,
+            stereo_width_scale=1.0,
+            reasons=(),
+            integrated_gap_db=0.0,
+        ),
+    )
+    monkeypatch.setattr(
+        mastering,
+        "apply_limiter",
+        lambda y, drive_db, ceil_db, **kwargs: (
+            stage_calls.append(
+                (
+                    "limiter",
+                    float(drive_db),
+                    float(kwargs.get("soft_clip_ratio", -1.0)),
+                )
+            )
+            or y
+        ),
+    )
+
+    sr_out, y_out = mastering.process(source, 8000)
+
+    assert sr_out == 8000
+    assert np.array_equal(y_out, np.vstack([source, source]))
+    assert stage_calls.count("eq") == 0
+    assert stage_calls.count("exciter") == 0
+    assert stage_calls.count("multiband") == 0
+    assert stage_calls.count("spatial") == 0
+    assert stage_calls.count("mono") == 0
+    assert stage_calls.count("saturation") == 0
+    assert stage_calls.count("micro") == 0
+    limiter_calls = [call for call in stage_calls if isinstance(call, tuple)]
+    assert len(limiter_calls) == 1
+    assert limiter_calls[0][1] <= 0.75
+    assert limiter_calls[0][2] <= max(
+        mastering.limiter_soft_clip_ratio * 0.35, 0.05
+    )
+    assert np.array_equal(
+        mastering.last_stage_signals["post_eq"],
+        np.vstack([source, source]),
+    )
+    assert np.array_equal(
+        mastering.last_stage_signals["post_spatial"],
+        np.vstack([source, source]),
+    )
+
+
 def test_process_applies_premaster_true_peak_trim_before_lufs_and_limiter(
     monkeypatch: pytest.MonkeyPatch,
 ):
