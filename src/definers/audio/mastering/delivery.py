@@ -155,6 +155,10 @@ def verify_delivery_export(
     headroom_recovery_transient_density: float | None = None,
     headroom_recovery_closed_margin_db: float | None = None,
     headroom_recovery_unused_margin_db: float | None = None,
+    stem_mastered_input: bool = False,
+    stem_glue_reverb_amount: float | None = None,
+    stem_drum_edge_amount: float | None = None,
+    stem_vocal_pullback_db: float | None = None,
     true_peak_oversample_factor: int = 4,
 ) -> DeliveryVerificationResult:
     decoded_signal = None
@@ -225,6 +229,10 @@ def verify_delivery_export(
         headroom_recovery_transient_density=headroom_recovery_transient_density,
         headroom_recovery_closed_margin_db=headroom_recovery_closed_margin_db,
         headroom_recovery_unused_margin_db=headroom_recovery_unused_margin_db,
+        stem_mastered_input=stem_mastered_input,
+        stem_glue_reverb_amount=stem_glue_reverb_amount,
+        stem_drum_edge_amount=stem_drum_edge_amount,
+        stem_vocal_pullback_db=stem_vocal_pullback_db,
         true_peak_oversample_factor=true_peak_oversample_factor,
     )
 
@@ -390,6 +398,10 @@ def save_verified_audio(
     headroom_recovery_transient_density: float | None = None,
     headroom_recovery_closed_margin_db: float | None = None,
     headroom_recovery_unused_margin_db: float | None = None,
+    stem_mastered_input: bool = False,
+    stem_glue_reverb_amount: float | None = None,
+    stem_drum_edge_amount: float | None = None,
+    stem_vocal_pullback_db: float | None = None,
     decoded_true_peak_dbfs: float | None = None,
     decoded_lufs_tolerance_db: float | None = None,
     true_peak_oversample_factor: int = 4,
@@ -479,6 +491,10 @@ def save_verified_audio(
             headroom_recovery_transient_density=headroom_recovery_transient_density,
             headroom_recovery_closed_margin_db=headroom_recovery_closed_margin_db,
             headroom_recovery_unused_margin_db=headroom_recovery_unused_margin_db,
+            stem_mastered_input=stem_mastered_input,
+            stem_glue_reverb_amount=stem_glue_reverb_amount,
+            stem_drum_edge_amount=stem_drum_edge_amount,
+            stem_vocal_pullback_db=stem_vocal_pullback_db,
             true_peak_oversample_factor=true_peak_oversample_factor,
         )
 

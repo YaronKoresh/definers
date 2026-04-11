@@ -3,6 +3,7 @@ from definers.ui.gradio_shared import (
     init_chat,
     init_output_folder_controls,
     init_progress_tracker,
+    init_status_card,
     launch_blocks,
     progress_update,
 )
@@ -53,20 +54,30 @@ def launch_audio_app(
     from definers.text import random_string
     from definers.ui.apps.audio_app_services import (
         MASTERING_PROFILE_CHOICES,
+        STEM_DRUM_EDGE_DEFAULT,
+        STEM_GLUE_REVERB_DEFAULT,
         STEM_MODEL_STRATEGY_CHOICES,
+        STEM_VOCAL_PULLBACK_DB_DEFAULT,
+        build_mastering_job_mix,
         describe_stem_model_choice,
+        finalize_mastering_job,
         get_mastering_profile_ui_state,
         is_custom_stem_model_strategy,
+        prepare_mastering_job,
+        refresh_mastering_job,
+        render_mastering_job_view,
         resolve_mastering_stem_previews,
         run_audio_analysis_tool,
         run_audio_preview_tool,
         run_autotune_song_tool,
         run_compact_audio_tool,
+        run_full_mastering_job,
         run_humanize_vocals_tool,
         run_mastering_tool,
         run_remove_silence_tool,
         run_split_audio_tool,
         run_stem_separation_tool,
+        separate_mastering_job_stems,
     )
     from definers.ui.apps.audio_workspace import (
         AUDIO_FORMAT_CHOICES,
@@ -254,6 +265,29 @@ def launch_audio_app(
                                         label="Save mastered stems",
                                         value=True,
                                     )
+                                    enhancer_stem_glue_reverb_amount = (
+                                        gr.Slider(
+                                            0.0,
+                                            1.5,
+                                            STEM_GLUE_REVERB_DEFAULT,
+                                            step=0.05,
+                                            label="Vocal/Other Glue Reverb",
+                                        )
+                                    )
+                                    enhancer_stem_drum_edge_amount = gr.Slider(
+                                        0.0,
+                                        1.5,
+                                        STEM_DRUM_EDGE_DEFAULT,
+                                        step=0.05,
+                                        label="Drum Edge / Expand-Compress",
+                                    )
+                                    enhancer_stem_vocal_pullback_db = gr.Slider(
+                                        0.0,
+                                        3.0,
+                                        STEM_VOCAL_PULLBACK_DB_DEFAULT,
+                                        step=0.1,
+                                        label="Extra Vocal Pullback (dB)",
+                                    )
                             gr.Markdown(
                                 "Auto Analyze chooses a mastering profile after reading the mix. Named profiles lock macro controls to avoid conflict, and Custom Macro Blend unlocks manual shaping."
                             )
@@ -331,6 +365,67 @@ def launch_audio_app(
                                             )
                                 enhancer_diagnostics = gr.Markdown()
                                 enhancer_share_links = gr.Markdown()
+                    with gr.Accordion(
+                        "Run In Stages Or Resume",
+                        open=False,
+                    ):
+                        gr.Markdown(
+                            "Use the same mastering settings above to prepare a resumable job, run one stage at a time, or execute the full staged flow in one pass."
+                        )
+                        enhancer_job_status = init_status_card(
+                            "Staged mastering ready",
+                            "Prepare a job to enable resumable mastering stages.",
+                        )
+                        enhancer_job_dir = gr.Textbox(
+                            label="Job Folder",
+                            placeholder="Filled after Prepare Staged Job or paste an existing job folder to resume.",
+                            interactive=True,
+                        )
+                        with gr.Row():
+                            enhancer_job_prepare_btn = gr.Button(
+                                "Prepare Staged Job"
+                            )
+                            enhancer_job_full_btn = gr.Button(
+                                "Run Full Job",
+                                variant="primary",
+                            )
+                            enhancer_job_separate_btn = gr.Button(
+                                "Separate Stems"
+                            )
+                            enhancer_job_mix_btn = gr.Button("Build Stem Mix")
+                            enhancer_job_finalize_btn = gr.Button(
+                                "Finalize Master"
+                            )
+                            enhancer_job_refresh_btn = gr.Button("Refresh Job")
+                        with gr.Row():
+                            enhancer_job_raw_stems = gr.File(
+                                label="Raw Stems",
+                                interactive=False,
+                                file_count="multiple",
+                            )
+                            enhancer_job_processed_stems = gr.File(
+                                label="Processed Stems",
+                                interactive=False,
+                                file_count="multiple",
+                            )
+                        with gr.Row():
+                            enhancer_job_mixed_audio = gr.Audio(
+                                label="Stem Mix Preview",
+                                interactive=False,
+                                buttons=["download"],
+                            )
+                            enhancer_job_mastered_audio = gr.Audio(
+                                label="Staged Final Master",
+                                interactive=False,
+                                buttons=["download"],
+                            )
+                        enhancer_job_report = gr.File(
+                            label="Staged Mastering Report",
+                            interactive=False,
+                        )
+                        enhancer_job_summary = gr.Markdown()
+                        with gr.Accordion("Advanced Job Details", open=False):
+                            enhancer_job_manifest = gr.Markdown()
                 with gr.Group(
                     visible=False, elem_classes="tool-container"
                 ) as view_vocal_finish:
@@ -1758,6 +1853,9 @@ def launch_audio_app(
             stem_mix_headroom_value,
             save_mastered_stems_value,
             stem_model_override,
+            stem_glue_reverb_amount_value,
+            stem_drum_edge_amount_value,
+            stem_vocal_pullback_db_value,
         ):
             mastering_steps = (
                 "Validate source",
@@ -1838,6 +1936,9 @@ def launch_audio_app(
                     stem_mix_headroom_value,
                     save_mastered_stems_value,
                     stem_model_override,
+                    stem_glue_reverb_amount_value,
+                    stem_drum_edge_amount_value,
+                    stem_vocal_pullback_db_value,
                 )
                 yield from poll_activity_updates(
                     activity_task,
@@ -1942,6 +2043,121 @@ def launch_audio_app(
                 }
                 raise gr.Error(str(error))
 
+        def prepare_mastering_job_view(
+            audio_path,
+            output_format,
+            profile_name,
+            bass,
+            volume,
+            effects,
+            stem_mastering,
+            stem_model_name,
+            stem_shifts_value,
+            stem_mix_headroom_value,
+            save_mastered_stems_value,
+            stem_model_override,
+            stem_glue_reverb_amount_value,
+            stem_drum_edge_amount_value,
+            stem_vocal_pullback_db_value,
+        ):
+            manifest = prepare_mastering_job(
+                audio_path,
+                output_format,
+                profile_name,
+                bass,
+                volume,
+                effects,
+                stem_mastering,
+                stem_model_name,
+                stem_shifts_value,
+                stem_mix_headroom_value,
+                save_mastered_stems_value,
+                stem_model_override=stem_model_override,
+                stem_glue_reverb_amount=stem_glue_reverb_amount_value,
+                stem_drum_edge_amount=stem_drum_edge_amount_value,
+                stem_vocal_pullback_db=stem_vocal_pullback_db_value,
+            )
+            return render_mastering_job_view(
+                str(manifest["job_dir"]),
+                title="Job prepared",
+            )
+
+        def run_full_mastering_job_view(
+            audio_path,
+            output_format,
+            profile_name,
+            bass,
+            volume,
+            effects,
+            stem_mastering,
+            stem_model_name,
+            stem_shifts_value,
+            stem_mix_headroom_value,
+            save_mastered_stems_value,
+            stem_model_override,
+            stem_glue_reverb_amount_value,
+            stem_drum_edge_amount_value,
+            stem_vocal_pullback_db_value,
+        ):
+            manifest = run_full_mastering_job(
+                audio_path,
+                output_format,
+                profile_name,
+                bass,
+                volume,
+                effects,
+                stem_mastering,
+                stem_model_name,
+                stem_shifts_value,
+                stem_mix_headroom_value,
+                save_mastered_stems_value,
+                stem_model_override=stem_model_override,
+                stem_glue_reverb_amount=stem_glue_reverb_amount_value,
+                stem_drum_edge_amount=stem_drum_edge_amount_value,
+                stem_vocal_pullback_db=stem_vocal_pullback_db_value,
+            )
+            return render_mastering_job_view(
+                str(manifest["job_dir"]),
+                title="Job completed",
+                detail="The full staged mastering flow finished and published the artifacts.",
+            )
+
+        def separate_mastering_job_view(current_job_dir):
+            manifest = separate_mastering_job_stems(current_job_dir)
+            if not bool(
+                dict(manifest.get("settings", {})).get("stem_mastering")
+            ):
+                return render_mastering_job_view(
+                    current_job_dir,
+                    title="Stereo-only job",
+                    detail="Stem separation is disabled for this job. Go directly to Finalize Master.",
+                )
+            return render_mastering_job_view(current_job_dir)
+
+        def mix_mastering_job_view(current_job_dir):
+            manifest = build_mastering_job_mix(current_job_dir)
+            if not bool(
+                dict(manifest.get("settings", {})).get("stem_mastering")
+            ):
+                return render_mastering_job_view(
+                    current_job_dir,
+                    title="Stereo-only job",
+                    detail="No stem mix is needed for this job. Go directly to Finalize Master.",
+                )
+            return render_mastering_job_view(current_job_dir)
+
+        def finalize_mastering_job_view(current_job_dir):
+            finalize_mastering_job(current_job_dir)
+            return render_mastering_job_view(current_job_dir)
+
+        def refresh_mastering_job_view(current_job_dir):
+            refresh_mastering_job(current_job_dir)
+            return render_mastering_job_view(
+                current_job_dir,
+                title="Job loaded",
+                detail="Resume from the next unfinished step.",
+            )
+
         enhancer_btn.click(
             mastering_ui,
             [
@@ -1957,6 +2173,9 @@ def launch_audio_app(
                 enhancer_stem_mix_headroom,
                 enhancer_save_mastered_stems,
                 enhancer_custom_stem_model,
+                enhancer_stem_glue_reverb_amount,
+                enhancer_stem_drum_edge_amount,
+                enhancer_stem_vocal_pullback_db,
             ],
             [
                 enhancer_btn,
@@ -1976,6 +2195,143 @@ def launch_audio_app(
                 audio_progress,
             ],
             show_progress="minimal",
+        )
+
+        enhancer_job_outputs = [
+            enhancer_job_dir,
+            enhancer_job_status,
+            enhancer_job_raw_stems,
+            enhancer_job_processed_stems,
+            enhancer_job_mixed_audio,
+            enhancer_job_mastered_audio,
+            enhancer_job_report,
+            enhancer_job_summary,
+            enhancer_job_manifest,
+        ]
+
+        bind_progress_click(
+            enhancer_job_prepare_btn,
+            prepare_mastering_job_view,
+            progress_output=audio_progress,
+            inputs=[
+                enhancer_input,
+                enhancer_format,
+                enhancer_preset,
+                enhancer_bass,
+                enhancer_volume,
+                enhancer_effects,
+                enhancer_stem_mastering,
+                enhancer_stem_strategy,
+                enhancer_stem_shifts,
+                enhancer_stem_mix_headroom,
+                enhancer_save_mastered_stems,
+                enhancer_custom_stem_model,
+                enhancer_stem_glue_reverb_amount,
+                enhancer_stem_drum_edge_amount,
+                enhancer_stem_vocal_pullback_db,
+            ],
+            outputs=enhancer_job_outputs,
+            action_label="Prepare Staged Job",
+            steps=(
+                "Validate source",
+                "Analyze mastering input",
+                "Write job manifest",
+                "Publish job",
+            ),
+            running_detail="Preparing the resumable mastering job.",
+            success_detail="Staged mastering job is ready.",
+        )
+        bind_progress_click(
+            enhancer_job_full_btn,
+            run_full_mastering_job_view,
+            progress_output=audio_progress,
+            inputs=[
+                enhancer_input,
+                enhancer_format,
+                enhancer_preset,
+                enhancer_bass,
+                enhancer_volume,
+                enhancer_effects,
+                enhancer_stem_mastering,
+                enhancer_stem_strategy,
+                enhancer_stem_shifts,
+                enhancer_stem_mix_headroom,
+                enhancer_save_mastered_stems,
+                enhancer_custom_stem_model,
+                enhancer_stem_glue_reverb_amount,
+                enhancer_stem_drum_edge_amount,
+                enhancer_stem_vocal_pullback_db,
+            ],
+            outputs=enhancer_job_outputs,
+            action_label="Run Full Job",
+            steps=(
+                "Prepare job",
+                "Run heavy stages",
+                "Finalize master",
+                "Publish artifacts",
+            ),
+            running_detail="Running the full staged mastering flow.",
+            success_detail="Full staged mastering flow is complete.",
+        )
+        bind_progress_click(
+            enhancer_job_separate_btn,
+            separate_mastering_job_view,
+            progress_output=audio_progress,
+            inputs=[enhancer_job_dir],
+            outputs=enhancer_job_outputs,
+            action_label="Separate Stems",
+            steps=(
+                "Load job",
+                "Separate stems",
+                "Publish raw stems",
+            ),
+            running_detail="Running the stem-separation stage.",
+            success_detail="Stem separation stage is complete.",
+        )
+        bind_progress_click(
+            enhancer_job_mix_btn,
+            mix_mastering_job_view,
+            progress_output=audio_progress,
+            inputs=[enhancer_job_dir],
+            outputs=enhancer_job_outputs,
+            action_label="Build Stem Mix",
+            steps=(
+                "Load job",
+                "Process separated stems",
+                "Publish mix artifacts",
+            ),
+            running_detail="Building the staged stem mix.",
+            success_detail="Stem mix stage is complete.",
+        )
+        bind_progress_click(
+            enhancer_job_finalize_btn,
+            finalize_mastering_job_view,
+            progress_output=audio_progress,
+            inputs=[enhancer_job_dir],
+            outputs=enhancer_job_outputs,
+            action_label="Finalize Master",
+            steps=(
+                "Load job",
+                "Render final delivery",
+                "Publish master",
+            ),
+            running_detail="Rendering the staged final master.",
+            success_detail="Staged final master is ready.",
+        )
+        bind_progress_click(
+            enhancer_job_refresh_btn,
+            refresh_mastering_job_view,
+            progress_output=audio_progress,
+            inputs=[enhancer_job_dir],
+            outputs=enhancer_job_outputs,
+            action_label="Refresh Job",
+            steps=(
+                "Load job",
+                "Refresh artifacts",
+                "Publish status",
+            ),
+            running_detail="Refreshing the staged mastering job.",
+            success_detail="Staged job state is refreshed.",
         )
 
         create_ui_handler(
@@ -3103,6 +3459,14 @@ def launch_audio_app(
                     enhancer_output,
                     enhancer_report,
                     enhancer_stems_output,
+                    enhancer_job_dir,
+                    enhancer_job_raw_stems,
+                    enhancer_job_processed_stems,
+                    enhancer_job_mixed_audio,
+                    enhancer_job_mastered_audio,
+                    enhancer_job_report,
+                    enhancer_job_summary,
+                    enhancer_job_manifest,
                     enhancer_diagnostics,
                     enhancer_share_links,
                 ),
@@ -3110,6 +3474,9 @@ def launch_audio_app(
                 enhancer_output_column: gr.update(visible=False),
                 enhancer_report: gr.update(value=None, visible=False),
                 enhancer_stems_output: gr.update(value=None, visible=False),
+                enhancer_job_status: gr.update(
+                    value="## Staged mastering ready\nPrepare a job to enable resumable mastering stages."
+                ),
             },
             [],
             [
@@ -3117,6 +3484,15 @@ def launch_audio_app(
                 enhancer_output,
                 enhancer_report,
                 enhancer_stems_output,
+                enhancer_job_dir,
+                enhancer_job_status,
+                enhancer_job_raw_stems,
+                enhancer_job_processed_stems,
+                enhancer_job_mixed_audio,
+                enhancer_job_mastered_audio,
+                enhancer_job_report,
+                enhancer_job_summary,
+                enhancer_job_manifest,
                 enhancer_diagnostics,
                 enhancer_share_links,
                 enhancer_output_column,

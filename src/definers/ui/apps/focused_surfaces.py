@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from definers.ui.apps.surface_hub import SurfaceCard, launch_surface_hub
+from definers.ui.apps.surface_hub import SurfaceCard
 
 AUDIO_SURFACE_CARDS = (
     SurfaceCard(
@@ -11,16 +11,6 @@ AUDIO_SURFACE_CARDS = (
             "Upload one stereo mix",
             "Pick a mastering profile",
             "Export mastered audio and optional stems",
-        ),
-    ),
-    SurfaceCard(
-        launcher="audio-mastering-jobs",
-        title="Mastering Jobs",
-        description="Run mastering as a resumable job with saved checkpoints, intermediate artifacts, and a final report.",
-        outcomes=(
-            "Prepare a persistent mastering job",
-            "Resume stem-aware or stereo-only stages",
-            "Download the final master and report later",
         ),
     ),
     SurfaceCard(
@@ -83,16 +73,6 @@ AUDIO_SURFACE_CARDS = (
             "Keep the workflow short and direct",
         ),
     ),
-    SurfaceCard(
-        launcher="audio-support",
-        title="Help",
-        description="Open the embedded support assistant when you need a quick explanation of an audio workflow.",
-        outcomes=(
-            "Ask what each workflow does",
-            "Get step-by-step usage help",
-            "Stay inside the audio domain",
-        ),
-    ),
 )
 
 VIDEO_SURFACE_CARDS = (
@@ -140,16 +120,6 @@ IMAGE_SURFACE_CARDS = (
         ),
     ),
     SurfaceCard(
-        launcher="image-generate-jobs",
-        title="Generate Jobs",
-        description="Run image generation as a resumable job with saved generation, upscale, and title-overlay stages.",
-        outcomes=(
-            "Prepare a persistent image job",
-            "Resume generation and upscale later",
-            "Download generated and titled variants",
-        ),
-    ),
-    SurfaceCard(
         launcher="image-upscale",
         title="Upscale",
         description="Upload one image and upscale it without having to think about generation controls.",
@@ -167,59 +137,6 @@ IMAGE_SURFACE_CARDS = (
             "Upload one image",
             "Enter the text lines",
             "Export a titled image",
-        ),
-    ),
-)
-
-TRAIN_SURFACE_CARDS = (
-    SurfaceCard(
-        launcher="ml-health",
-        title="Health",
-        description="Check runtime readiness and inspect the ML capability map before you execute anything.",
-        outcomes=(
-            "Refresh the live health report",
-            "Validate runtime readiness",
-            "Review the capability map",
-        ),
-    ),
-    SurfaceCard(
-        launcher="ml-train",
-        title="Train",
-        description="Build one training plan and run one training flow without inference or text tooling on screen.",
-        outcomes=(
-            "Load local or remote data",
-            "Preview the training route",
-            "Train and export an artifact",
-        ),
-    ),
-    SurfaceCard(
-        launcher="ml-run",
-        title="Run",
-        description="Run predictions, task inference, or answer generation from one execution-only surface.",
-        outcomes=(
-            "Predict from saved artifacts",
-            "Run task-based inference",
-            "Use the answer runtime",
-        ),
-    ),
-    SurfaceCard(
-        launcher="ml-text",
-        title="Text Lab",
-        description="Handle text features, reconstruction, summarization, and prompt optimization without training controls.",
-        outcomes=(
-            "Extract and reconstruct text features",
-            "Run summary flows",
-            "Optimize prompts for downstream models",
-        ),
-    ),
-    SurfaceCard(
-        launcher="ml-ops",
-        title="Ops",
-        description="Bootstrap models, inspect checkpoints, resolve languages, and run K-means advice from one support surface.",
-        outcomes=(
-            "Initialize model files or runtime models",
-            "Suggest cluster counts",
-            "Resolve checkpoints and language codes",
         ),
     ),
 )
@@ -245,24 +162,6 @@ def _launch_video_surface(visible_tabs, *, app_title: str, description: str):
         visible_tabs=visible_tabs,
         app_title=app_title,
         hero_eyebrow="Video Workflow",
-        hero_description=description,
-    )
-
-
-def _launch_train_surface(
-    visible_sections,
-    *,
-    app_title: str,
-    heading: str,
-    description: str,
-):
-    from definers.ui.apps.train import launch_train_app
-
-    return launch_train_app(
-        visible_sections=visible_sections,
-        app_title=app_title,
-        hero_label=app_title,
-        hero_heading=heading,
         hero_description=description,
     )
 
@@ -294,18 +193,6 @@ def launch_audio_mastering_surface():
         ("Mastering Studio",),
         app_title="Definers Mastering",
         description="Master one mix with guided presets, stem-aware processing, and a clear export path.",
-    )
-
-
-def launch_audio_mastering_jobs_surface():
-    from definers.ui.apps.audio_mastering_jobs import (
-        launch_audio_mastering_jobs_app,
-    )
-
-    return launch_audio_mastering_jobs_app(
-        app_title="Definers Mastering Jobs",
-        hero_eyebrow="Guided Audio Workflow",
-        hero_description="Run mastering as a resumable guided job with persistent artifacts, step checkpoints, and a clear next-step summary.",
     )
 
 
@@ -378,14 +265,6 @@ def launch_audio_midi_surface():
     )
 
 
-def launch_audio_support_surface():
-    return _launch_audio_surface(
-        ("Support Chat",),
-        app_title="Definers Audio Help",
-        description="Ask the built-in helper what each audio workflow does and how to use it.",
-    )
-
-
 def launch_video_workbench():
     from definers.ui.apps.video import launch_video_app
 
@@ -438,18 +317,6 @@ def launch_image_generate_surface():
     )
 
 
-def launch_image_generate_jobs_surface():
-    from definers.ui.apps.image_generate_jobs import (
-        launch_image_generate_jobs_app,
-    )
-
-    return launch_image_generate_jobs_app(
-        app_title="Definers Image Jobs",
-        hero_eyebrow="Guided Image Workflow",
-        hero_description="Run image generation as a resumable guided job with saved generation, upscale, and title-overlay artifacts.",
-    )
-
-
 def launch_image_upscale_surface():
     return _launch_image_surface(
         ("upscale",),
@@ -481,14 +348,11 @@ __all__ = [
     "launch_audio_analysis_surface",
     "launch_audio_cleanup_surface",
     "launch_audio_create_surface",
-    "launch_audio_mastering_jobs_surface",
     "launch_audio_mastering_surface",
     "launch_audio_midi_surface",
     "launch_audio_stems_surface",
-    "launch_audio_support_surface",
     "launch_audio_vocals_surface",
     "launch_audio_workbench",
-    "launch_image_generate_jobs_surface",
     "launch_image_generate_surface",
     "launch_image_title_surface",
     "launch_image_upscale_surface",

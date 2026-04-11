@@ -167,8 +167,44 @@ def test_launch_audio_app_hides_mastering_output_column_until_result(
         if component.kind == "Button"
         and _button_label(component) == "Master Audio"
     )
+    slider_labels = {
+        component.kwargs.get("label")
+        for component in registry
+        if component.kind == "Slider"
+    }
+    assert {
+        "Vocal/Other Glue Reverb",
+        "Drum Edge / Expand-Compress",
+        "Extra Vocal Pullback (dB)",
+    } <= slider_labels
+
+    master_input_labels = {
+        component.kwargs.get("label")
+        for component in master_button.event_calls["click"][0]["args"][1]
+        if hasattr(component, "kwargs")
+    }
+    assert {
+        "Vocal/Other Glue Reverb",
+        "Drum Edge / Expand-Compress",
+        "Extra Vocal Pullback (dB)",
+    } <= master_input_labels
+
     master_outputs = master_button.event_calls["click"][0]["args"][2]
     assert output_column in master_outputs
+
+    labels = {
+        _button_label(component)
+        for component in registry
+        if component.kind == "Button" and component.event_calls.get("click")
+    }
+    assert {
+        "Prepare Staged Job",
+        "Run Full Job",
+        "Separate Stems",
+        "Build Stem Mix",
+        "Finalize Master",
+        "Refresh Job",
+    } <= labels
 
     clear_buttons = [
         component
@@ -188,91 +224,3 @@ def test_launch_audio_app_hides_mastering_output_column_until_result(
         and _button_label(component) == "Open Outputs Folder"
     )
     assert open_outputs_button.event_calls.get("click")
-
-
-def test_launch_audio_mastering_jobs_app_binds_guided_actions(monkeypatch):
-    registry = []
-    fake_gradio = _build_fake_gradio_module(registry)
-    monkeypatch.setitem(sys.modules, "gradio", fake_gradio)
-
-    shared = importlib.import_module("definers.ui.gradio_shared")
-    monkeypatch.setattr(shared, "launch_blocks", lambda *args, **kwargs: None)
-
-    services_module = importlib.import_module(
-        "definers.ui.apps.audio_app_services"
-    )
-    monkeypatch.setattr(
-        services_module,
-        "get_mastering_profile_ui_state",
-        lambda *args, **kwargs: {
-            "selection": "custom",
-            "label": "Custom Macro Blend",
-            "description": "**Custom Macro Blend:** Manual macro control.",
-            "macro_note": "Manual macro control is enabled.",
-            "controls_enabled": True,
-            "bass": 0.5,
-            "volume": 0.5,
-            "effects": 0.5,
-        },
-    )
-    monkeypatch.setattr(
-        services_module,
-        "describe_stem_model_choice",
-        lambda *args, **kwargs: "**Stem Strategy:** Automatic mastering stack.",
-    )
-
-    workspace_module = importlib.import_module(
-        "definers.ui.apps.audio_workspace"
-    )
-    monkeypatch.setattr(
-        workspace_module,
-        "prepare_audio_workspace",
-        lambda: {"svc_installed": False},
-    )
-
-    mastering_jobs = importlib.import_module(
-        "definers.ui.apps.audio_mastering_jobs"
-    )
-    mastering_jobs.launch_audio_mastering_jobs_app()
-
-    labels = {
-        _button_label(component)
-        for component in registry
-        if component.kind == "Button" and component.event_calls.get("click")
-    }
-    assert {
-        "1. Prepare Job",
-        "2. Separate Stems",
-        "3. Build Stem Mix",
-        "4. Finalize Master",
-        "Refresh Job",
-        "Open Outputs Folder",
-    } <= labels
-
-    slider_labels = {
-        component.kwargs.get("label")
-        for component in registry
-        if component.kind == "Slider"
-    }
-    assert {
-        "Vocal/Other Glue Reverb",
-        "Drum Edge Amount",
-        "Extra Vocal Pullback (dB)",
-    } <= slider_labels
-
-    prepare_button = next(
-        component
-        for component in registry
-        if component.kind == "Button"
-        and _button_label(component) == "1. Prepare Job"
-    )
-    prepare_input_labels = {
-        component.kwargs.get("label")
-        for component in prepare_button.event_calls["click"][0]["args"][1]
-        if hasattr(component, "kwargs")
-    }
-    assert {
-        "Vocal/Other Glue Reverb",
-        "Drum Edge Amount",
-        "Extra Vocal Pullback (dB)",
-    } <= prepare_input_labels

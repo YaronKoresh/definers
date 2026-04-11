@@ -982,6 +982,47 @@ def prepare_mastering_job(
     return write_manifest(job_dir, manifest)
 
 
+def run_full_mastering_job(
+    audio_path: str,
+    format_choice: str,
+    profile_name: str,
+    bass: float,
+    volume: float,
+    effects: float,
+    stem_mastering: bool,
+    stem_model_name: str,
+    stem_shifts: int,
+    stem_mix_headroom_db: float,
+    save_mastered_stems: bool,
+    stem_model_override: str | None = None,
+    stem_glue_reverb_amount: float = STEM_GLUE_REVERB_DEFAULT,
+    stem_drum_edge_amount: float = STEM_DRUM_EDGE_DEFAULT,
+    stem_vocal_pullback_db: float = STEM_VOCAL_PULLBACK_DB_DEFAULT,
+) -> dict[str, object]:
+    manifest = prepare_mastering_job(
+        audio_path,
+        format_choice,
+        profile_name,
+        bass,
+        volume,
+        effects,
+        stem_mastering,
+        stem_model_name,
+        stem_shifts,
+        stem_mix_headroom_db,
+        save_mastered_stems,
+        stem_model_override=stem_model_override,
+        stem_glue_reverb_amount=stem_glue_reverb_amount,
+        stem_drum_edge_amount=stem_drum_edge_amount,
+        stem_vocal_pullback_db=stem_vocal_pullback_db,
+    )
+    job_dir = str(manifest["job_dir"])
+    if bool(dict(manifest.get("settings", {})).get("stem_mastering")):
+        separate_mastering_job_stems(job_dir)
+        build_mastering_job_mix(job_dir)
+    return finalize_mastering_job(job_dir)
+
+
 def separate_mastering_job_stems(job_dir: str) -> dict[str, object]:
     from definers.audio.stems import separate_stem_layers
 
@@ -1206,6 +1247,9 @@ def run_mastering_tool(
     stem_mix_headroom_db: float,
     save_mastered_stems: bool,
     stem_model_override: str | None = None,
+    stem_glue_reverb_amount: float = STEM_GLUE_REVERB_DEFAULT,
+    stem_drum_edge_amount: float = STEM_DRUM_EDGE_DEFAULT,
+    stem_vocal_pullback_db: float = STEM_VOCAL_PULLBACK_DB_DEFAULT,
 ) -> tuple[str, str | None, str, list[str]]:
     from definers.audio import master
 
@@ -1228,6 +1272,15 @@ def run_mastering_tool(
         stem_model_name,
         stem_model_override,
     )
+    resolved_stem_glue_reverb_amount = normalize_stem_glue_reverb_amount(
+        stem_glue_reverb_amount
+    )
+    resolved_stem_drum_edge_amount = normalize_stem_drum_edge_amount(
+        stem_drum_edge_amount
+    )
+    resolved_stem_vocal_pullback_db = normalize_stem_vocal_pullback_db(
+        stem_vocal_pullback_db
+    )
     mastering_kwargs: dict[str, object] = {
         "report_path": report_path,
         "stem_mastering": bool(stem_mastering),
@@ -1235,6 +1288,9 @@ def run_mastering_tool(
         "stem_shifts": max(int(stem_shifts), 1),
         "stem_mix_headroom_db": float(stem_mix_headroom_db),
         "save_mastered_stems": should_collect_mastered_stems,
+        "stem_glue_reverb_amount": resolved_stem_glue_reverb_amount,
+        "stem_drum_edge_amount": resolved_stem_drum_edge_amount,
+        "stem_vocal_pullback_db": resolved_stem_vocal_pullback_db,
     }
     mastering_kwargs.update(profile_kwargs)
 
@@ -1717,6 +1773,7 @@ __all__ = (
     "resolve_mastering_stem_previews",
     "resolve_mastering_request",
     "resolve_stem_model_name",
+    "run_full_mastering_job",
     "run_audio_analysis_tool",
     "run_audio_preview_tool",
     "run_autotune_song_tool",

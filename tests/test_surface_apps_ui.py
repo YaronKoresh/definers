@@ -138,30 +138,11 @@ def test_launch_image_app_binds_progress_actions(monkeypatch):
         "Generate",
         "Upscale",
         "Add title(s)",
-        "Open Outputs Folder",
-    } <= labels
-
-
-def test_launch_image_generate_jobs_app_binds_guided_actions(monkeypatch):
-    registry = []
-    monkeypatch.setitem(
-        sys.modules, "gradio", _build_fake_gradio_module(registry)
-    )
-    _patch_shared_launch(monkeypatch)
-
-    image_jobs = importlib.import_module("definers.ui.apps.image_generate_jobs")
-    image_jobs.launch_image_generate_jobs_app()
-
-    labels = {
-        _button_label(component)
-        for component in registry
-        if component.kind == "Button" and component.event_calls.get("click")
-    }
-    assert {
-        "1. Prepare Job",
-        "2. Generate Image",
-        "3. Upscale Result",
-        "4. Add Titles",
+        "Prepare Staged Job",
+        "Run Full Job",
+        "Generate Image",
+        "Upscale Result",
+        "Add Titles",
         "Refresh Job",
         "Open Outputs Folder",
     } <= labels

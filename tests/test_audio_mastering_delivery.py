@@ -347,3 +347,34 @@ def test_verify_delivery_export_attaches_stage_metrics_and_contract_assessments(
     assert any(
         "decoded" in issue or "drift" in issue for issue in result.issues
     )
+
+
+def test_save_verified_audio_accepts_stem_final_pass_telemetry():
+    final_path, _final_signal, verification = (
+        DELIVERY_MODULE.save_verified_audio(
+            destination_path="track.wav",
+            audio_signal=np.full(32, 0.5, dtype=np.float32),
+            sample_rate=8000,
+            input_signal=np.zeros(32, dtype=np.float32),
+            save_audio_fn=lambda **kwargs: kwargs["destination_path"],
+            read_audio_fn=lambda path: (
+                8000,
+                np.full(32, 0.5, dtype=np.float32),
+            ),
+            target_lufs=-10.0,
+            ceil_db=-0.1,
+            preset_name="balanced",
+            delivery_profile_name="lossless",
+            stem_mastered_input=True,
+            stem_glue_reverb_amount=1.1,
+            stem_drum_edge_amount=0.9,
+            stem_vocal_pullback_db=1.4,
+            true_peak_oversample_factor=1,
+        )
+    )
+
+    assert final_path == "track.wav"
+    assert verification.report.stem_mastered_input is True
+    assert verification.report.stem_glue_reverb_amount == pytest.approx(1.1)
+    assert verification.report.stem_drum_edge_amount == pytest.approx(0.9)
+    assert verification.report.stem_vocal_pullback_db == pytest.approx(1.4)

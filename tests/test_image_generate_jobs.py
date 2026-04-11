@@ -82,3 +82,47 @@ def test_image_job_flow_updates_artifacts_and_status(monkeypatch, tmp_path):
     assert view[3] is not None
     assert view[4] is not None
     assert '"titled_path"' in view[5]
+
+
+def test_run_full_image_generate_job_runs_all_stages(monkeypatch):
+    calls = []
+
+    monkeypatch.setattr(
+        jobs,
+        "prepare_image_generate_job",
+        lambda *args, **kwargs: {"job_dir": "image-job"},
+    )
+    monkeypatch.setattr(
+        jobs,
+        "generate_image_job",
+        lambda job_dir: calls.append(("generate", job_dir)) or {},
+    )
+    monkeypatch.setattr(
+        jobs,
+        "upscale_image_job",
+        lambda job_dir: calls.append(("upscale", job_dir)) or {},
+    )
+    monkeypatch.setattr(
+        jobs,
+        "title_image_job",
+        lambda job_dir, top, middle, bottom: (
+            calls.append(("title", job_dir, top, middle, bottom))
+            or {"job_dir": job_dir}
+        ),
+    )
+
+    manifest = jobs.run_full_image_generate_job(
+        "album cover",
+        8,
+        8,
+        "Top",
+        "Middle",
+        "Bottom",
+    )
+
+    assert manifest == {"job_dir": "image-job"}
+    assert calls == [
+        ("generate", "image-job"),
+        ("upscale", "image-job"),
+        ("title", "image-job", "Top", "Middle", "Bottom"),
+    ]

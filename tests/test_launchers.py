@@ -119,12 +119,10 @@ def test_gui_entrypoints_registers_focused_task_surfaces():
     assert {
         "audio",
         "audio-mastering",
-        "audio-mastering-jobs",
         "video",
         "video-composer",
         "image",
         "image-generate",
-        "image-generate-jobs",
         "image-upscale",
         "image-title",
         "train",

@@ -76,6 +76,9 @@ def test_run_mastering_tool_returns_report_and_stems(monkeypatch):
             3,
             6.0,
             True,
+            stem_glue_reverb_amount=1.25,
+            stem_drum_edge_amount=0.7,
+            stem_vocal_pullback_db=1.4,
         )
     )
 
@@ -88,6 +91,9 @@ def test_run_mastering_tool_returns_report_and_stems(monkeypatch):
     assert "volume" not in captured
     assert "effects" not in captured
     assert captured["stem_model_name"] == "mastering"
+    assert captured["stem_glue_reverb_amount"] == 1.25
+    assert captured["stem_drum_edge_amount"] == 0.7
+    assert captured["stem_vocal_pullback_db"] == 1.4
     assert Path(report_path).suffix == ".md"
     assert "**Verdict:**" in summary_text
     assert "**Control Mode:** Vocal Focus" in summary_text
@@ -150,6 +156,58 @@ def test_run_mastering_tool_collects_stems_for_gui_preview(monkeypatch):
     assert stem_files == [
         str(Path(stem_files[0]).with_name("bass_mastered.wav"))
     ]
+
+
+def test_run_mastering_tool_clamps_stem_final_pass_controls(monkeypatch):
+    captured = {}
+    fake_report = types.SimpleNamespace(
+        preset_name="balanced",
+        delivery_profile_name="lossless",
+        input_metrics=None,
+        output_metrics=None,
+        headroom_recovery_mode="adaptive",
+        headroom_recovery_gain_db=0.0,
+        post_spatial_stereo_motion=0.0,
+        post_clamp_true_peak_dbfs=-1.0,
+        delivery_issues=(),
+        to_dict=lambda: {"preset_name": "balanced"},
+    )
+
+    def fake_master(audio_path, output_path=None, **kwargs):
+        captured.update(kwargs)
+        resolved_output_path = Path(str(output_path))
+        resolved_output_path.write_text("audio", encoding="utf-8")
+        report_path = Path(str(kwargs["report_path"]))
+        report_path.write_text("{}", encoding="utf-8")
+        return str(resolved_output_path), fake_report
+
+    _patch_audio_symbol(
+        monkeypatch,
+        "master",
+        "definers.audio.mastering",
+        fake_master,
+    )
+
+    services.run_mastering_tool(
+        "song.wav",
+        "WAV",
+        "Balanced",
+        0.5,
+        0.5,
+        0.5,
+        True,
+        "mastering",
+        2,
+        6.0,
+        True,
+        stem_glue_reverb_amount=4.0,
+        stem_drum_edge_amount=-1.0,
+        stem_vocal_pullback_db=9.0,
+    )
+
+    assert captured["stem_glue_reverb_amount"] == 1.5
+    assert captured["stem_drum_edge_amount"] == 0.0
+    assert captured["stem_vocal_pullback_db"] == 3.0
 
 
 def test_run_mastering_tool_writes_outputs_under_managed_root(
@@ -615,6 +673,57 @@ def test_prepare_mastering_job_persists_manifest_and_input_copy(
     assert "**Glue reverb:** 1.50x" in status_text
     assert "**Drum edge:** 0.00x" in status_text
     assert "**Extra vocal pullback:** 3.00 dB" in status_text
+
+
+def test_run_full_mastering_job_runs_staged_flow(monkeypatch):
+    calls = []
+
+    monkeypatch.setattr(
+        services,
+        "prepare_mastering_job",
+        lambda *args, **kwargs: {
+            "job_dir": "job-dir",
+            "settings": {"stem_mastering": True},
+        },
+    )
+    monkeypatch.setattr(
+        services,
+        "separate_mastering_job_stems",
+        lambda job_dir: calls.append(("separate", job_dir)) or {},
+    )
+    monkeypatch.setattr(
+        services,
+        "build_mastering_job_mix",
+        lambda job_dir: calls.append(("mix", job_dir)) or {},
+    )
+    monkeypatch.setattr(
+        services,
+        "finalize_mastering_job",
+        lambda job_dir: (
+            calls.append(("finalize", job_dir)) or {"job_dir": job_dir}
+        ),
+    )
+
+    manifest = services.run_full_mastering_job(
+        "song.wav",
+        "wav",
+        "Balanced",
+        0.5,
+        0.5,
+        0.5,
+        True,
+        "mastering",
+        2,
+        6.0,
+        True,
+    )
+
+    assert manifest == {"job_dir": "job-dir"}
+    assert calls == [
+        ("separate", "job-dir"),
+        ("mix", "job-dir"),
+        ("finalize", "job-dir"),
+    ]
 
 
 def test_render_mastering_job_view_discovers_saved_artifacts(tmp_path):

@@ -40,11 +40,11 @@ An app-only launcher is a direct launcher that does not need an additional focus
 
 Use an app-only launcher for smaller or self-contained workflows where extra routing layers would add complexity without improving the UX.
 
-### Guided-Job Surface
+### Guided-Job Mode
 
-A guided-job surface is an optional pattern for expensive or multi-step workflows. It adds persistent job state, resumable steps, intermediate artifacts, and step-specific status.
+Guided-job mode is an optional pattern for expensive or multi-step workflows. It adds persistent job state, resumable steps, intermediate artifacts, and step-specific status inside an existing surface.
 
-Guided-job behavior is not mandatory for every launcher. It is an opt-in second-tier pattern for workflows that justify persistence and resume behavior.
+Guided-job behavior is not mandatory for every launcher. It is an opt-in second-tier pattern for workflows that justify persistence and resume behavior, but it does not require a second standalone GUI.
 
 ## Current Official Launcher Inventory
 
@@ -52,7 +52,7 @@ Guided-job behavior is not mandatory for every launcher. It is an opt-in second-
 
 - Workbench: `audio`
 - Focused surfaces: `audio-mastering`, `audio-vocals`, `audio-cleanup`, `audio-stems`, `audio-analysis`, `audio-create`, `audio-midi`
-- Guided-job surfaces: `audio-mastering-jobs`
+- Guided-job capable surface: `audio-mastering`
 
 ### Video
 
@@ -63,13 +63,11 @@ Guided-job behavior is not mandatory for every launcher. It is an opt-in second-
 
 - Workbench: `image`
 - Focused surfaces: `image-generate`, `image-upscale`, `image-title`
-- Guided-job surfaces: `image-generate-jobs`
+- Guided-job capable surface: `image-generate`
 
 ### ML And Training
 
 - Workbench: `train`
-
-`definers.ui.apps.focused_surfaces` already models train-focused cards conceptually, but they are not official launcher names until they are registered in `GUI_LAUNCHERS`.
 
 ### Direct App Launchers
 
@@ -114,7 +112,7 @@ This baseline is mandatory across the repo.
 
 ## Optional Guided-Job Contract
 
-Use the guided-job pattern only when a workflow is expensive, multi-step, interruption-prone, or artifact-heavy.
+Use guided-job mode only when a workflow is expensive, multi-step, interruption-prone, or artifact-heavy.
 
 If you opt in, the surface should:
 
@@ -131,8 +129,8 @@ Do not force guided-job behavior onto simple utilities such as translation, chat
 
 ### Guided-Job Capable Domains
 
-- Audio: `audio-mastering-jobs`
-- Image: `image-generate-jobs`
+- Audio: built into `audio-mastering`
+- Image: built into `image-generate`
 
 ### Workbench Plus Focused-Surface Domains
 
@@ -156,6 +154,7 @@ Do not force guided-job behavior onto simple utilities such as translation, chat
 - `translate`
 - `animation`
 - `faiss`
+
 
 ## Testing Rules
 
