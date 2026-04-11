@@ -18,6 +18,61 @@ def is_audio_segment(audio_signal) -> bool:
     )
 
 
+def _resolve_wav_subtype(bit_depth: int) -> str:
+    normalized_bit_depth = int(bit_depth)
+    if normalized_bit_depth >= 64:
+        return "DOUBLE"
+    if normalized_bit_depth >= 32:
+        return "FLOAT"
+    if normalized_bit_depth >= 24:
+        return "PCM_24"
+    if normalized_bit_depth >= 16:
+        return "PCM_16"
+    return "PCM_U8"
+
+
+def _read_audio_with_soundfile(
+    audio_file: str,
+) -> tuple[int, np.ndarray] | None:
+    import soundfile as sf
+
+    extension = str(get_ext(audio_file)).strip().lower()
+    if extension not in {"wav", "flac", "aif", "aiff"}:
+        return None
+    audio_data, sample_rate = sf.read(
+        audio_file,
+        dtype="float32",
+        always_2d=True,
+    )
+    return int(sample_rate), np.asarray(audio_data, dtype=np.float32).T
+
+
+def _write_wav_audio(
+    soundfile_module,
+    destination_path: str,
+    audio_signal: np.ndarray,
+    sample_rate: int,
+    *,
+    subtype: str,
+) -> None:
+    try:
+        soundfile_module.write(
+            destination_path,
+            audio_signal,
+            sample_rate,
+            subtype=subtype,
+            format="WAV",
+        )
+    except Exception:
+        soundfile_module.write(
+            destination_path,
+            audio_signal,
+            sample_rate,
+            subtype=subtype,
+            format="RF64",
+        )
+
+
 def run_ffmpeg(command: list[str]):
     import subprocess
 
@@ -37,6 +92,13 @@ def read_audio(audio_file: str) -> tuple[int, np.ndarray]:
     audio_file = full_path(audio_file)
     if not exist(audio_file):
         raise FileNotFoundError(audio_file)
+
+    try:
+        soundfile_result = _read_audio_with_soundfile(audio_file)
+    except Exception:
+        soundfile_result = None
+    if soundfile_result is not None:
+        return soundfile_result
 
     import pydub
 
@@ -98,22 +160,25 @@ def save_audio(
         audio_signal = audio_signal.T
 
     if ext == "wav":
-        subtype = {16: "PCM_16", 32: "FLOAT", 64: "DOUBLE"}.get(
-            bit_depth, "FLOAT"
-        )
-        sf.write(
+        _write_wav_audio(
+            sf,
             final_path,
             audio_signal,
             sample_rate,
-            subtype=subtype,
-            format="RF64",
+            subtype=_resolve_wav_subtype(bit_depth),
         )
 
     else:
         import io
 
         buffer = io.BytesIO()
-        sf.write(buffer, audio_signal, sample_rate, format="WAV")
+        _write_wav_audio(
+            sf,
+            buffer,
+            audio_signal,
+            sample_rate,
+            subtype=_resolve_wav_subtype(bit_depth),
+        )
         buffer.seek(0)
         song = pydub.AudioSegment.from_wav(buffer)
         song.export(

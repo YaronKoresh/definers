@@ -123,6 +123,54 @@ def _load_stems_module(package_name: str):
 STEMS_MODULE = _load_stems_module("_test_audio_stems_pkg.audio")
 
 
+def test_stem_mixer_saves_float_mix_without_int16_roundtrip(monkeypatch):
+    saved_call = {}
+
+    def fake_load(file_path, sr=None):
+        if str(file_path).endswith("first.wav"):
+            return np.array([0.5, -0.5], dtype=np.float32), 44100
+        return np.array([0.25, -0.25], dtype=np.float32), 44100
+
+    monkeypatch.setattr(
+        STEMS_MODULE,
+        "librosa_module",
+        lambda: types.SimpleNamespace(
+            load=fake_load,
+            resample=lambda y, orig_sr, target_sr: np.asarray(
+                y, dtype=np.float32
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        STEMS_MODULE,
+        "save_audio",
+        lambda **kwargs: (
+            saved_call.update(kwargs) or kwargs["destination_path"]
+        ),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "definers.system.output_paths",
+        types.SimpleNamespace(
+            managed_output_path=lambda extension, section, stem: (
+                f"{stem}.{extension}"
+            )
+        ),
+    )
+
+    result = STEMS_MODULE.stem_mixer(["first.wav", "second.wav"], "wav")
+
+    assert result == "stem_mix_abc123.wav"
+    assert saved_call["sample_rate"] == 44100
+    assert saved_call["bit_depth"] == 32
+    assert saved_call["destination_path"] == "stem_mix_abc123.wav"
+    assert saved_call["audio_signal"].dtype == np.float32
+    assert np.allclose(
+        saved_call["audio_signal"],
+        np.array([0.99, -0.99], dtype=np.float32),
+    )
+
+
 def test_build_mastering_separator_plan_skips_optional_repair_stages_for_clean_material():
     plan = STEMS_MODULE.build_mastering_separator_plan(44100)
 

@@ -227,6 +227,81 @@ def test_process_stem_layers_processes_each_stem_and_cleans_temp_dir(
     assert deleted_paths == ["temp-demucs-dir"]
 
 
+def test_process_stem_layers_saves_pre_mix_mastered_stems(tmp_path: Path):
+    base = CONFIG_MODULE.SmartMasteringConfig.balanced()
+    stems_dir = tmp_path / "saved-stems"
+    saved_audio: dict[str, np.ndarray] = {}
+    drums_signal = np.full((2, 64), 0.2, dtype=np.float32)
+    vocals_signal = np.full((2, 64), 0.1, dtype=np.float32)
+
+    MASTERING_STEMS_MODULE.process_stem_layers(
+        "song.wav",
+        base_config=base,
+        base_mastering_kwargs={"preset": "balanced"},
+        process_stem_fn=lambda signal, sample_rate, mastering_kwargs: (
+            sample_rate,
+            np.array(signal, copy=True),
+        ),
+        separate_stems_fn=lambda audio_path, model_name, shifts, quality_flags=(): (
+            {
+                "drums": "drums.wav",
+                "vocals": "vocals.wav",
+            },
+            "temp-demucs-dir",
+        ),
+        read_audio_fn=lambda path: (
+            8000,
+            np.array(drums_signal, copy=True)
+            if path == "drums.wav"
+            else np.array(vocals_signal, copy=True),
+        ),
+        delete_fn=lambda path: None,
+        mix_headroom_db=6.0,
+        mastered_stems_output_dir=str(stems_dir),
+        save_audio_fn=lambda **kwargs: (
+            saved_audio.__setitem__(
+                Path(kwargs["destination_path"]).name,
+                np.asarray(kwargs["audio_signal"], dtype=np.float32),
+            )
+            or kwargs["destination_path"]
+        ),
+    )
+
+    drums_plan = MASTERING_STEMS_MODULE.resolve_stem_mastering_plan(
+        "drums", base
+    )
+    vocals_plan = MASTERING_STEMS_MODULE.resolve_stem_mastering_plan(
+        "vocals", base
+    )
+    expected_drums, _ = MASTERING_STEMS_MODULE._apply_stem_mix_balance(
+        drums_signal,
+        "drums",
+        drums_plan.mix_gain_db,
+    )
+    expected_vocals, _ = MASTERING_STEMS_MODULE._apply_stem_mix_balance(
+        vocals_signal,
+        "vocals",
+        vocals_plan.mix_gain_db,
+    )
+    _, aligned_layers, _ = MASTERING_STEMS_MODULE._prepare_mixed_stem_layers(
+        {
+            "drums": (8000, expected_drums),
+            "vocals": (8000, expected_vocals),
+        },
+        mix_headroom_db=6.0,
+    )
+
+    assert np.allclose(saved_audio["drums_mastered.wav"], expected_drums)
+    assert np.allclose(
+        saved_audio["vocals_mastered.wav"],
+        expected_vocals,
+    )
+    assert not np.allclose(
+        saved_audio["drums_mastered.wav"],
+        aligned_layers["drums"][1],
+    )
+
+
 def test_process_stem_layers_preserves_output_order_when_threads_finish_out_of_order(
     tmp_path: Path,
 ):
@@ -413,6 +488,19 @@ def test_apply_stem_tone_enrichment_adds_default_octave_layers_to_vocals():
     assert len(calls) == 8
     assert enriched.shape == signal.shape
     assert float(np.max(np.abs(enriched))) > float(np.max(np.abs(signal)))
+
+
+def test_constrain_stem_peak_growth_limits_hot_stage_output():
+    reference = np.full((2, 256), 0.4, dtype=np.float32)
+    hot_signal = np.full((2, 256), 2.0, dtype=np.float32)
+
+    constrained = MASTERING_STEMS_MODULE._constrain_stem_peak_growth(
+        hot_signal,
+        reference_signal=reference,
+    )
+
+    assert float(np.max(np.abs(constrained))) <= 0.4 * 1.08 + 1e-6
+    assert float(np.max(np.abs(constrained))) <= 0.98 + 1e-6
 
 
 def test_resolve_stem_tone_layers_varies_by_role():

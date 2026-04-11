@@ -1159,9 +1159,6 @@ def separate_stems(
 
 
 def stem_mixer(files, format_choice):
-    import pydub
-    from scipy.io.wavfile import write as write_wav
-
     librosa = librosa_module()
     from definers.system.output_paths import managed_output_path
 
@@ -1210,9 +1207,6 @@ def stem_mixer(files, format_choice):
     if peak_amplitude > 0:
         mixed_y = mixed_y / peak_amplitude * 0.99
     _logger.info("Exporting final mix")
-    temp_wav_path = tmp(".wav", keep=False)
-    write_wav(temp_wav_path, target_sr, (mixed_y * 32767).astype(np.int16))
-    sound = pydub.AudioSegment.from_file(temp_wav_path)
     normalized_format = str(format_choice).strip().lower().lstrip(".") or "wav"
     output_stem = managed_output_path(
         normalized_format,
@@ -1220,10 +1214,11 @@ def stem_mixer(files, format_choice):
         stem=f"stem_mix_{random_string()}",
     )
     output_path = save_audio(
-        audio_signal=sound,
+        audio_signal=np.asarray(mixed_y, dtype=np.float32),
         destination_path=output_stem,
+        sample_rate=target_sr,
+        bit_depth=32,
     )
-    delete(temp_wav_path)
     _logger.info("Success! Mix saved to: %s", output_path)
     return output_path
 

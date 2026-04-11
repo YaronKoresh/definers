@@ -45,12 +45,15 @@ def test_read_audio_scales_using_sample_width():
         AudioSegment=types.SimpleNamespace(from_file=lambda path: fake_segment)
     )
 
-    with patch.dict(sys.modules, {"pydub": pydub_module}):
+    with patch.dict(
+        sys.modules,
+        {"pydub": pydub_module, "soundfile": types.SimpleNamespace()},
+    ):
         with (
             patch.object(IO_MODULE, "exist", lambda path: True),
             patch("definers.system.install_ffmpeg", lambda: None),
         ):
-            sr, audio = IO_MODULE.read_audio("demo.wav")
+            sr, audio = IO_MODULE.read_audio("demo.mp3")
 
     assert sr == 48000
     assert audio.shape == (2, 2)
@@ -70,7 +73,10 @@ def test_read_audio_bootstraps_ffmpeg_before_loading():
     )
     calls = []
 
-    with patch.dict(sys.modules, {"pydub": pydub_module}):
+    with patch.dict(
+        sys.modules,
+        {"pydub": pydub_module, "soundfile": types.SimpleNamespace()},
+    ):
         with (
             patch.object(IO_MODULE, "exist", lambda path: True),
             patch(
@@ -78,9 +84,44 @@ def test_read_audio_bootstraps_ffmpeg_before_loading():
                 lambda: calls.append("ffmpeg"),
             ),
         ):
-            IO_MODULE.read_audio("demo.wav")
+            IO_MODULE.read_audio("demo.mp3")
 
     assert calls == ["ffmpeg"]
+
+
+def test_read_audio_prefers_soundfile_for_lossless_formats():
+    soundfile_module = types.SimpleNamespace(
+        read=lambda path, dtype, always_2d: (
+            np.array([[0.25, -0.25]], dtype=np.float32),
+            48000,
+        )
+    )
+    pydub_module = types.SimpleNamespace(
+        AudioSegment=types.SimpleNamespace(
+            from_file=lambda path: (_ for _ in ()).throw(
+                AssertionError("unexpected pydub path")
+            )
+        )
+    )
+    calls = []
+
+    with patch.dict(
+        sys.modules,
+        {"pydub": pydub_module, "soundfile": soundfile_module},
+    ):
+        with (
+            patch.object(IO_MODULE, "exist", lambda path: True),
+            patch(
+                "definers.system.install_ffmpeg",
+                lambda: calls.append("ffmpeg"),
+            ),
+        ):
+            sr, audio = IO_MODULE.read_audio("demo.wav")
+
+    assert sr == 48000
+    assert audio.shape == (2, 1)
+    assert np.allclose(audio[:, 0], np.array([0.25, -0.25], dtype=np.float32))
+    assert calls == []
 
 
 def test_read_audio_missing_file_fails_before_bootstrapping_ffmpeg():
@@ -98,3 +139,118 @@ def test_read_audio_missing_file_fails_before_bootstrapping_ffmpeg():
             raise AssertionError("read_audio should raise FileNotFoundError")
 
     assert calls == []
+
+
+def test_save_audio_writes_standard_pcm_wav_by_default():
+    write_calls = []
+    soundfile_module = types.SimpleNamespace(
+        write=lambda path, data, sample_rate, subtype=None, format=None: (
+            write_calls.append(
+                (
+                    str(path),
+                    np.asarray(data).shape,
+                    sample_rate,
+                    subtype,
+                    format,
+                )
+            )
+        )
+    )
+
+    with patch.dict(
+        sys.modules,
+        {"pydub": types.SimpleNamespace(), "soundfile": soundfile_module},
+    ):
+        with patch("definers.system.install_ffmpeg", lambda: None):
+            result = IO_MODULE.save_audio(
+                "demo.wav",
+                np.zeros((2, 8), dtype=np.float32),
+                44100,
+                bit_depth=32,
+            )
+
+    assert result == "demo.wav"
+    assert write_calls == [("demo.wav", (8, 2), 44100, "FLOAT", "WAV")]
+
+
+def test_save_audio_falls_back_to_rf64_when_standard_wav_write_fails():
+    write_calls = []
+
+    def fake_write(path, data, sample_rate, subtype=None, format=None):
+        write_calls.append((str(path), subtype, format))
+        if format == "WAV":
+            raise RuntimeError("primary wav write failed")
+
+    soundfile_module = types.SimpleNamespace(write=fake_write)
+
+    with patch.dict(
+        sys.modules,
+        {"pydub": types.SimpleNamespace(), "soundfile": soundfile_module},
+    ):
+        with patch("definers.system.install_ffmpeg", lambda: None):
+            result = IO_MODULE.save_audio(
+                "fallback.wav",
+                np.zeros((2, 8), dtype=np.float32),
+                44100,
+                bit_depth=32,
+            )
+
+    assert result == "fallback.wav"
+    assert write_calls == [
+        ("fallback.wav", "FLOAT", "WAV"),
+        ("fallback.wav", "FLOAT", "RF64"),
+    ]
+
+
+def test_save_audio_uses_float_temp_wav_for_lossy_exports():
+    write_calls = []
+    export_calls = []
+
+    class FakeSong:
+        def export(
+            self, destination_path, format, bitrate=None, parameters=None
+        ):
+            export_calls.append(
+                (destination_path, format, bitrate, tuple(parameters))
+            )
+
+    soundfile_module = types.SimpleNamespace(
+        write=lambda path, data, sample_rate, subtype=None, format=None: (
+            write_calls.append(
+                (
+                    type(path).__name__,
+                    np.asarray(data).shape,
+                    sample_rate,
+                    subtype,
+                    format,
+                )
+            )
+        )
+    )
+    pydub_module = types.SimpleNamespace(
+        AudioSegment=types.SimpleNamespace(from_wav=lambda buffer: FakeSong())
+    )
+
+    with patch.dict(
+        sys.modules,
+        {"pydub": pydub_module, "soundfile": soundfile_module},
+    ):
+        with patch("definers.system.install_ffmpeg", lambda: None):
+            result = IO_MODULE.save_audio(
+                "demo.mp3",
+                np.zeros((2, 8), dtype=np.float32),
+                44100,
+                bit_depth=32,
+                bitrate=192,
+            )
+
+    assert result == "demo.mp3"
+    assert write_calls == [("BytesIO", (8, 2), 44100, "FLOAT", "WAV")]
+    assert export_calls == [
+        (
+            "demo.mp3",
+            "mp3",
+            "192k",
+            ("-compression_level", "9", "-b:a", "192k"),
+        )
+    ]

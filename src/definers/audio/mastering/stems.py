@@ -21,10 +21,62 @@ class StemMasteringPlan:
 
 
 _STEM_SUM_ATTENUATION_LINEAR = float(10.0 ** (-6.0 / 20.0))
+_STEM_SAVED_PEAK_CEILING_LINEAR = 0.98
+_STEM_TONE_ENRICHMENT_PEAK_GROWTH_LIMIT = 1.08
 
 
 def _stem_mix_gain_linear(mix_gain_db: float) -> float:
     return float(10.0 ** (float(mix_gain_db) / 20.0))
+
+
+def _sanitize_stem_signal(
+    signal: np.ndarray,
+    *,
+    peak_ceiling: float = _STEM_SAVED_PEAK_CEILING_LINEAR,
+) -> np.ndarray:
+    stabilized = np.nan_to_num(
+        np.asarray(signal, dtype=np.float32),
+        nan=0.0,
+        posinf=0.0,
+        neginf=0.0,
+    )
+    peak = float(np.max(np.abs(stabilized))) if stabilized.size else 0.0
+    if peak > float(peak_ceiling) > 0.0:
+        stabilized = stabilized * (float(peak_ceiling) / peak)
+    return stabilized.astype(np.float32, copy=False)
+
+
+def _constrain_stem_peak_growth(
+    signal: np.ndarray,
+    *,
+    reference_signal: np.ndarray | None,
+    peak_growth_limit: float = _STEM_TONE_ENRICHMENT_PEAK_GROWTH_LIMIT,
+    absolute_peak_ceiling: float = _STEM_SAVED_PEAK_CEILING_LINEAR,
+) -> np.ndarray:
+    stabilized = _sanitize_stem_signal(
+        signal,
+        peak_ceiling=absolute_peak_ceiling,
+    )
+    if reference_signal is None:
+        return stabilized
+
+    reference_array = np.asarray(reference_signal, dtype=np.float32)
+    reference_peak = (
+        float(np.max(np.abs(reference_array))) if reference_array.size else 0.0
+    )
+    if reference_peak <= 1e-6:
+        return stabilized
+
+    allowed_peak = min(
+        float(absolute_peak_ceiling),
+        max(reference_peak, reference_peak * float(peak_growth_limit)),
+    )
+    stabilized_peak = (
+        float(np.max(np.abs(stabilized))) if stabilized.size else 0.0
+    )
+    if stabilized_peak > allowed_peak > 0.0:
+        stabilized = stabilized * (allowed_peak / stabilized_peak)
+    return stabilized.astype(np.float32, copy=False)
 
 
 def _level_to_dbfs(level: float) -> float:
@@ -165,13 +217,13 @@ def _apply_stem_mix_balance(
     )
     balanced_signal = stereo_signal * _stem_mix_gain_linear(applied_gain_db)
 
-    peak = (
-        float(np.max(np.abs(balanced_signal))) if balanced_signal.size else 0.0
+    return (
+        _sanitize_stem_signal(
+            balanced_signal,
+            peak_ceiling=_STEM_SAVED_PEAK_CEILING_LINEAR,
+        ),
+        applied_gain_db,
     )
-    if peak > 0.98:
-        balanced_signal = balanced_signal * (0.98 / peak)
-
-    return balanced_signal.astype(np.float32, copy=False), applied_gain_db
 
 
 def _prepare_mixed_stem_layers(
@@ -400,12 +452,12 @@ def _apply_stem_tone_enrichment(
             shifted = shifted * (dry_peak / shifted_peak)
         enriched = enriched + shifted * float(mix)
 
-    peak = float(np.max(np.abs(enriched))) if enriched.size else 0.0
-    allowed_peak = dry_peak * 1.18 if dry_peak > 1e-6 else 1.0
-    if peak > allowed_peak and allowed_peak > 1e-6:
-        enriched = enriched * (allowed_peak / peak)
-
-    return enriched.astype(np.float32, copy=False)
+    return _constrain_stem_peak_growth(
+        enriched,
+        reference_signal=stereo_signal,
+        peak_growth_limit=_STEM_TONE_ENRICHMENT_PEAK_GROWTH_LIMIT,
+        absolute_peak_ceiling=_STEM_SAVED_PEAK_CEILING_LINEAR,
+    )
 
 
 def resolve_stem_mastering_plan(
@@ -713,6 +765,10 @@ def process_stem_layers(
             stem_sample_rate,
             mastering_kwargs,
         )
+        processed_signal = _sanitize_stem_signal(
+            processed_signal,
+            peak_ceiling=_STEM_SAVED_PEAK_CEILING_LINEAR,
+        )
         enriched_signal = _apply_stem_tone_enrichment(
             processed_signal,
             processed_sample_rate,
@@ -792,7 +848,7 @@ def process_stem_layers(
             and save_audio_fn is not None
         ):
             _save_mastered_stem_layers(
-                aligned_layers,
+                mastered_layers,
                 output_dir=mastered_stems_output_dir,
                 save_audio_fn=save_audio_fn,
                 output_format=mastered_stems_format,
