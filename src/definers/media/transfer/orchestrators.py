@@ -86,17 +86,19 @@ class ResourceRetrievalOrchestrator:
 
 
 def create_http_orchestrator() -> ResourceRetrievalOrchestrator:
-    from definers.media.transfer.policy import create_http_transfer_strategy
+    from definers.media import web_transfer as web_transfer_module
 
-    return ResourceRetrievalOrchestrator(create_http_transfer_strategy())
+    return ResourceRetrievalOrchestrator(
+        web_transfer_module.create_http_transfer_strategy()
+    )
 
 
 def create_zip_orchestrator() -> ResourceRetrievalOrchestrator:
-    from definers.media.transfer.policy import create_http_transfer_strategy
+    from definers.media import web_transfer as web_transfer_module
     from definers.media.web_transfer import ZipExtractTransferStrategy
 
     return ResourceRetrievalOrchestrator(
         ZipExtractTransferStrategy(
-            download_strategy=create_http_transfer_strategy()
+            download_strategy=web_transfer_module.create_http_transfer_strategy()
         )
     )

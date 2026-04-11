@@ -19,6 +19,13 @@ from definers.media.transfer.orchestrators import (
 from definers.system import log
 from definers.system.download_activity import report_download_activity
 
+try:
+    from lxml.cssselect import CSSSelector
+    from lxml.html import fromstring
+except ImportError:
+    CSSSelector = None
+    fromstring = None
+
 
 def google_drive_download(id, dest, unzip=True):
     from googledrivedownloader import download_file_from_google_drive
@@ -67,13 +74,8 @@ def linked_url(url):
 def extract_text(url, selector):
     from playwright.sync_api import expect, sync_playwright
 
-    try:
-        from lxml.cssselect import CSSSelector
-        from lxml.html import fromstring
-    except ImportError as error:
-        raise ImportError(
-            "lxml with cssselect is required for extract_text"
-        ) from error
+    if CSSSelector is None or fromstring is None:
+        raise ImportError("lxml with cssselect is required for extract_text")
 
     xpath = CSSSelector(selector).path
     log("URL", url)

@@ -122,10 +122,7 @@ def http_transfer_policy(
         resolved_capabilities
     ):
         if strategy_name == "http2-multiplex":
-            if not (
-                resolved_capabilities.http2_multiplexing
-                and resolved_capabilities.http2_runtime_ready
-            ):
+            if not resolved_capabilities.http2_multiplexing:
                 continue
         elif strategy_name == "http3-quic":
             if not (
