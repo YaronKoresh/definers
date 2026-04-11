@@ -66,7 +66,7 @@ Definers is standardizing the CLI around these rules:
 - runtime discovery of launcher surfaces should remain explicit and deterministic
 - parser construction, request shaping, and dispatch should stay thin once command definitions are centralized
 
-The compatibility import path `definers.cli.command_registry` still re-exports the command catalog, but the owner implementation now lives in `definers.cli.application.catalog`. Parser construction still lives in `definers.cli.command_parser` and `definers.cli.command_dispatcher`, while application-level assembly lives in `definers.cli.application`.
+The compatibility import path `definers.cli.command_registry` still re-exports the command catalog, but the owner implementation lives in `definers.cli.application.catalog`. Parser construction still lives in `definers.cli.command_parser` and `definers.cli.command_dispatcher`, while application-level assembly lives in `definers.cli.application`.
 
 The direct owner package for command catalog, parser assembly, runtime binding, and service flow is `definers.cli.application`. The older `definers.cli.command_registry`, `definers.cli.parser`, `definers.cli.runtime`, and `definers.cli.dispatch` modules remain compatibility facades.
 

@@ -15,7 +15,7 @@ def launch_train_app(
     hero_label="Definers ML Studio",
     hero_heading="Train, run, inspect, and bootstrap models from one surface.",
     hero_description=(
-        "The training launcher is now a full ML cockpit for data-driven training, "
+        "The training launcher is a full ML cockpit for data-driven training, "
         "task inference, text tooling, runtime diagnostics, and bootstrap flows."
     ),
 ):

@@ -80,6 +80,7 @@ MODULE_PACKAGE_SPECS: dict[str, tuple[str, ...]] = {
     "nltk": ("nltk>=3.8.0",),
     "onnx": ("onnx>=1.14.0",),
     "onnxruntime": ("onnxruntime",),
+    "openpyxl": ("openpyxl>=3.1.0",),
     "pillow_heif": ("pillow-heif>=0.13.0",),
     "playwright": ("playwright>=1.40.0",),
     "pydub": ("pydub>=0.25.1",),

@@ -1040,6 +1040,9 @@ def _read_tabular_dataframe(path: str):
             dataframe = pandas.read_csv(path, header=None)
         return dataframe
     if extension == "xlsx":
+        from definers import optional_dependencies
+
+        optional_dependencies.ensure_module_runtime("openpyxl")
         return pandas.read_excel(path)
     return pandas.read_json(path)
 
@@ -1646,6 +1649,9 @@ def _inspect_tabular_file(path: str):
                 dataframe = pandas.read_csv(path, header=None)
             row_count = _csv_row_count(path)
         elif extension == "xlsx":
+            from definers import optional_dependencies
+
+            optional_dependencies.ensure_module_runtime("openpyxl")
             dataframe = pandas.read_excel(path)
             row_count = len(dataframe)
         else:

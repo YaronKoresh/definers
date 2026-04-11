@@ -19,6 +19,7 @@ EXPECTED_BASE_DEPENDENCIES = {
     "numpy>=1.26.0,<3",
     "requests>=2.28.0",
     "joblib>=1.3.0",
+    "openpyxl>=3.1.0",
     "pandas>=1.5.0",
     "pillow>=9.1.0",
     "scipy>=1.10.0,<2",

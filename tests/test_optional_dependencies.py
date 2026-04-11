@@ -30,6 +30,7 @@ def test_runtime_specs_for_pypi_optional_modules_omit_vcs_links():
         "httpx": "httpx[http2]>=0.28.0",
         "madmom": "madmom>=0.16.1",
         "moviepy": "moviepy>=2.0.0",
+        "openpyxl": "openpyxl>=3.1.0",
         "refiners": "refiners>=0.4.0",
         "stable_whisper": "stable-ts>=2.19.1",
         "stopes": 'stopes>=2.2.1; sys_platform != "win32"',
@@ -202,6 +203,7 @@ def test_runtime_specs_trim_redundant_web_and_ml_packages():
     gradio_specs = optional_dependencies.package_specs_for_module("gradio")
     librosa_specs = optional_dependencies.package_specs_for_module("librosa")
     moviepy_specs = optional_dependencies.package_specs_for_module("moviepy")
+    openpyxl_specs = optional_dependencies.package_specs_for_module("openpyxl")
     transformers_specs = optional_dependencies.package_specs_for_module(
         "transformers"
     )
@@ -211,6 +213,7 @@ def test_runtime_specs_trim_redundant_web_and_ml_packages():
     assert all("numba" not in spec for spec in librosa_specs)
     assert all("resampy" not in spec for spec in librosa_specs)
     assert all("imageio-ffmpeg" not in spec for spec in moviepy_specs)
+    assert openpyxl_specs == ("openpyxl>=3.1.0",)
     assert all("tokenizers" not in spec for spec in transformers_specs)
 
 

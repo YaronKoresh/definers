@@ -1,5 +1,11 @@
 class DatasetValueLoader:
     @staticmethod
+    def ensure_xlsx_runtime() -> None:
+        from definers import optional_dependencies
+
+        optional_dependencies.ensure_module_runtime("openpyxl")
+
+    @staticmethod
     def load_audio_values(path: str, training: bool):
         import definers
         import definers.data.loaders as loaders_module
@@ -40,6 +46,7 @@ class DatasetValueLoader:
             if dataframe.empty:
                 dataframe = pandas.read_csv(path, header=None)
         elif extension == "xlsx":
+            DatasetValueLoader.ensure_xlsx_runtime()
             dataframe = pandas.read_excel(path)
         else:
             dataframe = pandas.read_json(path)

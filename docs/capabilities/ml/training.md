@@ -27,7 +27,7 @@ Definers exposes one ML training GUI with two modes inside the same `train` work
 - available inside `definers start train`
 - for non-expert users who want one clear entry path without routing dozens of parameters manually
 - guided intake starts from three intents: local files or local collection paths, remote dataset, or continue yesterday's model
-- the mode now inspects tabular files, media collections, folder-derived labels, and text or tabular sidecars before it unlocks plan preview and training
+- the mode inspects tabular files, media collections, folder-derived labels, and text or tabular sidecars before it unlocks plan preview and training
 - ambiguous beginner routes are reduced to one quick decision inside guided mode when Definers can safely narrow the choice instead of forcing an immediate switch to advanced mode
 - hosted runtimes such as Hugging Face Spaces and ZeroGPU keep preview inspection, first-pass dataset sizing, media collection sizing, and retention inside smaller hosted-safe budgets
 - guided training ends with a `Use Result` step that saves a session manifest, artifact sidecar, and rollout metrics for later recovery
@@ -64,7 +64,7 @@ The guided mode inside `train` owns these beginner-first rules:
 
 ## Session Persistence
 
-- each guided train run now writes a managed train session manifest under the train output root
+- each guided train run writes a managed train session manifest under the train output root
 - the final model artifact also receives a nearby manifest sidecar so future guided resume runs can recover the previous request, inspection, recommendations, and next actions
 - guided inspection and guided training also record rollout metrics so hosted and beginner-first routing outcomes can be audited without scraping UI output
 - the `Use Result` panel points users back to the `Run` tab for prediction, back to guided mode for continued training, or to the saved manifest for recovery and audit
@@ -73,7 +73,7 @@ The guided mode inside `train` owns these beginner-first rules:
 
 - guided validation depends on ML health being ready through `definers.ml.health_api`
 - local file inspection trusts the same safe-root policy as the data loader runtime
-- guided mode can now keep a dominant local file family for a first pass, align media sidecars, or infer media labels from folder structure when the route is still safe enough for beginner operation
+- guided mode can keep a dominant local file family for a first pass, align media sidecars, or infer media labels from folder structure when the route is still safe enough for beginner operation
 - unsupported or unresolved mixed-modality routes still fall back to the advanced workbench
 - hosted runtimes use shorter managed-output retention and can clean guided session outputs aggressively after training completes
 - train session manifests and artifact sidecars live under the managed output-path policy rather than the repository working tree

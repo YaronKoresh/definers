@@ -18,6 +18,7 @@ Definers keeps the base package small and treats optional domains as explicit in
 - Missing optional packages must fail cleanly.
 - CPU paths stay valid even when CUDA packages are absent.
 - Runtime install flows can target groups, tasks, modules, model domains, and model tasks.
+- Core spreadsheet-backed `xlsx` support is not optional; it is shipped in the base install through `openpyxl`.
 
 ## Import Policy
 
@@ -40,3 +41,8 @@ definers install audio
 definers install answer --type task
 definers install image --type model-domain
 ```
+
+## System Bootstrap
+
+- Linux hosts can use `apt_install()` from `definers.system` to provision the shared system packages behind the official audio, image, video, and hosted UI workflows.
+- That bootstrap includes `ffmpeg`, `libsndfile1`, `libgl1`, and `libglib2.0-0` in addition to the broader audio and visual stack.
