@@ -284,6 +284,7 @@ def test_process_stem_layers_saves_pre_mix_mastered_stems(tmp_path: Path):
         8000,
         "drums",
         base,
+        stem_overrides=drums_plan.overrides,
     )
     finished_vocals = MASTERING_STEMS_MODULE._apply_stem_role_finish(
         vocals_signal,
@@ -294,6 +295,7 @@ def test_process_stem_layers_saves_pre_mix_mastered_stems(tmp_path: Path):
             channel,
             copy=True,
         ),
+        stem_overrides=vocals_plan.overrides,
     )
     expected_drums, _ = MASTERING_STEMS_MODULE._apply_stem_mix_balance(
         finished_drums,
@@ -511,7 +513,61 @@ def test_apply_stem_mix_balance_keeps_bass_substantial_against_vocals():
     assert float(np.max(np.abs(bass))) > float(np.max(np.abs(vocals))) * 1.25
 
 
-def test_apply_stem_tone_enrichment_adds_default_octave_layers_to_vocals():
+def test_apply_stem_dynamics_controls_peaks_without_hollowing_bass():
+    base = CONFIG_MODULE.SmartMasteringConfig.balanced()
+    bass_plan = MASTERING_STEMS_MODULE.resolve_stem_mastering_plan("bass", base)
+    signal = np.full((2, 2048), 0.11, dtype=np.float32)
+    signal[:, :24] = 0.42
+    signal[:, 256:280] = -0.36
+
+    finished = MASTERING_STEMS_MODULE._apply_stem_dynamics(
+        signal,
+        8000,
+        "bass",
+        base,
+        stem_overrides=bass_plan.overrides,
+    )
+
+    input_peak = float(np.max(np.abs(signal)))
+    output_peak = float(np.max(np.abs(finished)))
+    input_body = float(np.mean(np.abs(signal[:, 512:1536])))
+    output_body = float(np.mean(np.abs(finished[:, 512:1536])))
+
+    assert output_peak < input_peak
+    assert output_body > input_body * 0.95
+
+
+def test_apply_stem_stereo_width_finish_widens_narrow_vocals():
+    base = CONFIG_MODULE.SmartMasteringConfig.balanced()
+    vocals_plan = MASTERING_STEMS_MODULE.resolve_stem_mastering_plan(
+        "vocals", base
+    )
+    time = np.linspace(
+        0.0, 12.0 * np.pi, 2048, endpoint=False, dtype=np.float32
+    )
+    mono = 0.18 * np.sin(time) + 0.05 * np.sin(time * 3.7)
+    signal = np.stack([mono, mono], axis=0).astype(np.float32)
+
+    widened = MASTERING_STEMS_MODULE._apply_stem_stereo_width_finish(
+        signal,
+        8000,
+        "vocals",
+        base,
+        stem_overrides=vocals_plan.overrides,
+    )
+
+    input_width = float(
+        np.sqrt(np.mean(np.square(0.5 * (signal[0] - signal[1]))))
+    )
+    output_width = float(
+        np.sqrt(np.mean(np.square(0.5 * (widened[0] - widened[1]))))
+    )
+
+    assert input_width == 0.0
+    assert output_width > 0.015
+
+
+def test_apply_stem_tone_enrichment_focuses_on_bass_by_default():
     base = CONFIG_MODULE.SmartMasteringConfig.balanced()
     calls: list[float] = []
     signal = np.full((2, 192), 0.2, dtype=np.float32)
@@ -519,7 +575,7 @@ def test_apply_stem_tone_enrichment_adds_default_octave_layers_to_vocals():
     enriched = MASTERING_STEMS_MODULE._apply_stem_tone_enrichment(
         signal,
         8000,
-        "vocals",
+        "bass",
         base,
         pitch_shift_fn=lambda channel, sample_rate, semitones: (
             calls.append(float(semitones))
@@ -527,8 +583,8 @@ def test_apply_stem_tone_enrichment_adds_default_octave_layers_to_vocals():
         ),
     )
 
-    assert set(calls) == {-12.0, -0.18, 0.18, 12.0}
-    assert len(calls) == 8
+    assert set(calls) == {-0.07, 12.0}
+    assert len(calls) == 4
     assert enriched.shape == signal.shape
     assert float(np.max(np.abs(enriched))) > float(np.max(np.abs(signal)))
 
@@ -564,30 +620,10 @@ def test_resolve_stem_tone_layers_varies_by_role():
     )
 
     assert tuple(semitones for semitones, _mix in bass_layers) == (-0.07, 12.0)
-    assert tuple(semitones for semitones, _mix in vocal_layers) == (
-        -12.0,
-        -0.18,
-        0.18,
-        12.0,
-    )
-    assert tuple(semitones for semitones, _mix in guitar_layers) == (
-        -12.0,
-        -0.12,
-        0.12,
-        12.0,
-    )
-    assert tuple(semitones for semitones, _mix in piano_layers) == (
-        -12.0,
-        -0.08,
-        0.08,
-        12.0,
-    )
-    assert tuple(semitones for semitones, _mix in other_layers) == (
-        -12.0,
-        -0.1,
-        0.1,
-        12.0,
-    )
+    assert vocal_layers == ()
+    assert guitar_layers == ()
+    assert piano_layers == ()
+    assert other_layers == ()
 
 
 def test_apply_stem_tone_enrichment_skips_drums_by_default():

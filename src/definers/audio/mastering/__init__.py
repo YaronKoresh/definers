@@ -738,7 +738,7 @@ def _master_internal(
         bitrate = int(kwargs.pop("bitrate", 320))
         compression_level = int(kwargs.pop("compression_level", 9))
         stem_model_name = str(kwargs.pop("stem_model_name", "mastering"))
-        stem_shifts = int(kwargs.pop("stem_shifts", 2))
+        stem_shifts = int(kwargs.pop("stem_shifts", 1))
         stem_mix_headroom_db = float(kwargs.pop("stem_mix_headroom_db", 6.0))
         save_mastered_stems = bool(
             kwargs.pop("save_mastered_stems", stem_mastering)

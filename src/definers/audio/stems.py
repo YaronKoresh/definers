@@ -124,13 +124,6 @@ def _resolve_mastering_sample_rate(input_sample_rate: int) -> int:
     return 44100
 
 
-def _has_repair_quality_flags(quality_flags: Sequence[str]) -> bool:
-    return any(
-        str(flag).strip() in {"Low-Quality", "Old-Recording"}
-        for flag in quality_flags
-    )
-
-
 def _separator_activity_scope(
     item_label: str,
     *,
@@ -180,10 +173,11 @@ def build_mastering_separator_plan(
     ):
         four_stem_candidates.insert(0, override_model_name)
 
-    use_repair_quality_path = _has_repair_quality_flags(resolved_quality_flags)
+    use_source_repair_path = True
+    use_post_separation_repair_path = True
 
     preprocess_stages: tuple[SeparatorModelStage, ...] = ()
-    if use_repair_quality_path:
+    if use_source_repair_path:
         preprocess_stages = (
             SeparatorModelStage(
                 model_candidates=_normalize_stage_candidates(
@@ -260,7 +254,7 @@ def build_mastering_separator_plan(
                 preferred_stems=("vocals",),
                 required=False,
             )
-            if use_repair_quality_path
+            if use_post_separation_repair_path
             else None
         ),
         instrumental_cleanup_stage=(
@@ -274,7 +268,7 @@ def build_mastering_separator_plan(
                 preferred_stems=("no bleed", "other", "instrumental"),
                 required=False,
             )
-            if use_repair_quality_path
+            if use_post_separation_repair_path
             else None
         ),
     )
@@ -839,6 +833,9 @@ def _run_mastering_separator_pipeline(
     *,
     shifts: int = 2,
 ) -> dict[str, str]:
+    primary_stage_shifts = max(int(shifts), 1)
+    repair_stage_shifts = 1
+
     with _separator_activity_scope(
         "Prepare separator input",
         detail="Resampling the source audio for stem separation.",
@@ -862,7 +859,7 @@ def _run_mastering_separator_pipeline(
                 f"preprocess_{stage_index}",
                 output_root,
                 plan.target_sample_rate,
-                shifts=shifts,
+                shifts=repair_stage_shifts,
             )
 
     isolated_vocal_path: str | None = None
@@ -877,7 +874,7 @@ def _run_mastering_separator_pipeline(
                 plan.vocal_pair_stage,
                 str(Path(output_root) / "vocal_pair"),
                 plan.target_sample_rate,
-                shifts=shifts,
+                shifts=primary_stage_shifts,
             )
         isolated_vocal_path = _select_stage_output(
             vocal_pair_outputs,
@@ -900,7 +897,7 @@ def _run_mastering_separator_pipeline(
                 "reference_split",
                 output_root,
                 plan.target_sample_rate,
-                shifts=shifts,
+                shifts=repair_stage_shifts,
             )
 
     four_stem_input_path = instrumental_reference_path or working_mix_path
@@ -913,7 +910,7 @@ def _run_mastering_separator_pipeline(
             plan.four_stem_stage,
             str(Path(output_root) / "four_stem"),
             plan.target_sample_rate,
-            shifts=shifts,
+            shifts=primary_stage_shifts,
         )
     drums_path = _select_stage_output(four_stem_outputs, ("drums",))
     bass_path = _select_stage_output(four_stem_outputs, ("bass",))
@@ -932,7 +929,7 @@ def _run_mastering_separator_pipeline(
                 "vocal_isolation",
                 output_root,
                 plan.target_sample_rate,
-                shifts=shifts,
+                shifts=primary_stage_shifts,
             )
     restored_vocal_path = isolated_vocal_path
     if plan.vocal_restoration_stage is not None:
@@ -946,7 +943,7 @@ def _run_mastering_separator_pipeline(
                 "vocal_restoration",
                 output_root,
                 plan.target_sample_rate,
-                shifts=shifts,
+                shifts=repair_stage_shifts,
             )
     cleaned_stage_paths = {
         "drums": drums_path,
@@ -967,7 +964,7 @@ def _run_mastering_separator_pipeline(
                 plan.instrumental_cleanup_stage,
                 str(Path(output_root) / "instrumental_cleanup"),
                 plan.target_sample_rate,
-                shifts=shifts,
+                shifts=repair_stage_shifts,
             )
     cleaned_drums_path = cleaned_stage_paths["drums"]
     cleaned_bass_path = cleaned_stage_paths["bass"]

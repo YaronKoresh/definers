@@ -282,14 +282,6 @@ def process_stem(
     log_fn("Mastering", "Applying stem cleanup...")
     y = self.apply_stem_cleanup(y, stem_role=stem_role)
 
-    log_fn("Mastering", "Applying exciter...")
-    y = _apply_exciter_stage(
-        self,
-        y,
-        stereo_fn=stereo_fn,
-        apply_exciter_fn=apply_exciter_fn,
-    )
-
     log_fn("Mastering", "Applying filtering...")
     y = freq_cut_fn(
         y,
@@ -370,14 +362,13 @@ def process(
         self.update_bands(self.spectral_balance_profile.band_intensity)
         y = self.multiband_compress(y)
 
-    if not preserve_stem_mix_tone:
-        log_fn("Mastering", "Applying exciter...")
-        y = _apply_exciter_stage(
-            self,
-            y,
-            stereo_fn=stereo_fn,
-            apply_exciter_fn=apply_exciter_fn,
-        )
+    log_fn("Mastering", "Applying exciter...")
+    y = _apply_exciter_stage(
+        self,
+        y,
+        stereo_fn=stereo_fn,
+        apply_exciter_fn=apply_exciter_fn,
+    )
 
     log_fn("Mastering", "Applying filtering...")
     y = freq_cut_fn(
@@ -387,14 +378,12 @@ def process(
         high_cut=self.filter_high_cut,
     )
 
-    if not preserve_stem_mix_tone:
-        log_fn("Mastering", "Applying stereo enhancement...")
-        y = self.apply_spatial_enhancement(y)
+    log_fn("Mastering", "Applying stereo enhancement...")
+    y = self.apply_spatial_enhancement(y)
     stage_signals["post_spatial"] = np.array(y, dtype=np.float32, copy=True)
 
-    if not preserve_stem_mix_tone:
-        log_fn("Mastering", "Applying low-end mono tightening...")
-        y = self.apply_low_end_mono_tightening(y)
+    log_fn("Mastering", "Applying low-end mono tightening...")
+    y = self.apply_low_end_mono_tightening(y)
 
     log_fn("Mastering", "Applying premaster true-peak trim...")
     y = self.apply_pre_limiter_true_peak_trim(y)
@@ -405,14 +394,14 @@ def process(
     stem_saturation_ratio = 0.0
     if stem_mastered_input:
         dynamic_drive_db = float(
-            min(dynamic_drive_db, max(self.drive_db * 1.1, 2.2))
+            min(dynamic_drive_db, max(self.drive_db * 1.32, 2.9))
         )
         stem_saturation_ratio = float(
             np.clip(
-                max(float(self.pre_limiter_saturation_ratio) * 0.62, 0.04)
-                + max(dynamic_drive_db - 0.6, 0.0) * 0.014,
+                max(float(self.pre_limiter_saturation_ratio) * 0.78, 0.06)
+                + max(dynamic_drive_db - 0.4, 0.0) * 0.02,
                 0.0,
-                0.14,
+                0.2,
             )
         )
     primary_soft_clip_ratio = self.compute_primary_soft_clip_ratio(
@@ -422,7 +411,7 @@ def process(
         primary_soft_clip_ratio = float(
             min(
                 primary_soft_clip_ratio,
-                max(float(self.limiter_soft_clip_ratio) * 0.7, 0.1),
+                max(float(self.limiter_soft_clip_ratio) * 0.95, 0.18),
             )
         )
 
@@ -464,7 +453,7 @@ def process(
         low_end_mono_cutoff_hz=contract.low_end_mono_cutoff_hz,
     )
     max_follow_up_passes = (
-        min(max(int(self.max_follow_up_passes), 1), 2)
+        min(max(int(self.max_follow_up_passes), 1), 3)
         if stem_mastered_input
         else self.max_follow_up_passes
     )
@@ -635,8 +624,8 @@ def process(
 
     peak_catch_events: list[PeakCatchEvent] = []
     peak_catch_metrics = character_metrics
-    peak_catch_attempts = 1 if stem_mastered_input else 3
-    peak_catch_soft_clip_ceiling = 0.22 if stem_mastered_input else 0.35
+    peak_catch_attempts = 2 if stem_mastered_input else 3
+    peak_catch_soft_clip_ceiling = 0.3 if stem_mastered_input else 0.35
     for peak_catch_index in range(peak_catch_attempts):
         before_true_peak_dbfs = float(
             getattr(peak_catch_metrics, "true_peak_dbfs", final_ceiling_db)
