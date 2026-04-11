@@ -165,6 +165,7 @@ def _load_mastering_module(package_name: str):
 CONFIG_MODULE, MASTERING_MODULE = _load_mastering_module(
     "_test_audio_mastering_phase_pkg.audio"
 )
+EQ_MODULE = sys.modules["_test_audio_mastering_phase_pkg.audio.mastering.eq"]
 
 
 def _make_mastering_instance():
@@ -803,6 +804,262 @@ def test_apply_stem_cleanup_preserves_drum_body_under_high_repair_pressure():
     assert idle_after < idle_before * 0.45
     assert body_after > body_before * 0.5
     assert peak_after > peak_before * 0.7
+
+
+def test_apply_stem_cleanup_does_not_hollow_sustained_bass_sections():
+    mastering = _make_mastering_instance()
+    mastering.spectral_balance_profile = (
+        MASTERING_MODULE.SpectralBalanceProfile(
+            rescue_factor=1.0,
+            correction_strength=1.0,
+            max_boost_db=12.0,
+            max_cut_db=6.0,
+            band_intensity=1.0,
+            restoration_factor=1.0,
+            air_restoration_factor=0.9,
+            body_restoration_factor=0.9,
+            closure_repair_factor=1.0,
+        )
+    )
+    source = np.full(960, 0.01, dtype=np.float32)
+    source[96:864] += 0.09
+    source[160:800] += 0.04 * np.sin(
+        np.linspace(0.0, 18.0 * np.pi, 640, endpoint=False, dtype=np.float32)
+    )
+
+    cleaned = mastering.apply_stem_cleanup(source, stem_role="bass")
+
+    body_before = float(np.mean(np.abs(source[224:736])))
+    body_after = float(np.mean(np.abs(cleaned[224:736])))
+    preserved_ratio = float(
+        np.mean(np.abs(cleaned[224:736]) >= np.abs(source[224:736]) * 0.45)
+    )
+
+    assert body_after > body_before * 0.72
+    assert preserved_ratio > 0.8
+
+
+def test_apply_stem_noise_gate_exposes_full_requested_controls():
+    mastering = MASTERING_MODULE.SmartMastering(
+        8000,
+        stem_noise_gate_normalization_mode="dbfs",
+        stem_noise_gate_normalization_target_dbfs=-9.0,
+        stem_noise_gate_threshold_db=-12.0,
+        stem_noise_gate_hysteresis_db=3.0,
+        stem_noise_gate_reduction_range_db=36.0,
+        stem_noise_gate_attack_ms=0.8,
+        stem_noise_gate_hold_ms=44.0,
+        stem_noise_gate_release_ms=28.0,
+        stem_noise_gate_lookahead_ms=2.5,
+        stem_noise_gate_soft_knee_db=6.0,
+        stem_noise_gate_oversampling=2,
+        stem_noise_gate_sidechain_hpf_hz=120.0,
+        stem_noise_gate_sidechain_lpf_hz=5200.0,
+        stem_noise_gate_stereo_link_percent=35.0,
+        stem_noise_gate_zero_crossing_enabled=False,
+        stem_noise_gate_zero_crossing_window_ms=2.0,
+        stem_noise_gate_adaptive_release_enabled=True,
+        stem_noise_gate_adaptive_release_strength=0.7,
+        stem_noise_gate_rms_window_ms=12.0,
+        stem_noise_gate_dc_offset_compensation=True,
+        stem_noise_gate_delay_compensation_enabled=True,
+        stem_noise_gate_inter_sample_peak_awareness=True,
+        stem_noise_gate_analysis_peak_dbfs=-1.0,
+    )
+    source = np.zeros(320, dtype=np.float32)
+    source[80:160] = 0.25
+
+    EQ_MODULE._apply_stem_noise_gate(
+        mastering,
+        source,
+        stem_role="vocals",
+        cleanup_pressure=0.0,
+    )
+
+    profile = mastering.last_stem_noise_gate_profile
+
+    assert profile["normalization_mode"] == "dbfs"
+    assert profile["normalization_target_dbfs"] == pytest.approx(-9.0)
+    assert profile["threshold_db"] == pytest.approx(-12.0)
+    assert profile["hysteresis_db"] == pytest.approx(3.0)
+    assert profile["reduction_range_db"] == pytest.approx(36.0)
+    assert profile["attack_ms"] == pytest.approx(0.8)
+    assert profile["hold_ms"] == pytest.approx(44.0)
+    assert profile["release_ms"] == pytest.approx(28.0)
+    assert profile["lookahead_ms"] == pytest.approx(2.5)
+    assert profile["soft_knee_db"] == pytest.approx(6.0)
+    assert profile["oversampling"] == 2
+    assert profile["sidechain_hpf_hz"] == pytest.approx(120.0)
+    assert profile["sidechain_lpf_hz"] == pytest.approx(5200.0)
+    assert profile["stereo_link_percent"] == pytest.approx(35.0)
+    assert profile["zero_crossing_enabled"] is False
+    assert profile["zero_crossing_window_ms"] == pytest.approx(2.0)
+    assert profile["adaptive_release_enabled"] is True
+    assert profile["adaptive_release_strength"] == pytest.approx(0.7)
+    assert profile["rms_window_ms"] == pytest.approx(12.0)
+    assert profile["dc_offset_compensation"] is True
+    assert profile["delay_compensation_enabled"] is True
+    assert profile["inter_sample_peak_awareness"] is True
+    assert profile["analysis_peak_dbfs"] == pytest.approx(-1.0)
+    assert mastering.last_stem_noise_gate_analysis_peak_dbfs == pytest.approx(
+        -1.0,
+        abs=0.05,
+    )
+
+
+def test_apply_stem_noise_gate_sidechain_hpf_ignores_low_rumble_trigger():
+    time_axis = np.arange(640, dtype=np.float32) / 8000.0
+    source = 0.18 * np.sin(2.0 * np.pi * 40.0 * time_axis).astype(np.float32)
+    source[240:320] += 0.09 * np.sin(
+        2.0 * np.pi * 1400.0 * time_axis[240:320]
+    ).astype(np.float32)
+
+    no_hpf = MASTERING_MODULE.SmartMastering(
+        8000,
+        stem_noise_gate_threshold_db=-12.0,
+        stem_noise_gate_reduction_range_db=48.0,
+        stem_noise_gate_attack_ms=0.3,
+        stem_noise_gate_hold_ms=0.0,
+        stem_noise_gate_release_ms=6.0,
+        stem_noise_gate_lookahead_ms=0.0,
+        stem_noise_gate_rms_window_ms=2.0,
+        stem_noise_gate_zero_crossing_enabled=False,
+        stem_noise_gate_sidechain_hpf_hz=0.0,
+    )
+    with_hpf = MASTERING_MODULE.SmartMastering(
+        8000,
+        stem_noise_gate_threshold_db=-12.0,
+        stem_noise_gate_reduction_range_db=48.0,
+        stem_noise_gate_attack_ms=0.3,
+        stem_noise_gate_hold_ms=0.0,
+        stem_noise_gate_release_ms=6.0,
+        stem_noise_gate_lookahead_ms=0.0,
+        stem_noise_gate_rms_window_ms=2.0,
+        stem_noise_gate_zero_crossing_enabled=False,
+        stem_noise_gate_sidechain_hpf_hz=160.0,
+    )
+
+    output_no_hpf = EQ_MODULE._apply_stem_noise_gate(
+        no_hpf,
+        source,
+        stem_role="vocals",
+        cleanup_pressure=0.0,
+    )
+    output_with_hpf = EQ_MODULE._apply_stem_noise_gate(
+        with_hpf,
+        source,
+        stem_role="vocals",
+        cleanup_pressure=0.0,
+    )
+
+    idle_no_hpf = float(np.mean(np.abs(output_no_hpf[0:160])))
+    idle_with_hpf = float(np.mean(np.abs(output_with_hpf[0:160])))
+    burst_with_hpf = float(np.mean(np.abs(output_with_hpf[252:308])))
+
+    assert idle_with_hpf < idle_no_hpf * 0.35
+    assert burst_with_hpf > idle_with_hpf * 4.0
+
+
+def test_apply_stem_noise_gate_stereo_link_percent_controls_linking():
+    source = np.full((2, 480), 0.002, dtype=np.float32)
+    source[0, 120:320] += 0.42
+    source[1, 120:320] += 0.07
+
+    unlinked = MASTERING_MODULE.SmartMastering(
+        8000,
+        stem_noise_gate_threshold_db=-10.0,
+        stem_noise_gate_reduction_range_db=42.0,
+        stem_noise_gate_attack_ms=0.5,
+        stem_noise_gate_hold_ms=0.0,
+        stem_noise_gate_release_ms=8.0,
+        stem_noise_gate_lookahead_ms=0.0,
+        stem_noise_gate_rms_window_ms=3.0,
+        stem_noise_gate_zero_crossing_enabled=False,
+        stem_noise_gate_stereo_link_percent=0.0,
+    )
+    linked = MASTERING_MODULE.SmartMastering(
+        8000,
+        stem_noise_gate_threshold_db=-10.0,
+        stem_noise_gate_reduction_range_db=42.0,
+        stem_noise_gate_attack_ms=0.5,
+        stem_noise_gate_hold_ms=0.0,
+        stem_noise_gate_release_ms=8.0,
+        stem_noise_gate_lookahead_ms=0.0,
+        stem_noise_gate_rms_window_ms=3.0,
+        stem_noise_gate_zero_crossing_enabled=False,
+        stem_noise_gate_stereo_link_percent=100.0,
+    )
+
+    output_unlinked = EQ_MODULE._apply_stem_noise_gate(
+        unlinked,
+        source,
+        stem_role="vocals",
+        cleanup_pressure=0.0,
+    )
+    output_linked = EQ_MODULE._apply_stem_noise_gate(
+        linked,
+        source,
+        stem_role="vocals",
+        cleanup_pressure=0.0,
+    )
+
+    right_phrase_unlinked = float(np.mean(np.abs(output_unlinked[1, 160:280])))
+    right_phrase_linked = float(np.mean(np.abs(output_linked[1, 160:280])))
+    right_idle_linked = float(np.mean(np.abs(output_linked[1, 0:96])))
+
+    assert right_phrase_linked > right_phrase_unlinked * 1.35
+    assert right_idle_linked < right_phrase_linked * 0.45
+
+
+def test_apply_stem_noise_gate_delay_compensation_keeps_transient_alignment():
+    source = np.zeros(400, dtype=np.float32)
+    source[80:86] = 1.0
+
+    delayed = MASTERING_MODULE.SmartMastering(
+        8000,
+        stem_noise_gate_threshold_db=-18.0,
+        stem_noise_gate_reduction_range_db=54.0,
+        stem_noise_gate_attack_ms=0.1,
+        stem_noise_gate_hold_ms=0.0,
+        stem_noise_gate_release_ms=2.0,
+        stem_noise_gate_lookahead_ms=5.0,
+        stem_noise_gate_rms_window_ms=0.5,
+        stem_noise_gate_zero_crossing_enabled=False,
+        stem_noise_gate_delay_compensation_enabled=False,
+    )
+    compensated = MASTERING_MODULE.SmartMastering(
+        8000,
+        stem_noise_gate_threshold_db=-18.0,
+        stem_noise_gate_reduction_range_db=54.0,
+        stem_noise_gate_attack_ms=0.1,
+        stem_noise_gate_hold_ms=0.0,
+        stem_noise_gate_release_ms=2.0,
+        stem_noise_gate_lookahead_ms=5.0,
+        stem_noise_gate_rms_window_ms=0.5,
+        stem_noise_gate_zero_crossing_enabled=False,
+        stem_noise_gate_delay_compensation_enabled=True,
+    )
+
+    output_delayed = EQ_MODULE._apply_stem_noise_gate(
+        delayed,
+        source,
+        stem_role="drums",
+        cleanup_pressure=0.0,
+    )
+    output_compensated = EQ_MODULE._apply_stem_noise_gate(
+        compensated,
+        source,
+        stem_role="drums",
+        cleanup_pressure=0.0,
+    )
+
+    delayed_peak_index = int(np.argmax(np.abs(output_delayed)))
+    compensated_peak_index = int(np.argmax(np.abs(output_compensated)))
+
+    assert output_delayed.shape == source.shape
+    assert output_compensated.shape == source.shape
+    assert delayed_peak_index > compensated_peak_index
+    assert abs(compensated_peak_index - 80) <= 4
 
 
 def test_build_spectral_balance_profile_raises_repair_ceiling_for_edm_like_deficit():

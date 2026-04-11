@@ -470,6 +470,105 @@ _DERIVED_FIELD_SPECS: dict[str, dict[str, Any]] = {
         "coeffs": {"volume": 0.05, "effects": -0.02},
         "clip": (0.0, 1.5),
     },
+    "stem_noise_gate_normalization_mode": {
+        "base": "none",
+        "kind": "str",
+    },
+    "stem_noise_gate_normalization_target_lufs": {
+        "base": -24.0,
+        "clip": (-70.0, 0.0),
+    },
+    "stem_noise_gate_normalization_target_dbfs": {
+        "base": -6.0,
+        "clip": (-60.0, 0.0),
+    },
+    "stem_noise_gate_threshold_db": {
+        "base": None,
+    },
+    "stem_noise_gate_hysteresis_db": {
+        "base": 4.5,
+        "clip": (0.0, 24.0),
+    },
+    "stem_noise_gate_reduction_range_db": {
+        "base": 28.0,
+        "clip": (0.0, 96.0),
+    },
+    "stem_noise_gate_attack_ms": {
+        "base": 4.0,
+        "coeffs": {"volume": -0.5, "effects": 1.0},
+        "clip": (0.1, 80.0),
+    },
+    "stem_noise_gate_hold_ms": {
+        "base": 90.0,
+        "coeffs": {"effects": 6.0},
+        "clip": (0.0, 500.0),
+    },
+    "stem_noise_gate_release_ms": {
+        "base": 42.0,
+        "coeffs": {"effects": 4.0},
+        "clip": (1.0, 500.0),
+    },
+    "stem_noise_gate_lookahead_ms": {
+        "base": 2.0,
+        "clip": (0.0, 20.0),
+    },
+    "stem_noise_gate_soft_knee_db": {
+        "base": 4.0,
+        "clip": (0.0, 24.0),
+    },
+    "stem_noise_gate_oversampling": {
+        "base": 1,
+        "kind": "int",
+        "clip": (1, 8),
+    },
+    "stem_noise_gate_sidechain_hpf_hz": {
+        "base": 0.0,
+        "clip": (0.0, 18000.0),
+    },
+    "stem_noise_gate_sidechain_lpf_hz": {
+        "base": 0.0,
+        "clip": (0.0, 22000.0),
+    },
+    "stem_noise_gate_stereo_link_percent": {
+        "base": 100.0,
+        "clip": (0.0, 100.0),
+    },
+    "stem_noise_gate_zero_crossing_enabled": {
+        "base": True,
+        "kind": "bool",
+    },
+    "stem_noise_gate_zero_crossing_window_ms": {
+        "base": 1.5,
+        "clip": (0.0, 25.0),
+    },
+    "stem_noise_gate_adaptive_release_enabled": {
+        "base": True,
+        "kind": "bool",
+    },
+    "stem_noise_gate_adaptive_release_strength": {
+        "base": 0.45,
+        "clip": (0.0, 1.5),
+    },
+    "stem_noise_gate_rms_window_ms": {
+        "base": 10.0,
+        "clip": (0.5, 200.0),
+    },
+    "stem_noise_gate_dc_offset_compensation": {
+        "base": True,
+        "kind": "bool",
+    },
+    "stem_noise_gate_delay_compensation_enabled": {
+        "base": True,
+        "kind": "bool",
+    },
+    "stem_noise_gate_inter_sample_peak_awareness": {
+        "base": True,
+        "kind": "bool",
+    },
+    "stem_noise_gate_analysis_peak_dbfs": {
+        "base": -1.0,
+        "clip": (-12.0, -0.1),
+    },
     "stem_cleanup_strength": {
         "base": 1.0,
         "clip": (0.0, 1.5),
@@ -565,6 +664,8 @@ def _apply_numeric_spec(
     base_value = spec["base"]
     if kind == "bool":
         return bool(base_value)
+    if kind == "str":
+        return str(base_value)
     if base_value is None:
         return None
 

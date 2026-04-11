@@ -734,6 +734,125 @@ def _align_audio_length(
     ).astype(np.float32, copy=False)
 
 
+def _signal_rms(values: np.ndarray) -> float:
+    array = np.asarray(values, dtype=np.float32)
+    if array.size == 0:
+        return 0.0
+    return float(np.sqrt(np.mean(np.square(array), dtype=np.float32)))
+
+
+def _resolve_optional_stage_content_profile(
+    stage_kind: str,
+) -> dict[str, float]:
+    normalized_stage_kind = str(stage_kind).strip().lower()
+    if normalized_stage_kind == "preprocess":
+        return {
+            "min_full_rms_ratio": 0.48,
+            "min_active_rms_ratio": 0.68,
+            "min_preserved_coverage_ratio": 0.74,
+        }
+    if normalized_stage_kind == "vocal_restoration":
+        return {
+            "min_full_rms_ratio": 0.44,
+            "min_active_rms_ratio": 0.64,
+            "min_preserved_coverage_ratio": 0.72,
+        }
+    if normalized_stage_kind == "instrumental_cleanup":
+        return {
+            "min_full_rms_ratio": 0.36,
+            "min_active_rms_ratio": 0.58,
+            "min_preserved_coverage_ratio": 0.64,
+        }
+    return {
+        "min_full_rms_ratio": 0.42,
+        "min_active_rms_ratio": 0.62,
+        "min_preserved_coverage_ratio": 0.68,
+    }
+
+
+def _optional_stage_preserves_source_content(
+    source_path: str,
+    candidate_path: str,
+    target_sample_rate: int,
+    *,
+    stage_kind: str,
+) -> bool:
+    if not source_path or not candidate_path or source_path == candidate_path:
+        return True
+    try:
+        source_signal = _read_stage_signal(source_path, target_sample_rate)
+        candidate_signal = _read_stage_signal(
+            candidate_path,
+            target_sample_rate,
+        )
+    except Exception:
+        return True
+
+    target_length = max(
+        int(source_signal.shape[-1]),
+        int(candidate_signal.shape[-1]),
+    )
+    source_signal = _align_audio_length(source_signal, target_length)
+    candidate_signal = _align_audio_length(candidate_signal, target_length)
+    source_energy = np.mean(np.abs(source_signal), axis=0, dtype=np.float32)
+    candidate_energy = np.mean(
+        np.abs(candidate_signal),
+        axis=0,
+        dtype=np.float32,
+    )
+    source_rms = _signal_rms(source_energy)
+    candidate_rms = _signal_rms(candidate_energy)
+    if source_rms <= 1e-6:
+        return True
+
+    source_peak = float(np.max(source_energy)) if source_energy.size else 0.0
+    activity_threshold = float(
+        max(
+            np.percentile(source_energy, 66.0),
+            np.mean(source_energy, dtype=np.float32) * 1.02,
+            source_peak * 0.14,
+            1e-6,
+        )
+    )
+    active_mask = source_energy >= activity_threshold
+    if not np.any(active_mask):
+        active_mask = source_energy >= max(source_peak * 0.3, 1e-6)
+
+    source_active = source_energy[active_mask]
+    candidate_active = candidate_energy[active_mask]
+    source_active_rms = _signal_rms(source_active)
+    candidate_active_rms = _signal_rms(candidate_active)
+    preserved_mask = candidate_active >= np.maximum(
+        source_active * 0.26,
+        activity_threshold * 0.24,
+    )
+    profile = _resolve_optional_stage_content_profile(stage_kind)
+    return bool(
+        candidate_rms >= source_rms * profile["min_full_rms_ratio"]
+        and candidate_active_rms
+        >= source_active_rms * profile["min_active_rms_ratio"]
+        and float(np.mean(preserved_mask, dtype=np.float32))
+        >= profile["min_preserved_coverage_ratio"]
+    )
+
+
+def _prefer_preserved_optional_stage_output(
+    source_path: str,
+    candidate_path: str,
+    target_sample_rate: int,
+    *,
+    stage_kind: str,
+) -> str:
+    if _optional_stage_preserves_source_content(
+        source_path,
+        candidate_path,
+        target_sample_rate,
+        stage_kind=stage_kind,
+    ):
+        return candidate_path
+    return source_path
+
+
 def _read_stage_signal(audio_path: str, target_sample_rate: int) -> np.ndarray:
     sample_rate, audio_signal = read_audio(audio_path)
     return _resample_audio_array(audio_signal, sample_rate, target_sample_rate)
@@ -853,13 +972,19 @@ def _run_mastering_separator_pipeline(
             stage_label,
             detail="Running the separator preprocessing stage.",
         ):
-            working_mix_path = _apply_stage_to_single_output(
+            stage_output_path = _apply_stage_to_single_output(
                 working_mix_path,
                 stage,
                 f"preprocess_{stage_index}",
                 output_root,
                 plan.target_sample_rate,
                 shifts=repair_stage_shifts,
+            )
+            working_mix_path = _prefer_preserved_optional_stage_output(
+                source_path=working_mix_path,
+                candidate_path=stage_output_path,
+                target_sample_rate=plan.target_sample_rate,
+                stage_kind="preprocess",
             )
 
     isolated_vocal_path: str | None = None
@@ -937,13 +1062,19 @@ def _run_mastering_separator_pipeline(
             "Restore vocals",
             detail="Applying the optional vocal restoration pass.",
         ):
-            restored_vocal_path = _apply_stage_to_single_output(
+            restored_vocal_candidate_path = _apply_stage_to_single_output(
                 isolated_vocal_path,
                 plan.vocal_restoration_stage,
                 "vocal_restoration",
                 output_root,
                 plan.target_sample_rate,
                 shifts=repair_stage_shifts,
+            )
+            restored_vocal_path = _prefer_preserved_optional_stage_output(
+                source_path=isolated_vocal_path,
+                candidate_path=restored_vocal_candidate_path,
+                target_sample_rate=plan.target_sample_rate,
+                stage_kind="vocal_restoration",
             )
     cleaned_stage_paths = {
         "drums": drums_path,
@@ -955,7 +1086,7 @@ def _run_mastering_separator_pipeline(
             "Clean instrumental stems",
             detail="Applying the optional bleed-suppression cleanup pass.",
         ):
-            cleaned_stage_paths = _run_separator_stage_batch(
+            cleaned_stage_candidate_paths = _run_separator_stage_batch(
                 {
                     "drums": drums_path,
                     "bass": bass_path,
@@ -966,6 +1097,22 @@ def _run_mastering_separator_pipeline(
                 plan.target_sample_rate,
                 shifts=repair_stage_shifts,
             )
+            cleaned_stage_paths = {
+                stem_name: _prefer_preserved_optional_stage_output(
+                    source_path=source_path,
+                    candidate_path=cleaned_stage_candidate_paths.get(
+                        stem_name,
+                        source_path,
+                    ),
+                    target_sample_rate=plan.target_sample_rate,
+                    stage_kind="instrumental_cleanup",
+                )
+                for stem_name, source_path in {
+                    "drums": drums_path,
+                    "bass": bass_path,
+                    "other": other_path,
+                }.items()
+            }
     cleaned_drums_path = cleaned_stage_paths["drums"]
     cleaned_bass_path = cleaned_stage_paths["bass"]
     cleaned_other_path = cleaned_stage_paths["other"]

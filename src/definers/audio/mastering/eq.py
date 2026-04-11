@@ -110,11 +110,15 @@ def _moving_average(values: np.ndarray, window_size: int) -> np.ndarray:
     if window_size <= 1:
         return samples.astype(np.float32, copy=True)
 
-    left_pad = window_size // 2
-    right_pad = window_size - left_pad - 1
-    padded = np.pad(samples, (left_pad, right_pad), mode="edge")
-    kernel = np.full(window_size, 1.0 / window_size, dtype=np.float32)
-    return np.convolve(padded, kernel, mode="valid").astype(np.float32)
+    cumulative = np.cumsum(samples, dtype=np.float64)
+    smoothed = np.empty_like(samples)
+    for index in range(samples.size):
+        start = max(0, index - window_size + 1)
+        total = cumulative[index]
+        if start > 0:
+            total -= cumulative[start - 1]
+        smoothed[index] = total / float(index - start + 1)
+    return smoothed.astype(np.float32, copy=False)
 
 
 def _rolling_max(values: np.ndarray, window_size: int) -> np.ndarray:
@@ -146,6 +150,246 @@ def _restore_audio_dtype(values: np.ndarray, dtype: np.dtype) -> np.ndarray:
         return np.clip(values, info.min, info.max).astype(dtype)
 
     return values.astype(dtype, copy=False)
+
+
+def _signal_rms(values: np.ndarray) -> float:
+    array = np.asarray(values, dtype=np.float32)
+    if array.size == 0:
+        return 0.0
+    return float(np.sqrt(np.mean(np.square(array), dtype=np.float32)))
+
+
+def _as_audio_channels(signal: np.ndarray) -> np.ndarray:
+    array = np.asarray(signal, dtype=np.float32)
+    if array.ndim == 1:
+        return array.reshape(1, -1)
+    if array.ndim == 2 and array.shape[0] <= array.shape[-1]:
+        return array.astype(np.float32, copy=False)
+    if array.ndim == 2:
+        return array.T.astype(np.float32, copy=False)
+    raise ValueError("Unsupported audio shape")
+
+
+def _align_audio_channels(signal: np.ndarray, target_length: int) -> np.ndarray:
+    channels = _as_audio_channels(signal)
+    current_length = int(channels.shape[-1])
+    if current_length == target_length:
+        return channels.astype(np.float32, copy=False)
+    if current_length > target_length:
+        return channels[:, :target_length].astype(np.float32, copy=False)
+    return np.pad(
+        channels,
+        ((0, 0), (0, target_length - current_length)),
+    ).astype(np.float32, copy=False)
+
+
+def _restore_audio_layout(
+    channels: np.ndarray,
+    reference_signal: np.ndarray,
+) -> np.ndarray:
+    reference_array = np.asarray(reference_signal)
+    if reference_array.ndim == 1:
+        return channels[0].astype(np.float32, copy=False)
+    if (
+        reference_array.ndim == 2
+        and reference_array.shape[0] > reference_array.shape[-1]
+    ):
+        return channels.T.astype(np.float32, copy=False)
+    return channels.astype(np.float32, copy=False)
+
+
+def _resolve_mask_window_samples(
+    sample_count: int,
+    sample_rate: int,
+    milliseconds: float,
+    *,
+    max_fraction: float,
+) -> int:
+    requested = int(round(sample_rate * milliseconds / 1000.0))
+    relative_cap = max(1, int(round(sample_count * max_fraction)))
+    return max(1, min(sample_count, requested, relative_cap))
+
+
+def _resolve_stem_cleanup_preservation_profile(
+    stem_role: str | None,
+) -> dict[str, float]:
+    normalized_role = _normalize_stem_role(stem_role)
+    if normalized_role == "drums":
+        return {
+            "min_full_rms_ratio": 0.28,
+            "min_active_rms_ratio": 0.56,
+            "min_preserved_coverage_ratio": 0.48,
+            "restore_mix": 0.28,
+        }
+    if normalized_role == "bass":
+        return {
+            "min_full_rms_ratio": 0.56,
+            "min_active_rms_ratio": 0.76,
+            "min_preserved_coverage_ratio": 0.82,
+            "restore_mix": 0.58,
+        }
+    if normalized_role == "vocals":
+        return {
+            "min_full_rms_ratio": 0.48,
+            "min_active_rms_ratio": 0.7,
+            "min_preserved_coverage_ratio": 0.78,
+            "restore_mix": 0.54,
+        }
+    if normalized_role == "other":
+        return {
+            "min_full_rms_ratio": 0.42,
+            "min_active_rms_ratio": 0.66,
+            "min_preserved_coverage_ratio": 0.72,
+            "restore_mix": 0.56,
+        }
+    return {
+        "min_full_rms_ratio": 0.44,
+        "min_active_rms_ratio": 0.68,
+        "min_preserved_coverage_ratio": 0.74,
+        "restore_mix": 0.5,
+    }
+
+
+def _measure_stem_cleanup_preservation(
+    source_signal: np.ndarray,
+    processed_signal: np.ndarray,
+) -> dict[str, float]:
+    source_channels = _as_audio_channels(source_signal)
+    processed_channels = _as_audio_channels(processed_signal)
+    target_length = max(
+        int(source_channels.shape[-1]),
+        int(processed_channels.shape[-1]),
+    )
+    source_channels = _align_audio_channels(source_channels, target_length)
+    processed_channels = _align_audio_channels(
+        processed_channels, target_length
+    )
+
+    source_energy = np.mean(np.abs(source_channels), axis=0, dtype=np.float32)
+    processed_energy = np.mean(
+        np.abs(processed_channels), axis=0, dtype=np.float32
+    )
+    source_rms = _signal_rms(source_energy)
+    processed_rms = _signal_rms(processed_energy)
+    if source_rms <= 1e-6:
+        return {
+            "full_rms_ratio": 1.0,
+            "active_rms_ratio": 1.0,
+            "preserved_coverage_ratio": 1.0,
+        }
+
+    source_peak = float(np.max(source_energy)) if source_energy.size else 0.0
+    activity_threshold = float(
+        max(
+            np.percentile(source_energy, 66.0),
+            np.mean(source_energy, dtype=np.float32) * 1.02,
+            source_peak * 0.14,
+            1e-6,
+        )
+    )
+    active_mask = source_energy >= activity_threshold
+    if not np.any(active_mask):
+        active_mask = source_energy >= max(source_peak * 0.3, 1e-6)
+
+    source_active = source_energy[active_mask]
+    processed_active = processed_energy[active_mask]
+    source_active_rms = _signal_rms(source_active)
+    processed_active_rms = _signal_rms(processed_active)
+    preserved_mask = processed_active >= np.maximum(
+        source_active * 0.26,
+        activity_threshold * 0.24,
+    )
+    return {
+        "full_rms_ratio": float(processed_rms / max(source_rms, 1e-6)),
+        "active_rms_ratio": float(
+            processed_active_rms / max(source_active_rms, 1e-6)
+        ),
+        "preserved_coverage_ratio": float(
+            np.mean(preserved_mask, dtype=np.float32)
+        ),
+    }
+
+
+def _stem_cleanup_preservation_failed(
+    metrics: dict[str, float],
+    profile: dict[str, float],
+) -> bool:
+    active_failed = (
+        metrics["active_rms_ratio"] < profile["min_active_rms_ratio"]
+    )
+    coverage_failed = (
+        metrics["preserved_coverage_ratio"]
+        < profile["min_preserved_coverage_ratio"]
+    )
+    full_failed = metrics["full_rms_ratio"] < profile["min_full_rms_ratio"]
+    return active_failed or coverage_failed or (full_failed and coverage_failed)
+
+
+def _build_stem_cleanup_restore_mask(source_signal: np.ndarray) -> np.ndarray:
+    source_channels = _as_audio_channels(source_signal)
+    source_energy = np.mean(np.abs(source_channels), axis=0, dtype=np.float32)
+    if source_energy.size == 0:
+        return np.zeros((1, 0), dtype=np.float32)
+
+    source_peak = float(np.max(source_energy)) if source_energy.size else 0.0
+    activity_threshold = float(
+        max(
+            np.percentile(source_energy, 66.0),
+            np.mean(source_energy, dtype=np.float32) * 1.02,
+            source_peak * 0.14,
+            1e-6,
+        )
+    )
+    active_mask = source_energy >= activity_threshold
+    if not np.any(active_mask):
+        active_mask = source_energy >= max(source_peak * 0.3, 1e-6)
+
+    hold_samples = max(
+        1,
+        min(
+            source_energy.size,
+            max(4, source_energy.size // 36),
+        ),
+    )
+    restore_curve = _rolling_max(active_mask.astype(np.float32), hold_samples)
+    restore_curve = _moving_average(
+        restore_curve,
+        max(1, hold_samples // 2),
+    )
+    restore_curve = np.clip(restore_curve, 0.0, 1.0)
+    return restore_curve.reshape(1, -1)
+
+
+def _preserve_stem_cleanup_content(
+    source_signal: np.ndarray,
+    processed_signal: np.ndarray,
+    *,
+    stem_role: str | None,
+) -> np.ndarray:
+    profile = _resolve_stem_cleanup_preservation_profile(stem_role)
+    source_array = np.asarray(source_signal, dtype=np.float32)
+    processed_array = np.asarray(processed_signal, dtype=np.float32)
+    metrics = _measure_stem_cleanup_preservation(source_array, processed_array)
+    if not _stem_cleanup_preservation_failed(metrics, profile):
+        return processed_array
+
+    source_channels = _as_audio_channels(source_array)
+    processed_channels = _align_audio_channels(
+        processed_array,
+        int(source_channels.shape[-1]),
+    )
+    restore_mix = float(np.clip(profile["restore_mix"], 0.0, 1.0))
+    restore_mask = _build_stem_cleanup_restore_mask(source_array)
+    blended_channels = processed_channels * (1.0 - restore_mix * restore_mask)
+    blended_channels += source_channels * (restore_mix * restore_mask)
+    restored = _restore_audio_layout(blended_channels, source_array)
+    restored_metrics = _measure_stem_cleanup_preservation(
+        source_array,
+        restored,
+    )
+    if not _stem_cleanup_preservation_failed(restored_metrics, profile):
+        return restored.astype(np.float32, copy=False)
+    return _restore_audio_layout(source_channels, source_array)
 
 
 def _resolve_stem_cleanup_pressure(
@@ -234,11 +478,561 @@ def _resolve_stem_residual_profile(
     }
 
 
+def _db_to_linear(level_db: float) -> float:
+    if not np.isfinite(level_db):
+        return 1.0
+    return float(10.0 ** (float(level_db) / 20.0))
+
+
+def _amplitude_to_db(values: np.ndarray) -> np.ndarray:
+    array = np.asarray(values, dtype=np.float32)
+    return (20.0 * np.log10(np.maximum(array, 1e-6))).astype(np.float32)
+
+
+def _measure_gate_sample_peak_dbfs(signal_values: np.ndarray) -> float:
+    array = np.asarray(signal_values, dtype=np.float32)
+    peak = float(np.max(np.abs(array))) if array.size else 0.0
+    if peak <= 0.0 or not np.isfinite(peak):
+        return -120.0
+    return float(20.0 * np.log10(peak))
+
+
+def _measure_gate_true_peak_dbfs(
+    signal_values: np.ndarray,
+    sample_rate: int,
+    oversample_factor: int,
+) -> float:
+    try:
+        from .loudness import measure_true_peak as loudness_measure_true_peak
+    except ImportError:
+        from definers.audio.mastering.loudness import (
+            measure_true_peak as loudness_measure_true_peak,
+        )
+
+    return float(
+        loudness_measure_true_peak(
+            signal_values,
+            sample_rate,
+            oversample_factor=max(int(oversample_factor), 1),
+            signal_module=signal,
+        )
+    )
+
+
+def _measure_gate_lufs(signal_values: np.ndarray, sample_rate: int) -> float:
+    try:
+        from .loudness import get_lufs as loudness_get_lufs
+    except ImportError:
+        from definers.audio.mastering.loudness import (
+            get_lufs as loudness_get_lufs,
+        )
+
+    return float(loudness_get_lufs(signal_values, sample_rate))
+
+
+def _resolve_gate_peak_oversampling(
+    gate_profile: dict[str, float | bool | str | None],
+) -> int:
+    configured_factor = max(int(gate_profile["oversampling"]), 1)
+    if bool(gate_profile["inter_sample_peak_awareness"]):
+        return max(configured_factor, 4)
+    return configured_factor
+
+
+def _measure_gate_analysis_peak_dbfs(
+    signal_values: np.ndarray,
+    sample_rate: int,
+    gate_profile: dict[str, float | bool | str | None],
+) -> float:
+    if bool(gate_profile["inter_sample_peak_awareness"]):
+        return _measure_gate_true_peak_dbfs(
+            signal_values,
+            sample_rate,
+            _resolve_gate_peak_oversampling(gate_profile),
+        )
+    return _measure_gate_sample_peak_dbfs(signal_values)
+
+
+def _apply_gate_dc_offset_compensation(
+    channels: np.ndarray,
+    enabled: bool,
+) -> np.ndarray:
+    if not enabled:
+        return np.asarray(channels, dtype=np.float32)
+    channel_array = np.asarray(channels, dtype=np.float32)
+    return (
+        channel_array
+        - np.mean(channel_array, axis=-1, keepdims=True, dtype=np.float32)
+    ).astype(np.float32, copy=False)
+
+
+def _normalize_gate_analysis_channels(
+    channels: np.ndarray,
+    sample_rate: int,
+    gate_profile: dict[str, float | bool | str | None],
+) -> np.ndarray:
+    normalized = _apply_gate_dc_offset_compensation(
+        channels,
+        bool(gate_profile["dc_offset_compensation"]),
+    )
+    mode = str(gate_profile["normalization_mode"]).strip().lower()
+
+    if mode == "lufs":
+        current_lufs = _measure_gate_lufs(normalized, sample_rate)
+        target_lufs = float(gate_profile["normalization_target_lufs"])
+        if np.isfinite(current_lufs) and np.isfinite(target_lufs):
+            normalized = normalized * _db_to_linear(target_lufs - current_lufs)
+    elif mode == "dbfs":
+        current_dbfs = _measure_gate_sample_peak_dbfs(normalized)
+        target_dbfs = float(gate_profile["normalization_target_dbfs"])
+        if (
+            np.isfinite(current_dbfs)
+            and current_dbfs > -120.0
+            and np.isfinite(target_dbfs)
+        ):
+            normalized = normalized * _db_to_linear(target_dbfs - current_dbfs)
+
+    current_peak_dbfs = _measure_gate_analysis_peak_dbfs(
+        normalized,
+        sample_rate,
+        gate_profile,
+    )
+    target_peak_dbfs = float(gate_profile["analysis_peak_dbfs"])
+    if (
+        np.isfinite(current_peak_dbfs)
+        and current_peak_dbfs > -120.0
+        and np.isfinite(target_peak_dbfs)
+    ):
+        normalized = normalized * _db_to_linear(
+            target_peak_dbfs - current_peak_dbfs
+        )
+
+    return np.asarray(normalized, dtype=np.float32)
+
+
+def _resample_audio_channels(
+    channels: np.ndarray,
+    *,
+    up: int,
+    down: int,
+) -> np.ndarray:
+    source_channels = _as_audio_channels(channels)
+    if max(int(up), 1) == max(int(down), 1):
+        return source_channels.astype(np.float32, copy=False)
+    resampled = signal.resample_poly(
+        source_channels,
+        max(int(up), 1),
+        max(int(down), 1),
+        axis=-1,
+    )
+    return _as_audio_channels(np.asarray(resampled, dtype=np.float32))
+
+
+def _apply_first_order_lowpass(
+    signal_values: np.ndarray,
+    sample_rate: int,
+    cutoff_hz: float,
+) -> np.ndarray:
+    if cutoff_hz <= 0.0 or cutoff_hz >= sample_rate * 0.5:
+        return np.asarray(signal_values, dtype=np.float32)
+
+    dt = 1.0 / float(max(sample_rate, 1))
+    rc = 1.0 / max(2.0 * np.pi * cutoff_hz, 1e-6)
+    alpha = float(np.clip(dt / (rc + dt), 0.0, 1.0))
+    source = np.asarray(signal_values, dtype=np.float32)
+    filtered = np.empty_like(source)
+    filtered[0] = source[0]
+    for index in range(1, source.size):
+        filtered[index] = filtered[index - 1] + alpha * (
+            source[index] - filtered[index - 1]
+        )
+    return filtered.astype(np.float32, copy=False)
+
+
+def _apply_first_order_highpass(
+    signal_values: np.ndarray,
+    sample_rate: int,
+    cutoff_hz: float,
+) -> np.ndarray:
+    if cutoff_hz <= 0.0:
+        return np.asarray(signal_values, dtype=np.float32)
+
+    dt = 1.0 / float(max(sample_rate, 1))
+    rc = 1.0 / max(2.0 * np.pi * cutoff_hz, 1e-6)
+    alpha = float(np.clip(rc / (rc + dt), 0.0, 1.0))
+    source = np.asarray(signal_values, dtype=np.float32)
+    filtered = np.empty_like(source)
+    filtered[0] = source[0]
+    for index in range(1, source.size):
+        filtered[index] = alpha * (
+            filtered[index - 1] + source[index] - source[index - 1]
+        )
+    return filtered.astype(np.float32, copy=False)
+
+
+def _apply_gate_sidechain_filters(
+    channels: np.ndarray,
+    sample_rate: int,
+    gate_profile: dict[str, float | bool | str | None],
+) -> np.ndarray:
+    low_cut_hz = float(
+        np.clip(gate_profile["sidechain_hpf_hz"], 0.0, sample_rate * 0.5)
+    )
+    high_cut_hz = float(
+        np.clip(gate_profile["sidechain_lpf_hz"], 0.0, sample_rate * 0.5)
+    )
+    if low_cut_hz <= 0.0 and high_cut_hz <= 0.0:
+        return np.asarray(channels, dtype=np.float32)
+
+    source_channels = _as_audio_channels(channels)
+    if int(source_channels.shape[-1]) == 0:
+        return source_channels.astype(np.float32, copy=False)
+
+    filtered_channels = []
+    for channel in source_channels:
+        filtered_channel = channel.astype(np.float32, copy=True)
+        if high_cut_hz > 0.0:
+            for _ in range(2):
+                filtered_channel = _apply_first_order_lowpass(
+                    filtered_channel,
+                    sample_rate,
+                    high_cut_hz,
+                )
+        if low_cut_hz > 0.0:
+            for _ in range(4):
+                filtered_channel = _apply_first_order_highpass(
+                    filtered_channel,
+                    sample_rate,
+                    low_cut_hz,
+                )
+        filtered_channels.append(filtered_channel)
+
+    return np.vstack(filtered_channels).astype(np.float32, copy=False)
+
+
+def _compute_gate_rms_envelope(
+    channels: np.ndarray,
+    window_samples: int,
+) -> np.ndarray:
+    source_channels = _as_audio_channels(channels)
+    envelopes = []
+    for channel in source_channels:
+        channel_power = np.square(channel, dtype=np.float32)
+        smoothed_power = _moving_average(channel_power, window_samples)
+        envelopes.append(
+            np.sqrt(np.maximum(smoothed_power, 1e-12)).astype(np.float32)
+        )
+    return np.vstack(envelopes).astype(np.float32)
+
+
+def _link_gate_detector_envelope(
+    detector_envelope: np.ndarray,
+    stereo_link_percent: float,
+) -> np.ndarray:
+    detector_channels = _as_audio_channels(detector_envelope)
+    if detector_channels.shape[0] <= 1:
+        return detector_channels.astype(np.float32, copy=False)
+
+    link_amount = float(np.clip(stereo_link_percent / 100.0, 0.0, 1.0))
+    if link_amount <= 0.0:
+        return detector_channels.astype(np.float32, copy=False)
+
+    linked = np.max(detector_channels, axis=0, keepdims=True)
+    return (
+        detector_channels * (1.0 - link_amount) + linked * link_amount
+    ).astype(np.float32, copy=False)
+
+
+def _resolve_noise_gate_threshold_db(
+    detector_db: np.ndarray,
+    gate_profile: dict[str, float | bool | str | None],
+) -> tuple[float, float, float]:
+    finite_levels = detector_db[np.isfinite(detector_db)]
+    if finite_levels.size == 0:
+        return -60.0, -120.0, -60.0
+
+    noise_floor_db = float(
+        np.percentile(finite_levels, gate_profile["noise_percentile"])
+    )
+    peak_db = float(np.percentile(finite_levels, 99.8))
+    threshold_override = gate_profile["threshold_db"]
+    if threshold_override is None:
+        dynamic_range_db = max(peak_db - noise_floor_db, 1.0)
+        threshold_db = noise_floor_db + dynamic_range_db * float(
+            gate_profile["threshold_ratio"]
+        )
+        threshold_db = float(
+            np.clip(
+                threshold_db,
+                noise_floor_db + 0.5,
+                max(peak_db - 0.25, noise_floor_db + 0.5),
+            )
+        )
+    else:
+        threshold_db = float(threshold_override)
+
+    return threshold_db, noise_floor_db, peak_db
+
+
+def _soft_gate_curve(
+    level_db: float,
+    close_threshold_db: float,
+    full_open_db: float,
+    knee_db: float,
+) -> float:
+    if full_open_db <= close_threshold_db:
+        return 1.0 if level_db >= full_open_db else 0.0
+
+    lower_bound = close_threshold_db - max(knee_db, 0.0) * 0.5
+    upper_bound = full_open_db + max(knee_db, 0.0) * 0.5
+    if upper_bound <= lower_bound:
+        return 1.0 if level_db >= full_open_db else 0.0
+
+    position = float(
+        np.clip(
+            (level_db - lower_bound) / (upper_bound - lower_bound),
+            0.0,
+            1.0,
+        )
+    )
+    return float(position * position * (3.0 - 2.0 * position))
+
+
+def _build_gate_gain_curve(
+    detector_db: np.ndarray,
+    *,
+    sample_rate: int,
+    gate_profile: dict[str, float | bool | str | None],
+) -> tuple[np.ndarray, np.ndarray, float]:
+    sample_count = int(detector_db.size)
+    if sample_count == 0:
+        return (
+            np.ones(0, dtype=np.float32),
+            np.zeros(0, dtype=np.float32),
+            -120.0,
+        )
+
+    attack_samples = _resolve_mask_window_samples(
+        sample_count,
+        sample_rate,
+        float(gate_profile["attack_ms"]),
+        max_fraction=0.08,
+    )
+    hold_samples = _resolve_mask_window_samples(
+        sample_count,
+        sample_rate,
+        float(gate_profile["hold_ms"]),
+        max_fraction=0.2,
+    )
+    release_samples = _resolve_mask_window_samples(
+        sample_count,
+        sample_rate,
+        float(gate_profile["release_ms"]),
+        max_fraction=0.24,
+    )
+    knee_db = float(np.clip(gate_profile["soft_knee_db"], 0.0, 24.0))
+    threshold_db, noise_floor_db, peak_db = _resolve_noise_gate_threshold_db(
+        detector_db,
+        gate_profile,
+    )
+    close_threshold_db = threshold_db - float(
+        np.clip(gate_profile["hysteresis_db"], 0.0, 24.0)
+    )
+    dynamic_range_db = max(peak_db - noise_floor_db, 1.0)
+    full_open_db = float(
+        min(
+            peak_db,
+            threshold_db
+            + max(
+                dynamic_range_db * float(gate_profile["full_open_ratio"]),
+                max(knee_db * 0.5, 0.5),
+            ),
+        )
+    )
+    closed_gain = _db_to_linear(-float(gate_profile["reduction_range_db"]))
+    adaptive_release_enabled = bool(gate_profile["adaptive_release_enabled"])
+    adaptive_release_strength = float(
+        np.clip(gate_profile["adaptive_release_strength"], 0.0, 1.5)
+    )
+    detector_activity = np.clip(
+        (detector_db - noise_floor_db) / max(dynamic_range_db, 1e-6),
+        0.0,
+        1.0,
+    ).astype(np.float32)
+
+    gain_curve = np.empty(sample_count, dtype=np.float32)
+    state_curve = np.zeros(sample_count, dtype=np.float32)
+    current_open = 0.0
+    hold_remaining = 0
+    gate_open = False
+
+    for index, level_db in enumerate(detector_db):
+        detector_level_db = (
+            float(level_db) if np.isfinite(level_db) else noise_floor_db
+        )
+        if gate_open:
+            if detector_level_db < close_threshold_db:
+                if hold_remaining > 0:
+                    hold_remaining -= 1
+                else:
+                    gate_open = False
+            else:
+                hold_remaining = hold_samples
+        elif detector_level_db >= threshold_db:
+            gate_open = True
+            hold_remaining = hold_samples
+
+        state_curve[index] = 1.0 if gate_open else 0.0
+        target_open = _soft_gate_curve(
+            detector_level_db,
+            close_threshold_db,
+            full_open_db,
+            knee_db,
+        )
+        if gate_open and hold_remaining > 0:
+            target_open = 1.0
+
+        if target_open > current_open:
+            smoothing_span = max(attack_samples, 1)
+        else:
+            release_multiplier = 1.0
+            if adaptive_release_enabled:
+                release_multiplier += adaptive_release_strength * float(
+                    detector_activity[index]
+                )
+            smoothing_span = max(
+                int(round(release_samples * release_multiplier)),
+                1,
+            )
+
+        current_open += (target_open - current_open) / float(smoothing_span)
+        current_open = float(np.clip(current_open, 0.0, 1.0))
+        gain_curve[index] = closed_gain + (1.0 - closed_gain) * current_open
+
+    return gain_curve, state_curve, threshold_db
+
+
+def _find_nearest_zero_crossing(
+    signal_values: np.ndarray,
+    center_index: int,
+    radius_samples: int,
+) -> int:
+    sample_count = int(signal_values.size)
+    if sample_count <= 1 or radius_samples <= 0:
+        return int(np.clip(center_index, 0, max(sample_count - 1, 0)))
+
+    start_index = max(1, center_index - radius_samples)
+    end_index = min(sample_count - 1, center_index + radius_samples)
+    if end_index <= start_index:
+        return int(np.clip(center_index, 0, sample_count - 1))
+
+    segment = signal_values[start_index - 1 : end_index + 1]
+    if segment.size <= 1:
+        return int(np.clip(center_index, 0, sample_count - 1))
+
+    sign_changes = np.where(
+        np.signbit(segment[:-1]) != np.signbit(segment[1:])
+    )[0]
+    if sign_changes.size == 0:
+        return int(np.clip(center_index, 0, sample_count - 1))
+
+    crossing_positions = start_index + sign_changes
+    return int(
+        crossing_positions[
+            int(np.argmin(np.abs(crossing_positions - center_index)))
+        ]
+    )
+
+
+def _apply_zero_crossing_smoothing(
+    program_channels: np.ndarray,
+    gate_mask: np.ndarray,
+    state_curves: np.ndarray,
+    *,
+    sample_rate: int,
+    gate_profile: dict[str, float | bool | str | None],
+) -> np.ndarray:
+    if not bool(gate_profile["zero_crossing_enabled"]):
+        return gate_mask.astype(np.float32, copy=False)
+
+    source_channels = _as_audio_channels(program_channels)
+    mask_channels = _as_audio_channels(gate_mask).astype(np.float32, copy=True)
+    guide_channels = _as_audio_channels(state_curves)
+    window_samples = _resolve_mask_window_samples(
+        int(mask_channels.shape[-1]),
+        sample_rate,
+        float(gate_profile["zero_crossing_window_ms"]),
+        max_fraction=0.02,
+    )
+    fade_samples = max(1, window_samples)
+
+    for channel_index in range(mask_channels.shape[0]):
+        guide_index = min(channel_index, guide_channels.shape[0] - 1)
+        transition_indices = (
+            np.where(np.abs(np.diff(guide_channels[guide_index])) > 0.5)[0] + 1
+        )
+        if transition_indices.size == 0:
+            continue
+
+        program_channel = source_channels[
+            min(channel_index, source_channels.shape[0] - 1)
+        ]
+        for transition_index in transition_indices:
+            zero_index = _find_nearest_zero_crossing(
+                program_channel,
+                int(transition_index),
+                window_samples,
+            )
+            fade_start = max(0, zero_index - fade_samples)
+            fade_end = min(
+                mask_channels.shape[-1], zero_index + fade_samples + 1
+            )
+            if fade_end - fade_start <= 1:
+                continue
+
+            start_gain = float(mask_channels[channel_index, fade_start])
+            end_gain = float(mask_channels[channel_index, fade_end - 1])
+            mask_channels[channel_index, fade_start:fade_end] = np.linspace(
+                start_gain,
+                end_gain,
+                fade_end - fade_start,
+            ).astype(np.float32)
+
+    return np.clip(mask_channels, 0.0, 1.0).astype(np.float32, copy=False)
+
+
+def _delay_audio_channels(
+    channels: np.ndarray,
+    delay_samples: int,
+) -> np.ndarray:
+    source_channels = _as_audio_channels(channels)
+    if delay_samples <= 0 or source_channels.size == 0:
+        return source_channels.astype(np.float32, copy=False)
+    return np.pad(
+        source_channels,
+        ((0, 0), (delay_samples, 0)),
+    )[:, : source_channels.shape[-1]].astype(np.float32, copy=False)
+
+
+def _compensate_audio_delay(
+    channels: np.ndarray,
+    delay_samples: int,
+) -> np.ndarray:
+    source_channels = _as_audio_channels(channels)
+    if delay_samples <= 0 or source_channels.size == 0:
+        return source_channels.astype(np.float32, copy=False)
+    trimmed = source_channels[:, delay_samples:]
+    return np.pad(
+        trimmed,
+        ((0, 0), (0, delay_samples)),
+    ).astype(np.float32, copy=False)
+
+
 def _resolve_stem_noise_gate_profile(
     stem_role: str | None,
     cleanup_pressure: float,
     gate_strength: float,
-) -> dict[str, float]:
+) -> dict[str, float | bool | str | None]:
     normalized_role = _normalize_stem_role(stem_role)
     strength = float(np.clip(gate_strength, 0.0, 1.5))
 
@@ -247,20 +1041,35 @@ def _resolve_stem_noise_gate_profile(
             np.clip((0.74 + cleanup_pressure * 0.14) * strength, 0.0, 1.0)
         )
         return {
-            "fast_ms": 1.3,
-            "slow_ms": 11.0,
-            "hold_ms": 54.0,
-            "release_ms": 18.0,
+            "normalization_mode": "none",
+            "normalization_target_lufs": -24.0,
+            "normalization_target_dbfs": -6.0,
+            "threshold_db": None,
+            "hysteresis_db": 2.4,
+            "reduction_range_db": float(18.0 + intensity * 7.0),
+            "attack_ms": 1.2,
+            "hold_ms": 52.0,
+            "release_ms": 20.0,
+            "lookahead_ms": 0.9,
+            "soft_knee_db": 2.0,
+            "oversampling": 1,
+            "sidechain_hpf_hz": 28.0,
+            "sidechain_lpf_hz": 0.0,
+            "stereo_link_percent": 100.0,
+            "zero_crossing_enabled": True,
+            "zero_crossing_window_ms": 0.9,
+            "adaptive_release_enabled": True,
+            "adaptive_release_strength": 0.2,
+            "rms_window_ms": 4.0,
+            "dc_offset_compensation": True,
+            "delay_compensation_enabled": True,
+            "inter_sample_peak_awareness": True,
+            "analysis_peak_dbfs": -1.0,
             "noise_percentile": 38.0,
             "threshold_ratio": float(
                 np.clip(0.07 + intensity * 0.02, 0.045, 0.18)
             ),
             "full_open_ratio": 0.16,
-            "floor": float(np.clip(0.055 - intensity * 0.02, 0.022, 0.06)),
-            "transient_bias": 0.92,
-            "open_exponent": 0.68,
-            "active_floor_scale": 0.98,
-            "mix": float(np.clip(0.48 + intensity * 0.1, 0.0, 0.72)),
         }
 
     if normalized_role == "vocals":
@@ -268,20 +1077,35 @@ def _resolve_stem_noise_gate_profile(
             np.clip((0.6 + cleanup_pressure * 0.18) * strength, 0.0, 1.0)
         )
         return {
-            "fast_ms": 3.6,
-            "slow_ms": 32.0,
+            "normalization_mode": "none",
+            "normalization_target_lufs": -23.0,
+            "normalization_target_dbfs": -7.0,
+            "threshold_db": None,
+            "hysteresis_db": 4.8,
+            "reduction_range_db": float(30.0 + intensity * 9.0),
+            "attack_ms": 3.4,
             "hold_ms": 96.0,
             "release_ms": 42.0,
+            "lookahead_ms": 2.0,
+            "soft_knee_db": 4.5,
+            "oversampling": 1,
+            "sidechain_hpf_hz": 90.0,
+            "sidechain_lpf_hz": 9000.0,
+            "stereo_link_percent": 100.0,
+            "zero_crossing_enabled": True,
+            "zero_crossing_window_ms": 1.5,
+            "adaptive_release_enabled": True,
+            "adaptive_release_strength": 0.56,
+            "rms_window_ms": 10.0,
+            "dc_offset_compensation": True,
+            "delay_compensation_enabled": True,
+            "inter_sample_peak_awareness": True,
+            "analysis_peak_dbfs": -1.0,
             "noise_percentile": 24.0,
             "threshold_ratio": float(
                 np.clip(0.065 + intensity * 0.03, 0.045, 0.18)
             ),
             "full_open_ratio": 0.24,
-            "floor": float(np.clip(0.06 - intensity * 0.024, 0.02, 0.068)),
-            "transient_bias": 0.32,
-            "open_exponent": 0.88,
-            "active_floor_scale": 0.82,
-            "mix": float(np.clip(0.46 + intensity * 0.14, 0.0, 0.74)),
         }
 
     if normalized_role == "bass":
@@ -289,38 +1113,68 @@ def _resolve_stem_noise_gate_profile(
             np.clip((0.5 + cleanup_pressure * 0.14) * strength, 0.0, 0.94)
         )
         return {
-            "fast_ms": 6.0,
-            "slow_ms": 56.0,
-            "hold_ms": 132.0,
-            "release_ms": 56.0,
+            "normalization_mode": "none",
+            "normalization_target_lufs": -22.0,
+            "normalization_target_dbfs": -6.0,
+            "threshold_db": None,
+            "hysteresis_db": 5.5,
+            "reduction_range_db": float(10.0 + intensity * 8.0),
+            "attack_ms": 5.4,
+            "hold_ms": 126.0,
+            "release_ms": 58.0,
+            "lookahead_ms": 1.4,
+            "soft_knee_db": 5.0,
+            "oversampling": 1,
+            "sidechain_hpf_hz": 0.0,
+            "sidechain_lpf_hz": 1900.0,
+            "stereo_link_percent": 100.0,
+            "zero_crossing_enabled": True,
+            "zero_crossing_window_ms": 1.8,
+            "adaptive_release_enabled": True,
+            "adaptive_release_strength": 0.68,
+            "rms_window_ms": 16.0,
+            "dc_offset_compensation": True,
+            "delay_compensation_enabled": True,
+            "inter_sample_peak_awareness": True,
+            "analysis_peak_dbfs": -1.0,
             "noise_percentile": 18.0,
             "threshold_ratio": float(
                 np.clip(0.11 + intensity * 0.025, 0.075, 0.22)
             ),
             "full_open_ratio": 0.28,
-            "floor": float(np.clip(0.13 - intensity * 0.018, 0.08, 0.13)),
-            "transient_bias": 0.12,
-            "open_exponent": 0.98,
-            "active_floor_scale": 0.8,
-            "mix": float(np.clip(0.22 + intensity * 0.1, 0.0, 0.56)),
         }
 
     intensity = float(
         np.clip((0.58 + cleanup_pressure * 0.18) * strength, 0.0, 1.0)
     )
     return {
-        "fast_ms": 3.4,
-        "slow_ms": 28.0,
-        "hold_ms": 86.0,
+        "normalization_mode": "none",
+        "normalization_target_lufs": -24.0,
+        "normalization_target_dbfs": -6.0,
+        "threshold_db": None,
+        "hysteresis_db": 4.0,
+        "reduction_range_db": float(22.0 + intensity * 8.0),
+        "attack_ms": 3.2,
+        "hold_ms": 84.0,
         "release_ms": 36.0,
+        "lookahead_ms": 1.6,
+        "soft_knee_db": 3.8,
+        "oversampling": 1,
+        "sidechain_hpf_hz": 45.0,
+        "sidechain_lpf_hz": 14000.0,
+        "stereo_link_percent": 100.0,
+        "zero_crossing_enabled": True,
+        "zero_crossing_window_ms": 1.4,
+        "adaptive_release_enabled": True,
+        "adaptive_release_strength": 0.42,
+        "rms_window_ms": 8.0,
+        "dc_offset_compensation": True,
+        "delay_compensation_enabled": True,
+        "inter_sample_peak_awareness": True,
+        "analysis_peak_dbfs": -1.0,
         "noise_percentile": 24.0,
         "threshold_ratio": float(np.clip(0.075 + intensity * 0.03, 0.045, 0.2)),
         "full_open_ratio": 0.24,
-        "floor": float(np.clip(0.058 - intensity * 0.014, 0.03, 0.065)),
-        "transient_bias": 0.28,
-        "open_exponent": 0.9,
-        "active_floor_scale": 0.82,
-        "mix": float(np.clip(0.32 + intensity * 0.12, 0.0, 0.62)),
     }
 
 
@@ -333,33 +1187,29 @@ def _build_stem_activity_mask(
     if mono_energy.size == 0:
         return np.ones(0, dtype=np.float32)
 
-    fast_samples = max(
-        1,
-        min(
-            mono_energy.size,
-            int(round(sample_rate * cleanup_profile["fast_ms"] / 1000.0)),
-        ),
+    fast_samples = _resolve_mask_window_samples(
+        mono_energy.size,
+        sample_rate,
+        cleanup_profile["fast_ms"],
+        max_fraction=0.08,
     )
-    slow_samples = max(
-        1,
-        min(
-            mono_energy.size,
-            int(round(sample_rate * cleanup_profile["slow_ms"] / 1000.0)),
-        ),
+    slow_samples = _resolve_mask_window_samples(
+        mono_energy.size,
+        sample_rate,
+        cleanup_profile["slow_ms"],
+        max_fraction=0.16,
     )
-    hold_samples = max(
-        1,
-        min(
-            mono_energy.size,
-            int(round(sample_rate * cleanup_profile["hold_ms"] / 1000.0)),
-        ),
+    hold_samples = _resolve_mask_window_samples(
+        mono_energy.size,
+        sample_rate,
+        cleanup_profile["hold_ms"],
+        max_fraction=0.14,
     )
-    release_samples = max(
-        1,
-        min(
-            mono_energy.size,
-            int(round(sample_rate * cleanup_profile["release_ms"] / 1000.0)),
-        ),
+    release_samples = _resolve_mask_window_samples(
+        mono_energy.size,
+        sample_rate,
+        cleanup_profile["release_ms"],
+        max_fraction=0.12,
     )
 
     fast_env = _moving_average(mono_energy, fast_samples)
@@ -405,91 +1255,52 @@ def _build_stem_activity_mask(
 
 
 def _build_stem_noise_gate_mask(
-    mono_energy: np.ndarray,
+    detector_channels: np.ndarray,
     *,
     sample_rate: int,
-    gate_profile: dict[str, float],
-) -> np.ndarray:
-    if mono_energy.size == 0:
-        return np.ones(0, dtype=np.float32)
+    gate_profile: dict[str, float | bool | str | None],
+) -> tuple[np.ndarray, np.ndarray, float]:
+    source_channels = _as_audio_channels(detector_channels)
+    if source_channels.size == 0:
+        empty = np.ones_like(source_channels, dtype=np.float32)
+        return empty, np.zeros_like(source_channels, dtype=np.float32), -120.0
 
-    fast_samples = max(
-        1,
-        min(
-            mono_energy.size,
-            int(round(sample_rate * gate_profile["fast_ms"] / 1000.0)),
-        ),
+    rms_window_samples = _resolve_mask_window_samples(
+        int(source_channels.shape[-1]),
+        sample_rate,
+        float(gate_profile["rms_window_ms"]),
+        max_fraction=0.12,
     )
-    slow_samples = max(
-        1,
-        min(
-            mono_energy.size,
-            int(round(sample_rate * gate_profile["slow_ms"] / 1000.0)),
-        ),
+    detector_envelope = _compute_gate_rms_envelope(
+        source_channels,
+        rms_window_samples,
     )
-    hold_samples = max(
-        1,
-        min(
-            mono_energy.size,
-            int(round(sample_rate * gate_profile["hold_ms"] / 1000.0)),
-        ),
+    linked_envelope = _link_gate_detector_envelope(
+        detector_envelope,
+        float(gate_profile["stereo_link_percent"]),
     )
-    release_samples = max(
-        1,
-        min(
-            mono_energy.size,
-            int(round(sample_rate * gate_profile["release_ms"] / 1000.0)),
-        ),
-    )
+    detector_db = _amplitude_to_db(linked_envelope)
 
-    fast_env = _moving_average(mono_energy, fast_samples)
-    slow_env = _moving_average(mono_energy, slow_samples)
-    transient = np.clip(
-        fast_env / np.maximum(slow_env, 1e-6) - 1.0,
-        0.0,
-        1.0,
-    )
-    control_env = np.maximum(
-        slow_env,
-        fast_env * (1.0 + transient * gate_profile["transient_bias"]),
-    )
+    gate_masks: list[np.ndarray] = []
+    state_curves: list[np.ndarray] = []
+    thresholds: list[float] = []
 
-    noise_floor = float(
-        np.percentile(slow_env, gate_profile["noise_percentile"])
-    )
-    peak_env = float(np.percentile(control_env, 99.8))
-    if peak_env <= noise_floor + 1e-6:
-        return np.ones_like(mono_energy, dtype=np.float32)
+    for channel_db in detector_db:
+        channel_mask, channel_state, threshold_db = _build_gate_gain_curve(
+            channel_db,
+            sample_rate=sample_rate,
+            gate_profile=gate_profile,
+        )
+        gate_masks.append(channel_mask)
+        state_curves.append(channel_state)
+        thresholds.append(threshold_db)
 
-    open_threshold = (
-        noise_floor + (peak_env - noise_floor) * gate_profile["threshold_ratio"]
+    threshold_value = float(np.mean(thresholds)) if thresholds else -120.0
+    return (
+        np.vstack(gate_masks).astype(np.float32, copy=False),
+        np.vstack(state_curves).astype(np.float32, copy=False),
+        threshold_value,
     )
-    full_open_level = (
-        open_threshold
-        + (peak_env - open_threshold) * gate_profile["full_open_ratio"]
-    )
-    gate_curve = np.clip(
-        (control_env - open_threshold)
-        / (full_open_level - open_threshold + 1e-6),
-        0.0,
-        1.0,
-    )
-    gate_curve = np.power(gate_curve, gate_profile["open_exponent"])
-    held_gate = _rolling_max(gate_curve, hold_samples)
-    smoothed_gate = _moving_average(held_gate, release_samples)
-    sustained_activity = np.clip(
-        (slow_env - noise_floor) / (peak_env - noise_floor + 1e-6),
-        0.0,
-        1.0,
-    )
-    smoothed_gate = np.maximum(
-        smoothed_gate,
-        sustained_activity * gate_profile["active_floor_scale"],
-    )
-    floor = gate_profile["floor"]
-    gate_mask = floor + (1.0 - floor) * np.clip(smoothed_gate, 0.0, 1.0)
-    mix = gate_profile["mix"]
-    return 1.0 - mix * (1.0 - gate_mask)
 
 
 def _apply_stem_residual_suppression(
@@ -550,6 +1361,9 @@ def _apply_stem_noise_gate(
     stem_role: str | None,
     cleanup_pressure: float,
 ) -> np.ndarray:
+    self.last_stem_noise_gate_analysis_peak_dbfs = None
+    self.last_stem_noise_gate_threshold_db = None
+    self.last_stem_noise_gate_profile = None
     if y.size == 0:
         return y
 
@@ -563,8 +1377,7 @@ def _apply_stem_noise_gate(
     if gate_strength <= 0.0:
         return y
 
-    channels = y if y.ndim > 1 else y[np.newaxis, :]
-    working_channels = np.asarray(channels, dtype=np.float32)
+    working_channels = _as_audio_channels(y)
     mono_energy = np.mean(np.abs(working_channels), axis=0)
     if not np.any(mono_energy > 0.0):
         return y
@@ -574,22 +1387,171 @@ def _apply_stem_noise_gate(
         cleanup_pressure,
         gate_strength,
     )
-    residual_profile = _resolve_stem_residual_profile(
-        stem_role, cleanup_pressure
+    gate_profile["normalization_mode"] = (
+        str(getattr(config, "stem_noise_gate_normalization_mode", "none"))
+        .strip()
+        .lower()
     )
-    gate_mask = _build_stem_noise_gate_mask(
-        mono_energy,
-        sample_rate=self.resampling_target,
+    gate_profile["normalization_target_lufs"] = float(
+        getattr(config, "stem_noise_gate_normalization_target_lufs", -24.0)
+    )
+    gate_profile["normalization_target_dbfs"] = float(
+        getattr(config, "stem_noise_gate_normalization_target_dbfs", -6.0)
+    )
+    gate_profile["threshold_db"] = getattr(
+        config,
+        "stem_noise_gate_threshold_db",
+        None,
+    )
+    gate_profile["hysteresis_db"] = float(
+        np.clip(
+            getattr(config, "stem_noise_gate_hysteresis_db", 4.5), 0.0, 24.0
+        )
+    )
+    gate_profile["reduction_range_db"] = float(
+        np.clip(
+            getattr(config, "stem_noise_gate_reduction_range_db", 28.0),
+            0.0,
+            96.0,
+        )
+    )
+    gate_profile["attack_ms"] = float(
+        np.clip(getattr(config, "stem_noise_gate_attack_ms", 4.0), 0.1, 80.0)
+    )
+    gate_profile["hold_ms"] = float(
+        np.clip(getattr(config, "stem_noise_gate_hold_ms", 90.0), 0.0, 500.0)
+    )
+    gate_profile["release_ms"] = float(
+        np.clip(getattr(config, "stem_noise_gate_release_ms", 42.0), 1.0, 500.0)
+    )
+    gate_profile["lookahead_ms"] = float(
+        np.clip(getattr(config, "stem_noise_gate_lookahead_ms", 2.0), 0.0, 20.0)
+    )
+    gate_profile["soft_knee_db"] = float(
+        np.clip(getattr(config, "stem_noise_gate_soft_knee_db", 4.0), 0.0, 24.0)
+    )
+    gate_profile["oversampling"] = int(
+        np.clip(getattr(config, "stem_noise_gate_oversampling", 1), 1, 8)
+    )
+    gate_profile["sidechain_hpf_hz"] = float(
+        max(getattr(config, "stem_noise_gate_sidechain_hpf_hz", 0.0), 0.0)
+    )
+    gate_profile["sidechain_lpf_hz"] = float(
+        max(getattr(config, "stem_noise_gate_sidechain_lpf_hz", 0.0), 0.0)
+    )
+    gate_profile["stereo_link_percent"] = float(
+        np.clip(
+            getattr(config, "stem_noise_gate_stereo_link_percent", 100.0),
+            0.0,
+            100.0,
+        )
+    )
+    gate_profile["zero_crossing_enabled"] = bool(
+        getattr(config, "stem_noise_gate_zero_crossing_enabled", True)
+    )
+    gate_profile["zero_crossing_window_ms"] = float(
+        np.clip(
+            getattr(config, "stem_noise_gate_zero_crossing_window_ms", 1.5),
+            0.0,
+            25.0,
+        )
+    )
+    gate_profile["adaptive_release_enabled"] = bool(
+        getattr(config, "stem_noise_gate_adaptive_release_enabled", True)
+    )
+    gate_profile["adaptive_release_strength"] = float(
+        np.clip(
+            getattr(config, "stem_noise_gate_adaptive_release_strength", 0.45),
+            0.0,
+            1.5,
+        )
+    )
+    gate_profile["rms_window_ms"] = float(
+        np.clip(
+            getattr(config, "stem_noise_gate_rms_window_ms", 10.0),
+            0.5,
+            200.0,
+        )
+    )
+    gate_profile["dc_offset_compensation"] = bool(
+        getattr(config, "stem_noise_gate_dc_offset_compensation", True)
+    )
+    gate_profile["delay_compensation_enabled"] = bool(
+        getattr(config, "stem_noise_gate_delay_compensation_enabled", True)
+    )
+    gate_profile["inter_sample_peak_awareness"] = bool(
+        getattr(config, "stem_noise_gate_inter_sample_peak_awareness", True)
+    )
+    gate_profile["analysis_peak_dbfs"] = float(
+        np.clip(
+            getattr(config, "stem_noise_gate_analysis_peak_dbfs", -1.0),
+            -12.0,
+            -0.1,
+        )
+    )
+    self.last_stem_noise_gate_profile = dict(gate_profile)
+
+    normalized_analysis = _normalize_gate_analysis_channels(
+        working_channels,
+        self.resampling_target,
+        gate_profile,
+    )
+    self.last_stem_noise_gate_analysis_peak_dbfs = float(
+        _measure_gate_analysis_peak_dbfs(
+            normalized_analysis,
+            self.resampling_target,
+            gate_profile,
+        )
+    )
+
+    oversampling = max(int(gate_profile["oversampling"]), 1)
+    analysis_channels = normalized_analysis
+    program_channels = working_channels.astype(np.float32, copy=False)
+    if oversampling > 1:
+        analysis_channels = _resample_audio_channels(
+            analysis_channels,
+            up=oversampling,
+            down=1,
+        )
+        program_channels = _resample_audio_channels(
+            program_channels,
+            up=oversampling,
+            down=1,
+        )
+    analysis_rate = int(self.resampling_target * oversampling)
+    detector_channels = _apply_gate_sidechain_filters(
+        analysis_channels,
+        analysis_rate,
+        gate_profile,
+    )
+
+    gate_mask, state_curves, threshold_db = _build_stem_noise_gate_mask(
+        detector_channels,
+        sample_rate=analysis_rate,
         gate_profile=gate_profile,
     )
-    activity_mask = _build_stem_activity_mask(
-        mono_energy,
-        sample_rate=self.resampling_target,
-        cleanup_profile=residual_profile,
+    self.last_stem_noise_gate_threshold_db = float(threshold_db)
+    lookahead_samples = _resolve_mask_window_samples(
+        int(program_channels.shape[-1]),
+        analysis_rate,
+        float(gate_profile["lookahead_ms"]),
+        max_fraction=0.06,
     )
-    gate_mask = np.maximum(gate_mask, activity_mask)
-    gated = working_channels * gate_mask
-    output = np.vstack(gated) if y.ndim > 1 else gated[0]
+    delayed_program = _delay_audio_channels(program_channels, lookahead_samples)
+    gate_mask = _apply_zero_crossing_smoothing(
+        delayed_program,
+        gate_mask,
+        state_curves,
+        sample_rate=analysis_rate,
+        gate_profile=gate_profile,
+    )
+    gated = delayed_program * gate_mask
+    if bool(gate_profile["delay_compensation_enabled"]):
+        gated = _compensate_audio_delay(gated, lookahead_samples)
+    if oversampling > 1:
+        gated = _resample_audio_channels(gated, up=1, down=oversampling)
+    gated = _align_audio_channels(gated, int(working_channels.shape[-1]))
+    output = _restore_audio_layout(gated, y)
     return _restore_audio_dtype(output, y.dtype)
 
 
@@ -829,18 +1791,24 @@ def apply_stem_cleanup(
             else eq_channel(y)
         )
 
+    cleaned = _apply_stem_noise_gate(
+        self,
+        cleaned,
+        stem_role=stem_role,
+        cleanup_pressure=cleanup_pressure,
+    )
     cleaned = _apply_stem_residual_suppression(
         self,
         cleaned,
         stem_role=stem_role,
         cleanup_pressure=cleanup_pressure,
     )
-    return _apply_stem_noise_gate(
-        self,
+    cleaned = _preserve_stem_cleanup_content(
+        y,
         cleaned,
         stem_role=stem_role,
-        cleanup_pressure=cleanup_pressure,
     )
+    return _restore_audio_dtype(cleaned, y.dtype)
 
 
 def apply_eq(

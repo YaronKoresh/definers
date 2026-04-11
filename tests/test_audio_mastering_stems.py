@@ -83,6 +83,7 @@ def test_resolve_stem_mastering_plan_scales_roles_differently():
     assert vocals.overrides["exciter_mix"] > bass.overrides["exciter_mix"]
     assert bass.overrides["exciter_mix"] > 0.5
     assert drums.overrides["target_lufs"] < base.target_lufs
+    assert drums.overrides["stem_noise_gate_enabled"] is True
     assert (
         drums.overrides["stem_cleanup_strength"]
         < vocals.overrides["stem_cleanup_strength"]

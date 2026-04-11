@@ -770,6 +770,27 @@ def test_separate_stem_layers_prefetches_mastering_plan_models(
     assert resolved_output_dir == str(tmp_path / "stage")
 
 
+def test_prefer_preserved_optional_stage_output_falls_back_to_source(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        STEMS_MODULE,
+        "_optional_stage_preserves_source_content",
+        lambda source_path, candidate_path, target_sample_rate, stage_kind: (
+            False
+        ),
+    )
+
+    resolved_path = STEMS_MODULE._prefer_preserved_optional_stage_output(
+        "source.wav",
+        "candidate.wav",
+        44100,
+        stage_kind="instrumental_cleanup",
+    )
+
+    assert resolved_path == "source.wav"
+
+
 def test_run_mastering_separator_pipeline_uses_fast_shifts_for_repair_stages(
     monkeypatch,
     tmp_path: Path,

@@ -1268,6 +1268,7 @@ def resolve_stem_mastering_plan(
         "limiter_soft_clip_ratio": shared_soft_clip_ratio,
         "pre_limiter_saturation_ratio": shared_saturation_ratio,
         "stereo_width": shared_width,
+        "stem_noise_gate_enabled": True,
         "contract_max_short_term_lufs": None,
         "contract_max_momentary_lufs": None,
         "contract_min_crest_factor_db": None,
@@ -1298,10 +1299,10 @@ def resolve_stem_mastering_plan(
                 "low_end_mono_tightening": "firm",
                 "low_end_mono_tightening_amount": 0.95,
                 "stem_cleanup_strength": float(
-                    np.clip(base_cleanup_strength * 0.48, 0.0, 1.5)
+                    np.clip(base_cleanup_strength * 0.18, 0.0, 1.5)
                 ),
                 "stem_noise_gate_strength": float(
-                    np.clip(base_noise_gate_strength * 0.54, 0.0, 1.5)
+                    np.clip(base_noise_gate_strength * 0.12, 0.0, 1.5)
                 ),
                 "micro_dynamics_strength": float(
                     np.clip(
@@ -1339,10 +1340,10 @@ def resolve_stem_mastering_plan(
                 "low_end_mono_tightening": "firm",
                 "low_end_mono_tightening_amount": 1.0,
                 "stem_cleanup_strength": float(
-                    np.clip(base_cleanup_strength * 0.5, 0.0, 1.5)
+                    np.clip(base_cleanup_strength * 0.12, 0.0, 1.5)
                 ),
                 "stem_noise_gate_strength": float(
-                    np.clip(base_noise_gate_strength * 0.48, 0.0, 1.5)
+                    np.clip(base_noise_gate_strength * 0.0, 0.0, 1.5)
                 ),
                 "micro_dynamics_strength": float(
                     np.clip(
@@ -1367,10 +1368,10 @@ def resolve_stem_mastering_plan(
                 "exciter_max_drive": base_config.exciter_max_drive + 0.2,
                 "stereo_width": float(np.clip(shared_width + 0.18, 1.08, 1.42)),
                 "stem_cleanup_strength": float(
-                    np.clip(base_cleanup_strength * 0.62, 0.0, 1.5)
+                    np.clip(base_cleanup_strength * 0.22, 0.0, 1.5)
                 ),
                 "stem_noise_gate_strength": float(
-                    np.clip(base_noise_gate_strength * 0.68, 0.0, 1.5)
+                    np.clip(base_noise_gate_strength * 0.18, 0.0, 1.5)
                 ),
                 "micro_dynamics_strength": float(
                     np.clip(
@@ -1396,10 +1397,10 @@ def resolve_stem_mastering_plan(
                 ),
                 "stereo_width": float(np.clip(shared_width + 0.16, 1.02, 1.38)),
                 "stem_cleanup_strength": float(
-                    np.clip(base_cleanup_strength * 0.74, 0.0, 1.5)
+                    np.clip(base_cleanup_strength * 0.16, 0.0, 1.5)
                 ),
                 "stem_noise_gate_strength": float(
-                    np.clip(base_noise_gate_strength * 0.76, 0.0, 1.5)
+                    np.clip(base_noise_gate_strength * 0.04, 0.0, 1.5)
                 ),
                 "micro_dynamics_strength": float(
                     np.clip(
@@ -1422,10 +1423,10 @@ def resolve_stem_mastering_plan(
                 ),
                 "stereo_width": float(np.clip(shared_width + 0.14, 1.02, 1.36)),
                 "stem_cleanup_strength": float(
-                    np.clip(base_cleanup_strength * 0.74, 0.0, 1.5)
+                    np.clip(base_cleanup_strength * 0.16, 0.0, 1.5)
                 ),
                 "stem_noise_gate_strength": float(
-                    np.clip(base_noise_gate_strength * 0.78, 0.0, 1.5)
+                    np.clip(base_noise_gate_strength * 0.04, 0.0, 1.5)
                 ),
                 "micro_dynamics_strength": float(
                     np.clip(
@@ -1450,10 +1451,10 @@ def resolve_stem_mastering_plan(
                 ),
                 "stereo_width": float(np.clip(shared_width + 0.2, 1.08, 1.42)),
                 "stem_cleanup_strength": float(
-                    np.clip(base_cleanup_strength * 0.72, 0.0, 1.5)
+                    np.clip(base_cleanup_strength * 0.14, 0.0, 1.5)
                 ),
                 "stem_noise_gate_strength": float(
-                    np.clip(base_noise_gate_strength * 0.76, 0.0, 1.5)
+                    np.clip(base_noise_gate_strength * 0.04, 0.0, 1.5)
                 ),
                 "micro_dynamics_strength": float(
                     np.clip(
