@@ -14,7 +14,7 @@ It brings together workflow-grade audio, text, image, video, data preparation, r
 
 - Audio workflows for mastering, stems, analysis, cleanup, and generation.
 - Data workflows for preparation, tokenization, vectorization, and dataset assembly.
-- ML workflows for text processing, training, inference, and retrieval-oriented features.
+- ML workflows for text processing, guided and advanced training inside the `train` workbench, inference, and retrieval-oriented features.
 - Image and video workflows for generation, composition, enhancement, and rendering.
 - System and runtime workflows for installation, process control, download handling, and compatibility.
 - Focused launcher surfaces for domain-specific applications instead of a single overloaded interface.

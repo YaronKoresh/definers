@@ -68,6 +68,7 @@ Guided-job behavior is not mandatory for every launcher. It is an opt-in second-
 ### ML And Training
 
 - Workbench: `train`
+- Guided and advanced training modes live inside the `train` workbench instead of separate launcher names, with quick decisions, managed manifests, and hosted-runtime-safe budgets staying inside that same surface.
 
 ### Direct App Launchers
 
@@ -138,15 +139,15 @@ Do not force guided-job behavior onto simple utilities such as translation, chat
 - Video
 - Image
 
+### Workbench-Only Domains
+
+- ML and training, with guided and advanced modes inside `train`, plus guided session manifests, artifact sidecars, rollout metrics, and hosted-runtime-safe beginner routing inside the same workbench
+
 ### Focused-Surface Capable Domains
 
 - Audio
 - Video
 - Image
-
-### Workbench-Only Domains
-
-- ML and training
 
 ### Baseline-Only Direct Launchers
 

@@ -360,6 +360,7 @@ def build_train_app(
         init_progress_tracker,
     )
 
+    from .coach_ui import build_train_guided_mode
     from .handlers import (
         build_training_plan_markdown,
         handle_answer,
@@ -482,157 +483,172 @@ def build_train_app(
                     )
             if "train" in selected_sections:
                 with gr.TabItem(TRAIN_TAB_NAMES[1]):
-                    with gr.Row():
-                        with gr.Column(scale=1):
-                            resume_model = gr.File(
-                                label="Resume Model Artifact"
-                            )
-                            save_as = gr.Textbox(
-                                label="Save Artifact As",
-                                placeholder="studio-model.joblib",
-                            )
-                            remote = gr.Textbox(
-                                placeholder="owner/dataset or remote URL",
-                                label="Remote Dataset",
-                            )
-                            revision = gr.Textbox(
-                                placeholder="main",
-                                label="Revision",
-                            )
-                            url_type = gr.Dropdown(
-                                label="Remote Dataset Type",
-                                value="parquet",
-                                choices=dataset_choices,
-                            )
-                            local_features = gr.File(
-                                label="Local Features",
-                                file_count="multiple",
-                                allow_reordering=True,
-                            )
-                            local_labels = gr.File(
-                                label="Local Labels",
-                                file_count="multiple",
-                                allow_reordering=True,
-                            )
-                        with gr.Column(scale=1):
-                            label_columns = gr.Textbox(
-                                placeholder="label;target",
-                                label="Label Columns",
-                            )
-                            drop_list = gr.Textbox(
-                                placeholder="unused_column;debug_column",
-                                label="Drop Columns",
-                            )
-                            selected_rows = gr.Textbox(
-                                placeholder="1-100 125 130-180",
-                                label="Selected Rows",
-                                max_length=MAX_INPUT_LENGTH,
-                            )
-                            batch_size = gr.Slider(
-                                minimum=1,
-                                maximum=512,
-                                step=1,
-                                value=32,
-                                label="Batch Size",
-                            )
-                            validation_split = gr.Slider(
-                                minimum=0,
-                                maximum=0.5,
-                                step=0.05,
-                                value=0.0,
-                                label="Validation Split",
-                            )
-                            test_split = gr.Slider(
-                                minimum=0,
-                                maximum=0.5,
-                                step=0.05,
-                                value=0.0,
-                                label="Test Split",
-                            )
-                            with gr.Accordion("Advanced Routing", open=False):
-                                order_by = gr.Textbox(
-                                    placeholder="shuffle",
-                                    label="Order By",
-                                )
-                                stratify = gr.Textbox(
-                                    placeholder="label",
-                                    label="Stratify",
-                                )
+                    gr.Markdown(
+                        "Use Guided Mode for the beginner-first route or Advanced Mode for direct control over columns, routing, and splits."
+                    )
+                    with gr.Tabs():
+                        with gr.TabItem("Guided Mode"):
+                            build_train_guided_mode(bind_action=bind_action)
+                        with gr.TabItem("Advanced Mode"):
                             with gr.Row():
-                                preview_plan_button = gr.Button(
-                                    "Preview Training Plan"
-                                )
-                                train_button = gr.Button(
-                                    "Train Model",
-                                    elem_classes="btn",
-                                )
-                        with gr.Column(scale=1):
-                            training_status = gr.Markdown(
-                                "## Training\n- Status: idle"
+                                with gr.Column(scale=1):
+                                    resume_model = gr.File(
+                                        label="Resume Model Artifact"
+                                    )
+                                    save_as = gr.Textbox(
+                                        label="Save Artifact As",
+                                        placeholder="studio-model.joblib",
+                                    )
+                                    remote = gr.Textbox(
+                                        placeholder="owner/dataset or remote URL",
+                                        label="Remote Dataset",
+                                    )
+                                    revision = gr.Textbox(
+                                        placeholder="main",
+                                        label="Revision",
+                                    )
+                                    url_type = gr.Dropdown(
+                                        label="Remote Dataset Type",
+                                        value="parquet",
+                                        choices=dataset_choices,
+                                    )
+                                    local_features = gr.File(
+                                        label="Local Features",
+                                        file_count="multiple",
+                                        allow_reordering=True,
+                                    )
+                                    local_labels = gr.File(
+                                        label="Local Labels",
+                                        file_count="multiple",
+                                        allow_reordering=True,
+                                    )
+                                with gr.Column(scale=1):
+                                    label_columns = gr.Textbox(
+                                        placeholder="label;target",
+                                        label="Label Columns",
+                                    )
+                                    drop_list = gr.Textbox(
+                                        placeholder="unused_column;debug_column",
+                                        label="Drop Columns",
+                                    )
+                                    selected_rows = gr.Textbox(
+                                        placeholder="1-100 125 130-180",
+                                        label="Selected Rows",
+                                        max_length=MAX_INPUT_LENGTH,
+                                    )
+                                    batch_size = gr.Slider(
+                                        minimum=1,
+                                        maximum=512,
+                                        step=1,
+                                        value=32,
+                                        label="Batch Size",
+                                    )
+                                    validation_split = gr.Slider(
+                                        minimum=0,
+                                        maximum=0.5,
+                                        step=0.05,
+                                        value=0.0,
+                                        label="Validation Split",
+                                    )
+                                    test_split = gr.Slider(
+                                        minimum=0,
+                                        maximum=0.5,
+                                        step=0.05,
+                                        value=0.0,
+                                        label="Test Split",
+                                    )
+                                    with gr.Accordion(
+                                        "Advanced Routing", open=False
+                                    ):
+                                        order_by = gr.Textbox(
+                                            placeholder="shuffle",
+                                            label="Order By",
+                                        )
+                                        stratify = gr.Textbox(
+                                            placeholder="label",
+                                            label="Stratify",
+                                        )
+                                    with gr.Row():
+                                        preview_plan_button = gr.Button(
+                                            "Preview Training Plan"
+                                        )
+                                        train_button = gr.Button(
+                                            "Train Model",
+                                            elem_classes="btn",
+                                        )
+                                with gr.Column(scale=1):
+                                    training_status = gr.Markdown(
+                                        "## Training\n- Status: idle"
+                                    )
+                                    training_plan = gr.Markdown(
+                                        "## Training Plan\n- Build a plan to inspect the execution route."
+                                    )
+                                    train_output = gr.File(
+                                        label="Training Output"
+                                    )
+                            bind_action(
+                                preview_plan_button,
+                                build_training_plan_markdown,
+                                inputs=[
+                                    local_features,
+                                    local_labels,
+                                    resume_model,
+                                    remote,
+                                    label_columns,
+                                    revision,
+                                    url_type,
+                                    drop_list,
+                                    selected_rows,
+                                    batch_size,
+                                    validation_split,
+                                    test_split,
+                                    order_by,
+                                    stratify,
+                                ],
+                                outputs=[training_plan],
+                                action_label="Preview Training Plan",
+                                steps=(
+                                    "Validate data sources",
+                                    "Build training plan",
+                                    "Publish plan",
+                                ),
+                                running_detail="Building the training plan preview.",
+                                success_detail="Training plan preview is ready.",
                             )
-                            training_plan = gr.Markdown(
-                                "## Training Plan\n- Build a plan to inspect the execution route."
+                            bind_action(
+                                train_button,
+                                handle_training,
+                                inputs=[
+                                    local_features,
+                                    local_labels,
+                                    resume_model,
+                                    remote,
+                                    label_columns,
+                                    revision,
+                                    url_type,
+                                    drop_list,
+                                    selected_rows,
+                                    save_as,
+                                    batch_size,
+                                    validation_split,
+                                    test_split,
+                                    order_by,
+                                    stratify,
+                                ],
+                                outputs=[
+                                    train_output,
+                                    training_plan,
+                                    training_status,
+                                ],
+                                action_label="Train Model",
+                                steps=(
+                                    "Validate training inputs",
+                                    "Run training job",
+                                    "Publish artifacts",
+                                ),
+                                running_detail="Running the training workflow.",
+                                success_detail="Training run is complete.",
                             )
-                            train_output = gr.File(label="Training Output")
-                    bind_action(
-                        preview_plan_button,
-                        build_training_plan_markdown,
-                        inputs=[
-                            local_features,
-                            local_labels,
-                            resume_model,
-                            remote,
-                            label_columns,
-                            revision,
-                            url_type,
-                            drop_list,
-                            selected_rows,
-                            batch_size,
-                            validation_split,
-                            test_split,
-                            order_by,
-                            stratify,
-                        ],
-                        outputs=[training_plan],
-                        action_label="Preview Training Plan",
-                        steps=(
-                            "Validate data sources",
-                            "Build training plan",
-                            "Publish plan",
-                        ),
-                        running_detail="Building the training plan preview.",
-                        success_detail="Training plan preview is ready.",
-                    )
-                    bind_action(
-                        train_button,
-                        handle_training,
-                        inputs=[
-                            local_features,
-                            local_labels,
-                            resume_model,
-                            remote,
-                            label_columns,
-                            revision,
-                            url_type,
-                            drop_list,
-                            selected_rows,
-                            save_as,
-                            batch_size,
-                            validation_split,
-                            test_split,
-                            order_by,
-                            stratify,
-                        ],
-                        outputs=[train_output, training_plan, training_status],
-                        action_label="Train Model",
-                        steps=(
-                            "Validate training inputs",
-                            "Run training job",
-                            "Publish artifacts",
-                        ),
-                        running_detail="Running the training workflow.",
-                        success_detail="Training run is complete.",
-                    )
             if "run" in selected_sections:
                 with gr.TabItem(TRAIN_TAB_NAMES[2]):
                     with gr.Tabs():

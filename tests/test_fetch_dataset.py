@@ -11,7 +11,9 @@ class TestFetchDataset(unittest.TestCase):
         mock_load_remote_dataset.return_value = mock_dataset
         dataset = fetch_dataset("some_dataset")
         self.assertEqual(dataset, mock_dataset)
-        mock_load_remote_dataset.assert_called_once_with("some_dataset", None)
+        mock_load_remote_dataset.assert_called_once_with(
+            "some_dataset", None, sample_rows=None
+        )
 
     @patch("definers.data.loaders._load_remote_dataset")
     def test_successful_load_with_revision(self, mock_load_remote_dataset):
@@ -19,7 +21,21 @@ class TestFetchDataset(unittest.TestCase):
         mock_load_remote_dataset.return_value = mock_dataset
         dataset = fetch_dataset("some_dataset", revision="v1.0")
         self.assertEqual(dataset, mock_dataset)
-        mock_load_remote_dataset.assert_called_once_with("some_dataset", "v1.0")
+        mock_load_remote_dataset.assert_called_once_with(
+            "some_dataset", "v1.0", sample_rows=None
+        )
+
+    @patch("definers.data.loaders._load_remote_dataset")
+    def test_successful_load_with_sample_rows(self, mock_load_remote_dataset):
+        mock_dataset = MagicMock()
+        mock_load_remote_dataset.return_value = mock_dataset
+
+        dataset = fetch_dataset("some_dataset", sample_rows=25)
+
+        self.assertEqual(dataset, mock_dataset)
+        mock_load_remote_dataset.assert_called_once_with(
+            "some_dataset", None, sample_rows=25
+        )
 
     @patch(
         "definers.data.loaders._load_remote_dataset",
@@ -29,7 +45,7 @@ class TestFetchDataset(unittest.TestCase):
         dataset = fetch_dataset("non_existent_dataset")
         self.assertIsNone(dataset)
         mock_load_remote_dataset.assert_called_once_with(
-            "non_existent_dataset", None
+            "non_existent_dataset", None, sample_rows=None
         )
 
     @patch(
@@ -40,7 +56,7 @@ class TestFetchDataset(unittest.TestCase):
         dataset = fetch_dataset("flaky_connection_dataset")
         self.assertIsNone(dataset)
         mock_load_remote_dataset.assert_called_once_with(
-            "flaky_connection_dataset", None
+            "flaky_connection_dataset", None, sample_rows=None
         )
 
     @patch("definers.data.loaders._load_remote_dataset_fallback")
@@ -53,9 +69,11 @@ class TestFetchDataset(unittest.TestCase):
         mock_load_remote_dataset_fallback.return_value = mock_dataset
         dataset = fetch_dataset("some_url", url_type="json")
         self.assertEqual(dataset, mock_dataset)
-        mock_load_remote_dataset.assert_called_once_with("some_url", None)
+        mock_load_remote_dataset.assert_called_once_with(
+            "some_url", None, sample_rows=None
+        )
         mock_load_remote_dataset_fallback.assert_called_once_with(
-            "some_url", "json", None
+            "some_url", "json", None, sample_rows=None
         )
 
     @patch("definers.data.loaders._load_remote_dataset_fallback")
@@ -68,9 +86,30 @@ class TestFetchDataset(unittest.TestCase):
         mock_load_remote_dataset_fallback.return_value = mock_dataset
         dataset = fetch_dataset("some_url", url_type="json", revision="v2")
         self.assertEqual(dataset, mock_dataset)
-        mock_load_remote_dataset.assert_called_once_with("some_url", "v2")
+        mock_load_remote_dataset.assert_called_once_with(
+            "some_url", "v2", sample_rows=None
+        )
         mock_load_remote_dataset_fallback.assert_called_once_with(
-            "some_url", "json", "v2"
+            "some_url", "json", "v2", sample_rows=None
+        )
+
+    @patch("definers.data.loaders._load_remote_dataset_fallback")
+    @patch("definers.data.loaders._load_remote_dataset")
+    def test_fallback_preserves_sample_rows(
+        self, mock_load_remote_dataset, mock_load_remote_dataset_fallback
+    ):
+        mock_dataset = MagicMock()
+        mock_load_remote_dataset.side_effect = Exception("Initial error")
+        mock_load_remote_dataset_fallback.return_value = mock_dataset
+
+        dataset = fetch_dataset("some_url", url_type="json", sample_rows=50)
+
+        self.assertEqual(dataset, mock_dataset)
+        mock_load_remote_dataset.assert_called_once_with(
+            "some_url", None, sample_rows=50
+        )
+        mock_load_remote_dataset_fallback.assert_called_once_with(
+            "some_url", "json", None, sample_rows=50
         )
 
     @patch(
@@ -86,9 +125,11 @@ class TestFetchDataset(unittest.TestCase):
     ):
         dataset = fetch_dataset("some_url", url_type="csv")
         self.assertIsNone(dataset)
-        mock_load_remote_dataset.assert_called_once_with("some_url", None)
+        mock_load_remote_dataset.assert_called_once_with(
+            "some_url", None, sample_rows=None
+        )
         mock_load_remote_dataset_fallback.assert_called_once_with(
-            "some_url", "csv", None
+            "some_url", "csv", None, sample_rows=None
         )
 
     @patch(
@@ -104,9 +145,11 @@ class TestFetchDataset(unittest.TestCase):
     ):
         dataset = fetch_dataset("some_url", url_type="parquet")
         self.assertIsNone(dataset)
-        mock_load_remote_dataset.assert_called_once_with("some_url", None)
+        mock_load_remote_dataset.assert_called_once_with(
+            "some_url", None, sample_rows=None
+        )
         mock_load_remote_dataset_fallback.assert_called_once_with(
-            "some_url", "parquet", None
+            "some_url", "parquet", None, sample_rows=None
         )
 
 

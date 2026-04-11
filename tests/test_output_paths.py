@@ -99,3 +99,17 @@ def test_cleanup_managed_output_path_removes_directory_under_root(
 
     assert removed is True
     assert session_dir.exists() is False
+
+
+def test_session_retention_seconds_uses_hosted_runtime_defaults(monkeypatch):
+    monkeypatch.delenv("DEFINERS_GUI_SESSION_RETENTION_SECONDS", raising=False)
+    monkeypatch.setenv("ZEROGPU", "1")
+
+    assert output_paths._session_retention_seconds() == 1800.0
+
+
+def test_session_retention_seconds_prefers_explicit_override(monkeypatch):
+    monkeypatch.setenv("ZEROGPU", "1")
+    monkeypatch.setenv("DEFINERS_GUI_SESSION_RETENTION_SECONDS", "90")
+
+    assert output_paths._session_retention_seconds() == 90.0

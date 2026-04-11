@@ -52,6 +52,7 @@ logger = init_logger()
 _LAZY_SUBMODULES = {
     "download_activity",
     "output_paths",
+    "runtime_budget",
 }
 
 
@@ -277,6 +278,7 @@ __all__ = (
     "run",
     "run_linux",
     "run_windows",
+    "runtime_budget",
     "save",
     "save_temp_text",
     "secure_command",

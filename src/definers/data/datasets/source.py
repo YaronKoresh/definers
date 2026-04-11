@@ -1,26 +1,43 @@
 class DatasetSourceLoader:
     @staticmethod
-    def load_remote_dataset(src: str, revision: str | None):
-        from datasets import load_dataset
-
-        if revision:
-            return load_dataset(src, revision=revision, split="train")
-        return load_dataset(src, split="train")
-
-    @staticmethod
-    def load_remote_dataset_fallback(
-        src: str, url_type: str, revision: str | None
+    def load_remote_dataset(
+        src: str,
+        revision: str | None,
+        sample_rows: int | None = None,
     ):
         from datasets import load_dataset
 
+        split_name = "train"
+        if sample_rows is not None and sample_rows > 0:
+            split_name = f"train[:{int(sample_rows)}]"
+        if revision:
+            return load_dataset(src, revision=revision, split=split_name)
+        return load_dataset(src, split=split_name)
+
+    @staticmethod
+    def load_remote_dataset_fallback(
+        src: str,
+        url_type: str,
+        revision: str | None,
+        sample_rows: int | None = None,
+    ):
+        from datasets import load_dataset
+
+        split_name = "train"
+        if sample_rows is not None and sample_rows > 0:
+            split_name = f"train[:{int(sample_rows)}]"
         if revision:
             return load_dataset(
                 url_type,
                 data_files={"train": src},
                 revision=revision,
-                split="train",
+                split=split_name,
             )
-        return load_dataset(url_type, data_files={"train": src}, split="train")
+        return load_dataset(
+            url_type,
+            data_files={"train": src},
+            split=split_name,
+        )
 
     @staticmethod
     def load_dataset_attempt(load_dataset_call, source_name: str):
@@ -46,12 +63,19 @@ class DatasetSourceLoader:
 
     @staticmethod
     def fetch_dataset(
-        src: str, url_type: str | None = None, revision: str | None = None
+        src: str,
+        url_type: str | None = None,
+        revision: str | None = None,
+        sample_rows: int | None = None,
     ):
         import definers.data.loaders as loaders_module
 
         dataset, allow_fallback = loaders_module._load_dataset_attempt(
-            lambda: loaders_module._load_remote_dataset(src, revision),
+            lambda: loaders_module._load_remote_dataset(
+                src,
+                revision,
+                sample_rows=sample_rows,
+            ),
             src,
         )
         if dataset is not None or url_type is None or not allow_fallback:
@@ -59,7 +83,10 @@ class DatasetSourceLoader:
         fallback_source = f"{url_type} with data_files {src}"
         fallback_dataset, _ = loaders_module._load_dataset_attempt(
             lambda: loaders_module._load_remote_dataset_fallback(
-                src, url_type, revision
+                src,
+                url_type,
+                revision,
+                sample_rows=sample_rows,
             ),
             fallback_source,
         )

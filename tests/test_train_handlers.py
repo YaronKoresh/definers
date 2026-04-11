@@ -147,6 +147,76 @@ def test_handle_training_returns_model_output_and_plan(monkeypatch):
     ]
 
 
+def test_handle_training_guided_profile_uses_beginner_progress_labels(
+    monkeypatch,
+):
+    import definers.ml as ml_module
+    import definers.system.output_paths as output_paths_module
+
+    trainer_plan_module = importlib.import_module("definers.ml.trainer_plan")
+    activity = []
+
+    monkeypatch.setattr(
+        "definers.system.download_activity.report_download_activity",
+        lambda item_label=None, **kwargs: activity.append(item_label),
+    )
+
+    class FakeTrainer:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        def training_plan(self, **kwargs):
+            return SimpleNamespace(
+                mode="file-dataset", source_summary="features.csv"
+            )
+
+        def train(self, **kwargs):
+            return "trained.joblib"
+
+    monkeypatch.setattr(ml_module, "AutoTrainer", FakeTrainer)
+    monkeypatch.setattr(ml_module, "simple_text", lambda value: value)
+    monkeypatch.setattr(
+        output_paths_module,
+        "managed_output_path",
+        lambda *args, **kwargs: f"/managed/train/{kwargs['filename']}",
+    )
+    monkeypatch.setattr(
+        trainer_plan_module,
+        "render_training_plan_markdown",
+        lambda plan: f"plan:{plan.mode}:{plan.source_summary}",
+    )
+
+    model_output, plan, status = handle_training(
+        ["features.csv"],
+        ["labels.csv"],
+        None,
+        None,
+        "label",
+        "main",
+        "csv",
+        None,
+        None,
+        "trained-output.joblib",
+        24,
+        0.15,
+        0.2,
+        "shuffle",
+        "label",
+        progress_profile="guided",
+    )
+
+    assert model_output == "trained.joblib"
+    assert plan == "plan:file-dataset:features.csv"
+    assert "Artifact: trained.joblib" in status
+    assert activity == [
+        "Check files",
+        "Understand data",
+        "Build plan",
+        "Train model",
+        "Save model",
+    ]
+
+
 def test_handle_prediction_uses_model_path(monkeypatch):
     import definers.ml as ml_module
 

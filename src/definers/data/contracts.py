@@ -80,6 +80,7 @@ class PrepareDataCacheControlPort(Protocol):
         src: str,
         url_type: str | None = None,
         revision: str | None = None,
+        sample_rows: int | None = None,
     ) -> LoadedValue: ...
 
     def files_to_dataset(

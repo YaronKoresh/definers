@@ -46,14 +46,21 @@ def _cleanup_interval_seconds() -> float:
 
 
 def _session_retention_seconds() -> float:
-    configured_value = os.environ.get(
-        "DEFINERS_GUI_SESSION_RETENTION_SECONDS",
-        "86400",
-    ).strip()
     try:
-        return max(float(configured_value), 0.0)
+        from definers.system.runtime_budget import (
+            estimate_session_retention_seconds,
+        )
+
+        return estimate_session_retention_seconds(os.environ)
     except Exception:
-        return 86400.0
+        configured_value = os.environ.get(
+            "DEFINERS_GUI_SESSION_RETENTION_SECONDS",
+            "86400",
+        ).strip()
+        try:
+            return max(float(configured_value), 0.0)
+        except Exception:
+            return 86400.0
 
 
 def _pytest_output_retention_seconds() -> float:

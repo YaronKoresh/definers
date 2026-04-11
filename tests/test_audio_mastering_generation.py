@@ -2292,16 +2292,20 @@ def test_process_stem_mastered_input_preserves_tonal_stages_for_final_glue(
     limiter_calls = [call for call in stage_calls if isinstance(call, tuple)]
     assert len(limiter_calls) == 1
     assert (
-        0.75
+        mastering.drive_db + 0.2
         < limiter_calls[0][1]
         <= max(
-            mastering.drive_db * 1.32,
-            2.9,
+            mastering.drive_db * 1.48,
+            3.35,
         )
     )
-    assert limiter_calls[0][2] <= max(
-        mastering.limiter_soft_clip_ratio * 0.95,
-        0.18,
+    assert (
+        mastering.limiter_soft_clip_ratio + 0.02
+        < limiter_calls[0][2]
+        <= max(
+            mastering.limiter_soft_clip_ratio * 1.08,
+            0.24,
+        )
     )
     assert np.array_equal(
         mastering.last_stage_signals["post_eq"],

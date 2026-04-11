@@ -208,9 +208,11 @@ def _resolve_stem_mix_target_dbfs(
     if normalized_name == "drums":
         return -11.9
     if normalized_name == "bass":
-        return -13.6
+        return -13.1
     if normalized_name == "vocals":
         return -19.2 - float(np.clip(vocal_pullback_db, 0.0, 3.0))
+    if normalized_name == "other":
+        return -16.9
     if normalized_name == "guitar":
         return -18.6
     if normalized_name == "piano":
@@ -227,7 +229,7 @@ def _resolve_stem_mix_balance_profile(
     if normalized_name == "drums":
         return 0.88, -3.6, 5.4
     if normalized_name == "bass":
-        return 0.82, -3.6, 5.2
+        return 0.86, -3.4, 5.6
     if normalized_name == "vocals":
         resolved_pullback_db = float(np.clip(vocal_pullback_db, 0.0, 3.0))
         return (
@@ -235,6 +237,8 @@ def _resolve_stem_mix_balance_profile(
             -5.4 - resolved_pullback_db,
             1.8 - resolved_pullback_db * 0.65,
         )
+    if normalized_name == "other":
+        return 0.82, -3.0, 4.8
     if normalized_name == "guitar":
         return 0.56, -4.5, 2.8
     if normalized_name == "piano":
@@ -971,69 +975,111 @@ def _resolve_stem_dynamics_profile(stem_name: str) -> dict[str, float]:
     if normalized_name == "drums":
         return {
             "threshold_percentile": 72.0,
-            "ratio": 5.4,
-            "attack_ms": 3.0,
-            "release_ms": 54.0,
-            "gain_smoothing_ms": 8.0,
-            "wet_mix": 0.84,
-            "body_mix": 0.04,
-            "body_window_ms": 3.2,
-            "sustain_bias": 0.94,
-            "threshold_mean_scale": 1.22,
-            "min_gain": 0.36,
-            "makeup_scale": 0.58,
-            "limiter_mix_bonus": 0.24,
-            "drive_bonus": 0.18,
+            "ratio": 5.9,
+            "attack_ms": 2.8,
+            "release_ms": 50.0,
+            "gain_smoothing_ms": 7.0,
+            "wet_mix": 0.88,
+            "body_mix": 0.06,
+            "body_window_ms": 3.0,
+            "sustain_bias": 0.96,
+            "threshold_mean_scale": 1.18,
+            "min_gain": 0.34,
+            "makeup_scale": 0.74,
+            "limiter_mix_bonus": 0.3,
+            "drive_bonus": 0.22,
+            "target_active_dbfs": -14.0,
+            "max_lift_db": 4.8,
+            "peak_target": 0.92,
+            "ceiling_drive": 2.1,
+            "lift_floor_dbfs": -34.0,
         }
     if normalized_name == "bass":
         return {
             "threshold_percentile": 82.0,
-            "ratio": 4.8,
-            "attack_ms": 8.5,
-            "release_ms": 88.0,
+            "ratio": 5.1,
+            "attack_ms": 7.8,
+            "release_ms": 84.0,
             "gain_smoothing_ms": 18.0,
-            "wet_mix": 0.74,
-            "body_mix": 0.18,
-            "body_window_ms": 6.5,
-            "sustain_bias": 1.04,
-            "threshold_mean_scale": 1.08,
-            "min_gain": 0.44,
-            "makeup_scale": 0.68,
-            "limiter_mix_bonus": 0.14,
-            "drive_bonus": 0.08,
+            "wet_mix": 0.78,
+            "body_mix": 0.2,
+            "body_window_ms": 6.8,
+            "sustain_bias": 1.06,
+            "threshold_mean_scale": 1.06,
+            "min_gain": 0.4,
+            "makeup_scale": 0.78,
+            "limiter_mix_bonus": 0.18,
+            "drive_bonus": 0.12,
+            "target_active_dbfs": -14.8,
+            "max_lift_db": 4.5,
+            "peak_target": 0.9,
+            "ceiling_drive": 2.0,
+            "lift_floor_dbfs": -34.0,
         }
     if normalized_name == "vocals":
         return {
             "threshold_percentile": 79.0,
-            "ratio": 4.9,
-            "attack_ms": 6.5,
-            "release_ms": 82.0,
+            "ratio": 5.1,
+            "attack_ms": 6.0,
+            "release_ms": 78.0,
             "gain_smoothing_ms": 14.0,
-            "wet_mix": 0.72,
-            "body_mix": 0.16,
-            "body_window_ms": 4.6,
-            "sustain_bias": 1.0,
-            "threshold_mean_scale": 1.12,
-            "min_gain": 0.42,
-            "makeup_scale": 0.62,
-            "limiter_mix_bonus": 0.18,
-            "drive_bonus": 0.12,
+            "wet_mix": 0.76,
+            "body_mix": 0.18,
+            "body_window_ms": 4.8,
+            "sustain_bias": 1.02,
+            "threshold_mean_scale": 1.08,
+            "min_gain": 0.4,
+            "makeup_scale": 0.68,
+            "limiter_mix_bonus": 0.22,
+            "drive_bonus": 0.14,
+            "target_active_dbfs": -17.4,
+            "max_lift_db": 3.5,
+            "peak_target": 0.86,
+            "ceiling_drive": 1.82,
+            "lift_floor_dbfs": -36.0,
+        }
+    if normalized_name == "other":
+        return {
+            "threshold_percentile": 77.0,
+            "ratio": 4.9,
+            "attack_ms": 5.2,
+            "release_ms": 68.0,
+            "gain_smoothing_ms": 12.0,
+            "wet_mix": 0.8,
+            "body_mix": 0.12,
+            "body_window_ms": 4.2,
+            "sustain_bias": 0.98,
+            "threshold_mean_scale": 1.1,
+            "min_gain": 0.39,
+            "makeup_scale": 0.72,
+            "limiter_mix_bonus": 0.2,
+            "drive_bonus": 0.14,
+            "target_active_dbfs": -16.0,
+            "max_lift_db": 4.4,
+            "peak_target": 0.88,
+            "ceiling_drive": 1.95,
+            "lift_floor_dbfs": -35.0,
         }
     return {
         "threshold_percentile": 78.0,
-        "ratio": 4.3,
+        "ratio": 4.6,
         "attack_ms": 5.8,
         "release_ms": 72.0,
         "gain_smoothing_ms": 13.0,
-        "wet_mix": 0.7,
-        "body_mix": 0.1,
+        "wet_mix": 0.74,
+        "body_mix": 0.12,
         "body_window_ms": 4.0,
         "sustain_bias": 0.98,
-        "threshold_mean_scale": 1.14,
-        "min_gain": 0.42,
-        "makeup_scale": 0.56,
-        "limiter_mix_bonus": 0.16,
-        "drive_bonus": 0.1,
+        "threshold_mean_scale": 1.1,
+        "min_gain": 0.4,
+        "makeup_scale": 0.64,
+        "limiter_mix_bonus": 0.18,
+        "drive_bonus": 0.12,
+        "target_active_dbfs": -16.8,
+        "max_lift_db": 3.9,
+        "peak_target": 0.87,
+        "ceiling_drive": 1.88,
+        "lift_floor_dbfs": -35.0,
     }
 
 
@@ -1168,17 +1214,71 @@ def _apply_stem_dynamics(
         )
     )
     limited = shaped * (1.0 - limiter_mix) + limited * limiter_mix
+    target_active_dbfs = _resolve_stem_override_float(
+        stem_overrides,
+        "stem_dynamics_target_active_dbfs",
+        dynamics_profile["target_active_dbfs"],
+        minimum=-36.0,
+        maximum=-8.0,
+    )
+    max_lift_db = _resolve_stem_override_float(
+        stem_overrides,
+        "stem_dynamics_max_lift_db",
+        dynamics_profile["max_lift_db"],
+        minimum=0.0,
+        maximum=12.0,
+    )
+    target_peak = _resolve_stem_override_float(
+        stem_overrides,
+        "stem_dynamics_peak_target",
+        dynamics_profile["peak_target"],
+        minimum=0.75,
+        maximum=_STEM_SAVED_PEAK_CEILING_LINEAR,
+    )
+    ceiling_drive = _resolve_stem_override_float(
+        stem_overrides,
+        "stem_dynamics_ceiling_drive",
+        dynamics_profile["ceiling_drive"],
+        minimum=1.0,
+        maximum=4.0,
+    )
+    lift_floor_dbfs = float(dynamics_profile["lift_floor_dbfs"])
     input_peak = (
         float(np.max(np.abs(stereo_signal))) if stereo_signal.size else 0.0
     )
+    active_level_dbfs = _measure_active_stem_level_dbfs(limited)
+    if input_peak >= 0.035 and active_level_dbfs > lift_floor_dbfs:
+        lift_db = float(
+            np.clip(target_active_dbfs - active_level_dbfs, 0.0, max_lift_db)
+        )
+        if lift_db > 1e-4:
+            limited = limited * _stem_mix_gain_linear(lift_db)
+
     limited_peak = float(np.max(np.abs(limited))) if limited.size else 0.0
-    if input_peak > 1e-6 and limited_peak > input_peak * 0.985:
-        limited = limited * ((input_peak * 0.985) / limited_peak)
-    return _constrain_stem_peak_growth(
+    if limited_peak > target_peak > 0.0:
+        overflow_ratio = float(limited_peak / max(target_peak, 1e-6))
+        clip_drive = float(
+            np.clip(
+                ceiling_drive + max(overflow_ratio - 1.0, 0.0) * 1.25,
+                1.0,
+                4.2,
+            )
+        )
+        clip_mix = float(
+            np.clip(
+                0.42 + max(overflow_ratio - 1.0, 0.0) * 0.58,
+                0.42,
+                1.0,
+            )
+        )
+        clipped = np.tanh(limited * clip_drive) / float(np.tanh(clip_drive))
+        limited = limited * (1.0 - clip_mix) + clipped * clip_mix
+        limited_peak = float(np.max(np.abs(limited))) if limited.size else 0.0
+    if limited_peak > target_peak > 0.0:
+        limited = limited * (target_peak / limited_peak)
+    return _sanitize_stem_signal(
         limited,
-        reference_signal=stereo_signal,
-        peak_growth_limit=1.06,
-        absolute_peak_ceiling=_STEM_SAVED_PEAK_CEILING_LINEAR,
+        peak_ceiling=target_peak,
     )
 
 
@@ -1275,6 +1375,10 @@ def resolve_stem_mastering_plan(
         "contract_max_crest_factor_db": None,
         "contract_max_stereo_width_ratio": None,
         "contract_min_low_end_mono_ratio": None,
+        "stem_dynamics_target_active_dbfs": -16.8,
+        "stem_dynamics_max_lift_db": 3.9,
+        "stem_dynamics_peak_target": 0.87,
+        "stem_dynamics_ceiling_drive": 1.88,
     }
 
     if normalized_name == "drums":
@@ -1310,15 +1414,20 @@ def resolve_stem_mastering_plan(
                     )
                 ),
                 "stereo_width": float(np.clip(shared_width + 0.04, 1.02, 1.16)),
+                "stem_dynamics_target_active_dbfs": -13.4,
+                "stem_dynamics_max_lift_db": 5.6,
+                "stem_dynamics_peak_target": 0.95,
+                "stem_dynamics_ceiling_drive": 2.35,
             }
         )
     elif normalized_name == "bass":
-        shared_mix_gain_db = 1.08
+        shared_mix_gain_db = 1.22
         shared_overrides.update(
             {
-                "drive_db": shared_drive_db + 0.42,
+                "target_lufs": shared_target_lufs + 0.28,
+                "drive_db": shared_drive_db + 0.48,
                 "bass_boost_db_per_oct": base_config.bass_boost_db_per_oct
-                + 0.78,
+                + 0.92,
                 "treble_boost_db_per_oct": max(
                     base_config.treble_boost_db_per_oct - 0.72, 0.0
                 ),
@@ -1333,7 +1442,7 @@ def resolve_stem_mastering_plan(
                     base_config.exciter_max_drive * 0.92, 0.6
                 ),
                 "stereo_width": 0.94,
-                "mono_bass_hz": max(base_config.mono_bass_hz, 160.0),
+                "mono_bass_hz": max(base_config.mono_bass_hz, 170.0),
                 "stereo_tone_variation_db": 0.0,
                 "stereo_motion_mid_amount": 0.0,
                 "stereo_motion_high_amount": 0.0,
@@ -1350,6 +1459,10 @@ def resolve_stem_mastering_plan(
                         base_config.micro_dynamics_strength * 0.46, 0.0, 0.1
                     )
                 ),
+                "stem_dynamics_target_active_dbfs": -14.1,
+                "stem_dynamics_max_lift_db": 5.0,
+                "stem_dynamics_peak_target": 0.94,
+                "stem_dynamics_ceiling_drive": 2.2,
             }
         )
     elif normalized_name == "vocals":
@@ -1383,6 +1496,45 @@ def resolve_stem_mastering_plan(
                 ),
                 "low_end_mono_tightening": "gentle",
                 "low_end_mono_tightening_amount": 0.3,
+                "stem_dynamics_target_active_dbfs": -16.7,
+                "stem_dynamics_max_lift_db": 3.8,
+                "stem_dynamics_peak_target": 0.89,
+                "stem_dynamics_ceiling_drive": 1.95,
+            }
+        )
+    elif normalized_name == "other":
+        shared_mix_gain_db = 0.72
+        shared_overrides.update(
+            {
+                "target_lufs": shared_target_lufs + 0.45,
+                "drive_db": shared_drive_db + 0.18,
+                "bass_boost_db_per_oct": base_config.bass_boost_db_per_oct
+                + 0.28,
+                "treble_boost_db_per_oct": base_config.treble_boost_db_per_oct
+                + 0.1,
+                "exciter_mix": float(
+                    np.clip(base_config.exciter_mix + 0.06, 0.0, 1.0)
+                ),
+                "exciter_max_drive": base_config.exciter_max_drive + 0.15,
+                "stereo_width": float(np.clip(shared_width + 0.22, 1.1, 1.44)),
+                "mono_bass_hz": max(base_config.mono_bass_hz, 145.0),
+                "stem_cleanup_strength": float(
+                    np.clip(base_cleanup_strength * 0.1, 0.0, 1.5)
+                ),
+                "stem_noise_gate_strength": float(
+                    np.clip(base_noise_gate_strength * 0.02, 0.0, 1.5)
+                ),
+                "micro_dynamics_strength": float(
+                    np.clip(
+                        base_config.micro_dynamics_strength + 0.01, 0.0, 0.24
+                    )
+                ),
+                "low_end_mono_tightening": "balanced",
+                "low_end_mono_tightening_amount": 0.68,
+                "stem_dynamics_target_active_dbfs": -15.0,
+                "stem_dynamics_max_lift_db": 5.1,
+                "stem_dynamics_peak_target": 0.93,
+                "stem_dynamics_ceiling_drive": 2.16,
             }
         )
     elif normalized_name == "guitar":
@@ -1409,6 +1561,10 @@ def resolve_stem_mastering_plan(
                 ),
                 "low_end_mono_tightening": "gentle",
                 "low_end_mono_tightening_amount": 0.35,
+                "stem_dynamics_target_active_dbfs": -16.2,
+                "stem_dynamics_max_lift_db": 4.2,
+                "stem_dynamics_peak_target": 0.91,
+                "stem_dynamics_ceiling_drive": 2.0,
             }
         )
     elif normalized_name == "piano":
@@ -1435,6 +1591,10 @@ def resolve_stem_mastering_plan(
                 ),
                 "low_end_mono_tightening": "gentle",
                 "low_end_mono_tightening_amount": 0.3,
+                "stem_dynamics_target_active_dbfs": -16.3,
+                "stem_dynamics_max_lift_db": 4.0,
+                "stem_dynamics_peak_target": 0.9,
+                "stem_dynamics_ceiling_drive": 1.98,
             }
         )
     else:

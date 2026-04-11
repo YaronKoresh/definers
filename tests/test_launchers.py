@@ -127,3 +127,4 @@ def test_gui_entrypoints_registers_focused_task_surfaces():
         "image-title",
         "train",
     }.issubset(set(GUI_LAUNCHERS))
+    assert "train-coach" not in GUI_LAUNCHERS

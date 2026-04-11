@@ -20,6 +20,56 @@ def _create_train_activity_reporter(total_steps: int):
     return create_activity_reporter(total_steps)
 
 
+def _training_progress_messages(action: str, progress_profile: str | None):
+    normalized_action = str(action or "train").strip().lower()
+    normalized_profile = str(progress_profile or "default").strip().lower()
+    if normalized_profile == "guided":
+        if normalized_action == "plan":
+            return (
+                (
+                    "Check files",
+                    "Checking the selected files, dataset, and saved model inputs.",
+                ),
+                (
+                    "Understand data",
+                    "Understanding the dataset shape, labels, and guided route.",
+                ),
+                ("Build plan", "Preparing the guided training plan."),
+            )
+        return (
+            (
+                "Check files",
+                "Checking the selected files, dataset, and saved model inputs.",
+            ),
+            (
+                "Understand data",
+                "Understanding the dataset shape, labels, and guided route.",
+            ),
+            ("Build plan", "Preparing the guided training plan."),
+            ("Train model", "Training the model with guided defaults."),
+            ("Save model", "Saving the trained model output."),
+        )
+    if normalized_action == "plan":
+        return (
+            (
+                "Normalize training request",
+                "Collecting the selected training inputs.",
+            ),
+            ("Build training plan", "Building the training execution plan."),
+            ("Render training plan", "Rendering the training plan preview."),
+        )
+    return (
+        (
+            "Normalize training request",
+            "Collecting the selected training inputs.",
+        ),
+        ("Initialize trainer", "Preparing the training runtime."),
+        ("Build training plan", "Preparing the training plan snapshot."),
+        ("Run training job", "Running the model training workflow."),
+        ("Render training status", "Preparing the training status summary."),
+    )
+
+
 def normalize_selected_rows(selected_rows):
     from definers.constants import MAX_CONSECUTIVE_SPACES, MAX_INPUT_LENGTH
     from definers.ml import simple_text
@@ -271,17 +321,15 @@ def build_training_plan_markdown(
     test_split,
     order_by,
     stratify,
+    progress_profile=None,
 ):
     from definers.ml.trainer_plan import (
         render_training_plan_markdown,
     )
 
-    report = _create_train_activity_reporter(3)
-    report(
-        1,
-        "Normalize training request",
-        detail="Collecting the selected training inputs.",
-    )
+    progress_messages = _training_progress_messages("plan", progress_profile)
+    report = _create_train_activity_reporter(len(progress_messages))
+    report(1, progress_messages[0][0], detail=progress_messages[0][1])
     request = _build_training_request(
         features,
         labels,
@@ -298,11 +346,7 @@ def build_training_plan_markdown(
         order_by,
         stratify,
     )
-    report(
-        2,
-        "Build training plan",
-        detail="Building the training execution plan.",
-    )
+    report(2, progress_messages[1][0], detail=progress_messages[1][1])
     trainer = _create_trainer(request)
     plan = trainer.training_plan(
         data=request["data"],
@@ -314,11 +358,7 @@ def build_training_plan_markdown(
         order_by=request["order_by"],
         stratify=request["stratify"],
     )
-    report(
-        3,
-        "Render training plan",
-        detail="Rendering the training plan preview.",
-    )
+    report(3, progress_messages[2][0], detail=progress_messages[2][1])
     return render_training_plan_markdown(plan)
 
 
@@ -338,17 +378,15 @@ def handle_training(
     test_split,
     order_by,
     stratify,
+    progress_profile=None,
 ):
     from definers.ml.trainer_plan import (
         render_training_plan_markdown,
     )
 
-    report = _create_train_activity_reporter(5)
-    report(
-        1,
-        "Normalize training request",
-        detail="Collecting the selected training inputs.",
-    )
+    progress_messages = _training_progress_messages("train", progress_profile)
+    report = _create_train_activity_reporter(len(progress_messages))
+    report(1, progress_messages[0][0], detail=progress_messages[0][1])
     request = _build_training_request(
         features,
         labels,
@@ -366,17 +404,9 @@ def handle_training(
         stratify,
         save_as=save_as,
     )
-    report(
-        2,
-        "Initialize trainer",
-        detail="Preparing the training runtime.",
-    )
+    report(2, progress_messages[1][0], detail=progress_messages[1][1])
     trainer = _create_trainer(request)
-    report(
-        3,
-        "Build training plan",
-        detail="Preparing the training plan snapshot.",
-    )
+    report(3, progress_messages[2][0], detail=progress_messages[2][1])
     plan = trainer.training_plan(
         data=request["data"],
         target=request["target"],
@@ -388,11 +418,7 @@ def handle_training(
         stratify=request["stratify"],
     )
     plan_markdown = render_training_plan_markdown(plan)
-    report(
-        4,
-        "Run training job",
-        detail="Running the model training workflow.",
-    )
+    report(4, progress_messages[3][0], detail=progress_messages[3][1])
     model_output = trainer.train(
         data=request["data"],
         target=request["target"],
@@ -409,11 +435,7 @@ def handle_training(
         batch_size=request["batch_size"],
         resume_from=request["resume_from"],
     )
-    report(
-        5,
-        "Render training status",
-        detail="Preparing the training status summary.",
-    )
+    report(5, progress_messages[4][0], detail=progress_messages[4][1])
     status_markdown = _render_markdown(
         "Training",
         "ready" if model_output else "blocked",

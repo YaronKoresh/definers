@@ -111,6 +111,35 @@ def test_resolve_stem_mastering_plan_clips_exciter_mix_and_staggers_drive():
     assert "exciter_max_drive" not in piano.overrides
 
 
+def test_resolve_stem_mastering_plan_keeps_other_forward_and_weighted():
+    base = CONFIG_MODULE.SmartMasteringConfig.balanced()
+
+    other = MASTERING_STEMS_MODULE.resolve_stem_mastering_plan("other", base)
+    vocals = MASTERING_STEMS_MODULE.resolve_stem_mastering_plan("vocals", base)
+    guitar = MASTERING_STEMS_MODULE.resolve_stem_mastering_plan("guitar", base)
+
+    assert other.mix_gain_db > vocals.mix_gain_db
+    assert other.mix_gain_db > guitar.mix_gain_db
+    assert other.overrides["target_lufs"] > vocals.overrides["target_lufs"]
+    assert (
+        other.overrides["bass_boost_db_per_oct"]
+        > base.bass_boost_db_per_oct + 0.2
+    )
+    assert (
+        other.overrides["stem_noise_gate_strength"]
+        < vocals.overrides["stem_noise_gate_strength"]
+    )
+    assert other.overrides["low_end_mono_tightening_amount"] >= 0.68
+    assert (
+        other.overrides["stem_dynamics_target_active_dbfs"]
+        > vocals.overrides["stem_dynamics_target_active_dbfs"]
+    )
+    assert (
+        other.overrides["stem_dynamics_max_lift_db"]
+        > vocals.overrides["stem_dynamics_max_lift_db"]
+    )
+
+
 def test_mix_stem_layers_aligns_sample_rates_and_applies_headroom():
     stems = {
         "drums": (
@@ -514,6 +543,29 @@ def test_apply_stem_mix_balance_keeps_bass_substantial_against_vocals():
     assert float(np.max(np.abs(bass))) > float(np.max(np.abs(vocals))) * 1.25
 
 
+def test_apply_stem_mix_balance_keeps_other_ahead_of_vocals():
+    base = CONFIG_MODULE.SmartMasteringConfig.balanced()
+    other_plan = MASTERING_STEMS_MODULE.resolve_stem_mastering_plan(
+        "other", base
+    )
+    vocals_plan = MASTERING_STEMS_MODULE.resolve_stem_mastering_plan(
+        "vocals", base
+    )
+    other, other_gain_db = MASTERING_STEMS_MODULE._apply_stem_mix_balance(
+        np.full((2, 256), 0.18, dtype=np.float32),
+        "other",
+        other_plan.mix_gain_db,
+    )
+    vocals, vocals_gain_db = MASTERING_STEMS_MODULE._apply_stem_mix_balance(
+        np.full((2, 256), 0.18, dtype=np.float32),
+        "vocals",
+        vocals_plan.mix_gain_db,
+    )
+
+    assert other_gain_db - vocals_gain_db > 1.5
+    assert float(np.max(np.abs(other))) > float(np.max(np.abs(vocals))) * 1.18
+
+
 def test_apply_stem_dynamics_controls_peaks_without_hollowing_bass():
     base = CONFIG_MODULE.SmartMasteringConfig.balanced()
     bass_plan = MASTERING_STEMS_MODULE.resolve_stem_mastering_plan("bass", base)
@@ -533,9 +585,60 @@ def test_apply_stem_dynamics_controls_peaks_without_hollowing_bass():
     output_peak = float(np.max(np.abs(finished)))
     input_body = float(np.mean(np.abs(signal[:, 512:1536])))
     output_body = float(np.mean(np.abs(finished[:, 512:1536])))
+    input_active = MASTERING_STEMS_MODULE._measure_active_stem_level_dbfs(
+        signal
+    )
+    output_active = MASTERING_STEMS_MODULE._measure_active_stem_level_dbfs(
+        finished
+    )
 
-    assert output_peak < input_peak
-    assert output_body > input_body * 0.95
+    assert abs(input_peak - 0.42) <= 1e-6
+    assert (
+        output_peak <= bass_plan.overrides["stem_dynamics_peak_target"] + 1e-6
+    )
+    assert output_body > input_body * 1.28
+    assert output_active > input_active + 2.6
+
+
+def test_apply_stem_dynamics_pushes_other_upward_before_mix_balance():
+    base = CONFIG_MODULE.SmartMasteringConfig.balanced()
+    other_plan = MASTERING_STEMS_MODULE.resolve_stem_mastering_plan(
+        "other", base
+    )
+    time = np.linspace(
+        0.0, 10.0 * np.pi, 2048, endpoint=False, dtype=np.float32
+    )
+    body = 0.06 * np.sin(time) + 0.025 * np.sin(time * 0.53)
+    accents = 0.045 * np.sin(time * 3.6)
+    signal = np.stack([body + accents, body - accents * 0.4], axis=0).astype(
+        np.float32
+    )
+
+    finished = MASTERING_STEMS_MODULE._apply_stem_dynamics(
+        signal,
+        8000,
+        "other",
+        base,
+        stem_overrides=other_plan.overrides,
+    )
+
+    input_peak = float(np.max(np.abs(signal)))
+    output_peak = float(np.max(np.abs(finished)))
+    input_active = MASTERING_STEMS_MODULE._measure_active_stem_level_dbfs(
+        signal
+    )
+    output_active = MASTERING_STEMS_MODULE._measure_active_stem_level_dbfs(
+        finished
+    )
+    input_body = float(np.mean(np.abs(signal[:, 256:1792])))
+    output_body = float(np.mean(np.abs(finished[:, 256:1792])))
+
+    assert (
+        output_peak <= other_plan.overrides["stem_dynamics_peak_target"] + 1e-6
+    )
+    assert output_peak > input_peak * 2.2
+    assert output_body > input_body * 1.65
+    assert output_active > input_active + 4.0
 
 
 def test_apply_stem_stereo_width_finish_widens_narrow_vocals():

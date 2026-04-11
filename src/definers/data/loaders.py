@@ -98,13 +98,29 @@ def load_as_numpy(path: str, training: bool = False):
     return _value_loader().load_as_numpy(path, training)
 
 
-def load_remote_dataset(src: str, revision: str | None):
-    return _source_loader().load_remote_dataset(src, revision)
+def load_remote_dataset(
+    src: str,
+    revision: str | None,
+    sample_rows: int | None = None,
+):
+    return _source_loader().load_remote_dataset(
+        src,
+        revision,
+        sample_rows=sample_rows,
+    )
 
 
-def load_remote_dataset_fallback(src: str, url_type: str, revision: str | None):
+def load_remote_dataset_fallback(
+    src: str,
+    url_type: str,
+    revision: str | None,
+    sample_rows: int | None = None,
+):
     return _source_loader().load_remote_dataset_fallback(
-        src, url_type, revision
+        src,
+        url_type,
+        revision,
+        sample_rows=sample_rows,
     )
 
 
@@ -113,17 +129,25 @@ def load_dataset_attempt(load_dataset_call, source_name: str):
 
 
 def fetch_dataset(
-    src: str, url_type: str | None = None, revision: str | None = None
+    src: str,
+    url_type: str | None = None,
+    revision: str | None = None,
+    sample_rows: int | None = None,
 ):
     dataset, allow_fallback = _load_dataset_attempt(
-        lambda: _load_remote_dataset(src, revision),
+        lambda: _load_remote_dataset(src, revision, sample_rows=sample_rows),
         src,
     )
     if dataset is not None or url_type is None or not allow_fallback:
         return dataset
     fallback_source = f"{url_type} with data_files {src}"
     fallback_dataset, _ = _load_dataset_attempt(
-        lambda: _load_remote_dataset_fallback(src, url_type, revision),
+        lambda: _load_remote_dataset_fallback(
+            src,
+            url_type,
+            revision,
+            sample_rows=sample_rows,
+        ),
         fallback_source,
     )
     return fallback_dataset
