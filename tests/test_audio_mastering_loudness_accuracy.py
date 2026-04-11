@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 from scipy import signal as scipy_signal
 
-from definers.audio.mastering_loudness import (
+from definers.audio.mastering.loudness import (
     get_lufs,
     measure_mastering_loudness,
 )

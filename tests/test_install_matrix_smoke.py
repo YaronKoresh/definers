@@ -19,6 +19,7 @@ EXPECTED_BASE_DEPENDENCIES = {
     "numpy>=1.26.0,<3",
     "requests>=2.28.0",
     "joblib>=1.3.0",
+    "openpyxl>=3.1.0",
     "pandas>=1.5.0",
     "pillow>=9.1.0",
     "scipy>=1.10.0,<2",
@@ -190,11 +191,19 @@ def test_optional_dependency_groups_omit_trimmed_packages():
         for spec in optional_dependencies_table["audio"]
     }
 
-    assert "audio-separator>=0.30.0" in optional_dependencies_table["audio"]
+    assert (
+        "audio-separator>=0.30.2,<0.32.0"
+        in optional_dependencies_table["audio"]
+    )
+    assert (
+        "audio-separator>=0.30.2,<0.31.0"
+        not in optional_dependencies_table["audio"]
+    )
     assert (
         'stopes>=2.2.1; sys_platform != "win32"'
         in optional_dependencies_table["nlp"]
     )
+    assert "moviepy>=2.0.0" in optional_dependencies_table["video"]
     assert "basic-pitch" not in audio_requirement_names
     assert "beautifulsoup4>=4.12.0" not in optional_dependencies_table["web"]
     assert "gradio-client>=2.3.0" not in optional_dependencies_table["web"]
@@ -202,11 +211,49 @@ def test_optional_dependency_groups_omit_trimmed_packages():
     assert "tensorflow>=2.15.0" not in optional_dependencies_table["ml"]
     assert "tf-keras>=2.15.0" not in optional_dependencies_table["ml"]
     assert "madmom" not in audio_requirement_names
+    assert "moviepy>=1.0.3" not in optional_dependencies_table["video"]
     assert "transformers" not in audio_requirement_names
     assert "torchvision>=0.16.0" not in optional_dependencies_table["ml"]
     assert "cssselect>=1.2.0" not in optional_dependencies_table["dev"]
-    assert "resampy>=0.4.2" in optional_dependencies_table["audio"]
+    assert "numba>=0.57.0" not in optional_dependencies_table["audio"]
+    assert "resampy>=0.4.2" not in optional_dependencies_table["audio"]
     assert "resampy>=0.4.2,<0.5" not in optional_dependencies_table["audio"]
+    assert "imageio-ffmpeg>=0.4.0" not in optional_dependencies_table["image"]
+    assert "imageio-ffmpeg>=0.4.0" not in optional_dependencies_table["video"]
+    assert "tokenizers>=0.15.0" not in optional_dependencies_table["ml"]
+
+
+def test_cuda_optional_dependency_group_uses_solver_friendly_ranges():
+    optional_dependencies_table = read_pyproject_config()["project"][
+        "optional-dependencies"
+    ]
+    cuda_specs = optional_dependencies_table["cuda"]
+
+    assert "cuda-python>=12.0.0" in cuda_specs
+    assert "nvidia-ml-py>=12" in cuda_specs
+    assert "cupy-cuda12x>=13.6.0,!=14.0.0" in cuda_specs
+    assert 'cudf-cu12>=26.2; platform_system == "Linux"' in cuda_specs
+    assert 'cuml-cu12>=26.2; platform_system == "Linux"' in cuda_specs
+    assert 'dask-cuda>=26.2; platform_system == "Linux"' in cuda_specs
+    assert 'dask-cudf-cu12>=26.2; platform_system == "Linux"' in cuda_specs
+    assert (
+        'distributed-ucxx-cu12>=0.48; platform_system == "Linux"' in cuda_specs
+    )
+    assert 'pylibraft-cu12>=26.2; platform_system == "Linux"' in cuda_specs
+    assert 'raft-dask-cu12>=26.2; platform_system == "Linux"' in cuda_specs
+    assert (
+        'rapids-dask-dependency>=26.2; platform_system == "Linux"' in cuda_specs
+    )
+    assert 'rmm-cu12>=26.2; platform_system == "Linux"' in cuda_specs
+    assert 'ucxx-cu12>=0.48; platform_system == "Linux"' in cuda_specs
+    assert all("dask[complete]" not in spec for spec in cuda_specs)
+    assert all("distributed==" not in spec for spec in cuda_specs)
+    assert all("libucx-cu12" not in spec for spec in cuda_specs)
+    assert all("pynvjitlink-cu12" not in spec for spec in cuda_specs)
+    assert all("ucx-py-cu12" not in spec for spec in cuda_specs)
+    assert all("nvidia-cublas-cu12" not in spec for spec in cuda_specs)
+    for spec in cuda_specs:
+        assert "==" not in str(Requirement(spec).specifier)
 
 
 def test_install_matrix_smoke_task_exists():

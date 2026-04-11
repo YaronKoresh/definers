@@ -1,7 +1,7 @@
 from unittest.mock import patch
 
-from definers.presentation.gui_registry import register_gui_launchers
-from definers.presentation.launchers import (
+from definers.ui.gui_registry import register_gui_launchers
+from definers.ui.launchers import (
     get_gui_project_names,
     launch_installed_project,
     start_project,
@@ -104,12 +104,27 @@ def test_get_gui_project_names_uses_namespace_when_registry_missing():
 
 
 def test_launch_installed_project_delegates_to_gui_entrypoints_start():
-    with patch(
-        "definers.presentation.launchers.import_module"
-    ) as mock_import_module:
+    with patch("definers.ui.launchers.import_module") as mock_import_module:
         mock_import_module.return_value.start.return_value = "started"
 
         result = launch_installed_project("chat")
 
     assert result == "started"
     mock_import_module.return_value.start.assert_called_once_with("chat")
+
+
+def test_gui_entrypoints_registers_focused_task_surfaces():
+    from definers.ui.gui_entrypoints import GUI_LAUNCHERS
+
+    assert {
+        "audio",
+        "audio-mastering",
+        "video",
+        "video-composer",
+        "image",
+        "image-generate",
+        "image-upscale",
+        "image-title",
+        "train",
+    }.issubset(set(GUI_LAUNCHERS))
+    assert "train-coach" not in GUI_LAUNCHERS

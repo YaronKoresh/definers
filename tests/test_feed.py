@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 
 import numpy as np
 
-from definers.application_ml.training import HybridModel, feed
+from definers.ml.training import HybridModel, feed
 
 
 class TestFeed(unittest.TestCase):

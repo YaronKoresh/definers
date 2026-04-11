@@ -3,11 +3,14 @@ import types
 import unittest
 from unittest.mock import patch
 
-import definers.presentation.chat_handlers as presentation_chat_handlers
 import definers.text as text
-from definers.application_text.validation import TextValidationError
+import definers.ui.chat_handlers as presentation_chat_handlers
 from definers.constants import MAX_CONSECUTIVE_SPACES, MAX_INPUT_LENGTH
-from definers.presentation.chat_handlers import get_chat_response
+from definers.text.validation import TextValidationError
+from definers.ui.chat_handlers import (
+    get_chat_response,
+    get_chat_response_stream,
+)
 
 
 class TestChatValidation(unittest.TestCase):
@@ -53,6 +56,23 @@ class TestChatValidation(unittest.TestCase):
         msg = {"text": "ok", "files": []}
 
         self.assertEqual(get_chat_response(msg, []), "ok")
+
+    def test_get_chat_response_stream_yields_runtime_stages(self):
+        msg = {"text": "ok", "files": []}
+
+        updates = list(get_chat_response_stream(msg, []))
+
+        self.assertEqual(
+            updates,
+            [
+                "Validating chat request...",
+                "Normalizing chat context...",
+                "Logging request context...",
+                "Running answer runtime...",
+                "Finalizing response...",
+                "ok",
+            ],
+        )
 
 
 if __name__ == "__main__":

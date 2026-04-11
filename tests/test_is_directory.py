@@ -2,7 +2,7 @@ import os
 import tempfile
 import unittest
 
-from definers.platform.filesystem import is_directory
+from definers.system.filesystem import is_directory
 
 
 class TestIsDirectory(unittest.TestCase):

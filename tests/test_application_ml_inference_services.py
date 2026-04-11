@@ -5,13 +5,13 @@ import unittest
 
 import numpy as np
 
-from definers.application_data.vectorizers import create_vectorizer
-from definers.application_ml.regression_predictor import RegressionPredictor
-from definers.application_ml.text_feature_extractor import TextFeatureExtractor
-from definers.application_ml.text_feature_reconstructor import (
+from definers.data.vectorizers import create_vectorizer
+from definers.ml.regression_predictor import RegressionPredictor
+from definers.ml.text.extract import TextFeatureExtractor
+from definers.ml.text.reconstruct import (
     TextFeatureReconstructor,
 )
-from definers.application_ml.training import LinearRegressionTorch
+from definers.ml.training import LinearRegressionTorch
 
 
 class TestApplicationMlInferenceServices(unittest.TestCase):

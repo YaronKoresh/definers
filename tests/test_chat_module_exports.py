@@ -1,11 +1,11 @@
 from unittest.mock import patch
 
-import definers.presentation.gui_entrypoints as gui_entrypoints
+import definers.ui.gui_entrypoints as gui_entrypoints
 
 
 def test_music_video_facade_delegates_to_service():
     with patch(
-        "definers.presentation.music_video_service.music_video",
+        "definers.ui.music_video_service.music_video",
         return_value="video.mp4",
     ) as mock_music_video:
         result = gui_entrypoints.music_video(
@@ -23,7 +23,7 @@ def test_music_video_facade_delegates_to_service():
 
 def test_lyric_video_facade_delegates_to_service():
     with patch(
-        "definers.presentation.lyric_video_service.lyric_video",
+        "definers.ui.lyric_video_service.lyric_video",
         return_value="lyrics.mp4",
     ) as mock_lyric_video:
         result = gui_entrypoints.lyric_video(
@@ -56,7 +56,7 @@ def test_lyric_video_facade_delegates_to_service():
 
 def test_init_stable_whisper_facade_delegates_to_service():
     with patch(
-        "definers.presentation.lyric_video_service.init_stable_whisper",
+        "definers.ui.lyric_video_service.init_stable_whisper",
         return_value=None,
     ) as mock_init_stable_whisper:
         gui_entrypoints.init_stable_whisper()

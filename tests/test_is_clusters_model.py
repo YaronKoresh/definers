@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import MagicMock
 
-from definers.application_ml import is_clusters_model
+from definers.ml import is_clusters_model
 
 
 class TestIsClustersModel(unittest.TestCase):

@@ -2,9 +2,9 @@ import os
 from unittest.mock import patch
 
 import definers.command_runner as command_runner
-import definers.platform.processes as process_module
 import definers.system as system
-from definers.platform.services import (
+import definers.system.processes as process_module
+from definers.system.services import (
     EnvironmentService,
     FileSystemService,
     InfrastructureServices,

@@ -3,6 +3,7 @@ import pathlib
 import tempfile
 import textwrap
 import unittest
+from unittest import mock
 
 MODULE_PATH = (
     pathlib.Path(__file__).resolve().parents[1]
@@ -50,6 +51,20 @@ class TestStripComments(unittest.TestCase):
         cleaned = strip_comments.remove_docstrings(source)
 
         self.assertEqual(cleaned, "class EmptyProtocol:\n\tpass\n")
+
+    def test_remove_docstrings_supports_ast_without_legacy_str_node(self):
+        source = 'class EmptyProtocol:\n    """Marker"""\n'
+
+        class AstProxy:
+            def __getattr__(self, name):
+                if name == "Str":
+                    raise AttributeError(name)
+                return getattr(__import__("ast"), name)
+
+        with mock.patch.object(strip_comments, "ast", AstProxy()):
+            cleaned = strip_comments.remove_docstrings(source)
+
+        self.assertEqual(cleaned, "class EmptyProtocol:\n    pass\n")
 
     def test_remove_docstrings_keeps_protocol_ellipsis_bodies(self):
         source = textwrap.dedent(

@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from definers.application_data.arrays import dtype
+from definers.data.arrays import dtype
 from tests.torch_stubs import build_fake_torch
 
 

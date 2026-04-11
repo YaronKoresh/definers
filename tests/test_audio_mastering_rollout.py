@@ -17,6 +17,7 @@ def _load_module(module_name: str, module_path: Path):
 
 ROOT = Path(__file__).resolve().parents[1]
 AUDIO_ROOT = ROOT / "src" / "definers" / "audio"
+MASTERING_ROOT = AUDIO_ROOT / "mastering"
 
 
 def _install_scipy_stub() -> None:
@@ -26,6 +27,9 @@ def _install_scipy_stub() -> None:
     signal_module = types.ModuleType("scipy.signal")
 
     signal_module.lfilter = lambda _b, _a, y, axis=-1: np.array(
+        y, dtype=np.float32, copy=True
+    )
+    signal_module.filtfilt = lambda _b, _a, y, axis=-1: np.array(
         y, dtype=np.float32, copy=True
     )
     signal_module.resample_poly = lambda y, up, down, axis=-1: np.array(
@@ -55,17 +59,21 @@ def _load_rollout_modules(package_name: str):
     package = types.ModuleType(package_name)
     package.__path__ = [str(AUDIO_ROOT)]
     sys.modules[package_name] = package
+    mastering_package_name = f"{package_name}.mastering"
+    mastering_package = types.ModuleType(mastering_package_name)
+    mastering_package.__path__ = [str(MASTERING_ROOT)]
+    sys.modules[mastering_package_name] = mastering_package
     _install_scipy_stub()
     config_module = _load_module(
         f"{package_name}.config", AUDIO_ROOT / "config.py"
     )
     _load_module(
-        f"{package_name}.mastering_loudness",
-        AUDIO_ROOT / "mastering_loudness.py",
+        f"{mastering_package_name}.loudness",
+        MASTERING_ROOT / "loudness.py",
     )
     reference_module = _load_module(
-        f"{package_name}.mastering_reference",
-        AUDIO_ROOT / "mastering_reference.py",
+        f"{mastering_package_name}.reference",
+        MASTERING_ROOT / "reference.py",
     )
     return config_module, reference_module
 

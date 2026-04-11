@@ -1,8 +1,8 @@
+import importlib
 from types import SimpleNamespace
 
 import pytest
-
-from definers.presentation.apps.train_handlers import (
+from definers.ui.apps.train_handlers import (
     build_training_plan_markdown,
     handle_answer,
     handle_features_to_text,
@@ -36,6 +36,8 @@ def test_normalize_selected_rows_preserves_clean_value(monkeypatch):
 def test_build_training_plan_markdown_uses_auto_trainer_plan(monkeypatch):
     import definers.ml as ml_module
 
+    trainer_plan_module = importlib.import_module("definers.ml.trainer_plan")
+
     class FakeTrainer:
         def __init__(self, **kwargs):
             self.kwargs = kwargs
@@ -46,7 +48,8 @@ def test_build_training_plan_markdown_uses_auto_trainer_plan(monkeypatch):
     monkeypatch.setattr(ml_module, "AutoTrainer", FakeTrainer)
     monkeypatch.setattr(ml_module, "simple_text", lambda value: value)
     monkeypatch.setattr(
-        "definers.application_ml.trainer_plan.render_training_plan_markdown",
+        trainer_plan_module,
+        "render_training_plan_markdown",
         lambda plan: f"plan:{plan.mode}:{plan.source_summary}",
     )
 
@@ -72,6 +75,15 @@ def test_build_training_plan_markdown_uses_auto_trainer_plan(monkeypatch):
 
 def test_handle_training_returns_model_output_and_plan(monkeypatch):
     import definers.ml as ml_module
+    import definers.system.output_paths as output_paths_module
+
+    trainer_plan_module = importlib.import_module("definers.ml.trainer_plan")
+    activity = []
+
+    monkeypatch.setattr(
+        "definers.system.download_activity.report_download_activity",
+        lambda item_label=None, **kwargs: activity.append(item_label),
+    )
 
     class FakeTrainer:
         def __init__(self, **kwargs):
@@ -84,7 +96,7 @@ def test_handle_training_returns_model_output_and_plan(monkeypatch):
 
         def train(self, **kwargs):
             assert kwargs["resume_from"] == "model.joblib"
-            assert kwargs["save_as"] == "trained-output.joblib"
+            assert kwargs["save_as"] == "/managed/train/trained-output.joblib"
             assert kwargs["batch_size"] == 24
             assert kwargs["validation_split"] == 0.15
             assert kwargs["test_split"] == 0.2
@@ -95,7 +107,13 @@ def test_handle_training_returns_model_output_and_plan(monkeypatch):
     monkeypatch.setattr(ml_module, "AutoTrainer", FakeTrainer)
     monkeypatch.setattr(ml_module, "simple_text", lambda value: value)
     monkeypatch.setattr(
-        "definers.application_ml.trainer_plan.render_training_plan_markdown",
+        output_paths_module,
+        "managed_output_path",
+        lambda *args, **kwargs: f"/managed/train/{kwargs['filename']}",
+    )
+    monkeypatch.setattr(
+        trainer_plan_module,
+        "render_training_plan_markdown",
         lambda plan: f"plan:{plan.mode}:{plan.source_summary}",
     )
 
@@ -120,6 +138,83 @@ def test_handle_training_returns_model_output_and_plan(monkeypatch):
     assert model_output == "trained.joblib"
     assert plan == "plan:file-dataset:features.csv"
     assert "Artifact: trained.joblib" in status
+    assert activity == [
+        "Normalize training request",
+        "Initialize trainer",
+        "Build training plan",
+        "Run training job",
+        "Render training status",
+    ]
+
+
+def test_handle_training_guided_profile_uses_beginner_progress_labels(
+    monkeypatch,
+):
+    import definers.ml as ml_module
+    import definers.system.output_paths as output_paths_module
+
+    trainer_plan_module = importlib.import_module("definers.ml.trainer_plan")
+    activity = []
+
+    monkeypatch.setattr(
+        "definers.system.download_activity.report_download_activity",
+        lambda item_label=None, **kwargs: activity.append(item_label),
+    )
+
+    class FakeTrainer:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        def training_plan(self, **kwargs):
+            return SimpleNamespace(
+                mode="file-dataset", source_summary="features.csv"
+            )
+
+        def train(self, **kwargs):
+            return "trained.joblib"
+
+    monkeypatch.setattr(ml_module, "AutoTrainer", FakeTrainer)
+    monkeypatch.setattr(ml_module, "simple_text", lambda value: value)
+    monkeypatch.setattr(
+        output_paths_module,
+        "managed_output_path",
+        lambda *args, **kwargs: f"/managed/train/{kwargs['filename']}",
+    )
+    monkeypatch.setattr(
+        trainer_plan_module,
+        "render_training_plan_markdown",
+        lambda plan: f"plan:{plan.mode}:{plan.source_summary}",
+    )
+
+    model_output, plan, status = handle_training(
+        ["features.csv"],
+        ["labels.csv"],
+        None,
+        None,
+        "label",
+        "main",
+        "csv",
+        None,
+        None,
+        "trained-output.joblib",
+        24,
+        0.15,
+        0.2,
+        "shuffle",
+        "label",
+        progress_profile="guided",
+    )
+
+    assert model_output == "trained.joblib"
+    assert plan == "plan:file-dataset:features.csv"
+    assert "Artifact: trained.joblib" in status
+    assert activity == [
+        "Check files",
+        "Understand data",
+        "Build plan",
+        "Train model",
+        "Save model",
+    ]
 
 
 def test_handle_prediction_uses_model_path(monkeypatch):
@@ -289,6 +384,7 @@ def test_summary_handlers_delegate_to_ml(monkeypatch):
 def test_handle_prompt_optimization_bootstraps_translate_and_summary(
     monkeypatch,
 ):
+    import definers.constants as constants_module
     import definers.ml as ml_module
 
     init_calls = []
@@ -303,14 +399,14 @@ def test_handle_prompt_optimization_bootstraps_translate_and_summary(
         lambda prompt: f"prep:{prompt}",
     )
     monkeypatch.setattr(
-        ml_module,
-        "optimize_prompt_realism",
-        lambda prompt: f"opt:{prompt}",
+        constants_module,
+        "general_positive_prompt",
+        "cinematic",
     )
 
     assert handle_prompt_optimization("sunrise") == (
         "prep:sunrise",
-        "opt:sunrise",
+        "prep:sunrise, cinematic, cinematic.",
     )
     assert init_calls == [("summary", True), ("translate", True)]
 

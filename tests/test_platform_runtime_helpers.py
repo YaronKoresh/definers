@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-import definers.platform.runtime as runtime
+import definers.system.runtime as runtime
 
 
 def test_get_os_name_lowercases_platform_name(

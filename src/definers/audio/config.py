@@ -3,7 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, ClassVar
 
-import numpy as np
+from definers.runtime_numpy import get_numpy_module
+
+np = get_numpy_module()
 
 _PRESET_MACRO_DEFAULTS: dict[str, dict[str, float]] = {
     "balanced": {
@@ -192,54 +194,54 @@ _DERIVED_FIELD_SPECS: dict[str, dict[str, Any]] = {
         "clip": (-40.0, -12.0),
     },
     "target_lufs": {
-        "base": -9.0,
-        "coeffs": {"volume": 3.0, "effects": 0.2},
+        "base": -9.05,
+        "coeffs": {"volume": 3.25, "effects": 0.15},
         "clip": (-14.0, -4.5),
     },
     "stop_bass_boost_hz": {
-        "base": 145.0,
+        "base": 148.0,
         "coeffs": {
-            "bass": 12.0,
-            "volume": 3.0,
-            "effects": -4.0,
+            "bass": 18.0,
+            "volume": 4.0,
+            "effects": -3.0,
         },
         "clip": (90.0, 220.0),
     },
     "start_treble_boost_hz": {
-        "base": 3650.0,
+        "base": 3800.0,
         "coeffs": {
-            "bass": 450.0,
-            "volume": 50.0,
-            "effects": -200.0,
+            "bass": 650.0,
+            "volume": 150.0,
+            "effects": -180.0,
         },
         "clip": (2200.0, 5500.0),
     },
     "bass_boost_db_per_oct": {
-        "base": 1.18,
+        "base": 1.26,
         "coeffs": {
-            "bass": 0.22,
-            "volume": 0.06,
-            "effects": -0.04,
+            "bass": 0.34,
+            "volume": 0.09,
+            "effects": -0.03,
         },
-        "clip": (0.4, 1.8),
+        "clip": (0.4, 2.1),
     },
     "mid_slope": {
-        "base": -0.82,
+        "base": -0.88,
         "coeffs": {
-            "bass": -0.18,
-            "volume": -0.08,
-            "effects": 0.08,
+            "bass": -0.26,
+            "volume": -0.1,
+            "effects": 0.06,
         },
         "clip": (-1.6, 0.2),
     },
     "treble_boost_db_per_oct": {
-        "base": 1.16,
+        "base": 1.04,
         "coeffs": {
-            "bass": -0.12,
-            "volume": -0.04,
-            "effects": 0.08,
+            "bass": -0.2,
+            "volume": -0.08,
+            "effects": 0.05,
         },
-        "clip": (0.5, 1.6),
+        "clip": (0.35, 1.6),
     },
     "anchor_curve_strength": {
         "base": 0.5,
@@ -251,13 +253,13 @@ _DERIVED_FIELD_SPECS: dict[str, dict[str, Any]] = {
         "clip": (0.1, 0.8),
     },
     "drive_db": {
-        "base": 1.35,
+        "base": 1.45,
         "coeffs": {
-            "bass": 0.1,
-            "volume": 0.9,
+            "bass": 0.14,
+            "volume": 1.05,
             "effects": -0.05,
         },
-        "clip": (0.0, 3.5),
+        "clip": (0.0, 4.2),
     },
     "ceil_db": {
         "base": -0.3,
@@ -312,8 +314,8 @@ _DERIVED_FIELD_SPECS: dict[str, dict[str, Any]] = {
         "clip": (0.0, 2.0),
     },
     "exciter_mix": {
-        "base": 0.86,
-        "coeffs": {"volume": -0.03, "effects": 0.12},
+        "base": 0.8,
+        "coeffs": {"volume": -0.05, "effects": 0.1},
         "clip": (0.0, 1.0),
     },
     "exciter_cutoff_hz": {"base": None},
@@ -327,11 +329,11 @@ _DERIVED_FIELD_SPECS: dict[str, dict[str, Any]] = {
         "clip": (0.5, 5.0),
     },
     "exciter_high_frequency_cutoff_hz": {
-        "base": 6800.0,
+        "base": 6500.0,
         "coeffs": {
-            "bass": -500.0,
-            "volume": -250.0,
-            "effects": 350.0,
+            "bass": -850.0,
+            "volume": -350.0,
+            "effects": 250.0,
         },
         "clip": (3500.0, 9000.0),
     },
@@ -410,9 +412,9 @@ _DERIVED_FIELD_SPECS: dict[str, dict[str, Any]] = {
         "clip": (0.1, 0.5),
     },
     "max_final_boost_db": {
-        "base": 3.5,
-        "coeffs": {"volume": 0.9, "effects": -0.1},
-        "clip": (1.0, 5.0),
+        "base": 3.7,
+        "coeffs": {"volume": 1.15, "effects": -0.08},
+        "clip": (1.0, 5.5),
     },
     "max_follow_up_passes": {
         "base": 2,
@@ -430,9 +432,9 @@ _DERIVED_FIELD_SPECS: dict[str, dict[str, Any]] = {
         "clip": (1, 16),
     },
     "limiter_soft_clip_ratio": {
-        "base": 0.18,
-        "coeffs": {"volume": 0.08, "effects": -0.01},
-        "clip": (0.0, 0.5),
+        "base": 0.2,
+        "coeffs": {"volume": 0.1, "effects": -0.015},
+        "clip": (0.0, 0.55),
     },
     "true_peak_oversample_factor": {
         "base": 8,
@@ -440,10 +442,10 @@ _DERIVED_FIELD_SPECS: dict[str, dict[str, Any]] = {
         "clip": (1, 16),
     },
     "pre_limiter_saturation_ratio": {
-        "base": 0.06,
+        "base": 0.08,
         "coeffs": {
-            "bass": 0.01,
-            "volume": 0.06,
+            "bass": 0.02,
+            "volume": 0.08,
             "effects": -0.015,
         },
         "clip": (0.0, 0.25),
@@ -468,11 +470,126 @@ _DERIVED_FIELD_SPECS: dict[str, dict[str, Any]] = {
         "coeffs": {"volume": 0.05, "effects": -0.02},
         "clip": (0.0, 1.5),
     },
+    "stem_noise_gate_normalization_mode": {
+        "base": "none",
+        "kind": "str",
+    },
+    "stem_noise_gate_normalization_target_lufs": {
+        "base": -24.0,
+        "clip": (-70.0, 0.0),
+    },
+    "stem_noise_gate_normalization_target_dbfs": {
+        "base": -6.0,
+        "clip": (-60.0, 0.0),
+    },
+    "stem_noise_gate_threshold_db": {
+        "base": None,
+    },
+    "stem_noise_gate_hysteresis_db": {
+        "base": 4.5,
+        "clip": (0.0, 24.0),
+    },
+    "stem_noise_gate_reduction_range_db": {
+        "base": 28.0,
+        "clip": (0.0, 96.0),
+    },
+    "stem_noise_gate_attack_ms": {
+        "base": 4.0,
+        "coeffs": {"volume": -0.5, "effects": 1.0},
+        "clip": (0.1, 80.0),
+    },
+    "stem_noise_gate_hold_ms": {
+        "base": 90.0,
+        "coeffs": {"effects": 6.0},
+        "clip": (0.0, 500.0),
+    },
+    "stem_noise_gate_release_ms": {
+        "base": 42.0,
+        "coeffs": {"effects": 4.0},
+        "clip": (1.0, 500.0),
+    },
+    "stem_noise_gate_lookahead_ms": {
+        "base": 2.0,
+        "clip": (0.0, 20.0),
+    },
+    "stem_noise_gate_soft_knee_db": {
+        "base": 4.0,
+        "clip": (0.0, 24.0),
+    },
+    "stem_noise_gate_oversampling": {
+        "base": 1,
+        "kind": "int",
+        "clip": (1, 8),
+    },
+    "stem_noise_gate_sidechain_hpf_hz": {
+        "base": 0.0,
+        "clip": (0.0, 18000.0),
+    },
+    "stem_noise_gate_sidechain_lpf_hz": {
+        "base": 0.0,
+        "clip": (0.0, 22000.0),
+    },
+    "stem_noise_gate_stereo_link_percent": {
+        "base": 100.0,
+        "clip": (0.0, 100.0),
+    },
+    "stem_noise_gate_zero_crossing_enabled": {
+        "base": True,
+        "kind": "bool",
+    },
+    "stem_noise_gate_zero_crossing_window_ms": {
+        "base": 1.5,
+        "clip": (0.0, 25.0),
+    },
+    "stem_noise_gate_adaptive_release_enabled": {
+        "base": True,
+        "kind": "bool",
+    },
+    "stem_noise_gate_adaptive_release_strength": {
+        "base": 0.45,
+        "clip": (0.0, 1.5),
+    },
+    "stem_noise_gate_rms_window_ms": {
+        "base": 10.0,
+        "clip": (0.5, 200.0),
+    },
+    "stem_noise_gate_dc_offset_compensation": {
+        "base": True,
+        "kind": "bool",
+    },
+    "stem_noise_gate_delay_compensation_enabled": {
+        "base": True,
+        "kind": "bool",
+    },
+    "stem_noise_gate_inter_sample_peak_awareness": {
+        "base": True,
+        "kind": "bool",
+    },
+    "stem_noise_gate_analysis_peak_dbfs": {
+        "base": -1.0,
+        "clip": (-12.0, -0.1),
+    },
+    "stem_cleanup_strength": {
+        "base": 1.0,
+        "clip": (0.0, 1.5),
+    },
     "stem_tone_enrichment_enabled": {"base": True, "kind": "bool"},
     "stem_tone_enrichment_mix": {
         "base": 0.14,
         "coeffs": {"volume": -0.01, "effects": 0.02},
         "clip": (0.0, 0.3),
+    },
+    "stem_glue_reverb_amount": {
+        "base": 1.0,
+        "clip": (0.0, 1.5),
+    },
+    "stem_drum_edge_amount": {
+        "base": 1.0,
+        "clip": (0.0, 1.5),
+    },
+    "stem_vocal_pullback_db": {
+        "base": 0.0,
+        "clip": (0.0, 3.0),
     },
     "reference_match_amount": {
         "base": 0.44,
@@ -547,6 +664,8 @@ def _apply_numeric_spec(
     base_value = spec["base"]
     if kind == "bool":
         return bool(base_value)
+    if kind == "str":
+        return str(base_value)
     if base_value is None:
         return None
 

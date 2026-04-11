@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from definers.application_data.loader_runtime import LoaderRuntimeSupport
+from definers.data.loader_runtime import LoaderRuntimeSupport
 
 
 def _normalized_path(path: str) -> str:

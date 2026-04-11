@@ -1,4 +1,4 @@
-from definers.application_chat.handlers import (
+from definers.chat.handlers import (
     MEDIA_INSTRUCTION,
     build_chat_audit_message,
     create_chat_request,

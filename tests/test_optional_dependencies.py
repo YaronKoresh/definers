@@ -17,15 +17,20 @@ def test_package_specs_for_ml_group_cover_runtime_gap_packages():
 
     assert "scikit-learn>=1.3.0" in specs
     assert "transformers>=4.36.0" in specs
+    assert "tokenizers>=0.15.0" not in specs
     assert all("fairseq" not in spec for spec in specs)
     assert all("hydra-core" not in spec for spec in specs)
 
 
 def test_runtime_specs_for_pypi_optional_modules_omit_vcs_links():
     expected_specs = {
-        "audio_separator": "audio-separator>=0.30.2,<0.31.0",
+        "aioquic": "aioquic>=1.2.0",
+        "audio_separator": "audio-separator>=0.30.2,<0.32.0",
         "basic_pitch": "basic-pitch>=0.4.0",
+        "httpx": "httpx[http2]>=0.28.0",
         "madmom": "madmom>=0.16.1",
+        "moviepy": "moviepy>=2.0.0",
+        "openpyxl": "openpyxl>=3.1.0",
         "refiners": "refiners>=0.4.0",
         "stable_whisper": "stable-ts>=2.19.1",
         "stopes": 'stopes>=2.2.1; sys_platform != "win32"',
@@ -80,6 +85,8 @@ def test_install_optional_target_installs_group_specs(monkeypatch):
             "fastapi>=0.100.0",
             "googledrivedownloader>=1.1.0",
             "gradio>=6.9.0",
+            "httpx[http2]>=0.28.0",
+            "aioquic>=1.2.0",
             "lxml[html_clean]>=5.2.0",
             "cssselect>=1.2.0",
             "matplotlib>=3.7.0",
@@ -105,13 +112,57 @@ def test_install_optional_target_uses_madmom_install_override():
     ]
 
 
+def test_ensure_module_runtime_skips_install_when_module_is_available(
+    monkeypatch,
+):
+    installed = []
+
+    monkeypatch.setattr(optional_dependencies, "_COMPLETED_INSTALLS", set())
+    monkeypatch.setattr(optional_dependencies, "_FAILED_INSTALLS", set())
+    monkeypatch.setattr(
+        optional_dependencies.importlib.util,
+        "find_spec",
+        lambda name: object() if name == "audio_separator" else None,
+    )
+
+    result = optional_dependencies.ensure_module_runtime(
+        "audio_separator",
+        installer=lambda package_specs: installed.append(package_specs),
+    )
+
+    assert result is True
+    assert installed == []
+
+
+def test_ensure_module_runtime_installs_when_module_is_missing(monkeypatch):
+    installed = []
+
+    monkeypatch.setattr(optional_dependencies, "_COMPLETED_INSTALLS", set())
+    monkeypatch.setattr(optional_dependencies, "_FAILED_INSTALLS", set())
+    monkeypatch.setattr(
+        optional_dependencies.importlib.util,
+        "find_spec",
+        lambda name: None,
+    )
+
+    result = optional_dependencies.ensure_module_runtime(
+        "audio_separator",
+        installer=lambda package_specs: installed.append(package_specs),
+    )
+
+    assert result is True
+    assert installed == [("audio-separator>=0.30.2,<0.32.0",)]
+
+
 def test_audio_group_install_includes_runtime_github_modules():
     audio_package_specs = optional_dependencies.package_specs_for_group("audio")
     audio_install_specs = optional_dependencies.install_specs_for_group("audio")
 
-    assert "audio-separator>=0.30.2,<0.31.0" in audio_package_specs
+    assert "audio-separator>=0.30.2,<0.32.0" in audio_package_specs
     assert "basic-pitch>=0.4.0" not in audio_package_specs
     assert "madmom>=0.16.1" not in audio_package_specs
+    assert "numba>=0.57.0" not in audio_package_specs
+    assert "resampy>=0.4.2" not in audio_package_specs
     assert (
         "basic-pitch @ https://github.com/YaronKoresh/basic-pitch/archive/830590229b32e30faebf1626f046bb9d0b80def7.tar.gz"
         in audio_install_specs
@@ -150,9 +201,20 @@ def test_runtime_specs_trim_redundant_web_and_ml_packages():
     assert optional_dependencies.package_specs_for_module("hydra") == ()
 
     gradio_specs = optional_dependencies.package_specs_for_module("gradio")
+    librosa_specs = optional_dependencies.package_specs_for_module("librosa")
+    moviepy_specs = optional_dependencies.package_specs_for_module("moviepy")
+    openpyxl_specs = optional_dependencies.package_specs_for_module("openpyxl")
+    transformers_specs = optional_dependencies.package_specs_for_module(
+        "transformers"
+    )
 
     assert gradio_specs == ("gradio>=6.9.0",)
     assert all("gradio-client" not in spec for spec in gradio_specs)
+    assert all("numba" not in spec for spec in librosa_specs)
+    assert all("resampy" not in spec for spec in librosa_specs)
+    assert all("imageio-ffmpeg" not in spec for spec in moviepy_specs)
+    assert openpyxl_specs == ("openpyxl>=3.1.0",)
+    assert all("tokenizers" not in spec for spec in transformers_specs)
 
 
 def test_optional_runtime_targets_list_groups_tasks_and_modules():
@@ -162,7 +224,9 @@ def test_optional_runtime_targets_list_groups_tasks_and_modules():
     assert "audio" in targets["groups"]
     assert "tts" in targets["tasks"]
     assert "translate" in targets["tasks"]
+    assert "aioquic" in targets["modules"]
     assert "gradio" in targets["modules"]
+    assert "httpx" in targets["modules"]
 
 
 def test_runtime_groups_omit_vcs_links():
@@ -204,7 +268,7 @@ def test_auto_install_import_retries_known_module(monkeypatch):
 
     result = optional_dependencies._auto_install_import(
         "gradio",
-        globals={"__name__": "definers.presentation.apps.chat_app"},
+        globals={"__name__": "definers.ui.apps.chat_app"},
     )
 
     assert result is sentinel
@@ -237,7 +301,7 @@ def test_auto_install_import_patch_does_not_corrupt_global_imports(
 
     result = optional_dependencies._auto_install_import(
         "gradio",
-        globals={"__name__": "definers.presentation.apps.chat_app"},
+        globals={"__name__": "definers.ui.apps.chat_app"},
     )
 
     assert result is sentinel

@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from definers.application_data.arrays import numpy_to_str
+from definers.data.arrays import numpy_to_str
 
 
 class TestNumpyToStr(unittest.TestCase):

@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from definers.application_ml import linear_regression
+from definers.ml import linear_regression
 
 
 class TestLinearRegression(unittest.TestCase):

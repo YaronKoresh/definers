@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from definers.application_data.arrays import get_max_shapes
+from definers.data.arrays import get_max_shapes
 
 
 class TestGetMaxShapes(unittest.TestCase):

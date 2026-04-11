@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 
-from definers.application_data.loaders import split_columns
+from definers.data.loaders import split_columns
 
 
 class TestSplitColumns(unittest.TestCase):

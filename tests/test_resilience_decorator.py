@@ -3,8 +3,8 @@ import logging
 
 import pytest
 
-import definers.shared_kernel.resilience as resilience_module
-from definers.shared_kernel.resilience import with_retry
+import definers.resilience as resilience_module
+from definers.resilience import with_retry
 
 
 class FakeLogger:

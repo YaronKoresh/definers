@@ -1,6 +1,6 @@
 import os
 
-from definers.persistence.database import Database
+from definers.database import Database
 
 
 def test_clean_keeps_latest_record_per_identifier_and_preserves_timestamps(

@@ -3,7 +3,7 @@ import shutil
 import tempfile
 import unittest
 
-from definers.platform.filesystem import load
+from definers.system.filesystem import load
 
 
 class TestLoad(unittest.TestCase):
@@ -59,7 +59,7 @@ class TestLoad(unittest.TestCase):
         self.assertEqual(load(empty_dir), [])
 
     def test_load_utf8_file(self):
-        content = "こんにちは世界"
+        content = "ã“ã‚“ã«ã¡ã¯ä¸–ç•Œ"
         with open(self.file_path, "w", encoding="utf8") as f:
             f.write(content)
         loaded_content = load(self.file_path)

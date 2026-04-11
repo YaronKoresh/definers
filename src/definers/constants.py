@@ -5,7 +5,7 @@ import re
 from definers.catalogs.languages import LANGUAGE_CODES, UNESCO_MAPPING
 from definers.catalogs.references import FFMPEG_URL, STYLE_CATALOG, USER_AGENTS
 from definers.catalogs.tasks import TASKS
-from definers.runtime.state import get_default_runtime_collections
+from definers.state import get_default_runtime_collections
 
 RUNTIME_REFERENCES = get_default_runtime_collections()
 MODELS = RUNTIME_REFERENCES.models

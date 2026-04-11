@@ -4,7 +4,7 @@ import os
 
 import pytest
 
-import definers.platform.processes as processes
+import definers.system.processes as processes
 
 
 def normalize_absolute_path(path: str) -> str:

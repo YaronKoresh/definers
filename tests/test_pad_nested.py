@@ -2,7 +2,7 @@ import unittest
 
 import numpy as _numpy
 
-from definers.application_data.arrays import pad_nested
+from definers.data.arrays import pad_nested
 
 
 class TestPadNested(unittest.TestCase):

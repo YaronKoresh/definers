@@ -19,6 +19,7 @@ def _load_module(module_name: str, module_path: Path):
 
 ROOT = Path(__file__).resolve().parents[1]
 AUDIO_ROOT = ROOT / "src" / "definers" / "audio"
+MASTERING_ROOT = AUDIO_ROOT / "mastering"
 
 
 def _install_scipy_stub() -> None:
@@ -27,6 +28,9 @@ def _install_scipy_stub() -> None:
     signal_module = types.ModuleType("scipy.signal")
 
     signal_module.lfilter = lambda _b, _a, y, axis=-1: np.array(
+        y, dtype=np.float32, copy=True
+    )
+    signal_module.filtfilt = lambda _b, _a, y, axis=-1: np.array(
         y, dtype=np.float32, copy=True
     )
     signal_module.resample_poly = lambda y, up, down, axis=-1: np.array(
@@ -56,22 +60,26 @@ def _load_finalization_module(package_name: str):
     package = types.ModuleType(package_name)
     package.__path__ = [str(AUDIO_ROOT)]
     sys.modules[package_name] = package
+    mastering_package_name = f"{package_name}.mastering"
+    mastering_package = types.ModuleType(mastering_package_name)
+    mastering_package.__path__ = [str(MASTERING_ROOT)]
+    sys.modules[mastering_package_name] = mastering_package
     _install_scipy_stub()
     _load_module(
-        f"{package_name}.mastering_loudness",
-        AUDIO_ROOT / "mastering_loudness.py",
+        f"{mastering_package_name}.loudness",
+        MASTERING_ROOT / "loudness.py",
     )
     _load_module(
-        f"{package_name}.mastering_contract",
-        AUDIO_ROOT / "mastering_contract.py",
+        f"{mastering_package_name}.contract",
+        MASTERING_ROOT / "contract.py",
     )
     _load_module(
-        f"{package_name}.mastering_dynamics",
-        AUDIO_ROOT / "mastering_dynamics.py",
+        f"{mastering_package_name}.dynamics",
+        MASTERING_ROOT / "dynamics.py",
     )
     return _load_module(
-        f"{package_name}.mastering_finalization",
-        AUDIO_ROOT / "mastering_finalization.py",
+        f"{mastering_package_name}.finalization",
+        MASTERING_ROOT / "finalization.py",
     )
 
 
@@ -189,6 +197,33 @@ def test_resolve_final_true_peak_target_prefers_stricter_delivery_target():
     target_db = FINALIZATION_MODULE.resolve_final_true_peak_target(mastering)
 
     assert target_db == pytest.approx(-1.0)
+
+
+def test_apply_pre_limiter_true_peak_trim_reduces_signal_to_minus_three_dbfs():
+    mastering = _mastering_stub(true_peak_oversample_factor=8)
+    source = np.array([0.2, -0.4, 0.98], dtype=np.float32)
+
+    trimmed = FINALIZATION_MODULE.apply_pre_limiter_true_peak_trim(
+        mastering,
+        source,
+        sample_rate=44100,
+        measure_true_peak_fn=lambda y, sr, oversample_factor=4: float(
+            20.0 * np.log10(max(np.max(np.abs(y)), 1e-12))
+        ),
+    )
+
+    expected_peak = float(10.0 ** (-3.0 / 20.0))
+
+    assert np.max(np.abs(trimmed)) == pytest.approx(expected_peak, abs=1e-4)
+    assert mastering.last_pre_limiter_true_peak_target_dbfs == pytest.approx(
+        -3.0
+    )
+    assert mastering.last_pre_limiter_true_peak_input_dbfs > -3.0
+    assert mastering.last_pre_limiter_true_peak_attenuation_db > 0.0
+    assert mastering.last_pre_limiter_true_peak_output_dbfs == pytest.approx(
+        -3.0,
+        abs=1e-4,
+    )
 
 
 def test_apply_delivery_trim_reduces_signal_when_true_peak_exceeds_target():

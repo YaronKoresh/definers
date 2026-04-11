@@ -19,6 +19,7 @@ def _load_module(module_name: str, module_path: Path):
 
 ROOT = Path(__file__).resolve().parents[1]
 AUDIO_ROOT = ROOT / "src" / "definers" / "audio"
+MASTERING_ROOT = AUDIO_ROOT / "mastering"
 _SCIPY_MODULE_NAMES = ("scipy", "scipy.signal", "scipy.io", "scipy.io.wavfile")
 
 
@@ -42,6 +43,9 @@ def _install_scipy_stub() -> None:
     def lfilter(_b, _a, y, axis=-1):
         return np.array(y, dtype=np.float32, copy=True)
 
+    def filtfilt(_b, _a, y, axis=-1):
+        return np.array(y, dtype=np.float32, copy=True)
+
     def resample_poly(y, up, down, axis=-1):
         array = np.asarray(y, dtype=np.float32)
         if max(int(up), 1) == 1 and max(int(down), 1) == 1:
@@ -50,6 +54,7 @@ def _install_scipy_stub() -> None:
         return repeated[..., :: max(int(down), 1)]
 
     signal_module.lfilter = lfilter
+    signal_module.filtfilt = filtfilt
     signal_module.resample_poly = resample_poly
     signal_module.butter = lambda *args, **kwargs: "sos"
     signal_module.sosfiltfilt = lambda sos, x, axis=-1: np.array(
@@ -80,6 +85,10 @@ def _load_reporting_modules(package_name: str):
     package = types.ModuleType(package_name)
     package.__path__ = [str(AUDIO_ROOT)]
     sys.modules[package_name] = package
+    mastering_package_name = f"{package_name}.mastering"
+    mastering_package = types.ModuleType(mastering_package_name)
+    mastering_package.__path__ = [str(MASTERING_ROOT)]
+    sys.modules[mastering_package_name] = mastering_package
     backup = {name: sys.modules.get(name) for name in _SCIPY_MODULE_NAMES}
     _install_scipy_stub()
 
@@ -88,20 +97,20 @@ def _load_reporting_modules(package_name: str):
             f"{package_name}.config", AUDIO_ROOT / "config.py"
         )
         loudness_module = _load_module(
-            f"{package_name}.mastering_loudness",
-            AUDIO_ROOT / "mastering_loudness.py",
+            f"{mastering_package_name}.loudness",
+            MASTERING_ROOT / "loudness.py",
         )
         contract_module = _load_module(
-            f"{package_name}.mastering_contract",
-            AUDIO_ROOT / "mastering_contract.py",
+            f"{mastering_package_name}.contract",
+            MASTERING_ROOT / "contract.py",
         )
         metrics_module = _load_module(
-            f"{package_name}.mastering_metrics",
-            AUDIO_ROOT / "mastering_metrics.py",
+            f"{mastering_package_name}.metrics",
+            MASTERING_ROOT / "metrics.py",
         )
         presets_module = _load_module(
-            f"{package_name}.mastering_presets",
-            AUDIO_ROOT / "mastering_presets.py",
+            f"{mastering_package_name}.presets",
+            MASTERING_ROOT / "presets.py",
         )
         return (
             config_module,
@@ -217,6 +226,7 @@ def test_generate_mastering_report_tracks_gain_deltas():
         input_signal,
         output_signal,
         8000,
+        final_in_memory_signal=output_signal * 0.86,
         post_eq_signal=input_signal * 1.2,
         post_spatial_signal=output_signal * 0.98,
         post_limiter_signal=output_signal * 0.95,
@@ -256,6 +266,9 @@ def test_generate_mastering_report_tracks_gain_deltas():
         resolved_true_peak_target_dbfs=-0.1,
         stereo_motion_activity=0.26,
         stereo_motion_correlation_guard=0.82,
+        export_gain_applied_db=1.75,
+        export_peak_alignment_mode="align_to_ceil",
+        export_peak_alignment_target_dbfs=-0.1,
         delivery_trim_attenuation_db=0.15,
         delivery_trim_input_true_peak_dbfs=0.05,
         delivery_trim_target_dbfs=-0.1,
@@ -271,6 +284,10 @@ def test_generate_mastering_report_tracks_gain_deltas():
         headroom_recovery_transient_density=0.18,
         headroom_recovery_closed_margin_db=0.28,
         headroom_recovery_unused_margin_db=0.0,
+        stem_mastered_input=True,
+        stem_glue_reverb_amount=1.15,
+        stem_drum_edge_amount=0.8,
+        stem_vocal_pullback_db=1.4,
     )
 
     assert report.preset_name == "edm"
@@ -282,8 +299,9 @@ def test_generate_mastering_report_tracks_gain_deltas():
     assert report.post_peak_catch_metrics is not None
     assert report.post_delivery_trim_metrics is not None
     assert report.post_clamp_metrics is not None
-    assert report.final_in_memory_metrics.integrated_lufs == pytest.approx(
-        report.output_metrics.integrated_lufs
+    assert (
+        report.final_in_memory_metrics.integrated_lufs
+        < report.output_metrics.integrated_lufs
     )
     assert report.output_contract_assessment is not None
     assert report.decoded_contract_assessment is not None
@@ -297,8 +315,15 @@ def test_generate_mastering_report_tracks_gain_deltas():
     assert report.headroom_recovery_output_true_peak_dbfs == pytest.approx(-0.1)
     assert report.headroom_recovery_mode == "guarded"
     assert report.headroom_recovery_closed_margin_db == pytest.approx(0.28)
+    assert report.stem_mastered_input is True
+    assert report.stem_glue_reverb_amount == pytest.approx(1.15)
+    assert report.stem_drum_edge_amount == pytest.approx(0.8)
+    assert report.stem_vocal_pullback_db == pytest.approx(1.4)
     assert report.stereo_motion_activity == pytest.approx(0.26)
     assert report.stereo_motion_correlation_guard == pytest.approx(0.82)
+    assert report.export_gain_applied_db == pytest.approx(1.75)
+    assert report.export_peak_alignment_mode == "align_to_ceil"
+    assert report.export_peak_alignment_target_dbfs == pytest.approx(-0.1)
     assert report.post_spatial_stereo_motion is not None
     assert report.output_stereo_motion is not None
     assert report.resolved_true_peak_target_dbfs == pytest.approx(-0.1)
@@ -307,6 +332,15 @@ def test_generate_mastering_report_tracks_gain_deltas():
     assert report.true_peak_delta_db > 0.0
     assert report.true_peak_margin_db is not None
     assert report.to_dict()["preset_name"] == "edm"
+    assert report.to_musician_dict()["stem_final_pass"] == {
+        "glue_reverb_amount": pytest.approx(1.15),
+        "drum_edge_amount": pytest.approx(0.8),
+        "vocal_pullback_db": pytest.approx(1.4),
+        "headroom_recovery_gain_db": pytest.approx(0.28),
+        "headroom_recovery_mode": "guarded",
+        "headroom_recovery_closed_margin_db": pytest.approx(0.28),
+    }
+    assert "## Stem Final Pass" in report.to_musician_markdown()
 
 
 def test_generate_mastering_report_uses_resolved_true_peak_target_for_margin():
@@ -331,7 +365,109 @@ def test_generate_mastering_report_uses_resolved_true_peak_target_for_margin():
     )
 
 
-def test_write_mastering_report_serializes_json(tmp_path: Path):
+def test_musician_report_prioritizes_delivery_after_export_alignment():
+    time_axis = np.linspace(0.0, 1.0, 8000, endpoint=False)
+    input_signal = 0.2 * np.sin(2.0 * np.pi * 110.0 * time_axis).astype(
+        np.float32
+    )
+    output_signal = 0.5 * np.sin(2.0 * np.pi * 110.0 * time_axis).astype(
+        np.float32
+    )
+    final_in_memory_signal = output_signal * float(10.0 ** (-1.4 / 20.0))
+    target_lufs = LOUDNESS_MODULE.measure_mastering_loudness(
+        output_signal,
+        8000,
+    ).integrated_lufs
+    contract = CONTRACT_MODULE.resolve_mastering_contract(
+        "balanced",
+        target_lufs=target_lufs,
+        ceil_db=-0.1,
+        target_lufs_tolerance_db=0.3,
+        min_crest_factor_db=0.0,
+    )
+
+    report = METRICS_MODULE.generate_mastering_report(
+        input_signal,
+        output_signal,
+        8000,
+        final_in_memory_signal=final_in_memory_signal,
+        target_lufs=target_lufs,
+        ceil_db=-0.1,
+        preset_name="balanced",
+        contract=contract,
+        export_gain_applied_db=1.4,
+        export_peak_alignment_mode="align_to_ceil",
+        export_peak_alignment_target_dbfs=-0.1,
+    )
+
+    musician_payload = report.to_musician_dict()
+
+    assert (
+        musician_payload["verdict"]["headline"] == "Delivery file is on target."
+    )
+    assert (
+        "corrected automatically during export"
+        in musician_payload["verdict"]["detail"]
+    )
+    assert musician_payload["attention"] == []
+    assert (
+        "Final master needs another pass." not in report.to_musician_markdown()
+    )
+
+
+def test_musician_report_frames_ceiling_limited_quiet_master_without_retry_language():
+    time_axis = np.linspace(0.0, 1.0, 8000, endpoint=False)
+    input_signal = 0.2 * np.sin(2.0 * np.pi * 110.0 * time_axis).astype(
+        np.float32
+    )
+    output_signal = 0.38 * np.sin(2.0 * np.pi * 110.0 * time_axis).astype(
+        np.float32
+    )
+    output_lufs = LOUDNESS_MODULE.measure_mastering_loudness(
+        output_signal,
+        8000,
+    ).integrated_lufs
+    target_lufs = output_lufs + 1.25
+    contract = CONTRACT_MODULE.resolve_mastering_contract(
+        "balanced",
+        target_lufs=target_lufs,
+        ceil_db=-0.1,
+        target_lufs_tolerance_db=0.25,
+    )
+
+    report = METRICS_MODULE.generate_mastering_report(
+        input_signal,
+        output_signal,
+        8000,
+        final_in_memory_signal=output_signal,
+        target_lufs=target_lufs,
+        ceil_db=-0.1,
+        preset_name="balanced",
+        contract=contract,
+        resolved_true_peak_target_dbfs=-0.1,
+        post_clamp_true_peak_dbfs=-0.06,
+        headroom_recovery_failure_reasons=("linear_recovery_stalled",),
+        headroom_recovery_mode="guarded",
+        headroom_recovery_closed_margin_db=0.21,
+        headroom_recovery_unused_margin_db=0.0,
+        stem_mastered_input=True,
+    )
+
+    musician_payload = report.to_musician_dict()
+
+    assert (
+        musician_payload["verdict"]["headline"]
+        == "Delivery stays slightly under target to protect punch."
+    )
+    assert "preserve punch" in musician_payload["verdict"]["detail"]
+    assert musician_payload["attention"]
+    assert "preserve punch" in musician_payload["attention"][0]
+    assert (
+        "Final master needs another pass." not in report.to_musician_markdown()
+    )
+
+
+def test_write_mastering_report_serializes_concise_json(tmp_path: Path):
     time_axis = np.linspace(0.0, 1.0, 8000, endpoint=False)
     input_signal = 0.2 * np.sin(2.0 * np.pi * 110.0 * time_axis).astype(
         np.float32
@@ -359,6 +495,10 @@ def test_write_mastering_report_serializes_json(tmp_path: Path):
         headroom_recovery_failure_reasons=(
             "loudness_already_within_tolerance",
         ),
+        stem_mastered_input=True,
+        stem_glue_reverb_amount=1.1,
+        stem_drum_edge_amount=0.9,
+        stem_vocal_pullback_db=1.0,
     )
     destination = tmp_path / "mastering-report.json"
 
@@ -368,14 +508,55 @@ def test_write_mastering_report_serializes_json(tmp_path: Path):
 
     assert written_path == str(destination)
     payload = destination.read_text(encoding="utf-8")
+    assert '"report_title": "Mastering Report"' in payload
     assert '"preset_name": "edm"' in payload
-    assert '"post_character_metrics"' in payload
-    assert '"post_peak_catch_metrics"' in payload
-    assert '"post_delivery_trim_metrics"' in payload
-    assert '"post_clamp_metrics"' in payload
-    assert '"post_spatial_metrics"' in payload
-    assert '"delivery_trim_attenuation_db"' in payload
-    assert '"headroom_recovery_gain_db"' in payload
+    assert '"final_master"' in payload
+    assert '"delivery_file"' in payload
+    assert '"stem_final_pass"' in payload
+    assert '"actions_taken"' in payload
+    assert '"attention"' in payload
+
+
+def test_write_mastering_report_renders_markdown(tmp_path: Path):
+    time_axis = np.linspace(0.0, 1.0, 8000, endpoint=False)
+    input_signal = 0.2 * np.sin(2.0 * np.pi * 110.0 * time_axis).astype(
+        np.float32
+    )
+    output_signal = 0.5 * np.sin(2.0 * np.pi * 110.0 * time_axis).astype(
+        np.float32
+    )
+
+    report = METRICS_MODULE.generate_mastering_report(
+        input_signal,
+        output_signal,
+        8000,
+        final_in_memory_signal=output_signal * 0.9,
+        preset_name="balanced",
+        delivery_profile_name="lossless",
+        export_gain_applied_db=1.1,
+        export_peak_alignment_mode="align_to_ceil",
+        export_peak_alignment_target_dbfs=-0.1,
+        stem_mastered_input=True,
+        stem_glue_reverb_amount=1.05,
+        stem_drum_edge_amount=0.95,
+        stem_vocal_pullback_db=0.75,
+        headroom_recovery_gain_db=0.2,
+        headroom_recovery_mode="guarded",
+        headroom_recovery_closed_margin_db=0.18,
+    )
+    destination = tmp_path / "mastering-report.md"
+
+    written_path = METRICS_MODULE.write_mastering_report(
+        report, str(destination)
+    )
+
+    assert written_path == str(destination)
+    payload = destination.read_text(encoding="utf-8")
+    assert "# Mastering Report" in payload
+    assert "## Final Master" in payload
+    assert "## Delivered File" in payload
+    assert "## Stem Final Pass" in payload
+    assert "## Processing Notes" in payload
 
 
 def test_mastering_presets_wrap_config_factories():

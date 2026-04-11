@@ -1,6 +1,9 @@
-import definers.application_text.system_messages as system_messages
-import definers.application_text.text_transforms as text_transforms
-import definers.application_text.translation as translation
+import importlib
+
+import definers
+import definers.text.system_messages as system_messages
+import definers.text.text_transforms as text_transforms
+import definers.text.translation as translation
 from definers import ml as ml_facade
 from definers.audio import (
     editing,
@@ -11,26 +14,26 @@ from definers.audio import (
     voice,
 )
 from definers.audio.mastering import master
-from definers.audio.mastering_character import (
+from definers.audio.mastering.character import (
     LimiterRecoverySettings,
     apply_low_end_mono_tightening,
     apply_micro_dynamics_finish,
     resolve_limiter_recovery_settings,
 )
-from definers.audio.mastering_contract import (
+from definers.audio.mastering.contract import (
     MasteringContract,
     MasteringContractAssessment,
     assess_mastering_contract,
     resolve_mastering_contract,
 )
-from definers.audio.mastering_delivery import (
+from definers.audio.mastering.delivery import (
     DeliveryProfile,
     DeliveryVerificationResult,
     resolve_delivery_profile,
     save_verified_audio,
     verify_delivery_export,
 )
-from definers.audio.mastering_finalization import (
+from definers.audio.mastering.finalization import (
     FinalizationAction,
     apply_delivery_trim,
     apply_pre_limiter_saturation,
@@ -40,41 +43,44 @@ from definers.audio.mastering_finalization import (
     plan_follow_up_action,
     resolve_final_true_peak_target,
 )
-from definers.audio.mastering_loudness import (
+from definers.audio.mastering.loudness import (
     MasteringLoudnessMetrics,
     measure_low_end_mono_ratio,
     measure_mastering_loudness,
     measure_stereo_width,
     measure_true_peak,
 )
-from definers.audio.mastering_metrics import (
+from definers.audio.mastering.metrics import (
     MasteringReport,
     generate_mastering_report,
 )
-from definers.audio.mastering_presets import (
+from definers.audio.mastering.presets import (
     MasteringPresets,
     balanced,
     edm,
     vocal,
 )
-from definers.audio.mastering_profile import SpectralBalanceProfile
-from definers.audio.mastering_reference import (
+from definers.audio.mastering.profile import SpectralBalanceProfile
+from definers.audio.mastering.reference import (
     ReferenceAnalysis,
     ReferenceMatchAssist,
     analyze_reference,
     reference_match_assist,
 )
-from definers.audio.mastering_stems import (
+from definers.audio.mastering.stems import (
     StemMasteringPlan,
     mix_stem_layers,
     process_stem_layers,
     resolve_stem_mastering_plan,
 )
-from definers.ml_health import get_ml_health_snapshot, ml_health_markdown
-from definers.ml_regression import linear_regression, predict_linear_regression
-from definers.ml_text import map_reduce_summary, optimize_prompt_realism
-from definers.system_archives import compress, extract, get_ext, secure_path
-from definers.system_installation import apt_install, install_ffmpeg
+from definers.ml.health_api import get_ml_health_snapshot, ml_health_markdown
+from definers.ml.regression_api import (
+    linear_regression,
+    predict_linear_regression,
+)
+from definers.ml.text.api import map_reduce_summary, optimize_prompt_realism
+from definers.system import compress, extract, get_ext, secure_path
+from definers.system.installation import apt_install, install_ffmpeg
 
 
 def test_audio_production_facade_reexports_specific_modules():
@@ -125,6 +131,23 @@ def test_ml_facade_reexports_specific_modules():
     assert ml_facade.predict_linear_regression is predict_linear_regression
     assert ml_facade.get_ml_health_snapshot is get_ml_health_snapshot
     assert ml_facade.ml_health_markdown is ml_health_markdown
+
+
+def test_root_package_lazy_exposes_patch_target_modules():
+    assert definers.data is importlib.import_module("definers.data")
+    assert definers.image is importlib.import_module("definers.image")
+    assert definers.model_installation is importlib.import_module(
+        "definers.model_installation"
+    )
+
+
+def test_ml_facade_lazy_exposes_patch_target_submodules():
+    assert ml_facade.inference is importlib.import_module(
+        "definers.ml.inference"
+    )
+    assert ml_facade.repository_sync is importlib.import_module(
+        "definers.ml.repository_sync"
+    )
 
 
 def test_split_modules_are_directly_importable():

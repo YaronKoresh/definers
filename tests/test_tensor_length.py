@@ -1,6 +1,6 @@
 import unittest
 
-from definers.application_data.arrays import tensor_length
+from definers.data.arrays import tensor_length
 from tests.torch_stubs import build_fake_torch
 
 

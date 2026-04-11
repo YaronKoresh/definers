@@ -4,8 +4,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-import definers.application_data.loaders as loaders_module
-from definers.application_data.exports import read_as_numpy
+import definers.data.loaders as loaders_module
+from definers.data.exports import read_as_numpy
 
 
 class TestReadAsNumpy(unittest.TestCase):

@@ -3,7 +3,7 @@ import shutil
 import tempfile
 import unittest
 
-from definers.platform.filesystem import exist, remove
+from definers.system.filesystem import exist, remove
 
 
 class TestRemove(unittest.TestCase):

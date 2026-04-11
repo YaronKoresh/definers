@@ -4,13 +4,19 @@ import pathlib
 import tokenize
 
 
+def _is_string_docstring_value(node: ast.AST) -> bool:
+    if isinstance(node, ast.Constant):
+        return isinstance(node.value, str)
+    legacy_str_node = getattr(ast, "Str", None)
+    return isinstance(legacy_str_node, type) and isinstance(
+        node, legacy_str_node
+    )
+
+
 def _is_string_docstring_statement(node: ast.stmt) -> bool:
     if not isinstance(node, ast.Expr):
         return False
-    value = node.value
-    if isinstance(value, ast.Str):
-        return True
-    return isinstance(value, ast.Constant) and isinstance(value.value, str)
+    return _is_string_docstring_value(node.value)
 
 
 def remove_docstrings(source: str) -> str:

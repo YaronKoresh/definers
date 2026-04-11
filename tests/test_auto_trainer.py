@@ -1,23 +1,32 @@
+import importlib
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 
-from definers.application_ml.trainer_plan import render_training_plan_markdown
-from definers.ml import AutoTrainer
+from definers.ml.trainer_plan import render_training_plan_markdown
+
+
+def _ml_module():
+    return importlib.import_module("definers.ml")
 
 
 class TestAutoTrainer(unittest.TestCase):
     def test_fit_accepts_mapping_payload(self):
-        trainer = AutoTrainer()
+        ml_module = _ml_module()
+        trainer = ml_module.AutoTrainer()
         trained_model = MagicMock()
 
         with (
-            patch("definers.ml._feed", return_value=trained_model) as mock_feed,
-            patch("definers.ml._fit", return_value=trained_model) as mock_fit,
-            patch(
-                "definers.ml._training_array_adapter", return_value=MagicMock()
+            patch.object(
+                ml_module, "_feed", return_value=trained_model
+            ) as mock_feed,
+            patch.object(
+                ml_module, "_fit", return_value=trained_model
+            ) as mock_fit,
+            patch.object(
+                ml_module, "_training_array_adapter", return_value=MagicMock()
             ),
         ):
             result = trainer.fit(
@@ -33,14 +42,15 @@ class TestAutoTrainer(unittest.TestCase):
         self.assertIs(mock_fit.call_args.args[0], trained_model)
 
     def test_train_uses_in_memory_data_and_saves_model(self):
-        trainer = AutoTrainer(batch_size=4)
+        ml_module = _ml_module()
+        trainer = ml_module.AutoTrainer(batch_size=4)
         trained_model = MagicMock()
 
         with (
-            patch("definers.ml._feed", return_value=trained_model),
-            patch("definers.ml._fit", return_value=trained_model),
-            patch(
-                "definers.ml._training_array_adapter", return_value=MagicMock()
+            patch.object(ml_module, "_feed", return_value=trained_model),
+            patch.object(ml_module, "_fit", return_value=trained_model),
+            patch.object(
+                ml_module, "_training_array_adapter", return_value=MagicMock()
             ),
             patch("joblib.dump") as mock_dump,
         ):
@@ -56,36 +66,39 @@ class TestAutoTrainer(unittest.TestCase):
         mock_dump.assert_called_once_with(trained_model, "auto-model.joblib")
 
     def test_train_uses_embedded_file_pipeline_for_file_inputs(self):
-        trainer = AutoTrainer(batch_size=8, source_type="json")
+        ml_module = _ml_module()
+        trainer = ml_module.AutoTrainer(batch_size=8, source_type="json")
         trained_model = MagicMock()
         training_data = MagicMock(
             train=[[{"feature": "a", "label": "b"}]], val=None, test=None
         )
 
         with (
-            patch("definers.ml._feed", return_value=trained_model) as mock_feed,
-            patch("definers.ml._fit", return_value=trained_model),
-            patch(
-                "definers.ml._training_array_adapter", return_value=MagicMock()
+            patch.object(
+                ml_module, "_feed", return_value=trained_model
+            ) as mock_feed,
+            patch.object(ml_module, "_fit", return_value=trained_model),
+            patch.object(
+                ml_module, "_training_array_adapter", return_value=MagicMock()
             ),
             patch(
-                "definers.application_data.preparation.prepare_data",
+                "definers.data.preparation.prepare_data",
                 return_value=training_data,
             ) as mock_prepare,
             patch(
-                "definers.application_data.tokenization.init_tokenizer",
+                "definers.data.tokenization.init_tokenizer",
                 return_value=object(),
             ),
             patch(
-                "definers.application_data.tokenization.tokenize_and_pad",
+                "definers.data.tokenization.tokenize_and_pad",
                 side_effect=lambda rows, tokenizer: rows,
             ),
             patch(
-                "definers.application_data.preparation.pad_sequences",
+                "definers.data.preparation.pad_sequences",
                 side_effect=lambda rows: rows,
             ),
             patch(
-                "definers.application_data.arrays.numpy_to_cupy",
+                "definers.data.arrays.numpy_to_cupy",
                 side_effect=lambda value: value,
             ),
             patch("joblib.dump") as mock_dump,
@@ -110,7 +123,7 @@ class TestAutoTrainer(unittest.TestCase):
         mock_dump.assert_called_once_with(trained_model, "pipeline.joblib")
 
     def test_train_url_uses_beginner_friendly_online_entry_point(self):
-        trainer = AutoTrainer()
+        trainer = _ml_module().AutoTrainer()
 
         with patch.object(
             trainer, "train", return_value="remote.joblib"
@@ -133,7 +146,7 @@ class TestAutoTrainer(unittest.TestCase):
     def test_predict_uses_loaded_model_for_in_memory_data(self):
         model = MagicMock()
         model.predict.return_value = np.array([1, 0])
-        trainer = AutoTrainer(model=model)
+        trainer = _ml_module().AutoTrainer(model=model)
 
         result = trainer.predict([[1, 2], [3, 4]])
 
@@ -141,12 +154,13 @@ class TestAutoTrainer(unittest.TestCase):
         model.predict.assert_called_once()
 
     def test_infer_uses_task_for_path_inputs(self):
-        trainer = AutoTrainer(task="answer")
+        ml_module = _ml_module()
+        trainer = ml_module.AutoTrainer(task="answer")
 
         with (
-            patch("definers.ml.init_model_file") as mock_init,
+            patch.object(ml_module, "init_model_file") as mock_init,
             patch.dict(
-                "definers.ml.MODELS",
+                ml_module.MODELS,
                 {
                     "answer": MagicMock(
                         predict=MagicMock(return_value=np.array([[1.0, 0.0]]))
@@ -154,24 +168,33 @@ class TestAutoTrainer(unittest.TestCase):
                 },
                 clear=True,
             ),
-            patch("definers.ml.read", return_value="hello"),
-            patch("definers.ml.create_vectorizer", return_value=MagicMock()),
-            patch(
-                "definers.ml.extract_text_features",
+            patch.object(ml_module, "read", return_value="hello"),
+            patch.object(
+                ml_module, "create_vectorizer", return_value=MagicMock()
+            ),
+            patch.object(
+                ml_module,
+                "extract_text_features",
                 return_value=np.array([1.0, 0.0], dtype=np.float32),
             ),
-            patch("definers.ml.numpy_to_cupy", side_effect=lambda value: value),
-            patch(
-                "definers.ml.one_dim_numpy",
+            patch.object(
+                ml_module, "numpy_to_cupy", side_effect=lambda value: value
+            ),
+            patch.object(
+                ml_module,
+                "one_dim_numpy",
                 side_effect=lambda value: np.asarray(value).reshape(1, -1),
             ),
-            patch(
-                "definers.ml.cupy_to_numpy",
+            patch.object(
+                ml_module,
+                "cupy_to_numpy",
                 side_effect=lambda value: np.asarray(value),
             ),
-            patch("definers.ml.features_to_text", return_value="prediction"),
+            patch.object(
+                ml_module, "features_to_text", return_value="prediction"
+            ),
             patch("builtins.open", unittest.mock.mock_open()),
-            patch("definers.ml.random_string", return_value="prediction"),
+            patch.object(ml_module, "random_string", return_value="prediction"),
         ):
             result = trainer.infer("sample.txt")
 
@@ -179,7 +202,7 @@ class TestAutoTrainer(unittest.TestCase):
         mock_init.assert_not_called()
 
     def test_training_plan_describes_remote_dataset_flow(self):
-        trainer = AutoTrainer(
+        trainer = _ml_module().AutoTrainer(
             batch_size=16,
             source_type="parquet",
             revision="main",
@@ -213,7 +236,7 @@ class TestAutoTrainer(unittest.TestCase):
         self.assertIn("Order By: shuffle", render_training_plan_markdown(plan))
 
     def test_file_dataset_detection_rejects_untrusted_absolute_path(self):
-        trainer = AutoTrainer()
+        trainer = _ml_module().AutoTrainer()
         outside_path = str(Path.cwd().parent / "outside.csv")
 
         self.assertFalse(trainer._is_file_dataset(outside_path))

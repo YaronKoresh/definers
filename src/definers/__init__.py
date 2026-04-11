@@ -1,21 +1,34 @@
 import contextlib
 import importlib
+import importlib.metadata as importlib_metadata
 import io
 import subprocess
 import sys
-from importlib.metadata import PackageNotFoundError, version as _pkg_version
 from types import ModuleType
 from typing import Any
 
 from .optional_dependencies import install_import_hook
+from .runtime_numpy import (
+    bootstrap_runtime_numpy,
+    get_array_module,
+    get_numpy_module,
+    is_cupy_backend,
+    patch_numpy_runtime,
+    runtime_backend_info,
+    runtime_backend_name,
+)
 
 install_import_hook()
+try:
+    bootstrap_runtime_numpy()
+except Exception:
+    pass
 
 
 def _resolve_version() -> str:
     try:
-        return _pkg_version("definers")
-    except PackageNotFoundError:
+        return importlib_metadata.version("definers")
+    except importlib_metadata.PackageNotFoundError:
         return "0.0.0"
 
 
@@ -25,6 +38,8 @@ class MissingTransformer:
 
 
 class MissingSoxModule:
+    __definers_missing_sox__ = True
+
     Transformer = MissingTransformer
 
     def __getattr__(self, name: str) -> Any:
@@ -66,66 +81,85 @@ def load_sox_module() -> ModuleType | MissingSoxModule:
 
 
 def has_sox() -> bool:
-    return not isinstance(sox, MissingSoxModule)
-
-
-def _install_optional_module_alias(
-    module_name: str, fallback_module_name: str
-) -> None:
-    if module_name in sys.modules:
-        return
-    try:
-        importlib.import_module(module_name)
-        return
-    except Exception:
-        pass
-    sys.modules[module_name] = importlib.import_module(
-        f"{__name__}.{fallback_module_name}"
-    )
-
-
-def install_optional_module_aliases() -> None:
-    _install_optional_module_alias("cv2", "opencv_compat")
-    _install_optional_module_alias("datasets", "datasets_compat")
-    _install_optional_module_alias(
-        "googledrivedownloader", "googledrivedownloader_compat"
-    )
-    _install_optional_module_alias("playwright", "playwright_compat")
-    _install_optional_module_alias("refiners", "refiners_compat")
+    return not getattr(sox, "__definers_missing_sox__", False)
 
 
 __version__ = _resolve_version()
 sox = load_sox_module()
-install_optional_module_aliases()
 
 _LAZY_SUBMODULES = {
-    "application_data",
-    "application_ml",
     "audio",
+    "chat",
     "cuda",
+    "data",
+    "file_ops",
     "image",
     "logger",
     "media",
     "ml",
+    "model_installation",
     "optional_dependencies",
-    "platform",
+    "runtime_numpy",
     "system",
     "text",
+    "ui",
+    "video",
 }
+
+
+def _load_lazy_submodule(name: str) -> Any:
+    module_name = f"{__name__}.{name}"
+    module = importlib.import_module(module_name)
+    sys.modules.setdefault(module_name, module)
+    globals()[name] = module
+    return module
+
+
+class _DefinersModule(ModuleType):
+    def __getattribute__(self, name: str) -> Any:
+        if name in _LAZY_SUBMODULES:
+            namespace = ModuleType.__getattribute__(self, "__dict__")
+            package_name = ModuleType.__getattribute__(self, "__name__")
+            module_name = f"{package_name}.{name}"
+            loaded_module = sys.modules.get(module_name)
+            cached_module = namespace.get(name)
+            if loaded_module is not None:
+                if cached_module is not loaded_module:
+                    namespace[name] = loaded_module
+                return loaded_module
+            if isinstance(cached_module, ModuleType):
+                if (
+                    ModuleType.__getattribute__(cached_module, "__name__")
+                    == module_name
+                ):
+                    sys.modules[module_name] = cached_module
+                    return cached_module
+        return ModuleType.__getattribute__(self, name)
 
 
 def __getattr__(name: str) -> Any:
     if name in _LAZY_SUBMODULES:
-        module = importlib.import_module(f"{__name__}.{name}")
-        globals()[name] = module
-        return module
+        return _load_lazy_submodule(name)
     raise AttributeError(name)
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()).union(_LAZY_SUBMODULES))
 
 
 __all__ = (
     "__version__",
+    "bootstrap_runtime_numpy",
+    "get_array_module",
     "has_sox",
-    "install_optional_module_aliases",
+    "get_numpy_module",
+    "is_cupy_backend",
     "load_sox_module",
+    "patch_numpy_runtime",
+    "runtime_backend_info",
+    "runtime_backend_name",
     "sox",
 )
+
+
+sys.modules[__name__].__class__ = _DefinersModule

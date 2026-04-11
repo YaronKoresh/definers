@@ -4,7 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-import definers.platform.compute as compute
+import definers.system.compute as compute
 
 
 class TestPlatformComputeFree(unittest.TestCase):

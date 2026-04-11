@@ -2,7 +2,7 @@ import os
 import unittest
 from unittest.mock import MagicMock, patch
 
-import definers.media.image_helpers as image_helpers_module
+import definers.image.helpers as image_helpers_module
 import definers.os_utils as os_utils
 import definers.path_utils as path_utils
 
@@ -35,6 +35,21 @@ for _name, _value in {
 
 
 class TestSaveImage(unittest.TestCase):
+    def test_save_image_defaults_to_managed_output_path(self):
+        mock_img = MagicMock()
+        with patch.object(
+            image_helpers_module,
+            "_image_random_string",
+            return_value="managed123",
+        ):
+            with patch(
+                "definers.system.output_paths.managed_output_path",
+                return_value="/managed/image/img_managed123.png",
+            ):
+                result_path = image_helpers_module.save_image(mock_img)
+        self.assertEqual(result_path, "/managed/image/img_managed123.png")
+        mock_img.save.assert_called_once_with(result_path)
+
     def test_save_image_returns_png_path(self):
         mock_img = MagicMock()
         with patch.object(

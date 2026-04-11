@@ -34,11 +34,9 @@ def test_package_version_matches_top_level_version():
 
 
 def test_chat_module_import_surface():
-    gui_entrypoints = importlib.import_module(
-        "definers.presentation.gui_entrypoints"
-    )
+    gui_entrypoints = importlib.import_module("definers.ui.gui_entrypoints")
 
-    assert gui_entrypoints.__name__ == "definers.presentation.gui_entrypoints"
+    assert gui_entrypoints.__name__ == "definers.ui.gui_entrypoints"
     assert hasattr(gui_entrypoints, "start")
     assert hasattr(gui_entrypoints, "_gui_chat")
 
@@ -68,15 +66,17 @@ def test_install_list_outputs_known_targets():
 
     assert code == 0
     assert "available install groups:" in out
+    assert "available model domains:" in out
     assert "audio" in out
     assert "tts" in out
     assert "translate" in out
     assert "gradio" in out
+    assert "stems" in out
     assert "fairseq" not in out
 
 
 def test_install_group_dispatch(monkeypatch):
-    import definers.presentation.cli_install as cli_install
+    import definers.cli.install as cli_install
 
     called = {}
 
@@ -105,7 +105,7 @@ def test_install_group_dispatch(monkeypatch):
 
 
 def test_install_task_dispatch(monkeypatch):
-    import definers.presentation.cli_install as cli_install
+    import definers.cli.install as cli_install
 
     called = {}
 
@@ -132,8 +132,37 @@ def test_install_task_dispatch(monkeypatch):
     }
 
 
+def test_install_model_domain_dispatch(monkeypatch):
+    import definers.cli.install as cli_install
+
+    called = {}
+
+    def fake_install(target, *, target_kind, list_only, output):
+        called["target"] = target
+        called["target_kind"] = target_kind
+        called["list_only"] = list_only
+        output("installed model domain audio")
+        return 0
+
+    monkeypatch.setattr(
+        cli_install,
+        "run_optional_install_command",
+        fake_install,
+    )
+
+    code, out = run_cli(["install", "audio", "--type", "model-domain"])
+
+    assert code == 0
+    assert out == "installed model domain audio"
+    assert called == {
+        "target": "audio",
+        "target_kind": "model-domain",
+        "list_only": False,
+    }
+
+
 def test_install_module_reports_pinned_madmom_source(monkeypatch):
-    import definers.presentation.cli_install as cli_install
+    import definers.cli.install as cli_install
 
     monkeypatch.setattr(
         cli_install,
@@ -156,7 +185,7 @@ def test_install_module_reports_pinned_madmom_source(monkeypatch):
 
 
 def test_install_module_reports_pinned_basic_pitch_source(monkeypatch):
-    import definers.presentation.cli_install as cli_install
+    import definers.cli.install as cli_install
 
     monkeypatch.setattr(
         cli_install,
@@ -180,7 +209,7 @@ def test_install_module_reports_pinned_basic_pitch_source(monkeypatch):
 
 def test_start_dispatch(monkeypatch, tmp_path):
 
-    import definers.presentation.gui_entrypoints as gui_entrypoints
+    import definers.ui.gui_entrypoints as gui_entrypoints
 
     assert hasattr(gui_entrypoints, "start")
 
@@ -201,7 +230,7 @@ def test_start_dispatch(monkeypatch, tmp_path):
 
 
 def test_music_video(monkeypatch):
-    import definers.presentation.gui_entrypoints as gui_entrypoints
+    import definers.ui.gui_entrypoints as gui_entrypoints
 
     assert hasattr(gui_entrypoints, "music_video")
 
@@ -216,7 +245,7 @@ def test_music_video(monkeypatch):
 
 
 def test_lyric_video(monkeypatch, tmp_path, capsys):
-    import definers.presentation.gui_entrypoints as gui_entrypoints
+    import definers.ui.gui_entrypoints as gui_entrypoints
 
     assert hasattr(gui_entrypoints, "lyric_video")
 
@@ -262,8 +291,81 @@ def test_install_removed_fairseq_module_is_rejected():
     )
 
 
+def test_install_removed_unknown_model_task_is_rejected():
+    code, out = run_cli(["install", "nope", "--type", "model-task"])
+
+    assert code == 1
+    assert (
+        out
+        == "unknown model-task target nope; run 'definers install --list' to inspect available targets"
+    )
+
+
+def test_known_model_task_install_failure_is_not_reported_as_unknown(
+    monkeypatch,
+):
+    import definers.cli.install as cli_install
+
+    monkeypatch.setattr(
+        cli_install,
+        "resolve_model_target_names",
+        lambda target, *, kind: ("stems",),
+    )
+    monkeypatch.setattr(
+        cli_install,
+        "install_model_target",
+        lambda target, *, kind: False,
+    )
+
+    output_lines = []
+    code = cli_install.run_optional_install_command(
+        "stems",
+        target_kind="model-task",
+        list_only=False,
+        output=output_lines.append,
+    )
+
+    assert code == 1
+    assert output_lines == ["failed to install model-task stems"]
+
+
+def test_known_model_task_install_failure_reports_reason_when_available(
+    monkeypatch,
+):
+    import definers.cli.install as cli_install
+
+    monkeypatch.setattr(
+        cli_install,
+        "resolve_model_target_names",
+        lambda target, *, kind: ("stems",),
+    )
+    monkeypatch.setattr(
+        cli_install,
+        "install_model_target",
+        lambda target, *, kind: False,
+    )
+    monkeypatch.setattr(
+        cli_install,
+        "model_install_error",
+        lambda target, *, kind: "RuntimeError: download bridge failed",
+    )
+
+    output_lines = []
+    code = cli_install.run_optional_install_command(
+        "stems",
+        target_kind="model-task",
+        list_only=False,
+        output=output_lines.append,
+    )
+
+    assert code == 1
+    assert output_lines == [
+        "failed to install model-task stems: RuntimeError: download bridge failed"
+    ]
+
+
 def test_start_dispatch_uses_registry_resolution(monkeypatch):
-    import definers.presentation.gui_entrypoints as gui_entrypoints
+    import definers.ui.gui_entrypoints as gui_entrypoints
 
     assert hasattr(gui_entrypoints, "_gui_chat")
 
@@ -282,7 +384,7 @@ def test_start_dispatch_uses_registry_resolution(monkeypatch):
 
 
 def test_unknown_namespace_only_gui_command_stays_invalid(monkeypatch):
-    import definers.presentation.gui_entrypoints as gui_entrypoints
+    import definers.ui.gui_entrypoints as gui_entrypoints
 
     monkeypatch.setitem(
         gui_entrypoints.__dict__,

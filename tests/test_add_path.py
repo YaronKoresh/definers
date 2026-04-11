@@ -4,14 +4,14 @@ import sys
 import unittest
 from unittest.mock import patch
 
-from definers.platform.services import (
+from definers.system import add_path
+from definers.system.services import (
     EnvironmentService,
     FileSystemService,
     InfrastructureServices,
     reset_infrastructure_services,
     set_infrastructure_services,
 )
-from definers.system import add_path
 
 
 def _norm(p):

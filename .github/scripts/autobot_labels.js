@@ -115,25 +115,24 @@ const LABEL_DEFINITIONS = {
 };
 
 const URGENT_SYNC_LABELS = ["breaking-change", "security"];
-const VERSION_SENSITIVE_LABELS = ["breaking-change", "enhancement", "security", "bug", "performance", "api", "database", "schema", "compatibility", "migration", "feature-flag", "runtime"];
+const VERSION_SENSITIVE_LABELS = ["breaking-change", "enhancement", "improvement", "deprecation", "security", "bug", "performance", "api", "database", "schema", "compatibility", "migration", "feature-flag", "runtime"];
 const VERSION_LABEL_ALIASES = { "breaking-changes": "breaking-change", "breaking_change": "breaking-change" };
 const FORCE_RELEASE_TYPES = ["enhancement", "breaking-change", "security"];
-const RELEASE_RELEVANT_LABELS = ["api", "breaking-change", "bug", "compatibility", "database", "enhancement", "feature-flag", "migration", "performance", "runtime", "schema", "security"];
+const RELEASE_RELEVANT_LABELS = ["api", "breaking-change", "bug", "compatibility", "database", "deprecation", "enhancement", "feature-flag", "improvement", "migration", "performance", "runtime", "schema", "security"];
 const SECONDARY_LABELS = ["chore", "ci", "cleanup", "config", "dependencies", "documentation", "dx", "formatting", "github", "lint", "quality", "refactor", "style", "test", "tooling", "workflow"];
-const VERSION_BUMP_BY_LABEL = {
-  "breaking-change": "major",
-  "enhancement": "minor",
-  "security": "patch",
-  "bug": "patch",
-  "performance": "patch",
-  "api": "patch",
-  "database": "patch",
-  "schema": "patch",
-  "compatibility": "patch",
-  "migration": "patch",
-  "feature-flag": "patch",
-  "runtime": "patch"
-};
+const MAJOR_VERSION_LABELS = ["breaking-change"];
+const MINOR_VERSION_LABELS = ["deprecation", "enhancement", "improvement"];
+const VERSION_BUMP_BY_LABEL = Object.fromEntries(
+  Object.keys(LABEL_DEFINITIONS).map((label) => {
+    if (MAJOR_VERSION_LABELS.includes(label)) {
+      return [label, "major"];
+    }
+    if (MINOR_VERSION_LABELS.includes(label)) {
+      return [label, "minor"];
+    }
+    return [label, "patch"];
+  })
+);
 
 module.exports = {
   DEFAULT_ISSUE_LABELS,

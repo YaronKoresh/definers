@@ -1,10 +1,11 @@
 import os
+from contextlib import nullcontext
 from importlib import import_module
 from pathlib import Path
 
 import pytest
 
-import definers.platform.paths as path_module
+import definers.system.paths as path_module
 from definers.system import secure_path
 
 
@@ -131,6 +132,53 @@ def test_convert_vocal_rvc_missing_deps(tmp_path):
     audio.write_text("")
 
     assert ml_module().convert_vocal_rvc("exp", str(audio)) is None
+
+
+def test_convert_vocal_rvc_bootstraps_svc_before_imports(monkeypatch, tmp_path):
+    audio = tmp_path / "input.wav"
+    audio.write_text("")
+    os.environ["DEFINERS_TRUSTED_PATHS"] = str(tmp_path)
+
+    module = ml_module()
+    rvc_module = import_module("definers.ml.rvc")
+    state = {"bootstrapped": False}
+    load_calls = []
+
+    def fake_load_optional_rvc_symbol(symbol_name, *module_names):
+        assert state["bootstrapped"] is True
+        load_calls.append(symbol_name)
+        if symbol_name == "Config":
+            return lambda: object()
+
+        class FakeVC:
+            def __init__(self, config):
+                self.config = config
+
+            def get_vc(self, *args, **kwargs):
+                return None
+
+            def vc_single(self, **kwargs):
+                return ("ok", (0, None))
+
+        return FakeVC
+
+    monkeypatch.setattr(
+        rvc_module,
+        "import_rvc_symbol",
+        fake_load_optional_rvc_symbol,
+    )
+    monkeypatch.setattr(
+        module,
+        "init_pretrained_model",
+        lambda task: state.update(bootstrapped=(task == "svc")),
+    )
+    monkeypatch.setattr(module, "normalize_audio_to_peak", lambda value: value)
+    monkeypatch.setattr(module, "separate_stems", lambda value: (value, None))
+    monkeypatch.setattr(module, "find_latest_checkpoint", lambda *args: None)
+    monkeypatch.setattr(module, "cwd", lambda path=None: nullcontext(path))
+
+    assert module.convert_vocal_rvc("exp", str(audio)) is None
+    assert load_calls == ["Config", "VC"]
 
 
 def test_sanitize_basename_and_experiment(tmp_path, capsys):

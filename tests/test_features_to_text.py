@@ -3,8 +3,8 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 
-from definers.application_data.vectorizers import create_vectorizer
-from definers.application_ml import features_to_text
+from definers.data.vectorizers import create_vectorizer
+from definers.ml import features_to_text
 
 
 class TestFeaturesToText(unittest.TestCase):
@@ -57,7 +57,7 @@ class TestFeaturesToText(unittest.TestCase):
         self.assertEqual(reconstructed_text, "middle alpha zulu")
 
     def test_extract_text_features_keeps_provided_vectorizer_vocabulary(self):
-        from definers.application_ml.inference import extract_text_features
+        from definers.ml.inference import extract_text_features
 
         trained_vectorizer = create_vectorizer(["alpha beta", "gamma"])
         expected_vocabulary = dict(trained_vectorizer.vocabulary_)

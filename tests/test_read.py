@@ -3,7 +3,7 @@ import shutil
 import tempfile
 import unittest
 
-from definers.platform.filesystem import read
+from definers.system.filesystem import read
 
 
 class TestRead(unittest.TestCase):
@@ -59,7 +59,7 @@ class TestRead(unittest.TestCase):
         self.assertEqual(read(empty_dir), [])
 
     def test_read_utf8_file(self):
-        content = "こんにちは世界"
+        content = "ã“ã‚“ã«ã¡ã¯ä¸–ç•Œ"
         with open(self.file_path, "w", encoding="utf8") as f:
             f.write(content)
         read_content = read(self.file_path)

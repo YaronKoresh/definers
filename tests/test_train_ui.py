@@ -1,6 +1,6 @@
 from types import ModuleType
 
-from definers.presentation.apps import train_ui
+from definers.ui.apps import train_ui
 
 
 def test_train_studio_metadata_covers_ml_surface():
@@ -46,6 +46,7 @@ class _FakeComponent:
         self.args = args
         self.kwargs = kwargs
         self.click_calls = []
+        self.change_calls = []
         registry.append(self)
 
     def __enter__(self):
@@ -54,8 +55,12 @@ class _FakeComponent:
     def __exit__(self, exc_type, exc, tb):
         return False
 
-    def click(self, fn=None, inputs=None, outputs=None):
-        self.click_calls.append((fn, inputs, outputs))
+    def click(self, fn=None, inputs=None, outputs=None, **kwargs):
+        self.click_calls.append((fn, inputs, outputs, kwargs))
+        return self
+
+    def change(self, fn=None, inputs=None, outputs=None, **kwargs):
+        self.change_calls.append((fn, inputs, outputs, kwargs))
         return self
 
 
@@ -96,6 +101,7 @@ def _build_fake_gradio_module(registry):
         "HTML",
         "Markdown",
         "Number",
+        "Radio",
         "Row",
         "Slider",
         "TabItem",
@@ -140,3 +146,21 @@ def test_build_train_app_constructs_expected_tabs(monkeypatch):
     assert "Run" in tab_labels
     assert "Text Lab" in tab_labels
     assert "Ops" in tab_labels
+    assert "Guided Mode" in tab_labels
+    assert "Advanced Mode" in tab_labels
+
+    open_outputs_button = next(
+        component
+        for component in registry
+        if component.kind == "Button"
+        and (component.args[0] if component.args else None)
+        == "Open Outputs Folder"
+    )
+    assert open_outputs_button.click_calls
+
+    assert any(
+        component.kind == "Button"
+        and component.args
+        and component.args[0] == "Inspect My Inputs"
+        for component in registry
+    )

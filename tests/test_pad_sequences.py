@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 import numpy as np
 
-from definers.application_data.preparation import pad_sequences
+from definers.data.preparation import pad_sequences
 from tests.torch_stubs import build_fake_torch_modules
 
 
@@ -24,7 +24,7 @@ class TestPadSequences(unittest.TestCase):
         X = [np.array([[1, 2], [3, 4]]), np.array([[5, 6]])]
         with patch.dict("sys.modules", modules):
             with patch(
-                "definers.application_data.arrays.cupy_to_numpy",
+                "definers.data.arrays.cupy_to_numpy",
                 side_effect=lambda x: x,
             ):
                 padded_X = pad_sequences(X)
@@ -42,7 +42,7 @@ class TestPadSequences(unittest.TestCase):
         X = [np.array([[1, 2, 3]])]
         with patch.dict("sys.modules", modules):
             with patch(
-                "definers.application_data.arrays.cupy_to_numpy",
+                "definers.data.arrays.cupy_to_numpy",
                 side_effect=lambda x: x,
             ):
                 padded_X = pad_sequences(X)
@@ -59,18 +59,18 @@ class TestPadSequences(unittest.TestCase):
         X = [np.array([[1, 2]]), np.array([[3, 4]])]
         with patch.dict("sys.modules", modules):
             with patch(
-                "definers.application_data.arrays.cupy_to_numpy",
+                "definers.data.arrays.cupy_to_numpy",
                 side_effect=lambda x: x,
             ):
                 padded_X = pad_sequences(X)
                 self.assertEqual(padded_X.shape, (2, 1, 2))
 
     @patch(
-        "definers.application_data.arrays.three_dim_numpy",
+        "definers.data.arrays.three_dim_numpy",
         return_value=np.array([[[1], [2]], [[3]]], dtype=object),
     )
     @patch(
-        "definers.application_data.arrays.cupy_to_numpy",
+        "definers.data.arrays.cupy_to_numpy",
         side_effect=lambda x: np.array([[[1.0], [2.0]], [[3.0]]], dtype=object),
     )
     def test_pad_sequences_calls_dependencies(
@@ -88,7 +88,7 @@ class TestPadSequences(unittest.TestCase):
         X = []
         with patch.dict("sys.modules", modules):
             with patch(
-                "definers.application_data.arrays.cupy_to_numpy",
+                "definers.data.arrays.cupy_to_numpy",
                 side_effect=lambda x: x,
             ):
                 padded_X = pad_sequences(X)

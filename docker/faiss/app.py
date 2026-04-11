@@ -35,7 +35,7 @@ def install_runtime() -> None:
 
 def main() -> None:
     install_runtime()
-    from definers.presentation.launchers import launch_installed_project
+    from definers.ui.launchers import launch_installed_project
 
     launch_installed_project(PROJECT)
 

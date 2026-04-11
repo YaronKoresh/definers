@@ -8,8 +8,12 @@ from unittest.mock import patch
 import joblib
 import numpy as np
 
-from definers.application_ml import repository_sync, safe_deserialization
-from definers.ml import AutoTrainer, init_custom_model
+from definers.ml import (
+    AutoTrainer,
+    init_custom_model,
+    repository_sync,
+    safe_deserialization,
+)
 
 
 class _MaliciousPayload:

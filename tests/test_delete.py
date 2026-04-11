@@ -3,7 +3,7 @@ import shutil
 import tempfile
 import unittest
 
-from definers.platform.filesystem import delete, exist
+from definers.system.filesystem import delete, exist
 
 
 class TestDelete(unittest.TestCase):

@@ -29,8 +29,9 @@ class FakeZipNetworkResponse:
 
 
 class FakeZipClientSession:
-    def __init__(self, payload: bytes):
+    def __init__(self, payload: bytes, *, read_bufsize: int | None = None):
         self.payload = payload
+        self.read_bufsize = read_bufsize
 
     async def __aenter__(self) -> "FakeZipClientSession":
         return self
@@ -71,7 +72,9 @@ def test_zip_extract_transfer_strategy_extracts_archive_async(
     payload = build_zip_payload("nested/payload.txt", "hello zip")
     fake_aiohttp = ModuleType("aiohttp")
     fake_aiohttp.ClientTimeout = lambda total: SimpleNamespace(total=total)
-    fake_aiohttp.ClientSession = lambda: FakeZipClientSession(payload)
+    fake_aiohttp.ClientSession = lambda **kwargs: FakeZipClientSession(
+        payload, **kwargs
+    )
     monkeypatch.setitem(sys.modules, "aiohttp", fake_aiohttp)
     strategy = ZipExtractTransferStrategy(request_timeout_seconds=20)
     target_node = tmp_path / "extract"
@@ -86,6 +89,36 @@ def test_zip_extract_transfer_strategy_extracts_archive_async(
     assert (target_node / "nested" / "payload.txt").read_text(
         encoding="utf-8"
     ) == "hello zip"
+
+
+def test_zip_extract_transfer_strategy_passes_aiohttp_read_bufsize(
+    monkeypatch, tmp_path: Path
+) -> None:
+    payload = build_zip_payload("nested/payload.txt", "hello zip")
+    session_kwargs: list[int | None] = []
+
+    def build_session(**kwargs):
+        session_kwargs.append(kwargs.get("read_bufsize"))
+        return FakeZipClientSession(payload, **kwargs)
+
+    fake_aiohttp = ModuleType("aiohttp")
+    fake_aiohttp.ClientTimeout = lambda total: SimpleNamespace(total=total)
+    fake_aiohttp.ClientSession = build_session
+    monkeypatch.setitem(sys.modules, "aiohttp", fake_aiohttp)
+    strategy = ZipExtractTransferStrategy(
+        chunk_size_bytes=262144,
+        request_timeout_seconds=20,
+    )
+
+    result = asyncio.run(
+        strategy.execute_transfer(
+            "https://example.com/archive.zip",
+            tmp_path / "extract",
+        )
+    )
+
+    assert result is True
+    assert session_kwargs == [4194304]
 
 
 def test_zip_extract_transfer_strategy_raises_on_invalid_archive_sync(
@@ -131,7 +164,9 @@ def test_zip_extract_transfer_strategy_rejects_path_traversal_async(
     payload = build_zip_payload("..\\outside.txt", "blocked")
     fake_aiohttp = ModuleType("aiohttp")
     fake_aiohttp.ClientTimeout = lambda total: SimpleNamespace(total=total)
-    fake_aiohttp.ClientSession = lambda: FakeZipClientSession(payload)
+    fake_aiohttp.ClientSession = lambda **kwargs: FakeZipClientSession(
+        payload, **kwargs
+    )
     monkeypatch.setitem(sys.modules, "aiohttp", fake_aiohttp)
     strategy = ZipExtractTransferStrategy(request_timeout_seconds=20)
     target_node = tmp_path / "extract"
@@ -147,3 +182,34 @@ def test_zip_extract_transfer_strategy_rejects_path_traversal_async(
 
     assert not (tmp_path / "outside.txt").exists()
     assert list(target_node.rglob("*")) == []
+
+
+def test_zip_extract_transfer_strategy_uses_injected_download_strategy(
+    tmp_path: Path,
+) -> None:
+    payload = build_zip_payload("nested/payload.txt", "hello zip")
+    target_node = tmp_path / "extract"
+
+    class FakeDownloadStrategy:
+        async def execute_transfer(
+            self, source_uri: str, archive_node: Path
+        ) -> bool:
+            assert source_uri == "https://example.com/archive.zip"
+            archive_node.write_bytes(payload)
+            return True
+
+    strategy = ZipExtractTransferStrategy(
+        download_strategy=FakeDownloadStrategy()
+    )
+
+    result = asyncio.run(
+        strategy.execute_transfer(
+            "https://example.com/archive.zip",
+            target_node,
+        )
+    )
+
+    assert result is True
+    assert (target_node / "nested" / "payload.txt").read_text(
+        encoding="utf-8"
+    ) == "hello zip"

@@ -1,6 +1,6 @@
 import unittest
 
-from definers.application_data.vectorizers import create_vectorizer
+from definers.data.vectorizers import create_vectorizer
 
 
 class TestCreateVectorizer(unittest.TestCase):

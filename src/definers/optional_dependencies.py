@@ -40,9 +40,10 @@ def _github_archive_install_spec(
 
 
 MODULE_PACKAGE_SPECS: dict[str, tuple[str, ...]] = {
+    "aioquic": ("aioquic>=1.2.0",),
     "aiofiles": ("aiofiles",),
     "aiohttp": ("aiohttp",),
-    "audio_separator": ("audio-separator>=0.30.2,<0.31.0",),
+    "audio_separator": ("audio-separator>=0.30.2,<0.32.0",),
     "basic_pitch": (BASIC_PITCH_PACKAGE_SPEC,),
     "cssselect": ("cssselect>=1.2.0",),
     "cv2": ("opencv-contrib-python-headless>=4.8.0",),
@@ -60,13 +61,12 @@ MODULE_PACKAGE_SPECS: dict[str, tuple[str, ...]] = {
     "googledrivedownloader": ("googledrivedownloader>=1.1.0",),
     "gradio": ("gradio>=6.9.0",),
     "huggingface_hub": ("huggingface-hub>=0.20.0",),
+    "httpx": ("httpx[http2]>=0.28.0",),
     "imageio": ("imageio>=2.30.0",),
     "imageio_ffmpeg": ("imageio-ffmpeg>=0.4.0",),
     "langdetect": ("langdetect>=1.0.9",),
     "librosa": (
         "librosa>=0.10.0",
-        "numba>=0.57.0",
-        "resampy>=0.4.2",
         "soundfile>=0.12.0",
     ),
     "lxml": (
@@ -76,14 +76,11 @@ MODULE_PACKAGE_SPECS: dict[str, tuple[str, ...]] = {
     "madmom": ("madmom>=0.16.1",),
     "matplotlib": ("matplotlib>=3.7.0",),
     "midi2audio": ("midi2audio",),
-    "moviepy": (
-        "moviepy>=1.0.3",
-        "imageio>=2.30.0",
-        "imageio-ffmpeg>=0.4.0",
-    ),
+    "moviepy": ("moviepy>=2.0.0",),
     "nltk": ("nltk>=3.8.0",),
     "onnx": ("onnx>=1.14.0",),
     "onnxruntime": ("onnxruntime",),
+    "openpyxl": ("openpyxl>=3.1.0",),
     "pillow_heif": ("pillow-heif>=0.13.0",),
     "playwright": ("playwright>=1.40.0",),
     "pydub": ("pydub>=0.25.1",),
@@ -108,7 +105,6 @@ MODULE_PACKAGE_SPECS: dict[str, tuple[str, ...]] = {
     ),
     "transformers": (
         "transformers>=4.36.0",
-        "tokenizers>=0.15.0",
         "sentencepiece>=0.1.99",
         "torch>=2.1.0",
     ),
@@ -145,7 +141,6 @@ OPTIONAL_DEPENDENCY_GROUP_MODULES: dict[str, tuple[str, ...]] = {
     ),
     "image": (
         "imageio",
-        "imageio_ffmpeg",
         "cv2",
         "pillow_heif",
         "skimage",
@@ -154,7 +149,6 @@ OPTIONAL_DEPENDENCY_GROUP_MODULES: dict[str, tuple[str, ...]] = {
     "video": (
         "edlib",
         "imageio",
-        "imageio_ffmpeg",
         "moviepy",
         "cv2",
         "skimage",
@@ -168,7 +162,6 @@ OPTIONAL_DEPENDENCY_GROUP_MODULES: dict[str, tuple[str, ...]] = {
         "safetensors",
         "sklearn",
         "sentencepiece",
-        "tokenizers",
         "transformers",
     ),
     "nlp": (
@@ -181,6 +174,8 @@ OPTIONAL_DEPENDENCY_GROUP_MODULES: dict[str, tuple[str, ...]] = {
         "fastapi",
         "googledrivedownloader",
         "gradio",
+        "httpx",
+        "aioquic",
         "lxml",
         "matplotlib",
         "playwright",
@@ -222,6 +217,16 @@ def normalize_module_name(module_name: str | None) -> str:
     if module_name is None:
         return ""
     return str(module_name).strip().split(".", 1)[0].replace("-", "_")
+
+
+def module_runtime_available(module_name: str | None) -> bool:
+    normalized_name = normalize_module_name(module_name)
+    if not normalized_name:
+        return False
+    try:
+        return importlib.util.find_spec(normalized_name) is not None
+    except (ImportError, ModuleNotFoundError, ValueError):
+        return False
 
 
 def package_specs_for_module(module_name: str | None) -> tuple[str, ...]:
@@ -432,6 +437,8 @@ def ensure_module_runtime(
     *,
     installer: Callable[[tuple[str, ...]], None] | None = None,
 ) -> bool:
+    if module_runtime_available(module_name):
+        return True
     return install_package_specs(
         install_specs_for_module(module_name),
         installer=installer,
@@ -592,6 +599,7 @@ __all__ = [
     "install_optional_target",
     "install_import_hook",
     "install_package_specs",
+    "module_runtime_available",
     "module_target_names",
     "normalize_module_name",
     "optional_runtime_targets",

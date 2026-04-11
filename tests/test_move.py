@@ -3,7 +3,7 @@ import shutil
 import tempfile
 import unittest
 
-from definers.platform.filesystem import move
+from definers.system.filesystem import move
 
 
 class TestMove(unittest.TestCase):

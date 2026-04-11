@@ -4,8 +4,8 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 
-import definers.application_data.preparation as preparation
-from definers.application_ml.training import fit
+import definers.data.preparation as preparation
+from definers.ml.training import fit
 
 
 class TestFit(unittest.TestCase):

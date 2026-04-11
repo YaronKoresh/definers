@@ -1,4 +1,4 @@
-from definers.platform.services import get_infrastructure_services
+from definers.system.services import get_infrastructure_services
 
 
 def secure_command(command):

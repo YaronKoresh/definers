@@ -1,12 +1,5 @@
 import os
 
-from definers.platform.compute import (
-    cuda_toolkit as _cuda_toolkit,
-    cuda_version,
-    device,
-    free as _free,
-    set_cuda_env as _set_cuda_env,
-)
 from definers.system import (
     catch,
     directory,
@@ -15,6 +8,13 @@ from definers.system import (
     paths,
     permit,
     run,
+)
+from definers.system.compute import (
+    cuda_toolkit as _cuda_toolkit,
+    cuda_version,
+    device,
+    free as _free,
+    set_cuda_env as _set_cuda_env,
 )
 
 

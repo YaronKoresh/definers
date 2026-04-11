@@ -4,7 +4,9 @@ import math
 from dataclasses import dataclass
 from typing import Any
 
-import numpy as np
+from definers.runtime_numpy import get_numpy_module
+
+np = get_numpy_module()
 
 from .dependencies import librosa_module
 
@@ -128,8 +130,15 @@ class LocalTextToSpeech:
     ) -> LocalTextToSpeech:
         from transformers import AutoTokenizer, VitsModel
 
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
-        model = VitsModel.from_pretrained(model_name).to(device_name)
+        from definers.model_installation import hf_snapshot_download
+
+        local_model_path = hf_snapshot_download(
+            repo_id=model_name,
+            item_label=model_name,
+            detail="Downloading text-to-speech model source files.",
+        )
+        tokenizer = AutoTokenizer.from_pretrained(local_model_path)
+        model = VitsModel.from_pretrained(local_model_path).to(device_name)
         model.eval()
         sample_rate = int(getattr(model.config, "sampling_rate", 16000))
         return cls(

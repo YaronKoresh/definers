@@ -1,6 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor
 
-from definers.runtime.state import (
+from definers.state import (
     create_runtime_state,
     delete_runtime_state,
     get_config,

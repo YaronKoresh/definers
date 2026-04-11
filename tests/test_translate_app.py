@@ -1,4 +1,4 @@
-from definers.presentation.apps.translate import TranslateApp
+from definers.ui.apps.translate import TranslateApp
 
 
 def test_translate_app_resolves_language_code_from_name():

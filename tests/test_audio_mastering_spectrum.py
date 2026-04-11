@@ -8,7 +8,14 @@ import pytest
 
 
 def _load_module(module_name: str, module_path: Path):
-    spec = importlib.util.spec_from_file_location(module_name, module_path)
+    spec_kwargs = {}
+    if module_path.name == "__init__.py":
+        spec_kwargs["submodule_search_locations"] = [str(module_path.parent)]
+    spec = importlib.util.spec_from_file_location(
+        module_name,
+        module_path,
+        **spec_kwargs,
+    )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = module
@@ -18,6 +25,7 @@ def _load_module(module_name: str, module_path: Path):
 
 ROOT = Path(__file__).resolve().parents[1]
 AUDIO_ROOT = ROOT / "src" / "definers" / "audio"
+MASTERING_ROOT = AUDIO_ROOT / "mastering"
 
 
 def _install_scipy_stub() -> None:
@@ -72,6 +80,7 @@ def _install_scipy_stub() -> None:
         y, copy=True
     )
     signal_module.butter = lambda *args, **kwargs: ("b", "a")
+    signal_module.filtfilt = lambda b, a, y, axis=-1: np.array(y, copy=True)
     signal_module.sosfilt = lambda sos, x: np.array(x, copy=True)
     signal_module.sosfiltfilt = lambda sos, x, axis=-1: np.array(x, copy=True)
 
@@ -146,7 +155,7 @@ def _load_mastering_module(package_name: str):
             log=lambda *_, **__: None,
         )
     mastering_module = _load_module(
-        f"{package_name}.mastering", AUDIO_ROOT / "mastering.py"
+        f"{package_name}.mastering", MASTERING_ROOT / "__init__.py"
     )
     return config_module, mastering_module
 

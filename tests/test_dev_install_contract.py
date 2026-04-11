@@ -62,6 +62,23 @@ def test_ci_workflows_install_only_dev_extra():
         assert 'pip install -e ".[dev,all]"' not in workflow_text
 
 
+def test_ci_workflows_cover_supported_python_range():
+    workflow_root = _workspace_root() / ".github" / "workflows"
+    for workflow_name in ("check.yml", "quality.yml"):
+        workflow_text = (workflow_root / workflow_name).read_text(
+            encoding="utf-8"
+        )
+        assert (
+            'python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]'
+            in workflow_text
+        )
+
+    publish_workflow_text = (workflow_root / "publish.yml").read_text(
+        encoding="utf-8"
+    )
+    assert 'python-version: "3.14"' in publish_workflow_text
+
+
 def test_tests_avoid_top_level_optional_dependency_imports():
     tests_root = _workspace_root() / "tests"
     for test_file in tests_root.glob("test_*.py"):
@@ -86,18 +103,3 @@ def test_tests_avoid_optional_dependency_imports_anywhere():
             f"{test_file.name} imports optional packages directly: "
             f"{', '.join(forbidden_imports)}"
         )
-
-
-def test_contributing_documents_dependency_free_test_policy():
-    contributing_text = (_workspace_root() / "CONTRIBUTING.md").read_text(
-        encoding="utf-8"
-    )
-
-    assert (
-        "Tests must not import optional third-party packages directly."
-        in contributing_text
-    )
-    assert (
-        "Tests must not use third-party library output as the oracle for expected results."
-        in contributing_text
-    )

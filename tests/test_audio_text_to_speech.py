@@ -91,11 +91,17 @@ def test_generate_voice_writes_backend_audio(monkeypatch):
     fake_tts = FakeTts()
     monkeypatch.setitem(voice.MODELS, "tts", fake_tts)
 
-    temp_paths = iter(["generated.wav", "voice_output.data"])
+    temp_paths = iter(["generated.wav"])
     monkeypatch.setattr(
         voice,
         "tmp",
         lambda extension=None, keep=True: next(temp_paths),
+    )
+    monkeypatch.setattr(
+        "definers.system.output_paths.managed_output_path",
+        lambda suffix=None, *, section, stem, filename=None, unique=True: (
+            "managed/generated_voice.mp3"
+        ),
     )
 
     written = {}
@@ -131,10 +137,10 @@ def test_generate_voice_writes_backend_audio(monkeypatch):
     assert written["path"] == "generated.wav"
     assert written["sample_rate"] == 16000
     assert np.isclose(np.max(np.abs(written["data"])), 0.9)
-    assert saved["destination_path"] == "voice_output"
+    assert saved["destination_path"] == "managed/generated_voice.mp3"
     assert saved["audio_signal"] is fake_sound
     assert saved["sample_rate"] == 16000
-    assert saved["output_format"] == "mp3"
+    assert "output_format" not in saved
 
 
 def test_generate_voice_returns_none_when_backend_fails(monkeypatch):
@@ -167,3 +173,60 @@ def test_generate_voice_returns_none_when_backend_fails(monkeypatch):
 
     assert result is None
     assert caught_messages == ["Generation failed: backend failure"]
+
+
+def test_local_text_to_speech_from_pretrained_uses_snapshot_directory(
+    monkeypatch,
+):
+    tokenizer_paths = []
+    model_paths = []
+    snapshot_calls = []
+
+    class FakeModel:
+        def __init__(self):
+            self.config = types.SimpleNamespace(sampling_rate=24000)
+            self.eval_called = False
+            self.device_name = None
+
+        def to(self, device_name):
+            self.device_name = device_name
+            return self
+
+        def eval(self):
+            self.eval_called = True
+
+    fake_model = FakeModel()
+    fake_transformers = types.SimpleNamespace(
+        AutoTokenizer=types.SimpleNamespace(
+            from_pretrained=lambda path: (
+                tokenizer_paths.append(path) or object()
+            )
+        ),
+        VitsModel=types.SimpleNamespace(
+            from_pretrained=lambda path: model_paths.append(path) or fake_model
+        ),
+    )
+    monkeypatch.setitem(sys.modules, "transformers", fake_transformers)
+    monkeypatch.setattr(
+        "definers.model_installation.hf_snapshot_download",
+        lambda **kwargs: snapshot_calls.append(kwargs) or "C:/models/tts",
+    )
+
+    backend = text_to_speech.LocalTextToSpeech.from_pretrained(
+        device_name="cuda",
+        model_name="facebook/mms-tts-eng",
+    )
+
+    assert tokenizer_paths == ["C:/models/tts"]
+    assert model_paths == ["C:/models/tts"]
+    assert snapshot_calls == [
+        {
+            "repo_id": "facebook/mms-tts-eng",
+            "item_label": "facebook/mms-tts-eng",
+            "detail": "Downloading text-to-speech model source files.",
+        }
+    ]
+    assert backend.model is fake_model
+    assert backend.sample_rate == 24000
+    assert fake_model.device_name == "cuda"
+    assert fake_model.eval_called is True

@@ -6,7 +6,7 @@ import definers.text as text_module
 
 class TestLanguage(unittest.TestCase):
     @patch(
-        "definers.application_text.text_transforms.detect_language",
+        "definers.text.text_transforms.detect_language",
         return_value="en",
     )
     def test_detect_english(self, mock_detect):
@@ -15,7 +15,7 @@ class TestLanguage(unittest.TestCase):
         mock_detect.assert_called_once_with("This is a test sentence.")
 
     @patch(
-        "definers.application_text.text_transforms.detect_language",
+        "definers.text.text_transforms.detect_language",
         return_value="fr",
     )
     def test_detect_french(self, mock_detect):
@@ -24,7 +24,7 @@ class TestLanguage(unittest.TestCase):
         mock_detect.assert_called_once_with("Ceci est une phrase de test.")
 
     @patch(
-        "definers.application_text.text_transforms.detect_language",
+        "definers.text.text_transforms.detect_language",
         side_effect=Exception("Detection failed"),
     )
     def test_language_detection_error(self, mock_detect):
