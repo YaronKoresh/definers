@@ -365,6 +365,108 @@ def test_generate_mastering_report_uses_resolved_true_peak_target_for_margin():
     )
 
 
+def test_musician_report_prioritizes_delivery_after_export_alignment():
+    time_axis = np.linspace(0.0, 1.0, 8000, endpoint=False)
+    input_signal = 0.2 * np.sin(2.0 * np.pi * 110.0 * time_axis).astype(
+        np.float32
+    )
+    output_signal = 0.5 * np.sin(2.0 * np.pi * 110.0 * time_axis).astype(
+        np.float32
+    )
+    final_in_memory_signal = output_signal * float(10.0 ** (-1.4 / 20.0))
+    target_lufs = LOUDNESS_MODULE.measure_mastering_loudness(
+        output_signal,
+        8000,
+    ).integrated_lufs
+    contract = CONTRACT_MODULE.resolve_mastering_contract(
+        "balanced",
+        target_lufs=target_lufs,
+        ceil_db=-0.1,
+        target_lufs_tolerance_db=0.3,
+        min_crest_factor_db=0.0,
+    )
+
+    report = METRICS_MODULE.generate_mastering_report(
+        input_signal,
+        output_signal,
+        8000,
+        final_in_memory_signal=final_in_memory_signal,
+        target_lufs=target_lufs,
+        ceil_db=-0.1,
+        preset_name="balanced",
+        contract=contract,
+        export_gain_applied_db=1.4,
+        export_peak_alignment_mode="align_to_ceil",
+        export_peak_alignment_target_dbfs=-0.1,
+    )
+
+    musician_payload = report.to_musician_dict()
+
+    assert (
+        musician_payload["verdict"]["headline"] == "Delivery file is on target."
+    )
+    assert (
+        "corrected automatically during export"
+        in musician_payload["verdict"]["detail"]
+    )
+    assert musician_payload["attention"] == []
+    assert (
+        "Final master needs another pass." not in report.to_musician_markdown()
+    )
+
+
+def test_musician_report_frames_ceiling_limited_quiet_master_without_retry_language():
+    time_axis = np.linspace(0.0, 1.0, 8000, endpoint=False)
+    input_signal = 0.2 * np.sin(2.0 * np.pi * 110.0 * time_axis).astype(
+        np.float32
+    )
+    output_signal = 0.38 * np.sin(2.0 * np.pi * 110.0 * time_axis).astype(
+        np.float32
+    )
+    output_lufs = LOUDNESS_MODULE.measure_mastering_loudness(
+        output_signal,
+        8000,
+    ).integrated_lufs
+    target_lufs = output_lufs + 1.25
+    contract = CONTRACT_MODULE.resolve_mastering_contract(
+        "balanced",
+        target_lufs=target_lufs,
+        ceil_db=-0.1,
+        target_lufs_tolerance_db=0.25,
+    )
+
+    report = METRICS_MODULE.generate_mastering_report(
+        input_signal,
+        output_signal,
+        8000,
+        final_in_memory_signal=output_signal,
+        target_lufs=target_lufs,
+        ceil_db=-0.1,
+        preset_name="balanced",
+        contract=contract,
+        resolved_true_peak_target_dbfs=-0.1,
+        post_clamp_true_peak_dbfs=-0.06,
+        headroom_recovery_failure_reasons=("linear_recovery_stalled",),
+        headroom_recovery_mode="guarded",
+        headroom_recovery_closed_margin_db=0.21,
+        headroom_recovery_unused_margin_db=0.0,
+        stem_mastered_input=True,
+    )
+
+    musician_payload = report.to_musician_dict()
+
+    assert (
+        musician_payload["verdict"]["headline"]
+        == "Delivery stays slightly under target to protect punch."
+    )
+    assert "preserve punch" in musician_payload["verdict"]["detail"]
+    assert musician_payload["attention"]
+    assert "preserve punch" in musician_payload["attention"][0]
+    assert (
+        "Final master needs another pass." not in report.to_musician_markdown()
+    )
+
+
 def test_write_mastering_report_serializes_concise_json(tmp_path: Path):
     time_axis = np.linspace(0.0, 1.0, 8000, endpoint=False)
     input_signal = 0.2 * np.sin(2.0 * np.pi * 110.0 * time_axis).astype(

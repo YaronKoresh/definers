@@ -72,7 +72,13 @@ def test_resolve_stem_mastering_plan_scales_roles_differently():
 
     assert drums.mix_gain_db > bass.mix_gain_db
     assert bass.mix_gain_db > vocals.mix_gain_db
+    assert drums.mix_gain_db - vocals.mix_gain_db > 2.3
+    assert bass.mix_gain_db >= 0.9
     assert bass.overrides["stereo_width"] < vocals.overrides["stereo_width"]
+    assert (
+        bass.overrides["bass_boost_db_per_oct"]
+        > base.bass_boost_db_per_oct + 0.5
+    )
     assert drums.overrides["low_end_mono_tightening"] == "firm"
     assert vocals.overrides["exciter_mix"] > bass.overrides["exciter_mix"]
     assert bass.overrides["exciter_mix"] > 0.5
@@ -484,6 +490,27 @@ def test_apply_stem_mix_balance_gives_drums_a_clear_level_lead():
     assert float(np.max(np.abs(drums))) > float(np.max(np.abs(vocals))) * 1.4
 
 
+def test_apply_stem_mix_balance_keeps_bass_substantial_against_vocals():
+    base = CONFIG_MODULE.SmartMasteringConfig.balanced()
+    bass_plan = MASTERING_STEMS_MODULE.resolve_stem_mastering_plan("bass", base)
+    vocals_plan = MASTERING_STEMS_MODULE.resolve_stem_mastering_plan(
+        "vocals", base
+    )
+    bass, bass_gain_db = MASTERING_STEMS_MODULE._apply_stem_mix_balance(
+        np.full((2, 256), 0.18, dtype=np.float32),
+        "bass",
+        bass_plan.mix_gain_db,
+    )
+    vocals, vocals_gain_db = MASTERING_STEMS_MODULE._apply_stem_mix_balance(
+        np.full((2, 256), 0.18, dtype=np.float32),
+        "vocals",
+        vocals_plan.mix_gain_db,
+    )
+
+    assert bass_gain_db - vocals_gain_db > 2.8
+    assert float(np.max(np.abs(bass))) > float(np.max(np.abs(vocals))) * 1.25
+
+
 def test_apply_stem_tone_enrichment_adds_default_octave_layers_to_vocals():
     base = CONFIG_MODULE.SmartMasteringConfig.balanced()
     calls: list[float] = []
@@ -609,6 +636,35 @@ def test_apply_stem_glue_reverb_only_colors_vocals_and_other():
     assert not np.allclose(vocals, signal)
     assert not np.allclose(other, signal)
     assert np.allclose(drums, signal)
+
+
+def test_apply_stem_glue_reverb_extends_sparse_tail_when_amount_is_higher():
+    low_glue = CONFIG_MODULE.SmartMasteringConfig.balanced()
+    high_glue = CONFIG_MODULE.SmartMasteringConfig.balanced()
+    low_glue.stem_glue_reverb_amount = 0.4
+    high_glue.stem_glue_reverb_amount = 1.5
+    signal = np.zeros((2, 4096), dtype=np.float32)
+    signal[:, :96] = 0.2
+
+    low_result = MASTERING_STEMS_MODULE._apply_stem_glue_reverb(
+        signal,
+        8000,
+        "vocals",
+        low_glue,
+    )
+    high_result = MASTERING_STEMS_MODULE._apply_stem_glue_reverb(
+        signal,
+        8000,
+        "vocals",
+        high_glue,
+    )
+
+    low_tail_energy = float(np.sum(np.abs(low_result[:, 1800:3400])))
+    high_tail_energy = float(np.sum(np.abs(high_result[:, 1800:3400])))
+
+    assert low_tail_energy > 0.0
+    assert high_tail_energy > low_tail_energy * 1.9
+    assert float(np.max(np.abs(high_result))) <= 0.98 + 1e-6
 
 
 def test_apply_drum_edge_finish_adds_controlled_transient_bite():

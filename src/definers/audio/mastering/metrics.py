@@ -202,6 +202,60 @@ def _final_master_assessment(
     )
 
 
+def _output_master_assessment(
+    report: MasteringReport,
+) -> MasteringContractAssessment | None:
+    assessment = report.output_contract_assessment
+    if assessment is not None:
+        return assessment
+    return _final_master_assessment(report)
+
+
+def _output_is_on_target(report: MasteringReport) -> bool:
+    assessment = _output_master_assessment(report)
+    return bool(assessment is not None and assessment.passed)
+
+
+def _delivery_is_on_target(report: MasteringReport) -> bool:
+    if not _output_is_on_target(report):
+        return False
+    decoded_assessment = report.decoded_contract_assessment
+    return bool(decoded_assessment is None or decoded_assessment.passed)
+
+
+def _delivery_loudness_was_limited(
+    report: MasteringReport,
+    assessment: MasteringContractAssessment,
+) -> bool:
+    if float(assessment.target_lufs_error_db) >= 0.0:
+        return False
+    failure_reasons = {
+        str(reason).strip().lower()
+        for reason in getattr(report, "headroom_recovery_failure_reasons", ())
+        if str(reason).strip()
+    }
+    if failure_reasons.intersection(
+        {"linear_recovery_stalled", "no_margin", "no_recovery_budget"}
+    ):
+        return True
+    resolved_target_dbfs = _safe_float(report.resolved_true_peak_target_dbfs)
+    post_clamp_true_peak_dbfs = _safe_float(report.post_clamp_true_peak_dbfs)
+    if (
+        resolved_target_dbfs is not None
+        and post_clamp_true_peak_dbfs is not None
+        and abs(resolved_target_dbfs - post_clamp_true_peak_dbfs) <= 0.12
+    ):
+        return True
+    closed_margin_db = _safe_float(report.headroom_recovery_closed_margin_db)
+    unused_margin_db = _safe_float(report.headroom_recovery_unused_margin_db)
+    return bool(
+        closed_margin_db is not None
+        and closed_margin_db > 0.05
+        and unused_margin_db is not None
+        and unused_margin_db <= 0.05
+    )
+
+
 def _export_alignment_note(report: MasteringReport) -> str | None:
     alignment_mode = (
         str(report.export_peak_alignment_mode or "").strip().lower()
@@ -270,32 +324,47 @@ def _attention_lines(report: MasteringReport) -> tuple[str, ...]:
         if report.contract is None
         else float(getattr(report.contract, "target_lufs_tolerance_db", 0.0))
     )
-    master_assessment = _final_master_assessment(report)
+    output_assessment = _output_master_assessment(report)
     decoded_assessment = report.decoded_contract_assessment
-    if master_assessment is not None and abs(
-        master_assessment.target_lufs_error_db
-    ) > max(tolerance_db + 0.25, 0.35):
-        direction = (
-            "hotter"
-            if master_assessment.target_lufs_error_db > 0.0
-            else "quieter"
-        )
-        lines.append(
-            f"Final master lands {abs(master_assessment.target_lufs_error_db):.2f} dB {direction} than the target."
-        )
     if (
-        master_assessment is not None
-        and master_assessment.short_term_over_db > 0.35
+        output_assessment is not None
+        and abs(output_assessment.target_lufs_error_db)
+        > max(tolerance_db + 0.25, 0.35)
+        and not _output_is_on_target(report)
+    ):
+        if _delivery_loudness_was_limited(report, output_assessment):
+            lines.append(
+                "Delivered loudness was held "
+                f"{abs(output_assessment.target_lufs_error_db):.2f} dB under target "
+                "to preserve punch and stay inside the delivery ceiling."
+            )
+        else:
+            direction = (
+                "hotter"
+                if output_assessment.target_lufs_error_db > 0.0
+                else "quieter"
+            )
+            subject = (
+                "Delivered file"
+                if report.output_contract_assessment is not None
+                else "Final master"
+            )
+            lines.append(
+                f"{subject} lands {abs(output_assessment.target_lufs_error_db):.2f} dB {direction} than the target."
+            )
+    if (
+        output_assessment is not None
+        and output_assessment.short_term_over_db > 0.35
     ):
         lines.append(
-            f"Short-term loudness still rises {master_assessment.short_term_over_db:.2f} dB above the profile window."
+            f"Short-term loudness still rises {output_assessment.short_term_over_db:.2f} dB above the profile window."
         )
     if (
-        master_assessment is not None
-        and master_assessment.momentary_over_db > 0.35
+        output_assessment is not None
+        and output_assessment.momentary_over_db > 0.35
     ):
         lines.append(
-            f"Momentary loudness still rises {master_assessment.momentary_over_db:.2f} dB above the profile window."
+            f"Momentary loudness still rises {output_assessment.momentary_over_db:.2f} dB above the profile window."
         )
     if decoded_assessment is not None and abs(
         decoded_assessment.target_lufs_error_db
@@ -319,22 +388,42 @@ def _attention_lines(report: MasteringReport) -> tuple[str, ...]:
 
 
 def _verdict_lines(report: MasteringReport) -> tuple[str, str]:
-    master_assessment = _final_master_assessment(report)
+    output_assessment = _output_master_assessment(report)
+    final_assessment = _final_master_assessment(report)
     decoded_assessment = report.decoded_contract_assessment
     attention_lines = _attention_lines(report)
-    if master_assessment is not None and master_assessment.passed:
+    if output_assessment is not None and output_assessment.passed:
         if decoded_assessment is not None and not decoded_assessment.passed:
             return (
-                "Final master is on target.",
+                "Delivery file is on target.",
                 "Decoded playback still moves outside the chosen delivery profile.",
             )
+        export_gain_applied_db = abs(
+            _safe_float(report.export_gain_applied_db) or 0.0
+        )
+        if (
+            final_assessment is not None
+            and not final_assessment.passed
+            and export_gain_applied_db > 0.05
+        ):
+            return (
+                "Delivery file is on target.",
+                "Remaining ceiling headroom was corrected automatically during export.",
+            )
         return (
-            "Final master is on target.",
+            "Delivery file is on target.",
             "Delivery translation looks stable for the chosen profile.",
         )
     if attention_lines:
+        if output_assessment is not None and _delivery_loudness_was_limited(
+            report, output_assessment
+        ):
+            return (
+                "Delivery stays slightly under target to protect punch.",
+                attention_lines[0],
+            )
         return (
-            "Final master needs another pass.",
+            "Delivery file needs review.",
             attention_lines[0],
         )
     return (

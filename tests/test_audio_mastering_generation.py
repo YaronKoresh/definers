@@ -203,6 +203,7 @@ def test_config_presets_span_density_and_stereo_motion_profiles():
     assert balanced.preset_name == "balanced"
     assert vocal.preset_name == "vocal"
     assert edm.target_lufs > balanced.target_lufs > vocal.target_lufs
+    assert edm.target_lufs - balanced.target_lufs > 3.0
     assert (
         edm.limiter_soft_clip_ratio
         > balanced.limiter_soft_clip_ratio
@@ -226,8 +227,10 @@ def test_config_presets_span_density_and_stereo_motion_profiles():
     )
     assert edm.bass_boost_db_per_oct > balanced.bass_boost_db_per_oct
     assert balanced.bass_boost_db_per_oct > vocal.bass_boost_db_per_oct
+    assert edm.bass_boost_db_per_oct - balanced.bass_boost_db_per_oct > 0.35
     assert vocal.treble_boost_db_per_oct > balanced.treble_boost_db_per_oct
     assert balanced.treble_boost_db_per_oct > edm.treble_boost_db_per_oct
+    assert balanced.treble_boost_db_per_oct - edm.treble_boost_db_per_oct > 0.2
     assert vocal.micro_dynamics_strength > balanced.micro_dynamics_strength
     assert balanced.micro_dynamics_strength > edm.micro_dynamics_strength
     assert balanced.stereo_tone_variation_db > edm.stereo_tone_variation_db
@@ -276,9 +279,13 @@ def test_macro_controls_derive_low_level_parameters():
 
     base_bass_boost = config.bass_boost_db_per_oct
     base_treble_boost = config.treble_boost_db_per_oct
+    base_exciter_high_cutoff = config.exciter_high_frequency_cutoff_hz
     config.bass = 1.0
-    assert config.bass_boost_db_per_oct > base_bass_boost
-    assert config.treble_boost_db_per_oct < base_treble_boost
+    assert config.bass_boost_db_per_oct > base_bass_boost + 0.2
+    assert config.treble_boost_db_per_oct < base_treble_boost - 0.1
+    assert config.exciter_high_frequency_cutoff_hz < (
+        base_exciter_high_cutoff - 300.0
+    )
 
     base_stereo_width = config.stereo_width
     base_micro_dynamics = config.micro_dynamics_strength
@@ -288,9 +295,11 @@ def test_macro_controls_derive_low_level_parameters():
 
     base_drive = config.drive_db
     base_target_lufs = config.target_lufs
+    base_final_boost = config.max_final_boost_db
     config.volume = 1.0
-    assert config.drive_db > base_drive
-    assert config.target_lufs > base_target_lufs
+    assert config.drive_db > base_drive + 0.15
+    assert config.target_lufs > base_target_lufs + 0.4
+    assert config.max_final_boost_db > base_final_boost + 0.2
 
 
 def test_low_level_overrides_take_precedence_over_macro_derivation():
@@ -2287,13 +2296,13 @@ def test_process_stem_mastered_input_preserves_tonal_stages_for_final_glue(
         0.75
         < limiter_calls[0][1]
         <= max(
-            mastering.drive_db * 0.85,
-            1.35,
+            mastering.drive_db * 1.1,
+            2.2,
         )
     )
     assert limiter_calls[0][2] <= max(
-        mastering.limiter_soft_clip_ratio * 0.55,
-        0.08,
+        mastering.limiter_soft_clip_ratio * 0.7,
+        0.1,
     )
     assert np.array_equal(
         mastering.last_stage_signals["post_eq"],

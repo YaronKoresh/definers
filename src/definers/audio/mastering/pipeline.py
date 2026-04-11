@@ -405,14 +405,14 @@ def process(
     stem_saturation_ratio = 0.0
     if stem_mastered_input:
         dynamic_drive_db = float(
-            min(dynamic_drive_db, max(self.drive_db * 0.85, 1.35))
+            min(dynamic_drive_db, max(self.drive_db * 1.1, 2.2))
         )
         stem_saturation_ratio = float(
             np.clip(
-                max(float(self.pre_limiter_saturation_ratio) * 0.55, 0.03)
-                + max(dynamic_drive_db - 0.75, 0.0) * 0.012,
+                max(float(self.pre_limiter_saturation_ratio) * 0.62, 0.04)
+                + max(dynamic_drive_db - 0.6, 0.0) * 0.014,
                 0.0,
-                0.11,
+                0.14,
             )
         )
     primary_soft_clip_ratio = self.compute_primary_soft_clip_ratio(
@@ -422,7 +422,7 @@ def process(
         primary_soft_clip_ratio = float(
             min(
                 primary_soft_clip_ratio,
-                max(float(self.limiter_soft_clip_ratio) * 0.55, 0.08),
+                max(float(self.limiter_soft_clip_ratio) * 0.7, 0.1),
             )
         )
 
