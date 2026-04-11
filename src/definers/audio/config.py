@@ -480,6 +480,18 @@ _DERIVED_FIELD_SPECS: dict[str, dict[str, Any]] = {
         "coeffs": {"volume": -0.01, "effects": 0.02},
         "clip": (0.0, 0.3),
     },
+    "stem_glue_reverb_amount": {
+        "base": 1.0,
+        "clip": (0.0, 1.5),
+    },
+    "stem_drum_edge_amount": {
+        "base": 1.0,
+        "clip": (0.0, 1.5),
+    },
+    "stem_vocal_pullback_db": {
+        "base": 0.0,
+        "clip": (0.0, 3.0),
+    },
     "reference_match_amount": {
         "base": 0.44,
         "coeffs": {"volume": -0.04, "effects": 0.1},

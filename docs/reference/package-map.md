@@ -23,7 +23,7 @@ The package map below is the target operating model for Definers. Package facade
 - `definers.runtime_numpy` owns NumPy and CuPy backend selection and compatibility helpers.
 - `definers.system` owns installation, paths, process control, runtime state, threads, output paths, and download activity.
 - `definers.text` owns translation, normalization, and text transformation utilities.
-- `definers.ui` owns launcher registration, app surfaces, and user-facing UI composition.
+- `definers.ui` owns launcher registration, focused-surface definitions, shared Gradio primitives, workbench composition, and user-facing UI routing.
 - `definers.video` owns rendering, composition, lyric-video, visualizer, and video helpers.
 - `definers.cli.application` is the direct owner package for command catalog, parser assembly, runtime binding, and CLI service flow.
 
@@ -32,6 +32,7 @@ The package map below is the target operating model for Definers. Package facade
 - `definers.chat` is the chat feature surface and should not become a generic application routing layer.
 - `definers.catalogs` owns static or semi-static catalog access.
 - `definers.internal_compat` is the only accepted home for third-party fallback shims and compatibility adapters.
+- `definers.ui.apps` is the direct owner package for concrete launcher implementations and domain UI surfaces.
 
 ## Feature Ownership Rules
 
@@ -54,5 +55,6 @@ The package map below is the target operating model for Definers. Package facade
 - `definers.media.transfer` is the owner package for transfer policy and artifact download entrypoints.
 - `definers.media.web_transfer` remains a public compatibility and patch-target surface for existing integrations.
 - `definers.data`, `definers.chat`, `definers.text`, and `definers.media` are lazy facades over narrower owner modules.
+- `definers.ui.gui_entrypoints` is the stable launcher-registry surface, while `definers.ui.gradio_shared` owns shared cross-domain progress and outputs helpers.
 
 Use package-level facades for discovery, then move to the concrete owner module for implementation work.

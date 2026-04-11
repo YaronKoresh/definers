@@ -208,6 +208,45 @@ def init_progress_tracker(
     )
 
 
+def _status_value_text(value: object) -> str:
+    if value is None:
+        return "n/a"
+    if isinstance(value, bool):
+        return "Yes" if value else "No"
+    if isinstance(value, float):
+        return f"{value:.2f}"
+    return str(value)
+
+
+def status_card_markdown(
+    title: str,
+    detail: str | None = None,
+    items: tuple[tuple[str, object], ...] | list[tuple[str, object]] = (),
+) -> str:
+    normalized_title = str(title or "Status").strip() or "Status"
+    normalized_detail = str(detail or "").strip() or "Ready."
+    lines = [f"## {normalized_title}", normalized_detail]
+    for label, value in items:
+        normalized_label = str(label).strip()
+        if not normalized_label:
+            continue
+        lines.append(f"- **{normalized_label}:** {_status_value_text(value)}")
+    return "\n".join(lines)
+
+
+def init_status_card(
+    title: str = "Status",
+    detail: str = "Ready.",
+    items: tuple[tuple[str, object], ...] | list[tuple[str, object]] = (),
+):
+    import gradio as gr
+
+    return gr.Markdown(
+        value=status_card_markdown(title, detail, items),
+        elem_classes="definers-status-card",
+    )
+
+
 def _output_folder_markup(
     path: str,
     detail: str,

@@ -3,6 +3,17 @@ from __future__ import annotations
 import inspect
 import json
 from pathlib import Path
+from shutil import copy2
+
+from definers.ui.gradio_shared import status_card_markdown
+from definers.ui.job_state import (
+    create_job_dir,
+    existing_path,
+    manifest_markdown,
+    read_manifest,
+    scan_file_map,
+    write_manifest,
+)
 
 MASTERING_PROFILE_CHOICES = (
     "Auto Analyze",
@@ -26,6 +37,21 @@ MASTERING_STEM_PREVIEW_ORDER = (
     "other",
     "guitar",
     "piano",
+)
+
+STEM_GLUE_REVERB_DEFAULT = 1.0
+STEM_DRUM_EDGE_DEFAULT = 1.0
+STEM_VOCAL_PULLBACK_DB_DEFAULT = 0.0
+
+_AUDIO_JOB_SUFFIXES = (
+    ".wav",
+    ".flac",
+    ".mp3",
+    ".m4a",
+    ".aac",
+    ".ogg",
+    ".opus",
+    ".wma",
 )
 
 _MASTERING_PROFILE_METADATA = {
@@ -124,6 +150,47 @@ def _coerce_macro_value(value: object, default_value: float) -> float:
         return float(value)
     except Exception:
         return float(default_value)
+
+
+def _coerce_bounded_float(
+    value: object,
+    *,
+    default_value: float,
+    minimum: float,
+    maximum: float,
+) -> float:
+    try:
+        resolved = float(value)
+    except Exception:
+        resolved = float(default_value)
+    return float(min(max(resolved, minimum), maximum))
+
+
+def normalize_stem_glue_reverb_amount(value: object) -> float:
+    return _coerce_bounded_float(
+        value,
+        default_value=STEM_GLUE_REVERB_DEFAULT,
+        minimum=0.0,
+        maximum=1.5,
+    )
+
+
+def normalize_stem_drum_edge_amount(value: object) -> float:
+    return _coerce_bounded_float(
+        value,
+        default_value=STEM_DRUM_EDGE_DEFAULT,
+        minimum=0.0,
+        maximum=1.5,
+    )
+
+
+def normalize_stem_vocal_pullback_db(value: object) -> float:
+    return _coerce_bounded_float(
+        value,
+        default_value=STEM_VOCAL_PULLBACK_DB_DEFAULT,
+        minimum=0.0,
+        maximum=3.0,
+    )
 
 
 def get_mastering_profile_ui_state(
@@ -541,6 +608,589 @@ def resolve_mastering_stem_previews(
         if matched_key is None:
             extras.append(resolved_path)
     return previews, extras
+
+
+def _job_dict(value: object) -> dict[str, object]:
+    if isinstance(value, dict):
+        return dict(value)
+    return {}
+
+
+def _job_artifacts(manifest: dict[str, object]) -> dict[str, object]:
+    return _job_dict(manifest.get("artifacts"))
+
+
+def _job_settings(manifest: dict[str, object]) -> dict[str, object]:
+    return _job_dict(manifest.get("settings"))
+
+
+def _job_input(manifest: dict[str, object]) -> dict[str, object]:
+    return _job_dict(manifest.get("input"))
+
+
+def _job_analysis(manifest: dict[str, object]) -> dict[str, object]:
+    return _job_dict(manifest.get("analysis"))
+
+
+def _read_mastering_job(job_dir: str) -> dict[str, object]:
+    manifest = read_manifest(job_dir)
+    if str(manifest.get("job_type", "")).strip() != "audio-mastering-job":
+        raise ValueError(
+            "The selected job folder is not an audio mastering job."
+        )
+    return manifest
+
+
+def _scan_audio_job_files(directory: object) -> dict[str, str]:
+    return scan_file_map(directory, suffixes=_AUDIO_JOB_SUFFIXES)
+
+
+def _refresh_mastering_job_artifacts(
+    manifest: dict[str, object],
+) -> dict[str, object]:
+    artifacts = _job_artifacts(manifest)
+    raw_stems_dir = existing_path(artifacts.get("raw_stems_dir"))
+    processed_stems_dir = existing_path(artifacts.get("processed_stems_dir"))
+    refreshed_artifacts = {
+        **artifacts,
+        "raw_stems_dir": raw_stems_dir,
+        "raw_stems": _scan_audio_job_files(raw_stems_dir),
+        "processed_stems_dir": processed_stems_dir,
+        "processed_stems": _scan_audio_job_files(processed_stems_dir),
+        "mixed_path": existing_path(artifacts.get("mixed_path")),
+        "mastered_path": existing_path(artifacts.get("mastered_path")),
+        "report_path": existing_path(artifacts.get("report_path")),
+        "report_summary": str(artifacts.get("report_summary", "")).strip(),
+    }
+    manifest["artifacts"] = refreshed_artifacts
+    return manifest
+
+
+def refresh_mastering_job(job_dir: str) -> dict[str, object]:
+    manifest = _read_mastering_job(job_dir)
+    refreshed_manifest = _refresh_mastering_job_artifacts(manifest)
+    return write_manifest(job_dir, refreshed_manifest)
+
+
+def resolve_mastering_job_status(
+    manifest: dict[str, object],
+) -> tuple[str, str]:
+    settings = _job_settings(manifest)
+    artifacts = _job_artifacts(manifest)
+    if existing_path(artifacts.get("mastered_path")) is not None:
+        return (
+            "Master ready",
+            "Done. Download the final master, the report, and any saved stems.",
+        )
+
+    if bool(settings.get("stem_mastering")):
+        if existing_path(artifacts.get("mixed_path")) is not None:
+            return (
+                "Stem mix ready",
+                "Next: Finalize Master. This stage renders the delivery file and report from the stem mix.",
+            )
+        if _job_dict(artifacts.get("raw_stems")):
+            return (
+                "Stem separation finished",
+                "Next: Build Stem Mix. Stem separation is the heavy stage; mix building reuses those artifacts.",
+            )
+        return (
+            "Job prepared",
+            "Next: Separate Stems. Stem separation is the heavy stage; later steps reuse the saved job artifacts.",
+        )
+
+    return (
+        "Job prepared",
+        "Next: Finalize Master. Stereo-only mastering skips stem separation and goes straight to final delivery.",
+    )
+
+
+def format_mastering_job_status(
+    manifest: dict[str, object],
+    *,
+    title: str | None = None,
+    detail: str | None = None,
+) -> str:
+    resolved_title, resolved_detail = resolve_mastering_job_status(manifest)
+    settings = _job_settings(manifest)
+    artifacts = _job_artifacts(manifest)
+    analysis = _job_analysis(manifest)
+    input_data = _job_input(manifest)
+    resolved_kwargs = _job_dict(manifest.get("resolved_mastering_kwargs"))
+    quality_flags = analysis.get("quality_flags") or ()
+    status_items: list[tuple[str, object]] = [
+        ("Job folder", manifest.get("job_dir", "")),
+        ("Input", Path(str(input_data.get("path", "input"))).name),
+        (
+            "Mode",
+            "Stem-Aware"
+            if bool(settings.get("stem_mastering"))
+            else "Stereo Only",
+        ),
+        (
+            "Output format",
+            str(settings.get("format_choice", "wav")).upper(),
+        ),
+        ("Requested profile", settings.get("profile_name", "Balanced")),
+        ("Resolved control mode", settings.get("control_mode", "Balanced")),
+        (
+            "Suggested preset",
+            analysis.get("suggested_preset", "balanced"),
+        ),
+        (
+            "Resolved preset",
+            resolved_kwargs.get("preset", "balanced"),
+        ),
+        (
+            "Quality flags",
+            ", ".join(str(flag) for flag in quality_flags)
+            if quality_flags
+            else "None",
+        ),
+    ]
+    if bool(settings.get("stem_mastering")):
+        status_items.extend(
+            [
+                (
+                    "Glue reverb",
+                    f"{normalize_stem_glue_reverb_amount(settings.get('stem_glue_reverb_amount')):.2f}x",
+                ),
+                (
+                    "Drum edge",
+                    f"{normalize_stem_drum_edge_amount(settings.get('stem_drum_edge_amount')):.2f}x",
+                ),
+                (
+                    "Extra vocal pullback",
+                    f"{normalize_stem_vocal_pullback_db(settings.get('stem_vocal_pullback_db')):.2f} dB",
+                ),
+            ]
+        )
+    status_items.extend(
+        [
+            ("Raw stems ready", len(_job_dict(artifacts.get("raw_stems")))),
+            (
+                "Processed stems ready",
+                len(_job_dict(artifacts.get("processed_stems"))),
+            ),
+            (
+                "Stem mix ready",
+                existing_path(artifacts.get("mixed_path")) is not None,
+            ),
+            (
+                "Final master ready",
+                existing_path(artifacts.get("mastered_path")) is not None,
+            ),
+        ]
+    )
+    return status_card_markdown(
+        title or resolved_title,
+        detail or resolved_detail,
+        status_items,
+    )
+
+
+def render_mastering_job_view(
+    job_dir: str,
+    *,
+    title: str | None = None,
+    detail: str | None = None,
+) -> tuple[
+    str,
+    str,
+    list[str] | None,
+    list[str] | None,
+    str | None,
+    str | None,
+    str | None,
+    str,
+    str,
+]:
+    manifest = refresh_mastering_job(job_dir)
+    artifacts = _job_artifacts(manifest)
+    raw_files = [
+        file_path
+        for file_path in _job_dict(artifacts.get("raw_stems")).values()
+        if existing_path(file_path) is not None
+    ]
+    processed_files = [
+        file_path
+        for file_path in _job_dict(artifacts.get("processed_stems")).values()
+        if existing_path(file_path) is not None
+    ]
+    report_summary = str(artifacts.get("report_summary", "")).strip()
+    return (
+        str(manifest.get("job_dir", job_dir)),
+        format_mastering_job_status(
+            manifest,
+            title=title,
+            detail=detail,
+        ),
+        raw_files or None,
+        processed_files or None,
+        existing_path(artifacts.get("mixed_path")),
+        existing_path(artifacts.get("mastered_path")),
+        existing_path(artifacts.get("report_path")),
+        report_summary,
+        manifest_markdown(manifest),
+    )
+
+
+def prepare_mastering_job(
+    audio_path: str,
+    format_choice: str,
+    profile_name: str,
+    bass: float,
+    volume: float,
+    effects: float,
+    stem_mastering: bool,
+    stem_model_name: str,
+    stem_shifts: int,
+    stem_mix_headroom_db: float,
+    save_mastered_stems: bool,
+    stem_model_override: str | None = None,
+    stem_glue_reverb_amount: float = STEM_GLUE_REVERB_DEFAULT,
+    stem_drum_edge_amount: float = STEM_DRUM_EDGE_DEFAULT,
+    stem_vocal_pullback_db: float = STEM_VOCAL_PULLBACK_DB_DEFAULT,
+) -> dict[str, object]:
+    from definers.audio.io import read_audio
+    from definers.audio.mastering import (
+        _analyze_mastering_input,
+        _resolve_mastering_kwargs_for_input,
+    )
+
+    source_path = Path(str(audio_path or "").strip())
+    if not source_path.exists():
+        raise FileNotFoundError(
+            "Upload a mix before preparing a mastering job."
+        )
+
+    _report_audio_activity(
+        "Prepare mastering job",
+        detail="Creating the guided mastering workspace.",
+        completed=1,
+        total=4,
+    )
+    job_dir = create_job_dir("audio/mastering_jobs", stem=source_path.stem)
+    copied_input_path = Path(job_dir) / (
+        f"input{source_path.suffix.lower() or '.wav'}"
+    )
+    copy2(source_path, copied_input_path)
+
+    _report_audio_activity(
+        "Analyze mastering input",
+        detail="Reading the source mix and analyzing the mastering route.",
+        completed=2,
+        total=4,
+    )
+    sample_rate, signal = read_audio(str(copied_input_path))
+    control_mode, profile_kwargs = resolve_mastering_request(
+        profile_name,
+        bass,
+        volume,
+        effects,
+    )
+    input_analysis = _analyze_mastering_input(signal, sample_rate)
+
+    _report_audio_activity(
+        "Resolve mastering settings",
+        detail="Resolving presets, quality flags, and stem options.",
+        completed=3,
+        total=4,
+    )
+    resolved_mastering_kwargs = _resolve_mastering_kwargs_for_input(
+        signal,
+        sample_rate,
+        dict(profile_kwargs),
+        input_analysis=input_analysis,
+    )
+    resolved_mastering_kwargs.setdefault(
+        "resampling_target",
+        int(input_analysis.target_sample_rate),
+    )
+    resolved_model_name = resolve_stem_model_name(
+        stem_model_name,
+        stem_model_override,
+    )
+    resolved_stem_glue_reverb_amount = normalize_stem_glue_reverb_amount(
+        stem_glue_reverb_amount
+    )
+    resolved_stem_drum_edge_amount = normalize_stem_drum_edge_amount(
+        stem_drum_edge_amount
+    )
+    resolved_stem_vocal_pullback_db = normalize_stem_vocal_pullback_db(
+        stem_vocal_pullback_db
+    )
+    resolved_mastering_kwargs.update(
+        {
+            "stem_glue_reverb_amount": resolved_stem_glue_reverb_amount,
+            "stem_drum_edge_amount": resolved_stem_drum_edge_amount,
+            "stem_vocal_pullback_db": resolved_stem_vocal_pullback_db,
+        }
+    )
+    manifest = {
+        "job_type": "audio-mastering-job",
+        "job_version": 1,
+        "job_dir": job_dir,
+        "input": {
+            "path": str(copied_input_path),
+            "sample_rate": int(sample_rate),
+        },
+        "settings": {
+            "format_choice": normalize_audio_format_choice(format_choice),
+            "profile_name": str(profile_name),
+            "bass": float(bass),
+            "volume": float(volume),
+            "effects": float(effects),
+            "control_mode": str(control_mode),
+            "stem_mastering": bool(stem_mastering),
+            "stem_model_name": str(resolved_model_name),
+            "stem_model_label": stem_model_choice_label(
+                stem_model_name,
+                stem_model_override,
+            ),
+            "stem_shifts": int(stem_shifts),
+            "stem_mix_headroom_db": float(stem_mix_headroom_db),
+            "save_mastered_stems": bool(save_mastered_stems),
+            "stem_glue_reverb_amount": resolved_stem_glue_reverb_amount,
+            "stem_drum_edge_amount": resolved_stem_drum_edge_amount,
+            "stem_vocal_pullback_db": resolved_stem_vocal_pullback_db,
+        },
+        "analysis": {
+            "suggested_preset": str(input_analysis.preset_name),
+            "quality_flags": list(input_analysis.quality_flags),
+            "target_sample_rate": int(input_analysis.target_sample_rate),
+        },
+        "resolved_mastering_kwargs": dict(resolved_mastering_kwargs),
+        "artifacts": {
+            "raw_stems_dir": None,
+            "raw_stems": {},
+            "processed_stems_dir": None,
+            "processed_stems": {},
+            "mixed_path": None,
+            "mastered_path": None,
+            "report_path": None,
+            "report_summary": "",
+        },
+    }
+
+    _report_audio_activity(
+        "Persist mastering job",
+        detail="Writing the job manifest and copied input into the managed output workspace.",
+        completed=4,
+        total=4,
+    )
+    return write_manifest(job_dir, manifest)
+
+
+def separate_mastering_job_stems(job_dir: str) -> dict[str, object]:
+    from definers.audio.stems import separate_stem_layers
+
+    manifest = _read_mastering_job(job_dir)
+    settings = _job_settings(manifest)
+    if not bool(settings.get("stem_mastering")):
+        return refresh_mastering_job(job_dir)
+
+    input_path = str(_job_input(manifest).get("path", ""))
+    raw_stems_dir = Path(str(job_dir)) / "raw_stems"
+    raw_stems_dir.mkdir(parents=True, exist_ok=True)
+    _report_audio_activity(
+        "Separate stems",
+        detail="Running the heavy stem-separation stage and saving raw layers.",
+        completed=1,
+        total=2,
+    )
+    stem_paths, resolved_output_dir = separate_stem_layers(
+        input_path,
+        model_name=str(settings.get("stem_model_name", "mastering")),
+        shifts=max(int(settings.get("stem_shifts", 2)), 1),
+        quality_flags=tuple(
+            str(flag).strip()
+            for flag in _job_analysis(manifest).get("quality_flags", ())
+            if str(flag).strip()
+        ),
+        output_dir=str(raw_stems_dir),
+    )
+    manifest["artifacts"] = {
+        **_job_artifacts(manifest),
+        "raw_stems_dir": str(resolved_output_dir),
+        "raw_stems": {
+            str(stem_name): str(stem_path)
+            for stem_name, stem_path in stem_paths.items()
+        },
+    }
+    _report_audio_activity(
+        "Publish raw stems",
+        detail="Raw stems are ready for inspection and the mix-building step.",
+        completed=2,
+        total=2,
+    )
+    return write_manifest(job_dir, manifest)
+
+
+def build_mastering_job_mix(job_dir: str) -> dict[str, object]:
+    from definers.audio.io import read_audio, save_audio
+    from definers.audio.mastering import SmartMastering, _process_stem_signal
+    from definers.audio.mastering.stems import process_stem_layers
+
+    manifest = _read_mastering_job(job_dir)
+    settings = _job_settings(manifest)
+    artifacts = _job_artifacts(manifest)
+    if not bool(settings.get("stem_mastering")):
+        return refresh_mastering_job(job_dir)
+    raw_stems = _job_dict(artifacts.get("raw_stems"))
+    if not raw_stems:
+        raise ValueError("Run stem separation before building the stem mix.")
+
+    processed_stems_dir = Path(str(job_dir)) / "processed_stems"
+    processed_stems_dir.mkdir(parents=True, exist_ok=True)
+    base_kwargs = dict(_job_dict(manifest.get("resolved_mastering_kwargs")))
+    input_sample_rate = int(_job_input(manifest).get("sample_rate", 44100))
+    base_mastering = SmartMastering(input_sample_rate, **base_kwargs)
+
+    def reuse_existing_stems(_audio_path, **_kwargs):
+        return raw_stems, str(
+            artifacts.get("raw_stems_dir") or processed_stems_dir
+        )
+
+    _report_audio_activity(
+        "Build stem mix",
+        detail="Processing separated stems and building the guided stem mix.",
+        completed=1,
+        total=3,
+    )
+    mixed_sample_rate, mixed_signal = process_stem_layers(
+        str(_job_input(manifest).get("path", "")),
+        base_config=base_mastering.config,
+        base_mastering_kwargs=base_kwargs,
+        process_stem_fn=_process_stem_signal,
+        separate_stems_fn=reuse_existing_stems,
+        read_audio_fn=read_audio,
+        delete_fn=lambda _path: None,
+        model_name=str(settings.get("stem_model_name", "mastering")),
+        shifts=max(int(settings.get("stem_shifts", 2)), 1),
+        quality_flags=tuple(
+            str(flag).strip()
+            for flag in _job_analysis(manifest).get("quality_flags", ())
+            if str(flag).strip()
+        ),
+        mix_headroom_db=float(settings.get("stem_mix_headroom_db", 6.0)),
+        save_mastered_stems=bool(settings.get("save_mastered_stems", True)),
+        mastered_stems_output_dir=(
+            str(processed_stems_dir)
+            if bool(settings.get("save_mastered_stems", True))
+            else None
+        ),
+        save_audio_fn=save_audio,
+        mastered_stems_format="wav",
+        mastered_stems_bit_depth=32,
+        mastered_stems_bitrate=320,
+        mastered_stems_compression_level=9,
+    )
+    _report_audio_activity(
+        "Write stem mix",
+        detail="Saving the combined stem mix artifact.",
+        completed=2,
+        total=3,
+    )
+    mixed_path = str(Path(str(job_dir)) / "stem_mix.wav")
+    save_audio(
+        destination_path=mixed_path,
+        audio_signal=mixed_signal,
+        sample_rate=int(mixed_sample_rate),
+        bit_depth=32,
+    )
+    manifest["artifacts"] = {
+        **artifacts,
+        "processed_stems_dir": str(processed_stems_dir),
+        "processed_stems": _scan_audio_job_files(processed_stems_dir),
+        "mixed_path": mixed_path,
+    }
+    _report_audio_activity(
+        "Publish stem mix",
+        detail="Processed stems and the stem mix are ready for final mastering.",
+        completed=3,
+        total=3,
+    )
+    return write_manifest(job_dir, manifest)
+
+
+def finalize_mastering_job(job_dir: str) -> dict[str, object]:
+    from definers.audio.io import read_audio, save_audio
+    from definers.audio.mastering import _render_master_output, master
+
+    manifest = _read_mastering_job(job_dir)
+    settings = _job_settings(manifest)
+    artifacts = _job_artifacts(manifest)
+    input_path = str(_job_input(manifest).get("path", ""))
+    output_ext = normalize_audio_format_choice(
+        str(settings.get("format_choice", "wav"))
+    )
+    output_path = str(
+        Path(str(job_dir)) / f"{Path(input_path).stem}_mastered.{output_ext}"
+    )
+    report_path = str(
+        Path(str(job_dir)) / f"{Path(input_path).stem}_mastering_report.md"
+    )
+    mastering_kwargs = dict(
+        _job_dict(manifest.get("resolved_mastering_kwargs"))
+    )
+
+    _report_audio_activity(
+        "Finalize master",
+        detail="Rendering the final delivery file and mastering report.",
+        completed=1,
+        total=2,
+    )
+    if bool(settings.get("stem_mastering")):
+        mixed_path = existing_path(artifacts.get("mixed_path"))
+        if mixed_path is None:
+            raise ValueError("Build the stem mix before finalizing the master.")
+        input_signal_sample_rate, input_signal = read_audio(input_path)
+        mixed_sample_rate, mixed_signal = read_audio(mixed_path)
+        mastered_path, report = _render_master_output(
+            input_path,
+            input_signal=input_signal,
+            processing_signal=mixed_signal,
+            processing_sample_rate=int(mixed_sample_rate),
+            output_path=output_path,
+            report_path=report_path,
+            report_indent=2,
+            bit_depth=32,
+            bitrate=320,
+            compression_level=9,
+            read_audio_fn=read_audio,
+            save_audio_fn=save_audio,
+            stem_mastered_input=True,
+            **mastering_kwargs,
+        )
+        _ = input_signal_sample_rate
+    else:
+        mastered_path, report = master(
+            input_path,
+            output_path=output_path,
+            report_path=report_path,
+            raise_on_error=True,
+            stem_mastering=False,
+            **mastering_kwargs,
+        )
+
+    manifest["artifacts"] = {
+        **artifacts,
+        "mastered_path": mastered_path,
+        "report_path": report_path
+        if existing_path(report_path) is not None
+        else None,
+        "report_summary": (
+            report.to_musician_markdown() if report is not None else ""
+        ),
+    }
+    _report_audio_activity(
+        "Publish final master",
+        detail="Final master, report, and any saved stems are ready.",
+        completed=2,
+        total=2,
+    )
+    return write_manifest(job_dir, manifest)
 
 
 def run_mastering_tool(
@@ -1044,13 +1694,26 @@ def run_audio_analysis_tool(
 __all__ = (
     "MASTERING_STEM_PREVIEW_ORDER",
     "MASTERING_PROFILE_CHOICES",
+    "STEM_DRUM_EDGE_DEFAULT",
     "STEM_MODEL_STRATEGY_CHOICES",
+    "STEM_GLUE_REVERB_DEFAULT",
+    "STEM_VOCAL_PULLBACK_DB_DEFAULT",
+    "build_mastering_job_mix",
     "describe_stem_model_choice",
+    "finalize_mastering_job",
     "format_mastering_summary",
+    "format_mastering_job_status",
     "get_mastering_profile_ui_state",
     "is_custom_stem_model_strategy",
     "normalize_audio_format_choice",
     "normalize_mastering_profile_selection",
+    "normalize_stem_drum_edge_amount",
+    "normalize_stem_glue_reverb_amount",
+    "normalize_stem_vocal_pullback_db",
+    "prepare_mastering_job",
+    "refresh_mastering_job",
+    "render_mastering_job_view",
+    "resolve_mastering_job_status",
     "resolve_mastering_stem_previews",
     "resolve_mastering_request",
     "resolve_stem_model_name",
@@ -1063,4 +1726,5 @@ __all__ = (
     "run_remove_silence_tool",
     "run_split_audio_tool",
     "run_stem_separation_tool",
+    "separate_mastering_job_stems",
 )

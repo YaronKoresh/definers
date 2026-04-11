@@ -95,6 +95,15 @@ def configure_runtime_state(
     self.codec_headroom_margin_db = float(
         max(cfg.codec_headroom_margin_db, 0.0)
     )
+    self.stem_glue_reverb_amount = float(
+        np.clip(cfg.stem_glue_reverb_amount, 0.0, 1.5)
+    )
+    self.stem_drum_edge_amount = float(
+        np.clip(cfg.stem_drum_edge_amount, 0.0, 1.5)
+    )
+    self.stem_vocal_pullback_db = float(
+        np.clip(cfg.stem_vocal_pullback_db, 0.0, 3.0)
+    )
     self.reference_match_amount = float(
         np.clip(cfg.reference_match_amount, 0.0, 1.0)
     )

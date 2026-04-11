@@ -1024,6 +1024,24 @@ def _render_master_output(
             "last_headroom_recovery_unused_margin_db",
             None,
         ),
+        stem_mastered_input=bool(
+            getattr(mastering, "stem_mastered_input", False)
+        ),
+        stem_glue_reverb_amount=getattr(
+            mastering,
+            "stem_glue_reverb_amount",
+            None,
+        ),
+        stem_drum_edge_amount=getattr(
+            mastering,
+            "stem_drum_edge_amount",
+            None,
+        ),
+        stem_vocal_pullback_db=getattr(
+            mastering,
+            "stem_vocal_pullback_db",
+            None,
+        ),
         decoded_true_peak_dbfs=(
             None
             if mastering.delivery_decoded_true_peak_dbfs is None

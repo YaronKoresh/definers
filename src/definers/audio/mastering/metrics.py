@@ -130,6 +130,10 @@ class MasteringReport:
     headroom_recovery_transient_density: float | None
     headroom_recovery_closed_margin_db: float | None
     headroom_recovery_unused_margin_db: float | None
+    stem_mastered_input: bool
+    stem_glue_reverb_amount: float | None
+    stem_drum_edge_amount: float | None
+    stem_vocal_pullback_db: float | None
     integrated_lufs_delta: float
     sample_peak_delta_db: float
     true_peak_delta_db: float
@@ -368,6 +372,7 @@ def _build_musician_report_payload(report: MasteringReport) -> dict[str, Any]:
                 "sample_rate": report.decoded_sample_rate,
             }
         ),
+        "stem_final_pass": _stem_final_pass_block(report),
         "actions_taken": list(_processing_actions(report)),
         "attention": list(_attention_lines(report)),
     }
@@ -413,6 +418,19 @@ def _render_musician_report_markdown(report: MasteringReport) -> str:
                 f"- Decoded sample rate: {report.decoded_sample_rate if report.decoded_sample_rate is not None else 'n/a'}",
             ]
         )
+    stem_final_pass = _stem_final_pass_block(report)
+    if stem_final_pass is not None:
+        sections.extend(
+            [
+                "",
+                "## Stem Final Pass",
+                f"- Vocal/other glue reverb: {_format_value(stem_final_pass['glue_reverb_amount'])}x",
+                f"- Drum edge amount: {_format_value(stem_final_pass['drum_edge_amount'])}x",
+                f"- Extra vocal pullback: {_format_value(stem_final_pass['vocal_pullback_db'], ' dB')}",
+                f"- Headroom recovery: {_format_value(stem_final_pass['headroom_recovery_gain_db'], ' dB')} ({report.headroom_recovery_mode or 'n/a'})",
+                f"- Closed ceiling margin: {_format_value(stem_final_pass['headroom_recovery_closed_margin_db'], ' dB')}",
+            ]
+        )
     sections.extend(["", "## Processing Notes"])
     actions = _processing_actions(report)
     if actions:
@@ -426,6 +444,23 @@ def _render_musician_report_markdown(report: MasteringReport) -> str:
     else:
         sections.append("- No major delivery warnings.")
     return "\n".join(sections) + "\n"
+
+
+def _stem_final_pass_block(report: MasteringReport) -> dict[str, Any] | None:
+    if not bool(getattr(report, "stem_mastered_input", False)):
+        return None
+    return {
+        "glue_reverb_amount": _safe_float(report.stem_glue_reverb_amount),
+        "drum_edge_amount": _safe_float(report.stem_drum_edge_amount),
+        "vocal_pullback_db": _safe_float(report.stem_vocal_pullback_db),
+        "headroom_recovery_gain_db": _safe_float(
+            report.headroom_recovery_gain_db
+        ),
+        "headroom_recovery_mode": report.headroom_recovery_mode,
+        "headroom_recovery_closed_margin_db": _safe_float(
+            report.headroom_recovery_closed_margin_db
+        ),
+    }
 
 
 def _serialize_report_payload(report: object) -> dict[str, Any]:
@@ -498,6 +533,10 @@ def generate_mastering_report(
     headroom_recovery_transient_density: float | None = None,
     headroom_recovery_closed_margin_db: float | None = None,
     headroom_recovery_unused_margin_db: float | None = None,
+    stem_mastered_input: bool = False,
+    stem_glue_reverb_amount: float | None = None,
+    stem_drum_edge_amount: float | None = None,
+    stem_vocal_pullback_db: float | None = None,
     true_peak_oversample_factor: int = 4,
     signal_module: Any = signal,
 ) -> MasteringReport:
@@ -662,6 +701,10 @@ def generate_mastering_report(
         headroom_recovery_transient_density=headroom_recovery_transient_density,
         headroom_recovery_closed_margin_db=headroom_recovery_closed_margin_db,
         headroom_recovery_unused_margin_db=headroom_recovery_unused_margin_db,
+        stem_mastered_input=bool(stem_mastered_input),
+        stem_glue_reverb_amount=stem_glue_reverb_amount,
+        stem_drum_edge_amount=stem_drum_edge_amount,
+        stem_vocal_pullback_db=stem_vocal_pullback_db,
         integrated_lufs_delta=output_metrics.integrated_lufs
         - input_metrics.integrated_lufs,
         sample_peak_delta_db=output_metrics.sample_peak_dbfs

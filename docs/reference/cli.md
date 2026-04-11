@@ -13,6 +13,8 @@ Definers exposes a small command surface that is intentionally split between bui
 definers --version
 definers start chat
 definers start audio-mastering
+definers start audio-mastering-jobs
+definers start image-generate-jobs
 definers install --list
 definers install audio
 definers music-video input.wav 1920 1080 30
@@ -35,8 +37,10 @@ In addition to the built-in command families, Definers currently exposes registe
 - `animation`
 - `faiss`
 - `audio-mastering`
+- `audio-mastering-jobs`
 - `audio-stems`
 - `audio-analysis`
+- `image-generate-jobs`
 - `image-upscale`
 - `video-lyrics`
 - `train`

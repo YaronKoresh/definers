@@ -2279,13 +2279,21 @@ def test_process_stem_mastered_input_preserves_tonal_stages_for_final_glue(
     assert stage_calls.count("multiband") == 0
     assert stage_calls.count("spatial") == 0
     assert stage_calls.count("mono") == 0
-    assert stage_calls.count("saturation") == 0
+    assert stage_calls.count("saturation") == 1
     assert stage_calls.count("micro") == 0
     limiter_calls = [call for call in stage_calls if isinstance(call, tuple)]
     assert len(limiter_calls) == 1
-    assert limiter_calls[0][1] <= 0.75
+    assert (
+        0.75
+        < limiter_calls[0][1]
+        <= max(
+            mastering.drive_db * 0.85,
+            1.35,
+        )
+    )
     assert limiter_calls[0][2] <= max(
-        mastering.limiter_soft_clip_ratio * 0.35, 0.05
+        mastering.limiter_soft_clip_ratio * 0.55,
+        0.08,
     )
     assert np.array_equal(
         mastering.last_stage_signals["post_eq"],

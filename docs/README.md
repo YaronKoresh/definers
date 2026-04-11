@@ -56,6 +56,8 @@ The documentation tree is intentionally split by reader intent rather than by so
 
 - [Launchers](capabilities/ui/launchers.md)
 
+The UI launcher guide also owns the contributor rules for workbenches, focused surfaces, app-only launchers, shared progress and output contracts, and optional guided-job patterns.
+
 ## Reference
 
 - [CLI Reference](reference/cli.md)

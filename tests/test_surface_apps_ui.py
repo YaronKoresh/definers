@@ -69,6 +69,9 @@ def _build_fake_gradio_module(registry):
         "Audio",
         "Blocks",
         "Button",
+        "Chatbot",
+        "ChatInterface",
+        "Checkbox",
         "CheckboxGroup",
         "Column",
         "Dropdown",
@@ -77,7 +80,9 @@ def _build_fake_gradio_module(registry):
         "HTML",
         "Image",
         "Markdown",
+        "MultimodalTextbox",
         "Number",
+        "Radio",
         "Row",
         "Slider",
         "State",
@@ -137,6 +142,31 @@ def test_launch_image_app_binds_progress_actions(monkeypatch):
     } <= labels
 
 
+def test_launch_image_generate_jobs_app_binds_guided_actions(monkeypatch):
+    registry = []
+    monkeypatch.setitem(
+        sys.modules, "gradio", _build_fake_gradio_module(registry)
+    )
+    _patch_shared_launch(monkeypatch)
+
+    image_jobs = importlib.import_module("definers.ui.apps.image_generate_jobs")
+    image_jobs.launch_image_generate_jobs_app()
+
+    labels = {
+        _button_label(component)
+        for component in registry
+        if component.kind == "Button" and component.event_calls.get("click")
+    }
+    assert {
+        "1. Prepare Job",
+        "2. Generate Image",
+        "3. Upscale Result",
+        "4. Add Titles",
+        "Refresh Job",
+        "Open Outputs Folder",
+    } <= labels
+
+
 def test_launch_translate_app_binds_translate_action(monkeypatch):
     registry = []
     monkeypatch.setitem(
@@ -190,6 +220,37 @@ def test_launch_faiss_app_binds_build_action(monkeypatch):
         and _button_label(component) == "Open Outputs Folder"
     )
     assert open_outputs_button.event_calls.get("click")
+
+
+def test_launch_chat_app_exposes_baseline_shell(monkeypatch):
+    registry = []
+    monkeypatch.setitem(
+        sys.modules, "gradio", _build_fake_gradio_module(registry)
+    )
+    _patch_shared_launch(monkeypatch)
+    fake_chat_handlers = ModuleType("definers.ui.chat_handlers")
+    fake_chat_handlers.get_chat_response_stream = lambda *args, **kwargs: "ok"
+    monkeypatch.setitem(
+        sys.modules,
+        "definers.ui.chat_handlers",
+        fake_chat_handlers,
+    )
+
+    chat_app = importlib.import_module("definers.ui.apps.chat_app")
+    chat_app.launch_chat_app()
+
+    open_outputs_button = next(
+        component
+        for component in registry
+        if component.kind == "Button"
+        and _button_label(component) == "Open Outputs Folder"
+    )
+    assert open_outputs_button.event_calls.get("click")
+    assert any(
+        component.kind == "Markdown"
+        and "Assistant ready" in str(component.kwargs.get("value", ""))
+        for component in registry
+    )
 
 
 def test_launch_animation_app_binds_chunk_actions(monkeypatch):

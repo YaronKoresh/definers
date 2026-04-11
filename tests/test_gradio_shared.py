@@ -3,7 +3,11 @@ import time
 from types import ModuleType
 
 from definers.system.download_activity import report_download_activity
-from definers.ui.gradio_shared import _progress_markup, wrap_progress_handler
+from definers.ui.gradio_shared import (
+    _progress_markup,
+    status_card_markdown,
+    wrap_progress_handler,
+)
 
 
 def test_progress_markup_idle_starts_empty():
@@ -120,3 +124,23 @@ def test_progress_markup_interpolates_runtime_activity_progress():
     assert "2/3 · 3/4" in markup
     assert "Run mastering engine (3/4)" in markup
     assert 'style="width: 58.33%"' in markup
+
+
+def test_status_card_markdown_formats_common_value_types():
+    markup = status_card_markdown(
+        "Image ready",
+        "Resume later or download the saved artifacts.",
+        [
+            ("Job folder", "C:/jobs/image_01"),
+            ("Generated image ready", True),
+            ("Upscale score", 0.875),
+            ("Titled image ready", False),
+            ("Report", None),
+        ],
+    )
+
+    assert "## Image ready" in markup
+    assert "- **Generated image ready:** Yes" in markup
+    assert "- **Upscale score:** 0.88" in markup
+    assert "- **Titled image ready:** No" in markup
+    assert "- **Report:** n/a" in markup

@@ -44,6 +44,16 @@ pip install -e ".[dev,web]"
 - Download changes should keep runtime policy separate from concrete transport strategy.
 - Restricted runtimes such as daemon hosts must remain safe by default.
 
+## GUI And Launcher Rules
+
+- Treat `docs/capabilities/ui/launchers.md` as the owner guide for GUI contribution policy and keep it current when launcher taxonomy, registration, shared UI rules, or testing expectations change.
+- Use the existing launcher taxonomy instead of inventing a parallel surface model: workbench for the full domain cockpit, focused surface for a narrow task family, and app-only launcher for a small self-contained workflow.
+- Register official launcher names in `definers.ui.gui_entrypoints` and keep CLI docs, launcher docs, and tests aligned with those names.
+- Reuse `definers.ui.gradio_shared` for progress and outputs-folder affordances instead of duplicating per-domain UI shells.
+- Every official GUI should expose a progress tracker, an outputs-folder affordance, named activity stages, and clean optional-dependency failure behavior.
+- Persistent job folders, resumable steps, intermediate artifact views, and manifest-based debugging are opt-in patterns for expensive or multi-step workflows, not a requirement for every launcher.
+- GUI changes need focused tests for launcher registration, UI binding, and any touched service orchestration.
+
 ## Validation
 
 Run the narrowest proof first, then the main gate.
@@ -90,6 +100,8 @@ At minimum, the owning page should make clear:
 - important defaults, configuration values, or environment variables
 - the main runtime limits or failure modes
 
+If launcher names, GUI taxonomy, or cross-domain surface rules change, update `docs/capabilities/ui/launchers.md` and any affected CLI or capability pages in the same change.
+
 ## RVC Policy
 
 RVC support is fork-only.
@@ -110,3 +122,4 @@ Before finishing, confirm all of the following:
 - `poe check` passes, or any unrelated failure is clearly identified
 - docs are updated if commands, structure, or runtime behavior changed
 - no dependency, install, or bootstrap regression was introduced
+- GUI changes also satisfy the launcher rules in `docs/capabilities/ui/launchers.md`

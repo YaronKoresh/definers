@@ -402,8 +402,19 @@ def process(
     log_fn("Mastering", "Preparing finalization...")
     current_lufs = get_lufs_fn(y, self.resampling_target)
     dynamic_drive_db = self.compute_dynamic_drive(current_lufs)
+    stem_saturation_ratio = 0.0
     if stem_mastered_input:
-        dynamic_drive_db = float(min(dynamic_drive_db, 0.75))
+        dynamic_drive_db = float(
+            min(dynamic_drive_db, max(self.drive_db * 0.85, 1.35))
+        )
+        stem_saturation_ratio = float(
+            np.clip(
+                max(float(self.pre_limiter_saturation_ratio) * 0.55, 0.03)
+                + max(dynamic_drive_db - 0.75, 0.0) * 0.012,
+                0.0,
+                0.11,
+            )
+        )
     primary_soft_clip_ratio = self.compute_primary_soft_clip_ratio(
         dynamic_drive_db
     )
@@ -411,16 +422,27 @@ def process(
         primary_soft_clip_ratio = float(
             min(
                 primary_soft_clip_ratio,
-                max(float(self.limiter_soft_clip_ratio) * 0.35, 0.05),
+                max(float(self.limiter_soft_clip_ratio) * 0.55, 0.08),
             )
         )
 
-    if not stem_mastered_input:
+    if not stem_mastered_input or stem_saturation_ratio > 0.0:
         log_fn("Mastering", "Applying pre-limiter saturation...")
-        y = self.apply_pre_limiter_saturation(
-            y,
-            dynamic_drive_db=dynamic_drive_db,
-        )
+        if stem_mastered_input:
+            original_saturation_ratio = float(self.pre_limiter_saturation_ratio)
+            self.pre_limiter_saturation_ratio = stem_saturation_ratio
+            try:
+                y = self.apply_pre_limiter_saturation(
+                    y,
+                    dynamic_drive_db=dynamic_drive_db,
+                )
+            finally:
+                self.pre_limiter_saturation_ratio = original_saturation_ratio
+        else:
+            y = self.apply_pre_limiter_saturation(
+                y,
+                dynamic_drive_db=dynamic_drive_db,
+            )
 
     log_fn("Mastering", "Applying limiter...")
 
@@ -442,7 +464,9 @@ def process(
         low_end_mono_cutoff_hz=contract.low_end_mono_cutoff_hz,
     )
     max_follow_up_passes = (
-        1 if stem_mastered_input else self.max_follow_up_passes
+        min(max(int(self.max_follow_up_passes), 1), 2)
+        if stem_mastered_input
+        else self.max_follow_up_passes
     )
     for follow_up_index in range(max_follow_up_passes):
         action = self.plan_follow_up_action(metrics, contract)

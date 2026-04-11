@@ -284,6 +284,10 @@ def test_generate_mastering_report_tracks_gain_deltas():
         headroom_recovery_transient_density=0.18,
         headroom_recovery_closed_margin_db=0.28,
         headroom_recovery_unused_margin_db=0.0,
+        stem_mastered_input=True,
+        stem_glue_reverb_amount=1.15,
+        stem_drum_edge_amount=0.8,
+        stem_vocal_pullback_db=1.4,
     )
 
     assert report.preset_name == "edm"
@@ -311,6 +315,10 @@ def test_generate_mastering_report_tracks_gain_deltas():
     assert report.headroom_recovery_output_true_peak_dbfs == pytest.approx(-0.1)
     assert report.headroom_recovery_mode == "guarded"
     assert report.headroom_recovery_closed_margin_db == pytest.approx(0.28)
+    assert report.stem_mastered_input is True
+    assert report.stem_glue_reverb_amount == pytest.approx(1.15)
+    assert report.stem_drum_edge_amount == pytest.approx(0.8)
+    assert report.stem_vocal_pullback_db == pytest.approx(1.4)
     assert report.stereo_motion_activity == pytest.approx(0.26)
     assert report.stereo_motion_correlation_guard == pytest.approx(0.82)
     assert report.export_gain_applied_db == pytest.approx(1.75)
@@ -324,6 +332,15 @@ def test_generate_mastering_report_tracks_gain_deltas():
     assert report.true_peak_delta_db > 0.0
     assert report.true_peak_margin_db is not None
     assert report.to_dict()["preset_name"] == "edm"
+    assert report.to_musician_dict()["stem_final_pass"] == {
+        "glue_reverb_amount": pytest.approx(1.15),
+        "drum_edge_amount": pytest.approx(0.8),
+        "vocal_pullback_db": pytest.approx(1.4),
+        "headroom_recovery_gain_db": pytest.approx(0.28),
+        "headroom_recovery_mode": "guarded",
+        "headroom_recovery_closed_margin_db": pytest.approx(0.28),
+    }
+    assert "## Stem Final Pass" in report.to_musician_markdown()
 
 
 def test_generate_mastering_report_uses_resolved_true_peak_target_for_margin():
@@ -376,6 +393,10 @@ def test_write_mastering_report_serializes_concise_json(tmp_path: Path):
         headroom_recovery_failure_reasons=(
             "loudness_already_within_tolerance",
         ),
+        stem_mastered_input=True,
+        stem_glue_reverb_amount=1.1,
+        stem_drum_edge_amount=0.9,
+        stem_vocal_pullback_db=1.0,
     )
     destination = tmp_path / "mastering-report.json"
 
@@ -389,6 +410,7 @@ def test_write_mastering_report_serializes_concise_json(tmp_path: Path):
     assert '"preset_name": "edm"' in payload
     assert '"final_master"' in payload
     assert '"delivery_file"' in payload
+    assert '"stem_final_pass"' in payload
     assert '"actions_taken"' in payload
     assert '"attention"' in payload
 
@@ -412,6 +434,13 @@ def test_write_mastering_report_renders_markdown(tmp_path: Path):
         export_gain_applied_db=1.1,
         export_peak_alignment_mode="align_to_ceil",
         export_peak_alignment_target_dbfs=-0.1,
+        stem_mastered_input=True,
+        stem_glue_reverb_amount=1.05,
+        stem_drum_edge_amount=0.95,
+        stem_vocal_pullback_db=0.75,
+        headroom_recovery_gain_db=0.2,
+        headroom_recovery_mode="guarded",
+        headroom_recovery_closed_margin_db=0.18,
     )
     destination = tmp_path / "mastering-report.md"
 
@@ -424,6 +453,7 @@ def test_write_mastering_report_renders_markdown(tmp_path: Path):
     assert "# Mastering Report" in payload
     assert "## Final Master" in payload
     assert "## Delivered File" in payload
+    assert "## Stem Final Pass" in payload
     assert "## Processing Notes" in payload
 
 

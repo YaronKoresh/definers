@@ -14,6 +14,16 @@ AUDIO_SURFACE_CARDS = (
         ),
     ),
     SurfaceCard(
+        launcher="audio-mastering-jobs",
+        title="Mastering Jobs",
+        description="Run mastering as a resumable job with saved checkpoints, intermediate artifacts, and a final report.",
+        outcomes=(
+            "Prepare a persistent mastering job",
+            "Resume stem-aware or stereo-only stages",
+            "Download the final master and report later",
+        ),
+    ),
+    SurfaceCard(
         launcher="audio-vocals",
         title="Vocals",
         description="Tune, humanize, shift, convert, or generate vocals without unrelated production controls.",
@@ -127,6 +137,16 @@ IMAGE_SURFACE_CARDS = (
             "Enter a prompt",
             "Choose width and height",
             "Generate one image",
+        ),
+    ),
+    SurfaceCard(
+        launcher="image-generate-jobs",
+        title="Generate Jobs",
+        description="Run image generation as a resumable job with saved generation, upscale, and title-overlay stages.",
+        outcomes=(
+            "Prepare a persistent image job",
+            "Resume generation and upscale later",
+            "Download generated and titled variants",
         ),
     ),
     SurfaceCard(
@@ -277,6 +297,18 @@ def launch_audio_mastering_surface():
     )
 
 
+def launch_audio_mastering_jobs_surface():
+    from definers.ui.apps.audio_mastering_jobs import (
+        launch_audio_mastering_jobs_app,
+    )
+
+    return launch_audio_mastering_jobs_app(
+        app_title="Definers Mastering Jobs",
+        hero_eyebrow="Guided Audio Workflow",
+        hero_description="Run mastering as a resumable guided job with persistent artifacts, step checkpoints, and a clear next-step summary.",
+    )
+
+
 def launch_audio_vocals_surface():
     return _launch_audio_surface(
         (
@@ -406,6 +438,18 @@ def launch_image_generate_surface():
     )
 
 
+def launch_image_generate_jobs_surface():
+    from definers.ui.apps.image_generate_jobs import (
+        launch_image_generate_jobs_app,
+    )
+
+    return launch_image_generate_jobs_app(
+        app_title="Definers Image Jobs",
+        hero_eyebrow="Guided Image Workflow",
+        hero_description="Run image generation as a resumable guided job with saved generation, upscale, and title-overlay artifacts.",
+    )
+
+
 def launch_image_upscale_surface():
     return _launch_image_surface(
         ("upscale",),
@@ -437,12 +481,14 @@ __all__ = [
     "launch_audio_analysis_surface",
     "launch_audio_cleanup_surface",
     "launch_audio_create_surface",
+    "launch_audio_mastering_jobs_surface",
     "launch_audio_mastering_surface",
     "launch_audio_midi_surface",
     "launch_audio_stems_surface",
     "launch_audio_support_surface",
     "launch_audio_vocals_surface",
     "launch_audio_workbench",
+    "launch_image_generate_jobs_surface",
     "launch_image_generate_surface",
     "launch_image_title_surface",
     "launch_image_upscale_surface",

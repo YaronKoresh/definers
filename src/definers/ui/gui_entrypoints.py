@@ -50,6 +50,10 @@ GUI_LAUNCHERS = register_gui_launchers(
             _launch_focused_surface,
             "launch_image_generate_surface",
         ),
+        "image-generate-jobs": partial(
+            _launch_focused_surface,
+            "launch_image_generate_jobs_surface",
+        ),
         "image-upscale": partial(
             _launch_focused_surface,
             "launch_image_upscale_surface",
@@ -83,6 +87,10 @@ GUI_LAUNCHERS = register_gui_launchers(
         "audio-mastering": partial(
             _launch_focused_surface,
             "launch_audio_mastering_surface",
+        ),
+        "audio-mastering-jobs": partial(
+            _launch_focused_surface,
+            "launch_audio_mastering_jobs_surface",
         ),
         "audio-vocals": partial(
             _launch_focused_surface,

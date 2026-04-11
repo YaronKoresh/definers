@@ -273,13 +273,29 @@ def test_process_stem_layers_saves_pre_mix_mastered_stems(tmp_path: Path):
     vocals_plan = MASTERING_STEMS_MODULE.resolve_stem_mastering_plan(
         "vocals", base
     )
-    expected_drums, _ = MASTERING_STEMS_MODULE._apply_stem_mix_balance(
+    finished_drums = MASTERING_STEMS_MODULE._apply_stem_role_finish(
         drums_signal,
+        8000,
+        "drums",
+        base,
+    )
+    finished_vocals = MASTERING_STEMS_MODULE._apply_stem_role_finish(
+        vocals_signal,
+        8000,
+        "vocals",
+        base,
+        pitch_shift_fn=lambda channel, sample_rate, semitones: np.array(
+            channel,
+            copy=True,
+        ),
+    )
+    expected_drums, _ = MASTERING_STEMS_MODULE._apply_stem_mix_balance(
+        finished_drums,
         "drums",
         drums_plan.mix_gain_db,
     )
     expected_vocals, _ = MASTERING_STEMS_MODULE._apply_stem_mix_balance(
-        vocals_signal,
+        finished_vocals,
         "vocals",
         vocals_plan.mix_gain_db,
     )
@@ -562,3 +578,51 @@ def test_apply_stem_tone_enrichment_skips_drums_by_default():
     )
 
     assert np.array_equal(enriched, signal)
+
+
+def test_apply_stem_glue_reverb_only_colors_vocals_and_other():
+    base = CONFIG_MODULE.SmartMasteringConfig.balanced()
+    signal = np.zeros((2, 1024), dtype=np.float32)
+    signal[:, :96] = 0.2
+
+    vocals = MASTERING_STEMS_MODULE._apply_stem_glue_reverb(
+        signal,
+        8000,
+        "vocals",
+        base,
+    )
+    other = MASTERING_STEMS_MODULE._apply_stem_glue_reverb(
+        signal,
+        8000,
+        "other",
+        base,
+    )
+    drums = MASTERING_STEMS_MODULE._apply_stem_glue_reverb(
+        signal,
+        8000,
+        "drums",
+        base,
+    )
+
+    assert vocals.shape == signal.shape
+    assert other.shape == signal.shape
+    assert not np.allclose(vocals, signal)
+    assert not np.allclose(other, signal)
+    assert np.allclose(drums, signal)
+
+
+def test_apply_drum_edge_finish_adds_controlled_transient_bite():
+    base = CONFIG_MODULE.SmartMasteringConfig.balanced()
+    signal = np.zeros((2, 2048), dtype=np.float32)
+    signal[:, ::128] = 0.3
+    signal[:, 1::128] = -0.18
+
+    finished = MASTERING_STEMS_MODULE._apply_drum_edge_finish(
+        signal,
+        8000,
+        base,
+    )
+
+    assert finished.shape == signal.shape
+    assert not np.allclose(finished, signal)
+    assert float(np.max(np.abs(finished))) <= 0.98 + 1e-6
