@@ -24,7 +24,7 @@ jobs:
           github.event_name == 'pull_request' &&
           github.event.action != 'closed'
         id: collect-pr-snapshot
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const helperPath = `${process.env.GITHUB_WORKSPACE || process.cwd()}/.github/scripts/autobot_pr_analysis.js`;
@@ -41,7 +41,7 @@ jobs:
           github.event_name == 'pull_request' &&
           github.event.action != 'closed'
         id: collect
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const helperPath = `${process.env.GITHUB_WORKSPACE || process.cwd()}/.github/scripts/autobot_pr_analysis.js`;
@@ -55,7 +55,7 @@ jobs:
           github.event_name == 'issues' &&
           github.event.action != 'closed'
         id: issue-summary-prompt
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const helperPath = `${process.env.GITHUB_WORKSPACE || process.cwd()}/.github/scripts/autobot_prompts.js`;
@@ -70,7 +70,7 @@ jobs:
           AUTOBOT_SUMMARY_TEXT: ${{ steps.collect.outputs.deterministic_summary || steps.issue-summary-prompt.outputs.fallback_summary }}
           AUTOBOT_LABELS_JSON: ${{ steps.collect.outputs.deterministic_labels_json }}
           PR_DETERMINISTIC_SEMVER: ${{ steps.collect.outputs.deterministic_semver_json }}
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const helperPath = `${process.env.GITHUB_WORKSPACE || process.cwd()}/.github/scripts/autobot_project_manager.js`;
@@ -91,7 +91,7 @@ jobs:
         if: github.event.action != 'closed'
         env:
           PROJECT_STATE_FILE: /tmp/autobot_project_state.json
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const helperPath = `${process.env.GITHUB_WORKSPACE || process.cwd()}/.github/scripts/autobot_project_manager.js`;
@@ -106,7 +106,7 @@ jobs:
             });
       - name: Sync Project Milestone
         if: github.event.action != 'closed'
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const helperPath = `${process.env.GITHUB_WORKSPACE || process.cwd()}/.github/scripts/autobot_project_manager.js`;
@@ -121,7 +121,7 @@ jobs:
             });
       - name: Finalize Closed Pull Request Release
         if: github.event_name == 'pull_request' && github.event.action == 'closed'
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const helperPath = `${process.env.GITHUB_WORKSPACE || process.cwd()}/.github/scripts/autobot_project_manager.js`;

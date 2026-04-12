@@ -16,7 +16,7 @@ jobs:
     steps:
       - name: Build AI Link Prompt
         id: build-ai-prompt
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const fs = require("fs");
@@ -179,7 +179,7 @@ jobs:
       - name: Analyze and Link
         env:
           AI_LINKS_RAW: ${{ steps.ai-links.outputs.response }}
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const { owner, repo } = context.repo;
