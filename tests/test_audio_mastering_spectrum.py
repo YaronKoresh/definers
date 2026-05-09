@@ -142,12 +142,16 @@ def _load_mastering_module(package_name: str):
         freq_cut=lambda y, *_, **__: y,
     )
     _install_scipy_stub()
-    sys.modules[f"{package_name}.utils"] = types.SimpleNamespace(
+    sys.modules[f"{package_name}.normalization"] = types.SimpleNamespace(
         apply_lufs=lambda y, *_, **__: y,
+        get_lufs=lambda y, *_: -14.0,
+    )
+    sys.modules[f"{package_name}.music_theory"] = types.SimpleNamespace(
         generate_bands=lambda start, stop, count: np.geomspace(
             float(start), float(stop), int(count)
         ).tolist(),
-        get_lufs=lambda y, *_: -14.0,
+    )
+    sys.modules[f"{package_name}.signal_effects"] = types.SimpleNamespace(
         stereo_widen=lambda y, *_, **__: y,
     )
     if parent_name:

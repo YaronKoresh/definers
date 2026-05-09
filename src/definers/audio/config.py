@@ -450,6 +450,25 @@ _DERIVED_FIELD_SPECS: dict[str, dict[str, Any]] = {
         },
         "clip": (0.0, 0.25),
     },
+    "adaptive_pre_limiter_true_peak_trim_enabled": {
+        "base": True,
+        "kind": "bool",
+    },
+    "adaptive_pre_limiter_true_peak_max_target_dbfs": {
+        "base": -1.6,
+        "coeffs": {"volume": -0.08, "effects": -0.05},
+        "clip": (-3.0, -0.8),
+    },
+    "anti_distortion_soft_clip_ceiling_ratio": {
+        "base": 0.28,
+        "coeffs": {"volume": -0.02, "effects": -0.01},
+        "clip": (0.12, 0.4),
+    },
+    "anti_distortion_saturation_ceiling_ratio": {
+        "base": 0.16,
+        "coeffs": {"volume": -0.02, "effects": -0.01},
+        "clip": (0.05, 0.3),
+    },
     "low_end_mono_tightening_amount": {
         "base": 0.76,
         "coeffs": {
@@ -583,6 +602,11 @@ _DERIVED_FIELD_SPECS: dict[str, dict[str, Any]] = {
         "base": 1.0,
         "clip": (0.0, 1.5),
     },
+    "stem_vocal_glue_tail_scale": {
+        "base": 0.72,
+        "coeffs": {"effects": 0.02},
+        "clip": (0.4, 1.0),
+    },
     "stem_drum_edge_amount": {
         "base": 1.0,
         "clip": (0.0, 1.5),
@@ -597,7 +621,7 @@ _DERIVED_FIELD_SPECS: dict[str, dict[str, Any]] = {
         "clip": (0.0, 1.0),
     },
     "micro_dynamics_strength": {
-        "base": 0.1,
+        "base": 0.14,
         "coeffs": {"volume": -0.04, "effects": 0.05},
         "clip": (0.0, 0.3),
     },

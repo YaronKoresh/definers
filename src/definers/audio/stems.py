@@ -17,8 +17,8 @@ from definers.system import catch, delete, tmp
 from definers.text import random_string
 
 from .dependencies import librosa_module
+from .file_processing import normalize_audio_to_peak
 from .io import read_audio, save_audio
-from .utils import normalize_audio_to_peak
 
 _logger = init_logger()
 
@@ -76,6 +76,119 @@ class MasteringSeparatorPlan:
     vocal_stage: SeparatorModelStage
     vocal_restoration_stage: SeparatorModelStage | None
     instrumental_cleanup_stage: SeparatorModelStage | None
+
+
+_STEM_SEPARATION_PROVENANCE_BY_OUTPUT_PATH: dict[str, dict[str, object]] = {}
+_STEM_SEPARATION_PROVENANCE_BY_OUTPUT_DIR: dict[
+    str, dict[str, dict[str, object]]
+] = {}
+
+
+def _normalize_quality_flags(flags: Sequence[object]) -> tuple[str, ...]:
+    return tuple(
+        dict.fromkeys(str(flag).strip() for flag in flags if str(flag).strip())
+    )
+
+
+def _empty_stem_separation_provenance() -> dict[str, object]:
+    return {
+        "quality_flags": (),
+        "source_dereverb_applied": False,
+        "source_denoise_applied": False,
+        "source_repair_intensity": 0.0,
+        "vocal_restoration_applied": False,
+        "instrumental_cleanup_applied": False,
+        "repair_intensity": 0.0,
+    }
+
+
+def _register_stem_separation_provenance(
+    output_root: str,
+    written_paths: Mapping[str, str],
+    *,
+    quality_flags: Sequence[str],
+    source_dereverb_applied: bool,
+    source_denoise_applied: bool,
+    vocal_restoration_applied: bool,
+    instrumental_cleanup_applied: Mapping[str, bool],
+) -> None:
+    normalized_quality_flags = _normalize_quality_flags(quality_flags)
+    output_root_key = str(Path(output_root))
+    output_provenance: dict[str, dict[str, object]] = {}
+    source_repair_intensity = float(
+        np.clip(
+            (1.0 if source_dereverb_applied else 0.0)
+            + (1.0 if source_denoise_applied else 0.0),
+            0.0,
+            2.0,
+        )
+        / 2.0
+    )
+
+    for stem_name, output_path in written_paths.items():
+        normalized_stem_name = _canonicalize_stem_name(stem_name)
+        provenance = {
+            "quality_flags": normalized_quality_flags,
+            "source_dereverb_applied": bool(source_dereverb_applied),
+            "source_denoise_applied": bool(source_denoise_applied),
+            "source_repair_intensity": source_repair_intensity,
+            "vocal_restoration_applied": bool(
+                vocal_restoration_applied and normalized_stem_name == "vocals"
+            ),
+            "instrumental_cleanup_applied": bool(
+                instrumental_cleanup_applied.get(normalized_stem_name, False)
+            ),
+        }
+        provenance["repair_intensity"] = float(
+            np.clip(
+                provenance["source_repair_intensity"]
+                + (0.34 if provenance["vocal_restoration_applied"] else 0.0)
+                + (0.26 if provenance["instrumental_cleanup_applied"] else 0.0),
+                0.0,
+                1.0,
+            )
+        )
+        output_provenance[normalized_stem_name] = dict(provenance)
+        _STEM_SEPARATION_PROVENANCE_BY_OUTPUT_PATH[str(Path(output_path))] = (
+            dict(provenance)
+        )
+
+    _STEM_SEPARATION_PROVENANCE_BY_OUTPUT_DIR[output_root_key] = (
+        output_provenance
+    )
+
+
+def get_stem_separation_provenance(
+    output_path: str | None = None,
+    *,
+    output_dir: str | None = None,
+    stem_name: str | None = None,
+) -> dict[str, object]:
+    if output_path is not None:
+        path_key = str(Path(output_path))
+        if path_key in _STEM_SEPARATION_PROVENANCE_BY_OUTPUT_PATH:
+            return dict(_STEM_SEPARATION_PROVENANCE_BY_OUTPUT_PATH[path_key])
+        if output_dir is None:
+            output_path_obj = Path(output_path)
+            output_dir = str(
+                output_path_obj.parent.parent
+                if output_path_obj.parent.name == "final"
+                else output_path_obj.parent
+            )
+        if stem_name is None:
+            stem_name = output_path and Path(output_path).stem
+
+    if output_dir is not None and stem_name is not None:
+        normalized_stem_name = _canonicalize_stem_name(stem_name)
+        output_root_key = str(Path(output_dir))
+        output_provenance = _STEM_SEPARATION_PROVENANCE_BY_OUTPUT_DIR.get(
+            output_root_key,
+            {},
+        )
+        if normalized_stem_name in output_provenance:
+            return dict(output_provenance[normalized_stem_name])
+
+    return _empty_stem_separation_provenance()
 
 
 def _normalize_model_name(value: str, *, option_name: str) -> str:
@@ -954,6 +1067,8 @@ def _run_mastering_separator_pipeline(
 ) -> dict[str, str]:
     primary_stage_shifts = max(int(shifts), 1)
     repair_stage_shifts = 1
+    source_dereverb_applied = False
+    source_denoise_applied = False
 
     with _separator_activity_scope(
         "Prepare separator input",
@@ -972,6 +1087,7 @@ def _run_mastering_separator_pipeline(
             stage_label,
             detail="Running the separator preprocessing stage.",
         ):
+            previous_mix_path = working_mix_path
             stage_output_path = _apply_stage_to_single_output(
                 working_mix_path,
                 stage,
@@ -986,6 +1102,11 @@ def _run_mastering_separator_pipeline(
                 target_sample_rate=plan.target_sample_rate,
                 stage_kind="preprocess",
             )
+            if working_mix_path != previous_mix_path:
+                if stage_index == 0:
+                    source_dereverb_applied = True
+                else:
+                    source_denoise_applied = True
 
     isolated_vocal_path: str | None = None
     instrumental_reference_path: str | None = None
@@ -1116,12 +1237,21 @@ def _run_mastering_separator_pipeline(
     cleaned_drums_path = cleaned_stage_paths["drums"]
     cleaned_bass_path = cleaned_stage_paths["bass"]
     cleaned_other_path = cleaned_stage_paths["other"]
+    instrumental_cleanup_applied = {
+        stem_name: cleaned_stage_paths[stem_name] != source_path
+        for stem_name, source_path in {
+            "drums": drums_path,
+            "bass": bass_path,
+            "other": other_path,
+        }.items()
+    }
+    vocal_restoration_applied = restored_vocal_path != isolated_vocal_path
 
     with _separator_activity_scope(
         "Write mastering stems",
         detail="Saving the aligned stem files for mastering.",
     ):
-        return _write_selected_stage_outputs(
+        written_paths = _write_selected_stage_outputs(
             {
                 "vocals": restored_vocal_path,
                 "drums": cleaned_drums_path,
@@ -1131,6 +1261,16 @@ def _run_mastering_separator_pipeline(
             output_root,
             plan.target_sample_rate,
         )
+    _register_stem_separation_provenance(
+        output_root,
+        written_paths,
+        quality_flags=plan.quality_flags,
+        source_dereverb_applied=source_dereverb_applied,
+        source_denoise_applied=source_denoise_applied,
+        vocal_restoration_applied=vocal_restoration_applied,
+        instrumental_cleanup_applied=instrumental_cleanup_applied,
+    )
+    return written_paths
 
 
 def _run_vocal_pair_separator_pipeline(

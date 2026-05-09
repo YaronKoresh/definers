@@ -297,9 +297,61 @@ def run_train_coach_workflow(state_payload):
     )
 
 
+def run_train_coach_auto_workflow(
+    requested_intent,
+    uploaded_files,
+    remote_src,
+    revision,
+    resume_artifact,
+    save_as,
+    local_collection_path=None,
+    resolving_choice=None,
+):
+    inspected = inspect_train_coach_request(
+        requested_intent,
+        uploaded_files,
+        remote_src,
+        revision,
+        resume_artifact,
+        save_as,
+        local_collection_path=local_collection_path,
+        resolving_choice=resolving_choice,
+    )
+    state_payload = inspected[0]
+    state = parse_train_coach_state(state_payload)
+    if state is not None and state.ready:
+        train_output, training_plan, training_status, use_result = (
+            run_train_coach_workflow(state_payload)
+        )
+    else:
+        train_output = None
+        training_plan = preview_train_coach_plan(state_payload)
+        training_status = (
+            "## Training\n"
+            "- Status: blocked\n"
+            "- Guided validation needs one safe route before training starts."
+        )
+        use_result = inspected[4]
+    return (
+        inspected[0],
+        inspected[1],
+        inspected[2],
+        inspected[3],
+        use_result,
+        inspected[5],
+        inspected[6],
+        inspected[7],
+        inspected[8],
+        train_output,
+        training_plan,
+        training_status,
+    )
+
+
 __all__ = [
     "inspect_train_coach_request",
     "preview_train_coach_plan",
     "reset_train_coach_state",
+    "run_train_coach_auto_workflow",
     "run_train_coach_workflow",
 ]

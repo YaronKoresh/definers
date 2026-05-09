@@ -4,7 +4,6 @@ Definers includes resilient network and artifact-transfer utilities for download
 
 ## Start Here
 
-- `definers.media.transfer`
 - `definers.media.web_transfer`
 - `definers.model_installation`
 - `definers.system.download_activity`
@@ -37,9 +36,9 @@ Definers is standardizing web transfer around four layers:
 
 The main goal is to keep fast paths available without hiding behavior behind a maze of incidental fallbacks.
 
-The current owner package is `definers.media.transfer`. The legacy `definers.media.web_transfer` module remains as a compatibility facade and public patch-target seam for existing imports.
+The direct owner module is `definers.media.web_transfer`.
 
-The current policy surface is implemented around `http_transfer_capabilities()` and `http_transfer_policy()` in `definers.media.transfer`.
+The policy surface is implemented around `http_transfer_capabilities()` and `http_transfer_policy()` in `definers.media.web_transfer`.
 
 ## Runtime Classes
 

@@ -7,8 +7,12 @@ import definers.text.translation as translation
 from definers import ml as ml_facade
 from definers.audio import (
     editing,
+    file_processing,
     music_generation,
+    music_theory,
+    normalization,
     production,
+    signal_effects,
     spectrum_visualization,
     stems,
     voice,
@@ -73,11 +77,13 @@ from definers.audio.mastering.stems import (
     process_stem_layers,
     resolve_stem_mastering_plan,
 )
+from definers.ml.analysis import kmeans_k_suggestions
 from definers.ml.health_api import get_ml_health_snapshot, ml_health_markdown
 from definers.ml.regression_api import (
     linear_regression,
     predict_linear_regression,
 )
+from definers.ml.runtime import check_parameter, pipe
 from definers.ml.text.api import map_reduce_summary, optimize_prompt_realism
 from definers.system import compress, extract, get_ext, secure_path
 from definers.system.installation import apt_install, install_ffmpeg
@@ -116,6 +122,22 @@ def test_audio_mastering_facade_reexports_reporting_modules():
     )
 
 
+def test_audio_facade_reexports_organized_signal_modules():
+    import definers.audio as audio_facade
+
+    assert (
+        audio_facade.normalize_audio_to_peak
+        is file_processing.normalize_audio_to_peak
+    )
+    assert audio_facade.stretch_audio is file_processing.stretch_audio
+    assert audio_facade.generate_bands is music_theory.generate_bands
+    assert audio_facade.get_scale_notes is music_theory.get_scale_notes
+    assert audio_facade.apply_lufs is normalization.apply_lufs
+    assert audio_facade.get_lufs is normalization.get_lufs
+    assert audio_facade.stereo_widen is signal_effects.stereo_widen
+    assert audio_facade.apply_compressor is signal_effects.apply_compressor
+
+
 def test_application_text_modules_expose_direct_exports():
     assert callable(translation.ai_translate)
     assert callable(text_transforms.simple_text)
@@ -131,9 +153,12 @@ def test_ml_facade_reexports_specific_modules():
     assert ml_facade.predict_linear_regression is predict_linear_regression
     assert ml_facade.get_ml_health_snapshot is get_ml_health_snapshot
     assert ml_facade.ml_health_markdown is ml_health_markdown
+    assert ml_facade.kmeans_k_suggestions is kmeans_k_suggestions
+    assert ml_facade.check_parameter is check_parameter
+    assert ml_facade.pipe is pipe
 
 
-def test_root_package_lazy_exposes_patch_target_modules():
+def test_root_package_exposes_patch_target_modules():
     assert definers.data is importlib.import_module("definers.data")
     assert definers.image is importlib.import_module("definers.image")
     assert definers.model_installation is importlib.import_module(
@@ -141,7 +166,7 @@ def test_root_package_lazy_exposes_patch_target_modules():
     )
 
 
-def test_ml_facade_lazy_exposes_patch_target_submodules():
+def test_ml_facade_exposes_patch_target_submodules():
     assert ml_facade.inference is importlib.import_module(
         "definers.ml.inference"
     )
@@ -169,6 +194,17 @@ def test_split_modules_are_directly_importable():
     assert callable(map_reduce_summary)
     assert callable(linear_regression)
     assert callable(get_ml_health_snapshot)
+    assert callable(kmeans_k_suggestions)
+    assert callable(check_parameter)
+    assert callable(pipe)
+    assert callable(file_processing.normalize_audio_to_peak)
+    assert callable(file_processing.stretch_audio)
+    assert callable(music_theory.generate_bands)
+    assert callable(music_theory.get_scale_notes)
+    assert callable(normalization.apply_lufs)
+    assert callable(normalization.get_lufs)
+    assert callable(signal_effects.stereo_widen)
+    assert callable(signal_effects.apply_compressor)
     assert MasteringLoudnessMetrics.__name__ == "MasteringLoudnessMetrics"
     assert MasteringContract.__name__ == "MasteringContract"
     assert MasteringContractAssessment.__name__ == "MasteringContractAssessment"

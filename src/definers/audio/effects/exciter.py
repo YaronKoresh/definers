@@ -10,7 +10,7 @@ from scipy.signal import butter, sosfiltfilt
 
 from ...file_ops import catch, log
 from ..dsp import remove_spectral_spikes, resample
-from ..utils import get_rms
+from ..normalization import get_rms
 from .mixing import pad_audio
 
 

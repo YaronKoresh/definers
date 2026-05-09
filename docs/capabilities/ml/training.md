@@ -5,9 +5,19 @@ Definers supports model training, regression utilities, feature handling, and re
 ## Start Here
 
 - `definers.ml.training`
+- `definers.ml.auto_train(material)` for the beginner path: pass one local file, a folder, uploaded file objects, a remote dataset id, or in-memory data and let Definers pick the safe route
+- `definers.ml.retrain(model_path, new_material)` continues a saved `.joblib` model when the guided coach can verify that the new material is compatible
 - `definers.ml.regression_api`
 - `definers.ml.health_api`
 - `definers start train`
+
+```python
+from definers.ml import auto_train
+
+result = auto_train("training.csv")
+prediction = result.predict("new_rows.csv")
+updated = result.retrain("more_training_data.csv")
+```
 
 ## Best Fit
 
@@ -26,6 +36,7 @@ Definers exposes one ML training GUI with two modes inside the same `train` work
 
 - available inside `definers start train`
 - for non-expert users who want one clear entry path without routing dozens of parameters manually
+- `Train Automatically` runs inspection and training in one click when the guided route is already safe
 - guided intake starts from three intents: local files or local collection paths, remote dataset, or continue yesterday's model
 - the mode inspects tabular files, media collections, folder-derived labels, and text or tabular sidecars before it unlocks plan preview and training
 - ambiguous beginner routes are reduced to one quick decision inside guided mode when Definers can safely narrow the choice instead of forcing an immediate switch to advanced mode

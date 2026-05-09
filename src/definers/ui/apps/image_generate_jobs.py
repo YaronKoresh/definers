@@ -203,11 +203,11 @@ def _latest_image_artifact(manifest: dict[str, object]) -> str | None:
 
 
 def generate_image_job(job_dir: str) -> dict[str, object]:
-    from definers.ui.apps.image import ImageApp
+    from definers.ui.apps.image import generate_image
 
     manifest = _read_image_job(job_dir)
     settings = _job_settings(manifest)
-    generated_source = ImageApp.generate_image(
+    generated_source = generate_image(
         str(settings.get("prompt", "")),
         int(settings.get("width", 1)),
         int(settings.get("height", 1)),
@@ -225,13 +225,13 @@ def generate_image_job(job_dir: str) -> dict[str, object]:
 
 
 def upscale_image_job(job_dir: str) -> dict[str, object]:
-    from definers.ui.apps.image import ImageApp
+    from definers.ui.apps.image import upscale_image
 
     manifest = _read_image_job(job_dir)
     source_path = _latest_image_artifact(manifest)
     if source_path is None:
         raise ValueError("Generate an image before running the upscale stage.")
-    upscaled_source = ImageApp.upscale_image(source_path)
+    upscaled_source = upscale_image(source_path)
     upscaled_path = _copy_job_image_artifact(
         str(upscaled_source),
         job_dir,
@@ -250,7 +250,7 @@ def title_image_job(
     middle_title: str,
     bottom_title: str,
 ) -> dict[str, object]:
-    from definers.ui.apps.image import ImageApp
+    from definers.ui.apps.image import title_image
 
     manifest = _read_image_job(job_dir)
     source_path = _latest_image_artifact(manifest)
@@ -263,7 +263,7 @@ def title_image_job(
         "middle_title": str(middle_title),
         "bottom_title": str(bottom_title),
     }
-    titled_source = ImageApp.title_image(
+    titled_source = title_image(
         source_path,
         str(top_title),
         str(middle_title),

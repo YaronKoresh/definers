@@ -219,7 +219,7 @@ def test_download_rvc_assets_uses_only_enhanced_fork_folders(
 
 
 def test_enhanced_rvc_fork_folder_paths_default_to_package_root():
-    package_root = Path(model_installation.__file__).resolve().parent
+    package_root = Path(model_installation.__file__).resolve().parents[1]
 
     paths = model_installation.enhanced_rvc_fork_folder_paths()
 
@@ -887,7 +887,7 @@ def test_hf_file_download_prefers_fast_direct_download(monkeypatch, tmp_path):
     monkeypatch.setenv("DEFINERS_FAST_HF_DOWNLOADS", "1")
     monkeypatch.setenv("DEFINERS_HF_MODEL_DIR", str(tmp_path))
     monkeypatch.setattr(
-        "definers.media.transfer.download_file",
+        "definers.media.web_transfer.download_file",
         fake_download_file,
     )
 
@@ -930,7 +930,7 @@ def test_hf_snapshot_download_prefers_fast_direct_snapshot_download(
         ),
     )
     monkeypatch.setattr(
-        "definers.media.transfer.download_file",
+        "definers.media.web_transfer.download_file",
         fake_download_file,
     )
 
@@ -1067,7 +1067,7 @@ def test_install_fast_huggingface_download_hooks_patches_imported_aliases(
         lambda repo_id, revision=None: ("config.json",),
     )
     monkeypatch.setattr(
-        "definers.media.transfer.download_file",
+        "definers.media.web_transfer.download_file",
         lambda source_url, destination_path: (
             download_calls.append((source_url, destination_path))
             or destination_path

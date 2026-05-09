@@ -1,12 +1,12 @@
 from types import SimpleNamespace
 
-from definers.ml.answer.content import (
-    AnswerContentPathResolver,
+from definers.ml.answer.service import (
+    append_history_message,
+    content_paths,
+    load_librosa_module,
+    load_soundfile_module,
+    normalize_answer_text,
 )
-from definers.ml.answer.dependencies import (
-    AnswerDependencyLoader,
-)
-from definers.ml.answer.text import AnswerTextService
 
 
 def test_answer_content_paths_ignores_entries_without_paths():
@@ -17,7 +17,7 @@ def test_answer_content_paths_ignores_entries_without_paths():
         {"path": "two.txt"},
     )
 
-    assert AnswerContentPathResolver.content_paths(content) == [
+    assert content_paths(content) == [
         "one.txt",
         "two.txt",
     ]
@@ -26,8 +26,8 @@ def test_answer_content_paths_ignores_entries_without_paths():
 def test_append_history_message_merges_adjacent_roles():
     history = [{"role": "system", "content": "base"}]
 
-    AnswerTextService.append_history_message(history, "user", "alpha")
-    AnswerTextService.append_history_message(history, "user", "beta")
+    append_history_message(history, "user", "alpha")
+    append_history_message(history, "user", "beta")
 
     assert history == [
         {"role": "system", "content": "base"},
@@ -36,21 +36,17 @@ def test_append_history_message_merges_adjacent_roles():
 
 
 def test_answer_content_paths_returns_dict_path():
-    assert AnswerContentPathResolver.content_paths({"path": "asset.wav"}) == [
-        "asset.wav"
-    ]
+    assert content_paths({"path": "asset.wav"}) == ["asset.wav"]
 
 
 def test_normalize_answer_text_skips_language_stack_for_ascii_english():
-    assert AnswerTextService.normalize_answer_text("plain english", "en") == (
-        "plain english"
-    )
+    assert normalize_answer_text("plain english", "en") == "plain english"
 
 
 def test_append_history_message_appends_new_role():
     history = [{"role": "system", "content": "base"}]
 
-    AnswerTextService.append_history_message(history, "assistant", "reply")
+    append_history_message(history, "assistant", "reply")
 
     assert history == [
         {"role": "system", "content": "base"},
@@ -70,7 +66,5 @@ def test_answer_dependency_loader_returns_none_for_missing_optional_modules(
 
     monkeypatch.setattr("builtins.__import__", fake_import)
 
-    loader = AnswerDependencyLoader()
-
-    assert loader.load_librosa_module() is None
-    assert loader.load_soundfile_module() is None
+    assert load_librosa_module() is None
+    assert load_soundfile_module() is None

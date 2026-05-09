@@ -1,6 +1,9 @@
 from types import ModuleType
 
-from definers.data.datasets.source import DatasetSourceLoader
+from definers.data.loaders import (
+    load_remote_dataset,
+    load_remote_dataset_fallback,
+)
 
 
 def test_load_remote_dataset_uses_sampled_train_split(monkeypatch):
@@ -15,7 +18,7 @@ def test_load_remote_dataset_uses_sampled_train_split(monkeypatch):
     fake_datasets.load_dataset = _fake_load_dataset
     monkeypatch.setitem(__import__("sys").modules, "datasets", fake_datasets)
 
-    result = DatasetSourceLoader.load_remote_dataset(
+    result = load_remote_dataset(
         "owner/dataset",
         "main",
         sample_rows=25,
@@ -40,7 +43,7 @@ def test_load_remote_dataset_defaults_to_full_train_split(monkeypatch):
     fake_datasets.load_dataset = _fake_load_dataset
     monkeypatch.setitem(__import__("sys").modules, "datasets", fake_datasets)
 
-    result = DatasetSourceLoader.load_remote_dataset("owner/dataset", None)
+    result = load_remote_dataset("owner/dataset", None)
 
     assert result == "dataset"
     assert captured == {
@@ -61,7 +64,7 @@ def test_load_remote_dataset_fallback_uses_sampled_train_split(monkeypatch):
     fake_datasets.load_dataset = _fake_load_dataset
     monkeypatch.setitem(__import__("sys").modules, "datasets", fake_datasets)
 
-    result = DatasetSourceLoader.load_remote_dataset_fallback(
+    result = load_remote_dataset_fallback(
         "https://example.test/data.jsonl",
         "json",
         None,

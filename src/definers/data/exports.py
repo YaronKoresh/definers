@@ -1,9 +1,3 @@
-def read_as_numpy(path: str):
-    from definers.data.loaders import load_as_numpy
-
-    return load_as_numpy(path)
-
-
 def get_prediction_file_extension(pred_type):
     if pred_type is None:
         return "data"

@@ -61,14 +61,44 @@ def detect_silence_mask(
     min_silence_len: float = 0.1,
 ) -> np.ndarray:
     librosa = librosa_module()
-
-    threshold_amplitude = librosa.db_to_amplitude(threshold_db)
     frame_length = int(0.02 * sample_rate)
     hop_length = frame_length // 4
 
     rms = librosa.feature.rms(
         y=audio_data, frame_length=frame_length, hop_length=hop_length
     )[0]
+    resolved_threshold_db = float(threshold_db)
+    finite_rms = rms[np.isfinite(rms) & (rms > 0.0)]
+    if finite_rms.size and float(threshold_db) == -16.0:
+        median_db = float(
+            20.0 * np.log10(max(np.percentile(finite_rms, 35.0), 1e-12))
+        )
+        peak_db = float(
+            20.0 * np.log10(max(np.percentile(finite_rms, 99.5), 1e-12))
+        )
+        activity_threshold = float(
+            max(
+                np.percentile(finite_rms, 68.0),
+                np.mean(finite_rms, dtype=np.float32) * 1.05,
+                1e-6,
+            )
+        )
+        activity_ratio = float(
+            np.mean(finite_rms >= activity_threshold, dtype=np.float32)
+        )
+        sparse_guard = float(np.clip((0.3 - activity_ratio) / 0.3, 0.0, 1.0))
+        dynamic_span_guard = float(
+            np.clip((max(peak_db - median_db, 0.0) - 8.0) / 14.0, 0.0, 1.0)
+        )
+        resolved_threshold_db = float(
+            np.clip(
+                threshold_db - sparse_guard * 4.0 - dynamic_span_guard * 2.0,
+                -24.0,
+                -12.0,
+            )
+        )
+
+    threshold_amplitude = librosa.db_to_amplitude(resolved_threshold_db)
     silence_mask_rms = rms < threshold_amplitude
     silence_mask = np.repeat(silence_mask_rms, hop_length)
 

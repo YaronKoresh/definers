@@ -1,6 +1,12 @@
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping, MutableMapping, Sequence
+from collections.abc import (
+    Callable,
+    Iterable,
+    Mapping,
+    MutableMapping,
+    Sequence,
+)
 from typing import Any, Protocol, TypeAlias
 
 CommandArguments: TypeAlias = Sequence[str]
@@ -15,85 +21,37 @@ TokenizerMap: TypeAlias = MutableMapping[str, TokenizerEntryMap]
 
 
 class EnvironmentPort(Protocol):
-    def get_os_name(self) -> str: ...
-
-    def is_admin_windows(self) -> bool: ...
-
-    def cores(self) -> int | None: ...
-
-    def get_python_version(self) -> str | None: ...
-
-    def importable(self, name: str) -> bool: ...
-
-    def runnable(self, command: str) -> bool: ...
-
-    def check_version_wildcard(
-        self, version_spec: Any, version_actual: Any
-    ) -> bool: ...
-
-    def installed(
-        self, package_name: str, version: str | None = None
-    ) -> bool: ...
+    get_os_name: Callable[[], str]
+    is_admin_windows: Callable[[], bool]
+    cores: Callable[[], int | None]
+    get_python_version: Callable[[], str | None]
+    importable: Callable[[str], bool]
+    runnable: Callable[[str], bool]
+    check_version_wildcard: Callable[[Any, Any], bool]
+    installed: Callable[[str, str | None], bool]
 
 
 class FileSystemPort(Protocol):
-    def exist(self, *path_parts: str) -> bool: ...
-
-    def load(self, path: str) -> Any: ...
-
-    def read(self, path: str) -> Any: ...
-
-    def save(self, path: str, text: Any = "") -> Any: ...
-
-    def write(self, path: str, text: Any = "") -> Any: ...
-
-    def directory(self, path: str, exist_ok: bool = True) -> Any: ...
-
-    def copy(self, source: str, target: str) -> Any: ...
-
-    def move(self, source: str, target: str) -> Any: ...
-
-    def delete(self, path: PathInput) -> Any: ...
-
-    def remove(self, path: PathInput) -> Any: ...
-
-    def permit(
-        self,
-        path: str,
-        *,
-        exists_func: Any | None = None,
-        get_os_name_func: Any | None = None,
-        subprocess_module: Any | None = None,
-    ) -> bool: ...
+    exist: Callable[..., bool]
+    load: Callable[[str], Any]
+    read: Callable[[str], Any]
+    save: Callable[[str, Any], Any]
+    write: Callable[[str, Any], Any]
+    directory: Callable[[str, bool], Any]
+    copy: Callable[[str, str], Any]
+    move: Callable[[str, str], Any]
+    delete: Callable[[PathInput], Any]
+    remove: Callable[[PathInput], Any]
+    permit: Callable[..., bool]
 
 
 class ProcessPort(Protocol):
-    def secure_command(self, command: CommandInput) -> list[str]: ...
-
-    def run_linux(
-        self,
-        command: CommandInput,
-        silent: bool = False,
-        env: ProcessEnvironment = None,
-    ) -> Any: ...
-
-    def run_windows(
-        self,
-        command: CommandInput,
-        silent: bool = False,
-        env: ProcessEnvironment = None,
-    ) -> Any: ...
-
-    def run(
-        self,
-        command: CommandInput,
-        silent: bool = False,
-        env: ProcessEnvironment = None,
-    ) -> Any: ...
-
-    def get_process_pid(self, process_name: str) -> int | None: ...
-
-    def send_signal_to_process(self, pid: int, signal_number: int) -> bool: ...
+    secure_command: Callable[[CommandInput], list[str]]
+    run_linux: Callable[[CommandInput, bool, ProcessEnvironment], Any]
+    run_windows: Callable[[CommandInput, bool, ProcessEnvironment], Any]
+    run: Callable[[CommandInput, bool, ProcessEnvironment], Any]
+    get_process_pid: Callable[[str], int | None]
+    send_signal_to_process: Callable[[int, int], bool]
 
 
 class InfrastructurePorts(Protocol):

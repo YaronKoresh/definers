@@ -63,6 +63,20 @@ CONFIG_MODULE, MASTERING_STEMS_MODULE = _load_mastering_stems_module(
 )
 
 
+def _melody_led_input_analysis():
+    return types.SimpleNamespace(
+        metrics=types.SimpleNamespace(
+            bass_share=0.08,
+            low_mid_share=0.18,
+            presence_share=0.29,
+            air_share=0.17,
+            crest_factor_db=13.2,
+            transient_density=0.02,
+            stereo_width_ratio=0.34,
+        )
+    )
+
+
 def test_resolve_stem_mastering_plan_scales_roles_differently():
     base = CONFIG_MODULE.SmartMasteringConfig.balanced()
 
@@ -73,6 +87,7 @@ def test_resolve_stem_mastering_plan_scales_roles_differently():
     assert drums.mix_gain_db > bass.mix_gain_db
     assert bass.mix_gain_db > vocals.mix_gain_db
     assert drums.mix_gain_db - vocals.mix_gain_db > 2.3
+    assert drums.mix_gain_db >= 1.9
     assert bass.mix_gain_db >= 0.9
     assert bass.overrides["stereo_width"] < vocals.overrides["stereo_width"]
     assert (
@@ -84,6 +99,7 @@ def test_resolve_stem_mastering_plan_scales_roles_differently():
     assert bass.overrides["exciter_mix"] > 0.5
     assert drums.overrides["target_lufs"] < base.target_lufs
     assert drums.overrides["stem_noise_gate_enabled"] is True
+    assert drums.overrides["stem_drum_edge_amount"] > 1.0
     assert (
         drums.overrides["stem_cleanup_strength"]
         < vocals.overrides["stem_cleanup_strength"]
@@ -120,6 +136,7 @@ def test_resolve_stem_mastering_plan_keeps_other_forward_and_weighted():
 
     assert other.mix_gain_db > vocals.mix_gain_db
     assert other.mix_gain_db > guitar.mix_gain_db
+    assert other.mix_gain_db >= 0.95
     assert other.overrides["target_lufs"] > vocals.overrides["target_lufs"]
     assert (
         other.overrides["bass_boost_db_per_oct"]
@@ -138,6 +155,38 @@ def test_resolve_stem_mastering_plan_keeps_other_forward_and_weighted():
         other.overrides["stem_dynamics_max_lift_db"]
         > vocals.overrides["stem_dynamics_max_lift_db"]
     )
+    assert other.overrides["stem_glue_reverb_amount"] > 1.0
+
+
+def test_resolve_stem_mastering_plan_adapts_to_melody_led_input():
+    base = CONFIG_MODULE.SmartMasteringConfig.balanced()
+    input_analysis = _melody_led_input_analysis()
+
+    neutral_other = MASTERING_STEMS_MODULE.resolve_stem_mastering_plan(
+        "other",
+        base,
+    )
+    adaptive_other = MASTERING_STEMS_MODULE.resolve_stem_mastering_plan(
+        "other",
+        base,
+        input_analysis=input_analysis,
+    )
+    neutral_drums = MASTERING_STEMS_MODULE.resolve_stem_mastering_plan(
+        "drums",
+        base,
+    )
+    adaptive_drums = MASTERING_STEMS_MODULE.resolve_stem_mastering_plan(
+        "drums",
+        base,
+        input_analysis=input_analysis,
+    )
+
+    assert adaptive_other.mix_gain_db > neutral_other.mix_gain_db
+    assert (
+        adaptive_other.overrides["stem_glue_reverb_amount"]
+        > neutral_other.overrides["stem_glue_reverb_amount"]
+    )
+    assert adaptive_drums.mix_gain_db < neutral_drums.mix_gain_db
 
 
 def test_mix_stem_layers_aligns_sample_rates_and_applies_headroom():
@@ -455,6 +504,121 @@ def test_process_stem_layers_forwards_quality_flags_to_separator():
     ]
 
 
+def test_process_stem_layers_forwards_cleanup_provenance_to_stem_mastering():
+    base = CONFIG_MODULE.SmartMasteringConfig.balanced()
+    process_calls: list[dict[str, object]] = []
+    stems_module_name = "_test_audio_mastering_stems_pkg.audio.stems"
+    original_stems_module = sys.modules.get(stems_module_name)
+    sys.modules[stems_module_name] = types.SimpleNamespace(
+        get_stem_separation_provenance=lambda output_path, output_dir=None, stem_name=None: {
+            "source_dereverb_applied": True,
+            "source_denoise_applied": True,
+            "repair_intensity": 0.88,
+            "quality_flags": ("Low-Quality",),
+        }
+    )
+
+    try:
+        MASTERING_STEMS_MODULE.process_stem_layers(
+            "song.wav",
+            base_config=base,
+            base_mastering_kwargs={"preset": "balanced"},
+            process_stem_fn=lambda signal, sample_rate, mastering_kwargs: (
+                process_calls.append(dict(mastering_kwargs))
+                or (sample_rate, np.array(signal, copy=True))
+            ),
+            separate_stems_fn=lambda audio_path, model_name, shifts, quality_flags=(): (
+                {
+                    "vocals": "vocals.wav",
+                },
+                "temp-demucs-dir",
+            ),
+            read_audio_fn=lambda path: (
+                8000,
+                np.full((2, 16), 0.1, dtype=np.float32),
+            ),
+            delete_fn=lambda path: None,
+            quality_flags=("Low-Quality",),
+            save_mastered_stems=False,
+        )
+    finally:
+        if original_stems_module is None:
+            sys.modules.pop(stems_module_name, None)
+        else:
+            sys.modules[stems_module_name] = original_stems_module
+
+    assert process_calls[0]["separator_quality_flags"] == ("Low-Quality",)
+    assert (
+        process_calls[0]["stem_cleanup_provenance"]["source_dereverb_applied"]
+        is True
+    )
+    assert (
+        process_calls[0]["stem_cleanup_provenance"]["repair_intensity"] == 0.88
+    )
+
+
+def test_process_stem_layers_uses_adaptive_remix_gains_for_melody_led_input(
+    tmp_path: Path,
+):
+    stems_dir = tmp_path / "saved-stems"
+    drum_signal = np.full((2, 64), 0.16, dtype=np.float32)
+    other_signal = np.full((2, 64), 0.16, dtype=np.float32)
+
+    def run_case(base_config):
+        saved_audio: dict[str, np.ndarray] = {}
+        MASTERING_STEMS_MODULE.process_stem_layers(
+            "song.wav",
+            base_config=base_config,
+            base_mastering_kwargs={"preset": "balanced"},
+            process_stem_fn=lambda signal, sample_rate, mastering_kwargs: (
+                sample_rate,
+                np.array(signal, copy=True),
+            ),
+            separate_stems_fn=lambda audio_path, model_name, shifts, quality_flags=(): (
+                {
+                    "drums": "drums.wav",
+                    "other": "other.wav",
+                },
+                "temp-demucs-dir",
+            ),
+            read_audio_fn=lambda path: (
+                8000,
+                np.array(drum_signal, copy=True)
+                if path == "drums.wav"
+                else np.array(other_signal, copy=True),
+            ),
+            delete_fn=lambda path: None,
+            mastered_stems_output_dir=str(stems_dir),
+            save_audio_fn=lambda **kwargs: (
+                saved_audio.__setitem__(
+                    Path(kwargs["destination_path"]).name,
+                    np.asarray(kwargs["audio_signal"], dtype=np.float32),
+                )
+                or kwargs["destination_path"]
+            ),
+        )
+        return saved_audio
+
+    neutral_base = CONFIG_MODULE.SmartMasteringConfig.balanced()
+    melody_base = CONFIG_MODULE.SmartMasteringConfig.balanced()
+    melody_base.input_analysis = _melody_led_input_analysis()
+    melody_base.separator_quality_flags = ("Low-Quality",)
+
+    neutral_saved = run_case(neutral_base)
+    melody_saved = run_case(melody_base)
+
+    neutral_ratio = float(
+        np.max(np.abs(neutral_saved["other_mastered.wav"]))
+        / max(np.max(np.abs(neutral_saved["drums_mastered.wav"])), 1e-6)
+    )
+    melody_ratio = float(
+        np.max(np.abs(melody_saved["other_mastered.wav"]))
+        / max(np.max(np.abs(melody_saved["drums_mastered.wav"])), 1e-6)
+    )
+
+    assert melody_ratio > neutral_ratio * 1.08
+
+
 def test_process_stem_layers_rebinds_activity_scope_for_worker_threads(
     monkeypatch,
 ):
@@ -518,7 +682,7 @@ def test_apply_stem_mix_balance_gives_drums_a_clear_level_lead():
         -0.3,
     )
 
-    assert drums_gain_db - vocals_gain_db > 3.0
+    assert drums_gain_db - vocals_gain_db > 3.3
     assert float(np.max(np.abs(drums))) > float(np.max(np.abs(vocals))) * 1.4
 
 
@@ -637,8 +801,8 @@ def test_apply_stem_dynamics_pushes_other_upward_before_mix_balance():
         output_peak <= other_plan.overrides["stem_dynamics_peak_target"] + 1e-6
     )
     assert output_peak > input_peak * 2.2
-    assert output_body > input_body * 1.65
-    assert output_active > input_active + 4.0
+    assert output_body > input_body * 1.8
+    assert output_active > input_active + 4.4
 
 
 def test_apply_stem_stereo_width_finish_widens_narrow_vocals():
@@ -807,6 +971,34 @@ def test_apply_stem_glue_reverb_extends_sparse_tail_when_amount_is_higher():
     assert float(np.max(np.abs(high_result))) <= 0.98 + 1e-6
 
 
+def test_apply_stem_glue_reverb_keeps_vocal_tail_shorter_than_other():
+    base = CONFIG_MODULE.SmartMasteringConfig.balanced()
+    base.stem_glue_reverb_amount = 1.35
+    signal = np.zeros((2, 4096), dtype=np.float32)
+    signal[:, :96] = 0.2
+
+    vocals = MASTERING_STEMS_MODULE._apply_stem_glue_reverb(
+        signal,
+        8000,
+        "vocals",
+        base,
+    )
+    other = MASTERING_STEMS_MODULE._apply_stem_glue_reverb(
+        signal,
+        8000,
+        "other",
+        base,
+    )
+
+    vocal_early_tail = float(np.sum(np.abs(vocals[:, 700:1600])))
+    vocal_late_tail = float(np.sum(np.abs(vocals[:, 2200:3600])))
+    other_late_tail = float(np.sum(np.abs(other[:, 2200:3600])))
+
+    assert vocal_early_tail > 0.0
+    assert vocal_late_tail > 0.0
+    assert other_late_tail > vocal_late_tail * 1.25
+
+
 def test_apply_drum_edge_finish_adds_controlled_transient_bite():
     base = CONFIG_MODULE.SmartMasteringConfig.balanced()
     signal = np.zeros((2, 2048), dtype=np.float32)
@@ -821,4 +1013,8 @@ def test_apply_drum_edge_finish_adds_controlled_transient_bite():
 
     assert finished.shape == signal.shape
     assert not np.allclose(finished, signal)
+    assert (
+        float(np.max(np.abs(finished[:, ::128])))
+        > float(np.max(np.abs(signal[:, ::128]))) * 1.08
+    )
     assert float(np.max(np.abs(finished))) <= 0.98 + 1e-6

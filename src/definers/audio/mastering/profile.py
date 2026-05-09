@@ -6,7 +6,7 @@ from definers.runtime_numpy import get_numpy_module
 
 np = get_numpy_module()
 
-from ..utils import generate_bands
+from ..music_theory import generate_bands
 
 
 @dataclass(frozen=True, slots=True)

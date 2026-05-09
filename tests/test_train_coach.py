@@ -535,6 +535,52 @@ def test_run_train_coach_workflow_delegates_to_train_handlers(
     assert loaded_manifest["artifact_path"] == str(artifact_path)
 
 
+def test_run_train_coach_auto_workflow_trains_ready_state(monkeypatch):
+    state = _ready_state()
+    state_payload = train_coach.train_coach_state_json(state)
+
+    monkeypatch.setattr(
+        coach_handlers,
+        "inspect_train_coach_request",
+        lambda *args, **kwargs: (
+            state_payload,
+            "summary",
+            "inspection",
+            "validation",
+            "use-before-training",
+            "quick",
+            {"visible": False},
+            {"interactive": True},
+            {"interactive": True},
+        ),
+    )
+    monkeypatch.setattr(
+        coach_handlers,
+        "run_train_coach_workflow",
+        lambda payload: (
+            "auto.joblib",
+            "plan-after-training",
+            "status-after-training",
+            "use-after-training",
+        ),
+    )
+
+    result = coach_handlers.run_train_coach_auto_workflow(
+        "files",
+        ["features.csv"],
+        None,
+        None,
+        None,
+        "auto.joblib",
+    )
+
+    assert result[0] == state_payload
+    assert result[4] == "use-after-training"
+    assert result[9] == "auto.joblib"
+    assert result[10] == "plan-after-training"
+    assert result[11] == "status-after-training"
+
+
 def test_write_train_session_manifest_persists_session_and_artifact_sidecar(
     monkeypatch, tmp_path
 ):
@@ -686,10 +732,16 @@ def test_build_train_guided_mode_constructs_expected_actions(monkeypatch):
         component.args[0] for component in buttons if component.args
     ]
     assert "Inspect My Inputs" in button_labels
+    assert "Train Automatically" in button_labels
     assert "Review Guided Plan" in button_labels
     assert "Train With Guided Defaults" in button_labels
     assert bind_calls == [
         ("Inspect My Inputs", "inspect_train_coach_request", "Inspect Inputs"),
+        (
+            "Train Automatically",
+            "run_train_coach_auto_workflow",
+            "Train Automatically",
+        ),
         (
             "Review Guided Plan",
             "preview_train_coach_plan",

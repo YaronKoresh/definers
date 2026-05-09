@@ -101,9 +101,9 @@ def _load_stems_module(package_name: str):
     io_module.save_audio = lambda **kwargs: kwargs["destination_path"]
     sys.modules[f"{package_name}.io"] = io_module
 
-    utils_module = types.ModuleType(f"{package_name}.utils")
-    utils_module.normalize_audio_to_peak = lambda path: path
-    sys.modules[f"{package_name}.utils"] = utils_module
+    file_processing_module = types.ModuleType(f"{package_name}.file_processing")
+    file_processing_module.normalize_audio_to_peak = lambda path: path
+    sys.modules[f"{package_name}.file_processing"] = file_processing_module
 
     try:
         module = _load_module(
@@ -904,3 +904,123 @@ def test_run_mastering_separator_pipeline_uses_fast_shifts_for_repair_stages(
     ]
     assert batch_calls == [1]
     assert stem_paths == write_calls[0]
+
+
+def test_run_mastering_separator_pipeline_registers_repair_provenance(
+    monkeypatch,
+    tmp_path: Path,
+):
+    plan = STEMS_MODULE.MasteringSeparatorPlan(
+        target_sample_rate=44100,
+        quality_flags=("Low-Quality", "Old-Recording"),
+        preprocess_stages=(
+            STEMS_MODULE.SeparatorModelStage(
+                model_candidates=("dereverb.ckpt",),
+                preferred_stems=("dry",),
+                required=False,
+            ),
+            STEMS_MODULE.SeparatorModelStage(
+                model_candidates=("denoise.ckpt",),
+                preferred_stems=("dry",),
+                required=False,
+            ),
+        ),
+        vocal_pair_stage=None,
+        reference_split_stage=STEMS_MODULE.SeparatorModelStage(
+            model_candidates=("reference.ckpt",),
+            preferred_stems=("other",),
+            required=False,
+        ),
+        four_stem_stage=STEMS_MODULE.SeparatorModelStage(
+            model_candidates=("four.ckpt",),
+            preferred_stems=("vocals", "drums", "bass", "other"),
+            required=True,
+        ),
+        vocal_stage=STEMS_MODULE.SeparatorModelStage(
+            model_candidates=("vocals.ckpt",),
+            preferred_stems=("vocals",),
+            required=True,
+        ),
+        vocal_restoration_stage=STEMS_MODULE.SeparatorModelStage(
+            model_candidates=("restore.ckpt",),
+            preferred_stems=("vocals",),
+            required=False,
+        ),
+        instrumental_cleanup_stage=STEMS_MODULE.SeparatorModelStage(
+            model_candidates=("cleanup.ckpt",),
+            preferred_stems=("no bleed",),
+            required=False,
+        ),
+    )
+
+    monkeypatch.setattr(
+        STEMS_MODULE,
+        "_separator_activity_scope",
+        lambda *args, **kwargs: __import__("contextlib").nullcontext(),
+    )
+    monkeypatch.setattr(
+        STEMS_MODULE,
+        "_prepare_separator_input_audio",
+        lambda audio_path, output_root, target_sample_rate: "prepared.wav",
+    )
+    monkeypatch.setattr(
+        STEMS_MODULE,
+        "_apply_stage_to_single_output",
+        lambda source_path, stage, stage_name, output_root, target_sample_rate, shifts=2: (
+            f"{stage_name}_applied.wav"
+        ),
+    )
+    monkeypatch.setattr(
+        STEMS_MODULE,
+        "_run_separator_stage",
+        lambda input_path, stage, output_dir, target_sample_rate, shifts=2: (
+            "four.ckpt",
+            (
+                str(Path(output_dir) / "mix_(Drums).wav"),
+                str(Path(output_dir) / "mix_(Bass).wav"),
+                str(Path(output_dir) / "mix_(Other).wav"),
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        STEMS_MODULE,
+        "_run_separator_stage_batch",
+        lambda input_paths, stage, output_dir, target_sample_rate, shifts=2: {
+            "drums": str(Path(output_dir) / "drums_clean.wav"),
+            "bass": input_paths["bass"],
+            "other": str(Path(output_dir) / "other_clean.wav"),
+        },
+    )
+    monkeypatch.setattr(
+        STEMS_MODULE,
+        "_write_selected_stage_outputs",
+        lambda selected_stage_paths, output_root, target_sample_rate: {
+            stem_name: str(Path(output_root) / "final" / f"{stem_name}.wav")
+            for stem_name in selected_stage_paths
+        },
+    )
+
+    stem_paths = STEMS_MODULE._run_mastering_separator_pipeline(
+        "song.wav",
+        str(tmp_path / "out"),
+        plan,
+        shifts=4,
+    )
+
+    vocal_provenance = STEMS_MODULE.get_stem_separation_provenance(
+        stem_paths["vocals"],
+        stem_name="vocals",
+    )
+    drum_provenance = STEMS_MODULE.get_stem_separation_provenance(
+        stem_paths["drums"],
+        stem_name="drums",
+    )
+
+    assert vocal_provenance["source_dereverb_applied"] is True
+    assert vocal_provenance["source_denoise_applied"] is True
+    assert vocal_provenance["vocal_restoration_applied"] is True
+    assert drum_provenance["instrumental_cleanup_applied"] is True
+    assert drum_provenance["quality_flags"] == (
+        "Low-Quality",
+        "Old-Recording",
+    )

@@ -54,8 +54,51 @@ def resolve_limiter_recovery_settings(
             style_map["balanced"],
         )
     )
+    punch_guard = float(
+        np.clip(
+            max(
+                (
+                    float(
+                        max(
+                            getattr(
+                                self, "last_processing_crest_factor_db", 0.0
+                            ),
+                            0.0,
+                        )
+                    )
+                    - 7.0
+                )
+                / 3.5,
+                (
+                    float(
+                        np.clip(
+                            getattr(
+                                self, "last_processing_transient_density", 0.0
+                            ),
+                            0.0,
+                            1.0,
+                        )
+                    )
+                    - 0.12
+                )
+                / 0.14,
+            ),
+            0.0,
+            1.0,
+        )
+    )
+    resolved_style = style
+    if style != "tight" and punch_guard > 0.0:
+        attack_scale = min(
+            attack_scale, float(np.clip(1.0 - punch_guard * 0.18, 0.78, 1.0))
+        )
+        release_min_scale *= float(np.clip(1.0 - punch_guard * 0.28, 0.64, 1.0))
+        release_max_scale *= float(np.clip(1.0 - punch_guard * 0.34, 0.58, 1.0))
+        window_scale *= float(np.clip(1.0 - punch_guard * 0.18, 0.72, 1.0))
+        if punch_guard >= 0.55:
+            resolved_style = "tight"
     return LimiterRecoverySettings(
-        style=style,
+        style=resolved_style,
         attack_ms=max(float(attack_ms) * attack_scale, 0.1),
         release_ms_min=max(float(release_ms_min) * release_min_scale, 1.0),
         release_ms_max=max(
@@ -212,17 +255,40 @@ def apply_micro_dynamics_finish(
         0.0,
         1.0,
     )
+    transient_activity = float(np.mean(transient_mask, dtype=np.float32))
+    punch_guard = float(
+        np.clip(
+            max(
+                (crest_factor_db - 6.5) / 3.8,
+                (transient_activity - 0.12) / 0.18,
+            ),
+            0.0,
+            1.0,
+        )
+    )
+    strength = float(np.clip(strength + punch_guard * 0.05, 0.0, 1.0))
+    transient_bias = float(
+        np.clip(transient_bias + punch_guard * 0.12, 0.0, 1.0)
+    )
     sustain_mask = 1.0 - transient_mask * transient_bias
     drive = 1.0 + sustain_mask * strength * 1.3
     normalized = np.tanh(signal * drive) / np.tanh(1.0 + strength * 1.3)
-    blend = np.clip(strength * sustain_mask, 0.0, 0.35)
+    blend = np.clip(
+        strength * sustain_mask * (1.0 - punch_guard * 0.14),
+        0.0,
+        0.35,
+    )
 
     if signal.ndim > 1:
         blend = blend[np.newaxis, :]
         transient_mask = transient_mask[np.newaxis, :]
 
     output = signal * (1.0 - blend) + normalized * blend
-    transient_preserve = np.clip(transient_mask * strength * 0.24, 0.0, 0.26)
+    transient_preserve = np.clip(
+        transient_mask * strength * (0.24 + punch_guard * 0.22),
+        0.0,
+        0.42,
+    )
     output = output * (1.0 - transient_preserve) + signal * transient_preserve
     output_peak = float(np.max(np.abs(output))) if output.size else 0.0
     if peak > 0.0 and output_peak > peak:

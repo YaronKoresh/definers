@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import contextlib
 import importlib.util
 import io
@@ -9,8 +10,10 @@ import math
 import mmap
 import multiprocessing
 import os
+import random
 import shutil
 import ssl
+import sys
 import tempfile
 import threading
 import urllib.request
@@ -26,32 +29,23 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Protocol
 from urllib.parse import urlsplit
 
-from definers.media.transfer.api import (
-    add_to_path_windows,
-    broadcast_path_change,
-    download_and_unzip,
-    download_file,
-    execute_async_operation,
-    extract_text,
-    google_drive_download,
-    linked_url,
-    validate_network_url,
-)
-from definers.media.transfer.orchestrators import (
-    ResourceRetrievalOrchestrator,
-    TransferExecutionPolicy,
-    create_http_orchestrator,
-    create_zip_orchestrator,
-)
-from definers.media.transfer.policy import (
-    HttpTransferCapabilities,
-    HttpTransferPolicy,
-    create_http_transfer_strategy,
-    http_transfer_capabilities,
-    http_transfer_policy,
+from definers.constants import MAX_INPUT_LENGTH, user_agents
+from definers.resilience import (
+    CircuitBreaker,
+    CircuitBreakerOpenException,
+    ExponentialBackoffDelay,
+    RetryPolicy,
+    execute_with_resilience_async,
 )
 from definers.system import log
 from definers.system.download_activity import report_download_activity
+
+try:
+    from lxml.cssselect import CSSSelector
+    from lxml.html import fromstring
+except ImportError:
+    CSSSelector = None
+    fromstring = None
 
 
 def _read_bool_env(name: str, default: bool) -> bool:
@@ -251,6 +245,487 @@ class NetworkTransferStrategy(Protocol):
     async def execute_transfer(
         self, source_uri: str, target_node: Path
     ) -> bool: ...
+
+
+@dataclass(frozen=True, slots=True)
+class HttpTransferCapabilities:
+    protocol_preference: str
+    http_range_requests: bool
+    parallel_connections: bool
+    separate_process_workers: bool
+    http2_multiplexing: bool
+    http2_runtime_ready: bool
+    http3_multiplexing: bool
+    http3_runtime_ready: bool
+    quic_udp: bool
+    max_parallel_connections: int
+    max_process_workers: int
+    max_multiplexed_streams: int
+
+
+@dataclass(frozen=True, slots=True)
+class HttpTransferPolicy:
+    runtime_class: str
+    protocol_preference: str
+    base_strategy_name: str
+    strategy_names: tuple[str, ...]
+    max_parallel_connections: int
+    max_process_workers: int
+    max_multiplexed_streams: int
+
+
+def http_transfer_capabilities() -> HttpTransferCapabilities:
+    max_parallel_connections = _parallel_download_workers()
+    max_process_workers = min(
+        max_parallel_connections,
+        _download_process_workers(),
+    )
+    max_multiplexed_streams = min(
+        max_parallel_connections,
+        _download_max_multiplexed_streams(),
+    )
+    return HttpTransferCapabilities(
+        protocol_preference=_download_http_protocol(),
+        http_range_requests=True,
+        parallel_connections=max_parallel_connections > 1,
+        separate_process_workers=max_process_workers > 1,
+        http2_multiplexing=_download_enable_multiplexing(),
+        http2_runtime_ready=_http2_runtime_ready(),
+        http3_multiplexing=(
+            _download_enable_multiplexing() and _download_enable_http3()
+        ),
+        http3_runtime_ready=_http3_runtime_ready(),
+        quic_udp=(
+            _download_enable_multiplexing()
+            and _download_enable_http3()
+            and _http3_runtime_ready()
+        ),
+        max_parallel_connections=max_parallel_connections,
+        max_process_workers=max_process_workers,
+        max_multiplexed_streams=max_multiplexed_streams,
+    )
+
+
+def _http_transfer_runtime_class(
+    capabilities: HttpTransferCapabilities,
+) -> str:
+    if not capabilities.parallel_connections:
+        return "serial"
+    if not capabilities.separate_process_workers:
+        return "restricted"
+    if (
+        capabilities.max_parallel_connections >= 64
+        or capabilities.max_multiplexed_streams >= 32
+    ):
+        return "high-throughput"
+    return "standard"
+
+
+def _http_transfer_base_strategy_name(
+    capabilities: HttpTransferCapabilities,
+) -> str:
+    if (
+        capabilities.separate_process_workers
+        and capabilities.max_process_workers > 1
+    ):
+        return "http1-range-process"
+    return "http1-range-threaded"
+
+
+def _http_transfer_protocol_candidates(
+    capabilities: HttpTransferCapabilities,
+) -> tuple[str, ...]:
+    if capabilities.protocol_preference == "http1":
+        return ()
+    if capabilities.protocol_preference == "http3":
+        return ("http3-quic", "http2-multiplex")
+    if capabilities.protocol_preference == "http2":
+        return ("http2-multiplex", "http3-quic")
+    return ("http2-multiplex", "http3-quic")
+
+
+def http_transfer_policy(
+    capabilities: HttpTransferCapabilities | None = None,
+) -> HttpTransferPolicy:
+    resolved_capabilities = (
+        http_transfer_capabilities() if capabilities is None else capabilities
+    )
+    ordered_strategy_names: list[str] = []
+    for strategy_name in _http_transfer_protocol_candidates(
+        resolved_capabilities
+    ):
+        if strategy_name == "http2-multiplex":
+            if not resolved_capabilities.http2_multiplexing:
+                continue
+        elif strategy_name == "http3-quic":
+            if not (
+                resolved_capabilities.http3_multiplexing
+                and resolved_capabilities.http3_runtime_ready
+                and resolved_capabilities.quic_udp
+            ):
+                continue
+        ordered_strategy_names.append(strategy_name)
+    base_strategy_name = _http_transfer_base_strategy_name(
+        resolved_capabilities
+    )
+    ordered_strategy_names.append(base_strategy_name)
+    return HttpTransferPolicy(
+        runtime_class=_http_transfer_runtime_class(resolved_capabilities),
+        protocol_preference=resolved_capabilities.protocol_preference,
+        base_strategy_name=base_strategy_name,
+        strategy_names=tuple(ordered_strategy_names),
+        max_parallel_connections=resolved_capabilities.max_parallel_connections,
+        max_process_workers=resolved_capabilities.max_process_workers,
+        max_multiplexed_streams=resolved_capabilities.max_multiplexed_streams,
+    )
+
+
+def _create_http_transfer_strategy_by_name(
+    strategy_name: str,
+) -> NetworkTransferStrategy:
+    if strategy_name == "http1-range-threaded":
+        return ParallelHttpRangeTransferStrategy()
+    if strategy_name == "http1-range-process":
+        return ParallelProcessHttpRangeTransferStrategy()
+    if strategy_name == "http2-multiplex":
+        return Http2MultiplexedRangeTransferStrategy()
+    if strategy_name == "http3-quic":
+        return Http3MultiplexedRangeTransferStrategy()
+    raise LookupError(f"unknown http transfer strategy {strategy_name}")
+
+
+def create_http_transfer_strategy() -> NetworkTransferStrategy:
+    policy = http_transfer_policy()
+    strategies = [
+        _create_http_transfer_strategy_by_name(strategy_name)
+        for strategy_name in policy.strategy_names
+    ]
+    if len(strategies) == 1:
+        return strategies[0]
+    return AdaptiveHttpTransferStrategy(strategies)
+
+
+@dataclass(frozen=True, slots=True)
+class TransferExecutionPolicy:
+    max_retries: int = 3
+    base_delay_seconds: float = 0.5
+
+    def retry_policy(self) -> RetryPolicy:
+        return RetryPolicy(
+            max_retries=self.max_retries,
+            delay_strategy=ExponentialBackoffDelay(
+                base_delay=self.base_delay_seconds
+            ),
+        )
+
+
+class ResourceRetrievalOrchestrator:
+    def __init__(
+        self,
+        strategy: NetworkTransferStrategy,
+        circuit_breaker: CircuitBreaker | None = None,
+        max_retries: int = 3,
+        base_delay_seconds: float = 0.5,
+    ):
+        self.strategy = strategy
+        self.circuit_breaker = circuit_breaker or CircuitBreaker(
+            failure_threshold=3, recovery_timeout=30
+        )
+        self.execution_policy = TransferExecutionPolicy(
+            max_retries=max_retries,
+            base_delay_seconds=base_delay_seconds,
+        )
+
+    def _log_retry(
+        self,
+        attempt_number: int,
+        total_attempts: int,
+        error: BaseException,
+    ) -> None:
+        logging.getLogger(__name__).warning(
+            "Retry attempt %d/%d failed: %s",
+            attempt_number,
+            total_attempts,
+            error,
+        )
+
+    async def process(self, source_uri: str, target_node: str | Path) -> bool:
+        target_path_object = Path(target_node)
+        try:
+            return await execute_with_resilience_async(
+                self.strategy.execute_transfer,
+                source_uri,
+                target_path_object,
+                circuit_breaker=self.circuit_breaker,
+                retry_policy=self.execution_policy.retry_policy(),
+                on_retry=self._log_retry,
+            )
+        except CircuitBreakerOpenException as circuit_open_fault:
+            logging.getLogger(__name__).error(
+                "Transfer blocked by open circuit: %s",
+                str(circuit_open_fault),
+            )
+            return False
+        except Exception as execution_fault:
+            logging.getLogger(__name__).error(
+                "Transfer fault: %s", str(execution_fault)
+            )
+            return False
+
+
+def create_http_orchestrator() -> ResourceRetrievalOrchestrator:
+    return ResourceRetrievalOrchestrator(create_http_transfer_strategy())
+
+
+def create_zip_orchestrator() -> ResourceRetrievalOrchestrator:
+    return ResourceRetrievalOrchestrator(
+        ZipExtractTransferStrategy(
+            download_strategy=create_http_transfer_strategy()
+        )
+    )
+
+
+def google_drive_download(id, dest, unzip=True):
+    from googledrivedownloader import download_file_from_google_drive
+
+    item_label = Path(str(dest)).name or str(dest)
+    report_download_activity(
+        item_label,
+        detail="Downloading artifact from Google Drive.",
+        phase="artifact",
+    )
+    try:
+        download_file_from_google_drive(
+            file_id=id,
+            dest_path=dest,
+            unzip=unzip,
+            showsize=False,
+        )
+        report_download_activity(
+            item_label,
+            detail=(
+                "Downloaded and extracted the Google Drive artifact."
+                if unzip
+                else "Downloaded the Google Drive artifact."
+            ),
+            phase="extract" if unzip else "artifact",
+            completed=1,
+            total=1,
+        )
+    except Exception as error:
+        log("google_drive_download failed", error)
+        return None
+
+
+def linked_url(url):
+    host = url.split("?")[0]
+    if "?" in url:
+        param = "?" + url.split("?")[1]
+    else:
+        param = ""
+    html_string = f'''\n         <!DOCTYPE html>\n        <html>\n            <head>\n                <meta charset="UTF-8">\n                <base href="{host}" target="_top">\n                <a href="{param}"></a>\n            </head>\n            <body onload='document.querySelector("a").click()'></body>\n        </html>\n    '''
+    html_bytes = html_string.encode("utf-8")
+    base64_encoded_html = base64.b64encode(html_bytes).decode("utf-8")
+    data_url = f"data:text/html;charset=utf-8;base64,{base64_encoded_html}"
+    return data_url
+
+
+def extract_text(url, selector):
+    from playwright.sync_api import expect, sync_playwright
+
+    if CSSSelector is None or fromstring is None:
+        raise ImportError("lxml with cssselect is required for extract_text")
+
+    xpath = CSSSelector(selector).path
+    log("URL", url)
+    html_string = None
+    with sync_playwright() as playwright:
+        browser_app = playwright.firefox.launch(headless=True)
+        browser = browser_app.new_context(
+            locale="en-US",
+            timezone_id="America/New_York",
+            user_agent=random.choice(user_agents["firefox"]),
+            color_scheme="dark",
+        )
+        page = browser.new_page()
+        page.goto(url, referer="https://duckduckgo.com/", timeout=18 * 1000)
+        expect(page.locator(selector)).not_to_be_empty()
+        page.wait_for_timeout(2000)
+        html_string = page.content()
+        browser.close()
+        browser_app.close()
+    if html_string is None:
+        return None
+    if not str(html_string).strip():
+        return ""
+    try:
+        html = fromstring(html_string)
+    except Exception:
+        return ""
+    elems = html.xpath(xpath)
+    elems = [
+        el.text_content().strip() for el in elems if el.text_content().strip()
+    ]
+    if len(elems) == 0:
+        return ""
+    return elems[0]
+
+
+def execute_async_operation(coroutine: Any) -> Any:
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coroutine)
+    operation_outcome: dict[str, Any] = {"result": None, "error": None}
+
+    def runner() -> None:
+        event_loop = asyncio.new_event_loop()
+        try:
+            asyncio.set_event_loop(event_loop)
+            operation_outcome["result"] = event_loop.run_until_complete(
+                coroutine
+            )
+            event_loop.run_until_complete(event_loop.shutdown_asyncgens())
+            shutdown_default_executor = getattr(
+                event_loop,
+                "shutdown_default_executor",
+                None,
+            )
+            if callable(shutdown_default_executor):
+                event_loop.run_until_complete(shutdown_default_executor())
+        except Exception as runner_fault:
+            operation_outcome["error"] = runner_fault
+        finally:
+            asyncio.set_event_loop(None)
+            event_loop.close()
+
+    execution_thread = threading.Thread(target=runner, daemon=False)
+    execution_thread.start()
+    execution_thread.join()
+    if operation_outcome["error"] is not None:
+        raise operation_outcome["error"]
+    return operation_outcome["result"]
+
+
+def validate_network_url(url: str) -> None:
+    if not isinstance(url, str):
+        raise ValueError("url must be a string")
+    if len(url) > MAX_INPUT_LENGTH:
+        raise ValueError(f"url too long ({len(url)} > {MAX_INPUT_LENGTH})")
+    if not (url.startswith("http://") or url.startswith("https://")):
+        raise ValueError(f"unsupported URL scheme: {url}")
+
+
+def _execute_orchestrated_transfer(
+    source_uri: str,
+    target_node: str,
+    *,
+    executor: Callable[[Any], Any],
+    orchestrator_factory: Callable[[], ResourceRetrievalOrchestrator],
+) -> bool:
+    async def async_runner() -> bool:
+        orchestrator = orchestrator_factory()
+        return await orchestrator.process(source_uri, target_node)
+
+    return bool(executor(async_runner()))
+
+
+def download_file(
+    url: str,
+    destination: str,
+    executor: Callable[[Any], Any] = execute_async_operation,
+    orchestrator_factory: Callable[
+        [], ResourceRetrievalOrchestrator
+    ] = create_http_orchestrator,
+) -> str | None:
+    validate_network_url(url)
+    success = _execute_orchestrated_transfer(
+        url,
+        destination,
+        executor=executor,
+        orchestrator_factory=orchestrator_factory,
+    )
+    return destination if success else None
+
+
+def download_and_unzip(
+    url: str,
+    extract_to: str,
+    executor: Callable[[Any], Any] = execute_async_operation,
+    orchestrator_factory: Callable[
+        [], ResourceRetrievalOrchestrator
+    ] = create_zip_orchestrator,
+) -> bool:
+    validate_network_url(url)
+    return _execute_orchestrated_transfer(
+        url,
+        extract_to,
+        executor=executor,
+        orchestrator_factory=orchestrator_factory,
+    )
+
+
+def broadcast_path_change():
+    if sys.platform != "win32":
+        return
+    import ctypes
+    from ctypes import wintypes
+
+    send_message_timeout = ctypes.windll.user32.SendMessageTimeoutW
+    send_message_timeout(
+        65535,
+        26,
+        0,
+        "Environment",
+        2,
+        5000,
+        ctypes.byref(wintypes.DWORD()),
+    )
+
+
+def add_to_path_windows(
+    folder_path: str,
+    broadcaster: Callable[[], None] | None = None,
+) -> None:
+    if sys.platform != "win32":
+        return
+    import winreg
+
+    folder_path = os.path.normpath(folder_path).strip('"')
+    path_change_broadcaster = (
+        broadcast_path_change if broadcaster is None else broadcaster
+    )
+    try:
+        key = winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            "Environment",
+            0,
+            winreg.KEY_ALL_ACCESS,
+        )
+        try:
+            current_path, _ = winreg.QueryValueEx(key, "PATH")
+        except FileNotFoundError:
+            current_path = ""
+        parts = [
+            p.strip('"') for p in str(current_path).split(";") if p.strip()
+        ]
+        if folder_path not in parts:
+            parts.insert(0, folder_path)
+            new_path = ";".join(parts)
+            winreg.SetValueEx(
+                key,
+                "PATH",
+                0,
+                winreg.REG_EXPAND_SZ,
+                new_path,
+            )
+            os.environ["PATH"] = (
+                folder_path + os.pathsep + os.environ.get("PATH", "")
+            )
+            path_change_broadcaster()
+        winreg.CloseKey(key)
+    except Exception:
+        return
 
 
 def _transfer_item_label(source_uri: str, target_node: Path) -> str:

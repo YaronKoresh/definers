@@ -46,7 +46,7 @@ Issues = "https://github.com/YaronKoresh/definers/issues"
 
 [project.optional-dependencies]
 audio = [
-    "audio-separator>=0.30.2,<0.45.0",
+    "audio-separator>=0.30.2,<0.32.0",
     "librosa>=0.10.0",
     "midi2audio",
     "pydub>=0.25.1",
@@ -181,8 +181,21 @@ indent-style = "space"
 [tool.poe.tasks]
 check = ["clean", "compile", "dead-code", "strip-comments", "pre-commit", "test", "clean"]
 coverage = ["_coverage-clean", "_coverage-run", "_coverage-clean"]
+test = ["_test-py", "_test-js"]
 
-[tool.poe.tasks.test]
+[tool.poe.tasks._test-js]
+cmd = "node --test tests/autobot_smart_link_unified.test.cjs tests/autobot_scripts.test.cjs tests/smart_link_scripts.test.cjs tests/deterministic_scenario_lanes.test.cjs"
+
+[tool.poe.tasks.autobot-preview]
+cmd = "node scripts/print_autobot_regression_fixture.cjs"
+
+[tool.poe.tasks.autobot-random]
+cmd = "node scripts/run_autobot_scenario_lanes.cjs"
+
+[tool.poe.tasks.autobot-random.env]
+SCENARIO_SUITES = "SMART_LINK,UNIFIED_AUTOMATION"
+
+[tool.poe.tasks._test-py]
 cmd = "pytest tests/"
 
 [tool.poe.tasks._coverage-run]

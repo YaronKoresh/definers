@@ -1,63 +1,80 @@
 import importlib
 import sys
-import types
-from unittest import mock
 
 import pytest
 
-TEST_LAZY_SUBMODULES = (
-    "audio",
-    "cuda",
+TEST_ROOT_EXPORTS = (
+    "data",
+    "image",
+    "model_installation",
+)
+TEST_EXPLICIT_SUBMODULES = (
     "logger",
+    "cuda",
     "ml",
     "system",
     "text",
 )
+TEST_PACKAGE_MODULES = (
+    "definers",
+    "sox",
+    *(f"definers.{name}" for name in TEST_ROOT_EXPORTS),
+    *(f"definers.{name}" for name in TEST_EXPLICIT_SUBMODULES),
+)
+MISSING_MODULE = object()
+
+
+def snapshot_package_modules():
+    return {
+        module_name: sys.modules.get(module_name, MISSING_MODULE)
+        for module_name in TEST_PACKAGE_MODULES
+    }
+
+
+def restore_package_modules(snapshot) -> None:
+    for module_name, module in snapshot.items():
+        if module is MISSING_MODULE:
+            sys.modules.pop(module_name, None)
+        else:
+            sys.modules[module_name] = module
+
+
+@pytest.fixture(autouse=True)
+def preserve_package_modules():
+    snapshot = snapshot_package_modules()
+    try:
+        yield
+    finally:
+        unload_package_root()
+        restore_package_modules(snapshot)
 
 
 def unload_package_root() -> None:
     sys.modules.pop("definers", None)
     sys.modules.pop("sox", None)
-    for submodule_name in TEST_LAZY_SUBMODULES:
+    for submodule_name in TEST_ROOT_EXPORTS:
         sys.modules.pop(f"definers.{submodule_name}", None)
 
 
-def test_lazy_attribute_imports_once_and_caches_module():
+def test_root_package_binds_direct_exports_on_import():
     unload_package_root()
-    original_import_module = importlib.import_module
-    sox_module = types.ModuleType("sox")
-    audio_module = types.ModuleType("definers.audio")
-    imported_names: list[str] = []
 
-    def fake_import_module(name: str, package: str | None = None):
-        imported_names.append(name)
-        if name == "sox":
-            return sox_module
-        if name == "definers.audio":
-            return audio_module
-        return original_import_module(name, package)
+    import definers
 
-    with mock.patch("importlib.import_module", side_effect=fake_import_module):
-        import definers
+    for submodule_name in TEST_ROOT_EXPORTS:
+        exported_module = getattr(definers, submodule_name)
+        owner_module = importlib.import_module(f"definers.{submodule_name}")
 
-        assert "audio" not in definers.__dict__
+        assert exported_module is owner_module
+        assert definers.__dict__[submodule_name] is owner_module
 
-        first_value = definers.audio
-        second_value = definers.audio
-
-    assert first_value is audio_module
-    assert second_value is audio_module
-    assert definers.__dict__["audio"] is audio_module
-    assert imported_names.count("definers.audio") == 1
     unload_package_root()
 
 
 def test_unknown_attribute_raises_attribute_error_without_caching():
     unload_package_root()
-    sox_module = types.ModuleType("sox")
 
-    with mock.patch("importlib.import_module", return_value=sox_module):
-        import definers
+    import definers
 
     with pytest.raises(AttributeError, match="missing_feature"):
         getattr(definers, "missing_feature")
@@ -66,36 +83,18 @@ def test_unknown_attribute_raises_attribute_error_without_caching():
     unload_package_root()
 
 
-def test_multiple_lazy_attributes_use_package_qualified_import_names():
+def test_root_direct_exports_are_in_all():
     unload_package_root()
-    original_import_module = importlib.import_module
-    sox_module = types.ModuleType("sox")
-    text_module = types.ModuleType("definers.text")
-    system_module = types.ModuleType("definers.system")
-    imported_names: list[str] = []
 
-    def fake_import_module(name: str, package: str | None = None):
-        imported_names.append(name)
-        if name == "sox":
-            return sox_module
-        if name == "definers.text":
-            return text_module
-        if name == "definers.system":
-            return system_module
-        return original_import_module(name, package)
+    import definers
 
-    with mock.patch("importlib.import_module", side_effect=fake_import_module):
-        import definers
+    for submodule_name in TEST_ROOT_EXPORTS:
+        assert submodule_name in definers.__all__
 
-        assert definers.text is text_module
-        assert definers.system is system_module
-
-    assert imported_names.count("definers.text") == 1
-    assert imported_names.count("definers.system") == 1
     unload_package_root()
 
 
-def test_lazy_attribute_refreshes_after_submodule_sys_modules_churn():
+def test_root_direct_export_stays_bound_after_sys_modules_churn():
     unload_package_root()
 
     import definers
@@ -104,8 +103,10 @@ def test_lazy_attribute_refreshes_after_submodule_sys_modules_churn():
     sys.modules.pop("definers.data", None)
 
     assert definers.data is first_data_module
-    assert definers.data is importlib.import_module("definers.data")
-    assert sys.modules["definers.data"] is definers.data
+    reimported_data_module = importlib.import_module("definers.data")
+
+    assert reimported_data_module is not first_data_module
+    assert definers.data is reimported_data_module
     unload_package_root()
 
 
@@ -138,33 +139,16 @@ def test_removed_legacy_root_aliases_raise_attribute_error():
 
 @pytest.mark.parametrize(
     "attribute_name",
-    ["logger", "cuda", "ml", "system"],
+    TEST_EXPLICIT_SUBMODULES,
 )
-def test_lazy_attribute_caches_module_for_rca_regressions(attribute_name: str):
+def test_unbound_root_subpackages_are_imported_explicitly(attribute_name: str):
     unload_package_root()
-    original_import_module = importlib.import_module
-    sox_module = types.ModuleType("sox")
-    lazy_module = types.ModuleType(f"definers.{attribute_name}")
-    imported_names: list[str] = []
 
-    def fake_import_module(name: str, package: str | None = None):
-        imported_names.append(name)
-        if name == "sox":
-            return sox_module
-        if name == f"definers.{attribute_name}":
-            return lazy_module
-        return original_import_module(name, package)
+    import definers
 
-    with mock.patch("importlib.import_module", side_effect=fake_import_module):
-        import definers
+    assert attribute_name not in definers.__dict__
 
-        assert attribute_name not in definers.__dict__
+    imported_module = importlib.import_module(f"definers.{attribute_name}")
 
-        first_value = getattr(definers, attribute_name)
-        second_value = getattr(definers, attribute_name)
-
-    assert first_value is lazy_module
-    assert second_value is lazy_module
-    assert definers.__dict__[attribute_name] is lazy_module
-    assert imported_names.count(f"definers.{attribute_name}") == 1
+    assert imported_module.__name__ == f"definers.{attribute_name}"
     unload_package_root()

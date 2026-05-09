@@ -1,10 +1,10 @@
-from definers.cli.application.catalog import create_cli_command_registry
-from definers.cli.application.runtime import resolve_cli_handlers
+from definers.cli.command_registry import create_cli_command_registry
 from definers.cli.health import (
     collect_cli_health_snapshot,
     run_cli_health_check,
     validate_cli_health_snapshot,
 )
+from definers.cli.runtime import resolve_cli_handlers
 
 
 def test_collect_cli_health_snapshot_reports_registry_metrics():

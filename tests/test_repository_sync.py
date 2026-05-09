@@ -11,6 +11,12 @@ from definers.ml import repository_sync
 
 
 class TestRepositorySyncHelpers(unittest.TestCase):
+    def test_public_predicate_exports_remain_available(self):
+        self.assertTrue(
+            repository_sync.is_http_url("https://huggingface.co/user/model")
+        )
+        self.assertTrue(repository_sync.is_huggingface_reference("user/model"))
+
     def test_parse_huggingface_blob_reference(self):
         reference = repository_sync._parse_huggingface_reference(
             "https://huggingface.co/ibm-granite/granite-4.0-h-350m/blob/3b17b717b8f2f5d305b0a92c1491e239aeda19c8/model.safetensors"

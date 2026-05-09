@@ -58,17 +58,13 @@ pip install -e ".[dev,web]"
 
 Run the narrowest proof first, then the main gate.
 
-```bash
-poe check
-poe cli-health
-poe ml-health
-pytest tests/test_cli.py -q
-pytest tests/test_application_ml_answer_services.py tests/test_application_ml_answer_history_preparer.py tests/test_answer.py -q
-```
+`poe check` runs the full test suite and lints the codebase, including the fixed-seed Autobot scenario coverage. If your change touches a specific domain, run the related test slice instead of the full suite.
 
 Rules:
 
 - Prefer focused pytest slices while iterating.
+- Run the unified automation workflow slice when changing `.github/scripts`, deterministic scenario engines, or GitHub automation tests.
+- Run `poe autobot-random` only when you want extra randomized Autobot scenario coverage beyond the normal test suite.
 - Do not ignore failures directly caused by your change.
 - Tests must not depend on optional third-party packages being installed.
 - Tests must not use third-party library output as the expected-value oracle.

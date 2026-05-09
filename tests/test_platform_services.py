@@ -1,7 +1,6 @@
 import os
 from unittest.mock import patch
 
-import definers.command_runner as command_runner
 import definers.system as system
 import definers.system.processes as process_module
 from definers.system.services import (
@@ -18,21 +17,23 @@ def teardown_function() -> None:
     reset_infrastructure_services()
 
 
-def test_command_runner_uses_configured_process_service():
-    calls: list[tuple[object, bool, dict | None]] = []
+def test_system_secure_command_uses_configured_process_service():
+    calls: list[object] = []
 
-    def fake_run(command, silent=False, env=None):
-        calls.append((command, silent, env))
-        return ["ok"]
+    def fake_secure_command(command):
+        calls.append(command)
+        return ["echo", "ok"]
 
     set_infrastructure_services(
-        InfrastructureServices(processes=ProcessService(run_fn=fake_run))
+        InfrastructureServices(
+            processes=ProcessService(secure_command=fake_secure_command)
+        )
     )
 
-    result = command_runner.run(["echo", "hello"], silent=True, env={"A": "1"})
+    result = system.secure_command(["echo", "hello"])
 
-    assert result == ["ok"]
-    assert calls == [(["echo", "hello"], True, {"A": "1"})]
+    assert result == ["echo", "ok"]
+    assert calls == [["echo", "hello"]]
 
 
 def test_system_read_uses_configured_filesystem_service():
@@ -43,7 +44,7 @@ def test_system_read_uses_configured_filesystem_service():
         return "payload"
 
     set_infrastructure_services(
-        InfrastructureServices(filesystem=FileSystemService(read_fn=fake_read))
+        InfrastructureServices(filesystem=FileSystemService(read=fake_read))
     )
 
     assert system.read("demo.txt") == "payload"
@@ -58,9 +59,7 @@ def test_system_permit_preserves_compatibility_injected_dependencies():
         return True
 
     set_infrastructure_services(
-        InfrastructureServices(
-            filesystem=FileSystemService(permit_fn=fake_permit)
-        )
+        InfrastructureServices(filesystem=FileSystemService(permit=fake_permit))
     )
 
     assert system.permit("demo.txt") is True
@@ -75,7 +74,7 @@ def test_system_permit_preserves_compatibility_injected_dependencies():
 def test_system_get_os_name_uses_configured_environment_service():
     set_infrastructure_services(
         InfrastructureServices(
-            environment=EnvironmentService(get_os_name_fn=lambda: "custom-os")
+            environment=EnvironmentService(get_os_name=lambda: "custom-os")
         )
     )
 
@@ -90,7 +89,7 @@ def test_system_run_uses_configured_process_service():
         return ["done"]
 
     set_infrastructure_services(
-        InfrastructureServices(processes=ProcessService(run_fn=fake_run))
+        InfrastructureServices(processes=ProcessService(run=fake_run))
     )
 
     assert system.run(["echo", "hello"], silent=True, env={"A": "1"}) == [

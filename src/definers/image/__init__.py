@@ -502,3 +502,6 @@ def upscale(
         solver_type=solver_type,
     )
     return save_image(upscaled_image)
+
+
+__all__ = [glb for glb in globals() if not glb.startswith("_")]

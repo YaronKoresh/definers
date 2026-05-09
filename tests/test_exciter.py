@@ -55,7 +55,7 @@ def _load_exciter_module(package_name: str):
             values, dtype=np.float32
         ),
     )
-    sys.modules[f"{audio_package}.utils"] = types.SimpleNamespace(
+    sys.modules[f"{audio_package}.normalization"] = types.SimpleNamespace(
         get_rms=lambda values: float(
             np.sqrt(np.mean(np.square(values), dtype=np.float32))
         ),

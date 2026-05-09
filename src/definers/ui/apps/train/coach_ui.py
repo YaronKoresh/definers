@@ -61,6 +61,7 @@ def build_train_guided_mode(*, bind_action):
         inspect_train_coach_request,
         preview_train_coach_plan,
         reset_train_coach_state,
+        run_train_coach_auto_workflow,
         run_train_coach_workflow,
     )
 
@@ -106,6 +107,10 @@ def build_train_guided_mode(*, bind_action):
             )
             inspect_button = gr.Button(
                 "Inspect My Inputs",
+                elem_classes="btn",
+            )
+            auto_train_button = gr.Button(
+                "Train Automatically",
                 elem_classes="btn",
             )
             preview_button = gr.Button(
@@ -200,6 +205,36 @@ def build_train_guided_mode(*, bind_action):
         ),
         running_detail="Inspecting files, datasets, and resume artifacts.",
         success_detail="Guided inspection is ready.",
+    )
+    bind_action(
+        auto_train_button,
+        run_train_coach_auto_workflow,
+        inputs=inspect_inputs,
+        outputs=[
+            state_payload,
+            intake_summary,
+            inspection_markdown,
+            validation_markdown,
+            use_result_markdown,
+            resolving_question_markdown,
+            resolving_choice,
+            preview_button,
+            train_button,
+            train_output,
+            training_plan,
+            training_status,
+        ],
+        action_label="Train Automatically",
+        steps=(
+            "Check files",
+            "Understand data",
+            "Resolve route",
+            "Train model",
+            "Save model",
+            "Suggest next steps",
+        ),
+        running_detail="Inspecting the inputs and training when the guided route is ready.",
+        success_detail="Automatic guided training finished or reported the next decision.",
     )
     bind_action(
         preview_button,

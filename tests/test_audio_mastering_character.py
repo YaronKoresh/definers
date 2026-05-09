@@ -102,3 +102,41 @@ def test_apply_micro_dynamics_finish_restrains_hot_dense_signal():
 
     assert np.max(np.abs(finished - source)) < 0.03
     assert np.max(np.abs(finished)) <= np.max(np.abs(source)) + 1e-6
+
+
+def test_apply_micro_dynamics_finish_preserves_repeated_transient_hits():
+    mastering = SimpleNamespace(
+        micro_dynamics_strength=0.24,
+        micro_dynamics_fast_window_ms=4.0,
+        micro_dynamics_slow_window_ms=24.0,
+        micro_dynamics_transient_bias=0.86,
+    )
+    source = np.zeros(80, dtype=np.float32)
+    source[8] = 0.9
+    source[9:18] = 0.26
+    source[32] = 0.88
+    source[33:42] = 0.24
+    source[56] = 0.86
+    source[57:66] = 0.22
+
+    finished = CHARACTER_MODULE.apply_micro_dynamics_finish(
+        mastering,
+        source,
+        sample_rate=1000,
+    )
+
+    hit_delta = float(
+        np.mean(np.abs(finished[[8, 32, 56]] - source[[8, 32, 56]]))
+    )
+    body_delta = float(
+        np.mean(
+            np.abs(
+                finished[[12, 16, 36, 40, 60, 64]]
+                - source[[12, 16, 36, 40, 60, 64]]
+            )
+        )
+    )
+
+    assert finished.shape == source.shape
+    assert hit_delta < body_delta
+    assert float(np.max(np.abs(finished[[8, 32, 56]]))) >= 0.82

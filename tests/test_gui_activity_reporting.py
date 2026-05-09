@@ -4,7 +4,7 @@ import types
 
 def test_image_generate_image_reports_granular_activity(monkeypatch):
     import definers.text.validation as validation_module
-    from definers.ui.apps.image import ImageApp
+    from definers.ui.apps.image import generate_image
 
     activity = []
 
@@ -34,7 +34,7 @@ def test_image_generate_image_reports_granular_activity(monkeypatch):
         lambda *args, **kwargs: "generated.png",
     )
 
-    result = ImageApp.generate_image("prompt", 1, 1)
+    result = generate_image("prompt", 1, 1)
 
     assert result == "generated.png"
     assert activity == [
@@ -74,7 +74,7 @@ def test_translate_app_reports_target_language_activity(monkeypatch):
 
 
 def test_animation_reset_state_reports_granular_activity(monkeypatch):
-    from definers.ui.apps.animation import AnimationApp
+    from definers.ui.apps.animation import reset_state
 
     activity = []
     removed_paths = []
@@ -103,8 +103,8 @@ def test_animation_reset_state_reports_granular_activity(monkeypatch):
         "chunks_path": "old-path",
     }
 
-    updated_state, latest_chunk, combine_button, generate_button = (
-        AnimationApp.reset_state(chunk_state)
+    updated_state, latest_chunk, combine_button, generate_button = reset_state(
+        chunk_state
     )
 
     assert updated_state["current_chunk"] == 1

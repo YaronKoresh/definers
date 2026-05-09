@@ -4,8 +4,8 @@ from pathlib import Path
 
 from definers.system import catch, delete, tmp
 
+from .file_processing import stretch_audio
 from .io import save_audio
-from .utils import stretch_audio
 
 
 def change_audio_speed(

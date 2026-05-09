@@ -1,11 +1,11 @@
 from argparse import Namespace
 
-from definers.cli.application import (
+from definers.cli.command_dispatcher import dispatch_cli_command
+from definers.cli.command_parser import parse_cli_command
+from definers.cli.command_registry import (
     create_cli_command_registry,
     get_known_cli_names,
 )
-from definers.cli.command_dispatcher import dispatch_cli_command
-from definers.cli.command_parser import parse_cli_command
 from definers.cli.install_command import InstallCommand
 from definers.cli.lyric_video_command import LyricVideoCommand
 from definers.cli.music_video_command import MusicVideoCommand

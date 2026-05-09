@@ -1,6 +1,5 @@
 import logging
 import subprocess
-from importlib import import_module
 
 from definers import (
     file_ops as _file_ops,
@@ -8,7 +7,13 @@ from definers import (
 )
 from definers.observability import init_logger as _shared_init_logger
 
-from . import filesystem as _filesystem, paths as _paths
+from . import (
+    download_activity,
+    filesystem as _filesystem,
+    output_paths,
+    paths as _paths,
+    runtime_budget,
+)
 from .archives import (
     compress,
     extract,
@@ -48,20 +53,6 @@ def init_logger(
 
 
 logger = init_logger()
-
-_LAZY_SUBMODULES = {
-    "download_activity",
-    "output_paths",
-    "runtime_budget",
-}
-
-
-def __getattr__(name: str):
-    if name in _LAZY_SUBMODULES:
-        module = import_module(f"{__name__}.{name}")
-        globals()[name] = module
-        return module
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def _bind_module_attributes(function, module):
@@ -221,73 +212,4 @@ def permit(
     )
 
 
-__all__ = (
-    "add_path",
-    "apt_install",
-    "big_number",
-    "build_faiss",
-    "catch",
-    "check_version_wildcard",
-    "compress",
-    "copy",
-    "cores",
-    "cwd",
-    "delete",
-    "directory",
-    "download_activity",
-    "exist",
-    "extract",
-    "find_package_paths",
-    "full_path",
-    "get_ext",
-    "get_linux_distribution",
-    "get_os_name",
-    "get_process_pid",
-    "importable",
-    "init_logger",
-    "install_audio_effects",
-    "install_ffmpeg",
-    "install_ffmpeg_linux",
-    "install_ffmpeg_windows",
-    "installed",
-    "is_admin_windows",
-    "is_ai_model",
-    "is_directory",
-    "is_package_path",
-    "is_symlink",
-    "is_text",
-    "load",
-    "log",
-    "logger",
-    "modify_wheel_requirements",
-    "move",
-    "normalize_path",
-    "parent_directory",
-    "path_end",
-    "path_ext",
-    "path_name",
-    "paths",
-    "permit",
-    "post_install",
-    "pre_install",
-    "output_paths",
-    "read",
-    "remove",
-    "remove_readonly",
-    "runnable",
-    "run",
-    "run_linux",
-    "run_windows",
-    "runtime_budget",
-    "save",
-    "save_temp_text",
-    "secure_command",
-    "secure_path",
-    "send_signal_to_process",
-    "shutil_rmtree_readonly_handler",
-    "thread",
-    "tmp",
-    "unique",
-    "wait",
-    "write",
-)
+__all__ = [glb for glb in globals() if not glb.startswith("_")]

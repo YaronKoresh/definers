@@ -13,8 +13,9 @@ from definers.system import catch, delete, exist, run, tmp
 
 from .analysis import analyze_audio_features
 from .dependencies import librosa_module
+from .file_processing import normalize_audio_to_peak
 from .io import save_audio
-from .utils import get_scale_notes, normalize_audio_to_peak
+from .music_theory import get_scale_notes
 
 _logger = init_logger()
 
