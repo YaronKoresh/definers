@@ -81,7 +81,7 @@ def _is_pytest_runtime() -> bool:
 
 
 def _pytest_root_base_path() -> Path:
-    base_path = Path(tempfile.gettempdir()) / "definers" / "gui_outputs_pytest"
+    base_path = Path(tempfile.gettempdir()) / "definers" / "gui_test"
     base_path.mkdir(parents=True, exist_ok=True)
     return base_path.resolve()
 
@@ -184,9 +184,7 @@ def _cleanup_stale_session_directories(root_path: Path) -> None:
 
 
 def _cleanup_stale_pytest_roots(active_root: Path | None = None) -> None:
-    pytest_root_base = (
-        Path(tempfile.gettempdir()) / "definers" / "gui_outputs_pytest"
-    )
+    pytest_root_base = Path(tempfile.gettempdir()) / "definers" / "gui_test"
     if not pytest_root_base.exists():
         return
     retention_seconds = _pytest_output_retention_seconds()
@@ -259,7 +257,7 @@ def _maybe_cleanup_output_root(root_path: Path) -> None:
 def _default_root_path() -> Path:
     if _is_pytest_runtime():
         return _pytest_root_path()
-    return Path(tempfile.gettempdir()) / "definers" / "gui_outputs"
+    return Path(tempfile.gettempdir()) / "definers" / "gui"
 
 
 def _root_path(*, cleanup: bool = True) -> Path:
@@ -268,7 +266,7 @@ def _root_path(*, cleanup: bool = True) -> Path:
     if configured_root:
         root_path = Path(configured_root).expanduser()
     elif configured_data_root:
-        root_path = Path(configured_data_root).expanduser() / "gui_outputs"
+        root_path = Path(configured_data_root).expanduser() / "gui"
     else:
         root_path = _default_root_path()
     root_path.mkdir(parents=True, exist_ok=True)

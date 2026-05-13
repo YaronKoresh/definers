@@ -1655,6 +1655,7 @@ class AutoTrainer:
         source=None,
         target=None,
         model=None,
+        model_type: str | None = None,
         model_path: str | None = None,
         task: str | None = None,
         *,
@@ -1671,6 +1672,7 @@ class AutoTrainer:
         self.source = source
         self.target = target
         self.model = model
+        self.model_type = model_type
         self.model_path = model_path
         self.task = task
         self.batch_size = batch_size
@@ -2100,7 +2102,17 @@ class AutoTrainer:
         except Exception as error:
             catch(error)
             return None
-        self.model = load_serialized_model(safe_model_path, "joblib")
+        model_type = self.model_type or path_ext(safe_model_path)
+        if model_type not in (
+            "joblib",
+            "pkl",
+            "pt",
+            "pth",
+            "safetensors",
+            "onnx",
+        ):
+            model_type = "joblib"
+        self.model = repository_sync.load_model(safe_model_path, model_type)
         self.model_path = str(resolved_model_path)
         return self.model
 
@@ -2573,7 +2585,14 @@ class AutoTrainer:
         prediction_input = np.asarray(feature_array)
         if prediction_input.ndim == 1:
             prediction_input = prediction_input.reshape(1, -1)
-        prediction = model.predict(prediction_input)
+        prediction = None
+        try:
+            prediction = model.predict(prediction_input)
+        except Exception:
+            try:
+                prediction = model.forward(prediction_input)
+            except Exception:
+                prediction = model.__call__(prediction_input)
         if cupy_to_numpy is not None:
             try:
                 return cupy_to_numpy(prediction)

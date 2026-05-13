@@ -658,6 +658,11 @@ def build_train_app(
                                     model_predict = gr.File(
                                         label="Saved Model Artifact"
                                     )
+                                    predict_model_type = gr.Dropdown(
+                                        label="Model Type",
+                                        choices=model_type_choices,
+                                        value="auto",
+                                    )
                                     prediction_data = gr.File(
                                         label="Prediction Input File"
                                     )
@@ -686,6 +691,7 @@ def build_train_app(
                                 handle_prediction,
                                 inputs=[
                                     model_predict,
+                                    predict_model_type,
                                     prediction_data,
                                     prediction_payload,
                                 ],

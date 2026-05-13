@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+import uuid
 from collections.abc import Mapping, Sequence
 from contextlib import nullcontext
 from dataclasses import dataclass
@@ -559,6 +560,8 @@ def _resolve_output_paths(
     output_files: Sequence[str],
     output_dir: str,
 ) -> tuple[str, ...]:
+    from definers.model_installation import _shorten_audio_separator_stem_name
+
     resolved_output_paths: list[str] = []
     for output_file in _flatten_output_files(output_files):
         candidate_path = Path(output_file)
@@ -567,10 +570,18 @@ def _resolve_output_paths(
                 resolved_output_paths.append(str(candidate_path))
             continue
         output_path = Path(output_dir) / output_file
-        if not output_path.exists():
-            output_path = Path(output_dir) / candidate_path.name
-        if output_path.exists():
-            resolved_output_paths.append(str(output_path))
+        candidate_paths = (
+            output_path,
+            Path(output_dir) / candidate_path.name,
+            _shorten_audio_separator_stem_name(output_path),
+            _shorten_audio_separator_stem_name(
+                Path(output_dir) / candidate_path.name
+            ),
+        )
+        for resolved_candidate_path in dict.fromkeys(candidate_paths):
+            if resolved_candidate_path.exists():
+                resolved_output_paths.append(str(resolved_candidate_path))
+                break
     return tuple(resolved_output_paths)
 
 
@@ -1091,7 +1102,7 @@ def _run_mastering_separator_pipeline(
             stage_output_path = _apply_stage_to_single_output(
                 working_mix_path,
                 stage,
-                f"preprocess_{stage_index}",
+                f"p{stage_index}",
                 output_root,
                 plan.target_sample_rate,
                 shifts=repair_stage_shifts,
@@ -1118,7 +1129,7 @@ def _run_mastering_separator_pipeline(
             _model_name, vocal_pair_outputs = _run_separator_stage(
                 working_mix_path,
                 plan.vocal_pair_stage,
-                str(Path(output_root) / "vocal_pair"),
+                str(Path(output_root) / "pair"),
                 plan.target_sample_rate,
                 shifts=primary_stage_shifts,
             )
@@ -1140,7 +1151,7 @@ def _run_mastering_separator_pipeline(
             instrumental_reference_path = _apply_stage_to_single_output(
                 working_mix_path,
                 plan.reference_split_stage,
-                "reference_split",
+                "ref_sep",
                 output_root,
                 plan.target_sample_rate,
                 shifts=repair_stage_shifts,
@@ -1154,7 +1165,7 @@ def _run_mastering_separator_pipeline(
         _four_stem_model_name, four_stem_outputs = _run_separator_stage(
             four_stem_input_path,
             plan.four_stem_stage,
-            str(Path(output_root) / "four_stem"),
+            str(Path(output_root) / "4stem"),
             plan.target_sample_rate,
             shifts=primary_stage_shifts,
         )
@@ -1172,7 +1183,7 @@ def _run_mastering_separator_pipeline(
             isolated_vocal_path = _apply_stage_to_single_output(
                 working_mix_path,
                 plan.vocal_stage,
-                "vocal_isolation",
+                "voc_isol",
                 output_root,
                 plan.target_sample_rate,
                 shifts=primary_stage_shifts,
@@ -1186,7 +1197,7 @@ def _run_mastering_separator_pipeline(
             restored_vocal_candidate_path = _apply_stage_to_single_output(
                 isolated_vocal_path,
                 plan.vocal_restoration_stage,
-                "vocal_restoration",
+                "voc_rest",
                 output_root,
                 plan.target_sample_rate,
                 shifts=repair_stage_shifts,
@@ -1214,7 +1225,7 @@ def _run_mastering_separator_pipeline(
                     "other": other_path,
                 },
                 plan.instrumental_cleanup_stage,
-                str(Path(output_root) / "instrumental_cleanup"),
+                str(Path(output_root) / "instr_cln"),
                 plan.target_sample_rate,
                 shifts=repair_stage_shifts,
             )
@@ -1226,7 +1237,7 @@ def _run_mastering_separator_pipeline(
                         source_path,
                     ),
                     target_sample_rate=plan.target_sample_rate,
-                    stage_kind="instrumental_cleanup",
+                    stage_kind="instr_cln",
                 )
                 for stem_name, source_path in {
                     "drums": drums_path,
@@ -1291,7 +1302,7 @@ def _run_vocal_pair_separator_pipeline(
     _model_name, output_files = _run_separator_stage(
         prepared_mix_path,
         stage,
-        str(Path(output_root) / "vocal_pair"),
+        str(Path(output_root) / "pair"),
         target_sample_rate,
         shifts=shifts,
     )
@@ -1331,7 +1342,7 @@ def separate_stem_layers(
         ).lower()
     resolved_output_dir = output_dir or managed_output_session_dir(
         "audio/stems",
-        stem=Path(audio_path).stem,
+        stem=f"s{uuid.uuid4().hex[:8]}",
     )
     owns_output_dir = output_dir is None
 
@@ -1380,7 +1391,7 @@ def separate_stems(
 
     output_dir = managed_output_session_dir(
         "audio/stems",
-        stem=Path(audio_path).stem,
+        stem=f"s{uuid.uuid4().hex[:8]}",
     )
     try:
         stem_paths, _resolved_output_dir = separate_stem_layers(

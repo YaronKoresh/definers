@@ -1210,6 +1210,38 @@ def test_patched_audio_separator_write_audio_soundfile_uses_output_dir(
     assert (tmp_path / "stage").is_dir()
 
 
+def test_patched_audio_separator_write_audio_soundfile_preserves_model_suffix(
+    monkeypatch, tmp_path
+):
+    written_paths = []
+
+    monkeypatch.setattr(
+        model_installation,
+        "_AUDIO_SEPARATOR_ORIGINAL_WRITE_AUDIO_SOUNDFILE",
+        lambda separator, stem_path, stem_source: (
+            written_paths.append((stem_path, stem_source)) or stem_path
+        ),
+    )
+
+    separator = ModuleType("separator_instance")
+    separator.output_dir = str(tmp_path / "stage")
+    stem_source = object()
+
+    written_path = (
+        model_installation._patched_audio_separator_write_audio_soundfile(
+            separator,
+            "prepared_input_(other)_MelBandRoformerSYHFT.wav",
+            stem_source,
+        )
+    )
+
+    expected_path = str(
+        tmp_path / "stage" / "prepared_input_(other)_MelBandRoformerSYHFT.wav"
+    )
+    assert written_path == expected_path
+    assert written_paths == [(expected_path, stem_source)]
+
+
 def test_patched_audio_separator_write_audio_pydub_falls_back_to_managed_root(
     monkeypatch, tmp_path
 ):

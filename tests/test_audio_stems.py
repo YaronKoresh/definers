@@ -565,6 +565,21 @@ def test_run_separator_stage_reports_unmaterialized_output_paths(
     assert "song_(Vocals)_ghost.wav" in str(error_info.value)
 
 
+def test_resolve_output_paths_accepts_shortened_writer_path(tmp_path: Path):
+    from definers.model_installation import _shorten_audio_separator_stem_name
+
+    output_dir = tmp_path / "stage"
+    output_dir.mkdir()
+    output_name = f"prepared_input_(other)_{'model' * 20}.wav"
+    written_path = _shorten_audio_separator_stem_name(output_dir / output_name)
+    written_path.write_text("stem", encoding="utf-8")
+
+    assert STEMS_MODULE._resolve_output_paths(
+        [output_name],
+        str(output_dir),
+    ) == (str(written_path),)
+
+
 def test_download_runtime_stage_models_resolves_legacy_aliases(monkeypatch):
     downloaded_models = []
 

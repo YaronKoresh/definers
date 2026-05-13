@@ -7,6 +7,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -217,6 +218,31 @@ _AUDIO_SEPARATOR_TQDM_MODULES = (
     "audio_separator.separator.architectures.mdxc_separator",
     "audio_separator.separator.architectures.vr_separator",
 )
+
+
+def _shorten_audio_separator_stem_name(original_path: Path) -> Path:
+    stem = original_path.stem
+    if len(stem) <= 64:
+        return original_path
+
+    suffix = original_path.suffix
+    parts = re.split(r"(_\([^)]*\))", stem)
+    prefix = parts[0]
+    tags = [
+        part
+        for part in parts[1:]
+        if part.startswith("_(") and part.endswith(")")
+    ]
+    kept_tags = tags[-3:]
+
+    short_stem = prefix + "".join(kept_tags)
+    short_stem = re.sub(r"[^A-Za-z0-9_()]+", "_", short_stem).strip("_")
+    short_stem = short_stem or "stem"
+    hash_suffix = hashlib.sha1(stem.encode("utf-8")).hexdigest()[:8]
+    short_base = short_stem[:55].rstrip("_") or "stem"
+    short_stem = f"{short_base}_{hash_suffix}"
+
+    return original_path.with_name(f"{short_stem}{suffix}")
 
 
 def _normalize_model_task_name(value: str | None) -> str:
@@ -1668,6 +1694,7 @@ def _patched_audio_separator_write_audio_pydub(
             )
             / resolved_stem_path
         )
+    resolved_stem_path = _shorten_audio_separator_stem_name(resolved_stem_path)
     resolved_stem_path.parent.mkdir(parents=True, exist_ok=True)
     return original_writer(separator, str(resolved_stem_path), stem_source)
 
@@ -1689,6 +1716,7 @@ def _patched_audio_separator_write_audio_soundfile(
             )
             / resolved_stem_path
         )
+    resolved_stem_path = _shorten_audio_separator_stem_name(resolved_stem_path)
     resolved_stem_path.parent.mkdir(parents=True, exist_ok=True)
     return original_writer(separator, str(resolved_stem_path), stem_source)
 
