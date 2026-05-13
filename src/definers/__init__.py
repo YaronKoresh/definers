@@ -47,9 +47,17 @@ class MissingSoxModule:
         raise ImportError("sox module is not available")
 
 
+def _is_trusted_sox_cache_entry(cached_module: object) -> bool:
+    if getattr(cached_module, "__definers_missing_sox__", False) is True:
+        return True
+    if not isinstance(cached_module, ModuleType):
+        return True
+    return getattr(cached_module, "__spec__", None) is None
+
+
 def load_sox_module() -> ModuleType | MissingSoxModule:
     cached_module = sys.modules.get("sox")
-    if cached_module is not None and not isinstance(cached_module, ModuleType):
+    if cached_module is not None and _is_trusted_sox_cache_entry(cached_module):
         return cached_module
     buffer = io.StringIO()
     original_run = subprocess.run
@@ -82,7 +90,7 @@ def load_sox_module() -> ModuleType | MissingSoxModule:
 
 
 def has_sox() -> bool:
-    return not getattr(sox, "__definers_missing_sox__", False)
+    return getattr(sox, "__definers_missing_sox__", False) is not True
 
 
 __version__ = _resolve_version()
@@ -153,8 +161,11 @@ class _DefinersModule(ModuleType):
             qualified_name = (
                 f"{ModuleType.__getattribute__(self, '__name__')}.{name}"
             )
+            bound_module = namespace.get(name)
             module = sys.modules.get(qualified_name)
             if module is None:
+                if isinstance(bound_module, ModuleType):
+                    return bound_module
                 module = importlib.import_module(qualified_name)
             namespace[name] = module
             return module

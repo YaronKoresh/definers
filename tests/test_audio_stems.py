@@ -910,12 +910,12 @@ def test_run_mastering_separator_pipeline_uses_fast_shifts_for_repair_stages(
     )
 
     assert stage_calls == [
-        ("preprocess_0", 1),
-        ("preprocess_1", 1),
-        ("reference_split", 1),
-        ("four_stem", 4),
-        ("vocal_isolation", 4),
-        ("vocal_restoration", 1),
+        ("p0", 1),
+        ("p1", 1),
+        ("ref_sep", 1),
+        ("4stem", 4),
+        ("voc_isol", 4),
+        ("voc_rest", 1),
     ]
     assert batch_calls == [1]
     assert stem_paths == write_calls[0]

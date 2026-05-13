@@ -7,6 +7,11 @@ from unittest import mock
 
 
 class TestSoxLazyImport(unittest.TestCase):
+    def setUp(self):
+        for name in ("sox", "definers"):
+            if name in sys.modules:
+                del sys.modules[name]
+
     def tearDown(self):
         for name in ("sox", "definers"):
             if name in sys.modules:
