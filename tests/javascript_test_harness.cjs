@@ -13,6 +13,9 @@ function resolveVitestApi() {
         afterAll: globalThis.afterAll || globalThis.after,
       };
     }
+    if (globalThis.__vitestCjsBridge__) {
+      return globalThis.__vitestCjsBridge__;
+    }
   }
   return null;
 }
