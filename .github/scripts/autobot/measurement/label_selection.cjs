@@ -1,13 +1,9 @@
 const {
-  LARGE_PR_GENERIC_LABEL_LIMIT,
-  LARGE_PR_LABEL_LIMIT,
   PR_CANONICAL_LABEL_REPLACEMENTS,
   SMALL_PR_FILE_LIMIT,
-  SMALL_PR_GENERIC_LABEL_LIMIT,
-  SMALL_PR_LABEL_LIMIT,
   SMALL_PR_TOTAL_CHANGE_LIMIT
 } = require("../constants.cjs");
-const { AutobotLabelRegistry, LABEL_PRIORITY, MAX_AUTOBOT_LABELS, sortLabels, technicalLabelsOnly } = require("../labels.cjs");
+const { AutobotLabelRegistry, LABEL_PRIORITY, sortLabels, technicalLabelsOnly } = require("../labels.cjs");
 
 const DEFAULT_MAX_LABEL_WORDS = 2;
 
@@ -80,16 +76,29 @@ function mergeRankedLabels(primaryLabels, secondaryLabels, limit) {
   return mergedLabels;
 }
 
+function resolveLabelLimit(rawLimit) {
+  if (rawLimit === undefined || rawLimit === null || rawLimit === "") {
+    return Number.POSITIVE_INFINITY;
+  }
+  const parsedLimit = Number(rawLimit);
+  if (!Number.isFinite(parsedLimit)) {
+    return Number.POSITIVE_INFINITY;
+  }
+  return Math.max(parsedLimit, 1);
+}
+
 function isSmallPullRequest(filesChanged, totalChanges) {
   return filesChanged <= SMALL_PR_FILE_LIMIT && totalChanges <= SMALL_PR_TOTAL_CHANGE_LIMIT;
 }
 
 function derivePrLabelBudget(smallPullRequest) {
-  return smallPullRequest ? SMALL_PR_LABEL_LIMIT : LARGE_PR_LABEL_LIMIT;
+  void smallPullRequest;
+  return Number.POSITIVE_INFINITY;
 }
 
 function deriveGenericMaintenanceLabelLimit(smallPullRequest) {
-  return smallPullRequest ? SMALL_PR_GENERIC_LABEL_LIMIT : LARGE_PR_GENERIC_LABEL_LIMIT;
+  void smallPullRequest;
+  return Number.POSITIVE_INFINITY;
 }
 
 function normalizePrOutputLabel(label) {
@@ -98,17 +107,21 @@ function normalizePrOutputLabel(label) {
 }
 
 function applyPrLabelPolicy(labels, options = {}) {
-  const limit = Math.max(Number(options.limit) || MAX_AUTOBOT_LABELS, 1);
+  const limit = resolveLabelLimit(options.limit);
   const maxWords = Math.max(Number(options.maxWords) || DEFAULT_MAX_LABEL_WORDS, 1);
+  const normalizedLabels = applyLabelWordBudget((labels || []).map((label) => normalizePrOutputLabel(label)), { maxWords });
+  if (!Number.isFinite(limit)) {
+    return technicalLabelsOnly(normalizedLabels);
+  }
   return technicalLabelsOnly(
-    applyLabelWordBudget((labels || []).map((label) => normalizePrOutputLabel(label)), { maxWords }),
+    normalizedLabels,
     { limit }
   );
 }
 
 function selectDeterministicLabels(orderedSignals, deterministicLabelSet, options = {}) {
-  const limit = Math.max(Number(options.limit) || MAX_AUTOBOT_LABELS, 1);
-  const collectionLimit = Math.max(limit * 2, MAX_AUTOBOT_LABELS);
+  const limit = resolveLabelLimit(options.limit);
+  const collectionLimit = Number.isFinite(limit) ? Math.max(limit * 2, 24) : Number.POSITIVE_INFINITY;
   const explicitLabels = sortLabels([...orderedSignals, ...deterministicLabelSet]);
   const fallbackLabels = sortLabels([...deterministicLabelSet]);
   const selectedLabels = [];

@@ -3,7 +3,6 @@ const fs = require("fs");
 const { analyzeIssueIntake } = require("./issue_intake.cjs");
 const {
   AutobotLabelRegistry,
-  MAX_AUTOBOT_LABELS,
   parseAutobotLabels,
   sortLabels,
   technicalLabelsOnly,
@@ -88,11 +87,11 @@ function resolveUnifiedAutomationFiles(input) {
 }
 
 function normalizeAutobotLabels(value) {
-  return trimLowSignalLabels(sortLabels(uniqueValidLabels(parseAutobotLabels(value))), { limit: MAX_AUTOBOT_LABELS });
+  return trimLowSignalLabels(sortLabels(uniqueValidLabels(parseAutobotLabels(value))));
 }
 
 function buildCombinedAutobotLabels(directLabels, linkedLabels) {
-  return trimLowSignalLabels(sortLabels(uniqueValidLabels([...(directLabels || []), ...(linkedLabels || [])])), { limit: MAX_AUTOBOT_LABELS });
+  return trimLowSignalLabels(sortLabels(uniqueValidLabels([...(directLabels || []), ...(linkedLabels || [])])));
 }
 
 function shouldAnalyzeAutobotContext(context) {
@@ -151,8 +150,7 @@ function deriveLinkedAutobotLabels(analysis) {
         .filter(([, score]) => score >= LINKED_LABEL_MIN_SCORE)
         .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
         .map(([label]) => label)
-    ),
-    { limit: MAX_AUTOBOT_LABELS }
+    )
   );
 }
 
@@ -248,7 +246,7 @@ async function analyzeUnifiedAutomationState({
 
   const rawCombinedAutobotLabels = buildCombinedAutobotLabels(autobotArtifacts.deterministicLabels, linkedAutobotLabels);
   const combinedAutobotLabels = context?.eventName === "pull_request"
-    ? technicalLabelsOnly(rawCombinedAutobotLabels, { limit: MAX_AUTOBOT_LABELS })
+    ? technicalLabelsOnly(rawCombinedAutobotLabels)
     : rawCombinedAutobotLabels;
   const issueNumber = context.issue && context.issue.number ? context.issue.number : null;
 

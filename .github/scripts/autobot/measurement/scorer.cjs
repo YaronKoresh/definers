@@ -1,6 +1,6 @@
 const { AutobotLabelRegistry, LABEL_DEFINITIONS } = require("../labels.cjs");
 
-const MAX_EMITTED_LABELS = 12;
+const MAX_EMITTED_LABELS = Number.POSITIVE_INFINITY;
 
 const SCOPE_MULTIPLIERS = Object.freeze({
   private: 0.7,
@@ -492,6 +492,7 @@ const EVIDENCE_RULES = Object.freeze({
     defaultScope: "repo",
     defaultConfidence: "corroborated",
     defaultPolarity: "mixed",
+    titleBoost: 0.1,
     categoryWeights: Object.freeze({
       "security-policy": 1.0,
       "validation-guards": 0.35,
@@ -763,6 +764,24 @@ const EVIDENCE_RULES = Object.freeze({
       ui: 0.15
     })
   }),
+  "style-visual-only-change": Object.freeze({
+    baseWeight: 0.76,
+    defaultScope: "public",
+    defaultConfidence: "corroborated",
+    defaultPolarity: "mixed",
+    categoryWeights: Object.freeze({
+      "ui-ux": 0.9,
+      "refactor-quality": 0.35
+    }),
+    impactWeights: Object.freeze({
+      "patch-maintenance": 0.45
+    }),
+    labelBoosts: Object.freeze({
+      style: 0.95,
+      formatting: 0.65,
+      ui: 0.35
+    })
+  }),
   "documentation-surface": Object.freeze({
     baseWeight: 0.95,
     defaultScope: "repo",
@@ -916,6 +935,28 @@ const EVIDENCE_RULES = Object.freeze({
       github: 0.95
     })
   }),
+  "codeql-security-alert-reduction": Object.freeze({
+    baseWeight: 1.02,
+    defaultScope: "repo",
+    defaultConfidence: "corroborated",
+    defaultPolarity: "additive",
+    categoryWeights: Object.freeze({
+      "security-policy": 1.0,
+      "workflow-ci": 0.45,
+      "github-management": 0.2
+    }),
+    impactWeights: Object.freeze({
+      "minor-operational-capability": 0.2,
+      "patch-maintenance": 0.25
+    }),
+    labelBoosts: Object.freeze({
+      security: 0.95,
+      codeql: 0.95,
+      vulnerability: 0.55,
+      hardening: 0.35,
+      github: 0.15
+    })
+  }),
   "automation-bot-change": Object.freeze({
     baseWeight: 0.84,
     defaultScope: "repo",
@@ -990,6 +1031,28 @@ const EVIDENCE_RULES = Object.freeze({
       dependencies: 0.95,
       compatibility: 0.35,
       packaging: 0.2
+    })
+  }),
+  "dependency-vulnerability-remediation": Object.freeze({
+    baseWeight: 0.98,
+    defaultScope: "repo",
+    defaultConfidence: "corroborated",
+    defaultPolarity: "additive",
+    categoryWeights: Object.freeze({
+      "dependencies-packaging": 1.0,
+      "security-policy": 0.85,
+      "supply-chain": 0.55
+    }),
+    impactWeights: Object.freeze({
+      "minor-operational-capability": 0.2,
+      "patch-maintenance": 0.3
+    }),
+    labelBoosts: Object.freeze({
+      dependencies: 0.8,
+      security: 0.75,
+      vulnerability: 0.95,
+      "supply-chain": 0.45,
+      hardening: 0.25
     })
   }),
   "docker-runtime-expansion": Object.freeze({
@@ -1105,6 +1168,25 @@ const EVIDENCE_RULES = Object.freeze({
     labelBoosts: Object.freeze({
       cleanup: 0.95,
       refactor: 0.2
+    })
+  }),
+  "refactor-net-line-change": Object.freeze({
+    baseWeight: 0.68,
+    defaultScope: "subsystem",
+    defaultConfidence: "corroborated",
+    defaultPolarity: "mixed",
+    categoryWeights: Object.freeze({
+      "refactor-quality": 1.0,
+      "cleanup-removal": 0.25,
+      "tooling-dx": 0.2
+    }),
+    impactWeights: Object.freeze({
+      "patch-maintenance": 0.35
+    }),
+    labelBoosts: Object.freeze({
+      refactor: 0.95,
+      quality: 0.6,
+      cleanup: 0.2
     })
   }),
   "refactor-maintainability": Object.freeze({
@@ -1250,6 +1332,38 @@ const EVIDENCE_RULES = Object.freeze({
       license: 0.95,
       policy: 0.45,
       github: 0.2
+    })
+  }),
+  "pr-title-bug-signal": Object.freeze({
+    baseWeight: 0.42,
+    defaultScope: "subsystem",
+    defaultConfidence: "title",
+    defaultPolarity: "destructive",
+    categoryWeights: Object.freeze({
+      "reliability-bugfix": 0.55
+    }),
+    impactWeights: Object.freeze({
+      "patch-maintenance": 0.2
+    }),
+    labelBoosts: Object.freeze({
+      bug: 0.45,
+      stability: 0.15
+    })
+  }),
+  "pr-title-enhancement-signal": Object.freeze({
+    baseWeight: 0.42,
+    defaultScope: "subsystem",
+    defaultConfidence: "title",
+    defaultPolarity: "additive",
+    categoryWeights: Object.freeze({
+      "feature-capability": 0.55
+    }),
+    impactWeights: Object.freeze({
+      "minor-additive-capability": 0.2
+    }),
+    labelBoosts: Object.freeze({
+      enhancement: 0.45,
+      improvement: 0.12
     })
   }),
   "issue-bug-report": Object.freeze({
@@ -1512,7 +1626,8 @@ const LABEL_SCORE_RECIPES = Object.freeze({
     Object.freeze({ type: "category", key: "cleanup-removal", weight: 1.0 })
   ]),
   refactor: Object.freeze([
-    Object.freeze({ type: "category", key: "refactor-quality", weight: 1.0 })
+    Object.freeze({ type: "category", key: "refactor-quality", weight: 1.0 }),
+    Object.freeze({ type: "category", key: "cleanup-removal", weight: 0.15 })
   ]),
   quality: Object.freeze([
     Object.freeze({ type: "category", key: "refactor-quality", weight: 0.8 })
@@ -1582,9 +1697,21 @@ const LABEL_SCORE_RECIPES = Object.freeze({
     Object.freeze({ type: "category", key: "build-release", weight: 0.3 }),
     Object.freeze({ type: "category", key: "schema-contract", weight: 0.2 })
   ]),
-  style: Object.freeze([]),
-  formatting: Object.freeze([]),
-  lint: Object.freeze([]),
+  style: Object.freeze([
+    Object.freeze({ type: "category", key: "ui-ux", channel: "additive", weight: 0.6 }),
+    Object.freeze({ type: "category", key: "refactor-quality", weight: 0.35 }),
+    Object.freeze({ type: "impact", key: "patch-maintenance", weight: 0.15 })
+  ]),
+  formatting: Object.freeze([
+    Object.freeze({ type: "category", key: "refactor-quality", weight: 0.55 }),
+    Object.freeze({ type: "category", key: "ui-ux", weight: 0.2 }),
+    Object.freeze({ type: "impact", key: "patch-maintenance", weight: 0.2 })
+  ]),
+  lint: Object.freeze([
+    Object.freeze({ type: "category", key: "refactor-quality", weight: 0.45 }),
+    Object.freeze({ type: "category", key: "validation-guards", weight: 0.25 }),
+    Object.freeze({ type: "category", key: "tooling-dx", weight: 0.2 })
+  ]),
   chore: Object.freeze([])
 });
 

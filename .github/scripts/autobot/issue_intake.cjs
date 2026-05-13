@@ -124,7 +124,7 @@ class AutobotIssueClassifier {
         AutobotIssueClassifier.pushUnique(labels, "matrix job");
       }
     }
-    if (/unit test/.test(text)) {
+    if (/unit tests/.test(text)) {
       AutobotIssueClassifier.pushUnique(labels, "unit test");
     }
     if (/integration test|scenario|regression/.test(text)) {
@@ -267,8 +267,8 @@ class AutobotIssueClassifier {
 
   static normalizeOutputLabels(labels, options = {}) {
     const maxWords = Math.max(Number(options.maxWords) || MAX_LABEL_WORDS, 1);
-    const limit = Math.max(Number(options.limit) || AutobotLabelRegistry.MAX_AUTOBOT_LABELS, 1);
-    return AutobotLabelRegistry.technicalLabelsOnly(applyLabelWordBudget(labels, { maxWords }), { limit });
+    const limit = options.limit;
+    return AutobotLabelRegistry.technicalLabelsOnly(applyLabelWordBudget(labels, { maxWords }), limit === undefined ? {} : { limit });
   }
 
   static analyzeIssueIntake(issue) {

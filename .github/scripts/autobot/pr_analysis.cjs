@@ -24,7 +24,7 @@ const {
   normalizePatch: normalizePatchFromGatherInfo,
   resolveSnapshotFile: resolveSnapshotFileFromGatherInfo
 } = require("./gather_info.cjs");
-const { AutobotLabelRegistry, MAX_AUTOBOT_LABELS, sortLabels } = require("./labels.cjs");
+const { AutobotLabelRegistry, sortLabels } = require("./labels.cjs");
 const { LABEL_SUPPORT_PATTERNS } = require("./constants.cjs");
 
 const SNAPSHOT_FILE = "/tmp/autobot_pr_snapshot.json";
@@ -79,12 +79,22 @@ const PR_PIPELINE_CLUTTER_LABELS = new Set([
   "python matrix"
 ]);
 const ACCESSIBILITY_TEXT_PATTERN = /\baria-|accessib|a11y|screen reader|keyboard nav/;
-const AUTOMATION_TEXT_PATTERN = /\b(autobot|automation|label|triage|milestone|release)\b/;
-const FEATURE_FLAG_TEXT_PATTERN = /feature[\s-]?flag|kill switch|rollout/;
+const AUTOMATION_TEXT_PATTERN = /\b(autobot|release[-_ ]script|automation[-_ ]bot|repo automation)\b/;
+const FEATURE_FLAG_TEXT_PATTERN = /\b(feature[\s_-]?(?:flag|toggle)|kill[\s_-]?switch|rollout(?:\s+gate|\s+policy)?|cohort(?:\s+rule)?|segment(?:ation)?|bucket(?:ing)?)\b/;
+const FEATURE_FLAG_PATH_PATTERN = /(^|\/)(feature[-_]?flag|feature[-_]?toggle|rollout|gate|segment|cohort|bucket|kill[-_ ]switch)(\/|$)/;
+
+function isFeatureFlagSurfacePath(normalizedPath) {
+  return FEATURE_FLAG_PATH_PATTERN.test(normalizedPath);
+}
+
+function hasFeatureFlagEvidence(normalizedPath, text) {
+  return isFeatureFlagSurfacePath(normalizedPath)
+    && FEATURE_FLAG_TEXT_PATTERN.test(text);
+}
+
 const LOCALIZATION_TEXT_PATTERN = /\bi18n\b|\bl10n\b|\blocale\b|\btranslations?\b|\bgettext\b/;
 const PACKAGE_JSON_DEPENDENCY_CONTEXT_PATTERNS = Object.freeze([/^"(dependencies|devDependencies|peerDependencies|optionalDependencies|bundledDependencies|bundleDependencies)"\s*:\s*\{,?$/i]);
-const PACKAGE_JSON_DEPENDENCY_METADATA_KEYS = new Set(["browser", "description", "directories", "engines", "exports", "keywords", "main", "module", "name", "overrides", "packageManager", "repository", "resolutions", "scripts", "type", "version", "volta"]);
-const PACKAGE_JSON_DEPENDENCY_VALUE_PATTERN = /^(workspace:|file:|link:|npm:|github:|git\+|https?:|~|\^|>=?|<=?|=|\*|\d)/i;
+const PACKAGE_JSON_DEPENDENCY_KEYS = Object.freeze(["dependencies", "devDependencies", "peerDependencies", "optionalDependencies", "bundledDependencies", "bundleDependencies", "overrides", "resolutions"]);
 const PYPROJECT_DEPENDENCY_CONTEXT_PATTERNS = Object.freeze([
   /^\[(project\.optional-dependencies|dependency-groups|tool\.poetry\.dependencies|tool\.poetry\.group\.[^\]]+\.dependencies|tool\.pdm(?:\.[^\]]+)?\.(?:dependencies|dev-dependencies)|build-system)\]$/i,
   /^(dependencies|optional-dependencies|requires)\s*=\s*[\[{]/i
@@ -120,10 +130,19 @@ const PATH_NORMALIZATION_TEXT_PATTERN = /\b(path normalization|normalize(?:d|r|s
 const TEMP_DIRECTORY_TEXT_PATTERN = /\b(temp(?:orary)?(?:\s+directory|\s+dir)?|tempfile|mkdtemp|temp dir|tmp dir|temp path)\b/;
 const ATOMIC_WRITE_TEXT_PATTERN = /\b(atomic(?:\s+write)?|os\.replace|fsync|write\s+tmp|rename\()\b/;
 const SYMLINK_SAFETY_TEXT_PATTERN = /\b(symlink|readlink|lstat|realpath)\b/;
-const SUBPROCESS_IO_TEXT_PATTERN = /\b(subprocess|child_process|popen|communicate|stdin|stdout|stderr|pipe)\b/;
+const SUBPROCESS_IO_TEXT_PATTERN = /(subprocess\.(?:popen|run|call|check_call|check_output)\s*\(|child_process\.(?:spawn|fork|exec|execfile|execsync|spawnsync)\s*\(|\bpopen\s*\(|\bcommunicate\s*\(|\bstdin\b|\bstdout\b|\bstderr\b|\bpipe(?:line)?\b)/;
 const WORKER_POOL_TEXT_PATTERN = /\b(worker pool|thread ?pool|process ?pool|executor)\b/;
 const RETRY_BUDGET_TEXT_PATTERN = /\b(retry budget|retry(?:ing)?|backoff|max[_\s-]?attempts?)\b/;
 const DAEMON_MODE_TEXT_PATTERN = /\b(daemon(?:ize|ized)?|detached process|daemon mode)\b/;
+const OBSERVABILITY_TEXT_PATTERN = /\b(observability|telemetry|prometheus|opentelemetry|otel|metrics?|histogram|counter|gauge|tracing?|trace id|span(?: id)?|monitoring|datadog|newrelic)\b/;
+const OBSERVABILITY_PATH_PATTERN = /(^|\/)(observability|telemetry|monitoring|metrics?|prometheus|tracing)(\/|$)/;
+const VISUAL_STYLE_TEXT_PATTERN = /\b(class(name)?=|style=|styles?\.|theme|color|font|spacing|margin|padding|border(?:-radius)?|box-shadow|background|tailwind|var\(--|display\s*:\s*(flex|grid))\b/;
+const VISUAL_LOGIC_GUARD_PATTERN = /\b(fetch|axios|router|route|endpoint|sql|query|mutation|auth|token|database|subprocess|spawn|fork|exec\(|if\s*\(|while\s*\(|for\s*\()\b/;
+const DEPENDENCY_VERSION_MUTATION_PATTERN = /\b(?:workspace:|file:|link:|npm:|github:|git\+|https?:|~|\^|>=?|<=?|==|!=|===|[0-9]+\.[0-9]+(?:\.[0-9]+)?)\b/i;
+const DEPENDENCY_REMEDIATION_ACTION_PATTERN = /\b(upgrad(?:e|ed|ing)|bump(?:ed|ing)?|remediat(?:e|ed|ing|ion)|patch(?:ed|ing)?|fix(?:ed|ing)?)\b/;
+const CODEQL_SECURITY_NOTIFICATION_PATTERN = /\b(codeql|code scanning)\b[\s\S]{0,80}\b(alerts?|notifications?)\b|\b(alerts?|notifications?)\b[\s\S]{0,80}\b(codeql|code scanning)\b/;
+const BEFORE_AFTER_ALERT_COUNT_PATTERN = /\b(?:before|from)\b[^0-9]{0,24}(\d+)[^0-9]{0,24}\b(?:after|to)\b[^0-9]{0,24}(\d+)/;
+const TRANSITION_ALERT_COUNT_PATTERN = /\b(?:alerts?|notifications?)\b[^0-9]{0,24}(\d+)\s*(?:->|→|to)\s*(\d+)/;
 
 function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, "utf8"));
@@ -188,24 +207,171 @@ function hasPyprojectDependencyChange(patch) {
     || hasDependencyContext && changedLines.some((line) => matchesAnyPattern(line, PYPROJECT_SECTION_ENTRY_PATTERNS));
 }
 
-function hasPackageJsonDependencyChange(patch) {
-  const normalizedLines = splitPatchLines(patch)
-    .map((line) => stripDiffLinePrefix(line).trim())
-    .filter(Boolean);
-  const changedLines = splitPatchLines(patch)
-    .filter((line) => isChangedPatchLine(line))
-    .map((line) => stripDiffLinePrefix(line).trim())
-    .filter(Boolean);
-  const hasDependencyContext = normalizedLines.some((line) => matchesAnyPattern(line, PACKAGE_JSON_DEPENDENCY_CONTEXT_PATTERNS));
-  return changedLines.some((line) => matchesAnyPattern(line, PACKAGE_JSON_DEPENDENCY_CONTEXT_PATTERNS))
-    || hasDependencyContext && changedLines.some((line) => {
-      const entryMatch = line.match(/^"([^"]+)"\s*:\s*"([^"]+)"[,]?$/);
-      if (!entryMatch) {
-        return false;
+function normalizeObjectKeysDeep(value) {
+  if (Array.isArray(value)) {
+    return value.map((entry) => normalizeObjectKeysDeep(entry));
+  }
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+  const sortedEntries = Object.keys(value)
+    .sort((left, right) => left.localeCompare(right))
+    .map((key) => [key, normalizeObjectKeysDeep(value[key])]);
+  return Object.fromEntries(sortedEntries);
+}
+
+function normalizeJsonCandidate(rawJson) {
+  return String(rawJson || "")
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/```\s*$/i, "")
+    .replace(/,\s*([}\]])/g, "$1")
+    .trim();
+}
+
+function tryParseJson(rawJson) {
+  const normalized = normalizeJsonCandidate(rawJson);
+  if (!normalized) {
+    return null;
+  }
+  try {
+    return JSON.parse(normalized);
+  } catch (error) {
+    return null;
+  }
+}
+
+function reconstructPatchState(patch, mode = "after") {
+  const includeAdded = mode === "after";
+  const reconstructedLines = [];
+  for (const rawLine of splitPatchLines(patch)) {
+    if (!rawLine) {
+      reconstructedLines.push("");
+      continue;
+    }
+    if (/^(diff --git |index |@@ |\\ No newline at end of file)/.test(rawLine)) {
+      continue;
+    }
+    if (/^(\+\+\+|---) /.test(rawLine)) {
+      continue;
+    }
+    if (rawLine.startsWith("+")) {
+      if (includeAdded) {
+        reconstructedLines.push(rawLine.slice(1));
       }
-      const [, key, value] = entryMatch;
-      return !PACKAGE_JSON_DEPENDENCY_METADATA_KEYS.has(key) && PACKAGE_JSON_DEPENDENCY_VALUE_PATTERN.test(value);
-    });
+      continue;
+    }
+    if (rawLine.startsWith("-")) {
+      if (!includeAdded) {
+        reconstructedLines.push(rawLine.slice(1));
+      }
+      continue;
+    }
+    if (rawLine.startsWith(" ")) {
+      reconstructedLines.push(rawLine.slice(1));
+      continue;
+    }
+    reconstructedLines.push(rawLine);
+  }
+  return reconstructedLines.join("\n").trim();
+}
+
+function pickPackageJsonDependencyTree(parsedPackageJson) {
+  if (!parsedPackageJson || typeof parsedPackageJson !== "object" || Array.isArray(parsedPackageJson)) {
+    return null;
+  }
+  const dependencyTree = {};
+  for (const dependencyKey of PACKAGE_JSON_DEPENDENCY_KEYS) {
+    const dependencyValue = parsedPackageJson[dependencyKey];
+    if (dependencyValue === undefined || dependencyValue === null) {
+      continue;
+    }
+    if (Array.isArray(dependencyValue)) {
+      dependencyTree[dependencyKey] = dependencyValue.map((entry) => String(entry)).sort((left, right) => left.localeCompare(right));
+      continue;
+    }
+    if (typeof dependencyValue === "object") {
+      dependencyTree[dependencyKey] = normalizeObjectKeysDeep(dependencyValue);
+    }
+  }
+  return Object.keys(dependencyTree).length > 0 ? dependencyTree : null;
+}
+
+function extractPackageJsonDependencyTreeFromPatchLines(patch, mode = "after") {
+  const includeAdded = mode === "after";
+  const dependencyTree = {};
+  let activeSection = "";
+  let braceDepth = 0;
+
+  for (const rawLine of splitPatchLines(patch)) {
+    if (/^(diff --git |index |@@ |\+\+\+ |--- |\\ No newline at end of file)/.test(rawLine)) {
+      continue;
+    }
+    if (rawLine.startsWith("+") && !includeAdded) {
+      continue;
+    }
+    if (rawLine.startsWith("-") && includeAdded) {
+      continue;
+    }
+
+    const line = stripDiffLinePrefix(rawLine).trim();
+    if (!line) {
+      continue;
+    }
+
+    const sectionMatch = line.match(/^"(dependencies|devDependencies|peerDependencies|optionalDependencies|bundledDependencies|bundleDependencies|overrides|resolutions)"\s*:\s*\{\s*$/);
+    if (sectionMatch) {
+      activeSection = sectionMatch[1];
+      braceDepth = 1;
+      if (!dependencyTree[activeSection]) {
+        dependencyTree[activeSection] = {};
+      }
+      continue;
+    }
+
+    if (activeSection) {
+      const openBraces = (line.match(/\{/g) || []).length;
+      const closeBraces = (line.match(/\}/g) || []).length;
+      braceDepth += openBraces - closeBraces;
+      const entryMatch = line.match(/^"([^"]+)"\s*:\s*(.+?)(?:,)?$/);
+      if (entryMatch) {
+        const dependencyName = entryMatch[1];
+        const rawValue = entryMatch[2].trim();
+        const parsedValue = tryParseJson(rawValue);
+        dependencyTree[activeSection][dependencyName] = parsedValue === null
+          ? rawValue
+          : normalizeObjectKeysDeep(parsedValue);
+      }
+      if (braceDepth <= 0) {
+        activeSection = "";
+        braceDepth = 0;
+      }
+    }
+  }
+
+  return Object.keys(dependencyTree).length > 0 ? normalizeObjectKeysDeep(dependencyTree) : null;
+}
+
+function parsePackageJsonDependencyTreeFromPatch(patch, mode = "after") {
+  const reconstructedState = reconstructPatchState(patch, mode);
+  const reconstructedParsed = tryParseJson(reconstructedState);
+  const reconstructedTree = pickPackageJsonDependencyTree(reconstructedParsed);
+  if (reconstructedTree) {
+    return reconstructedTree;
+  }
+  return extractPackageJsonDependencyTreeFromPatchLines(patch, mode);
+}
+
+function hasPackageJsonDependencyChange(patch) {
+  const beforeTree = parsePackageJsonDependencyTreeFromPatch(patch, "before");
+  const afterTree = parsePackageJsonDependencyTreeFromPatch(patch, "after");
+  if (!beforeTree && !afterTree) {
+    return false;
+  }
+  if (!beforeTree || !afterTree) {
+    return true;
+  }
+  return JSON.stringify(beforeTree) !== JSON.stringify(afterTree);
 }
 
 function hasDependencySurfaceChange(normalizedPath, patch) {
@@ -219,6 +385,140 @@ function hasDependencySurfaceChange(normalizedPath, patch) {
     return hasPackageJsonDependencyChange(patch);
   }
   return false;
+}
+
+function changedPatchBodyLines(patch) {
+  return splitPatchLines(patch)
+    .filter((line) => isChangedPatchLine(line))
+    .map((line) => stripDiffLinePrefix(line));
+}
+
+function changedPatchBodyText(patch) {
+  return changedPatchBodyLines(patch).join("\n").toLowerCase();
+}
+
+function collectRuntimeOsFamilies(text) {
+  const families = new Set();
+  const normalizedText = String(text || "").toLowerCase();
+  for (const match of normalizedText.matchAll(/\b(ubuntu|windows|macos|linux)(?:[-_.a-z0-9]*)\b/g)) {
+    families.add(match[1]);
+  }
+  return families;
+}
+
+function hasWorkflowMatrixSignal(patchText) {
+  return /\bstrategy\s*:|\bmatrix\s*:|\bmatrix\.[a-z0-9_-]+\b|\${{\s*matrix\./.test(patchText);
+}
+
+function hasPythonMatrixSignal(patchText) {
+  return hasWorkflowMatrixSignal(patchText)
+    && (/\bpython-version\b|\bpython_version\b|\bmatrix\.python\b|\${{\s*matrix\.python/.test(patchText));
+}
+
+function hasOsMatrixSignal(patchText) {
+  if (!hasWorkflowMatrixSignal(patchText)) {
+    return false;
+  }
+  if (/\bmatrix\.os\b|\${{\s*matrix\.os\s*}}/.test(patchText)) {
+    return true;
+  }
+  const inlineMatrixList = patchText.match(/\bos\s*:\s*\[([^\]]+)\]/);
+  if (inlineMatrixList && collectRuntimeOsFamilies(inlineMatrixList[1]).size >= 2) {
+    return true;
+  }
+  return collectRuntimeOsFamilies(patchText).size >= 2;
+}
+
+function hasDependencyVersionMutation(patch) {
+  const addedLines = splitPatchLines(patch)
+    .filter((line) => line.startsWith("+") && !line.startsWith("+++ "))
+    .map((line) => stripDiffLinePrefix(line).trim())
+    .filter(Boolean);
+  const removedLines = splitPatchLines(patch)
+    .filter((line) => line.startsWith("-") && !line.startsWith("--- "))
+    .map((line) => stripDiffLinePrefix(line).trim())
+    .filter(Boolean);
+  const hasVersionSignal = (line) => DEPENDENCY_VERSION_MUTATION_PATTERN.test(line);
+  return addedLines.some((line) => hasVersionSignal(line))
+    && removedLines.some((line) => hasVersionSignal(line));
+}
+
+function hasVulnerabilityKeywordEvidence(text) {
+  return /\b(vulnerab\w*|advisory|cve-\d{4}-\d+|ghsa-[a-z0-9-]+|exploit(?:able)?|security advisory|security notification)\b/.test(text);
+}
+
+function hasDependencyVulnerabilityRemediationEvidence({ normalizedPath, patch, securityContextText }) {
+  if (!hasDependencySurfaceChange(normalizedPath, patch)) {
+    return false;
+  }
+  const patchContext = `${normalizedPath}\n${patch}`.toLowerCase();
+  const normalizedSecurityContext = String(securityContextText || "").toLowerCase();
+  const hasPatchVulnerabilityEvidence = hasVulnerabilityKeywordEvidence(patchContext);
+  const hasSecurityContextVulnerabilityEvidence = hasVulnerabilityKeywordEvidence(normalizedSecurityContext);
+  if (!hasPatchVulnerabilityEvidence && !hasSecurityContextVulnerabilityEvidence) {
+    return false;
+  }
+  if (hasDependencyVersionMutation(patch)) {
+    return true;
+  }
+  return hasPatchVulnerabilityEvidence
+    && (
+      DEPENDENCY_REMEDIATION_ACTION_PATTERN.test(patchContext)
+      || DEPENDENCY_REMEDIATION_ACTION_PATTERN.test(normalizedSecurityContext)
+    );
+}
+
+function extractSecurityNotificationCount(line) {
+  const normalizedLine = String(line || "").toLowerCase();
+  if (!CODEQL_SECURITY_NOTIFICATION_PATTERN.test(normalizedLine)) {
+    return null;
+  }
+  const leadingCountMatch = normalizedLine.match(/\b(?:open|remaining|new|total|active|resolved)?\s*(?:alerts?|notifications?)\b[^0-9]{0,12}(\d+)\b/);
+  if (leadingCountMatch) {
+    return Number(leadingCountMatch[1]);
+  }
+  const trailingCountMatch = normalizedLine.match(/\b(\d+)\b[^0-9]{0,12}(?:open|remaining|new|total|active|resolved)?\s*(?:alerts?|notifications?)\b/);
+  return trailingCountMatch ? Number(trailingCountMatch[1]) : null;
+}
+
+function hasInlineSecurityAlertReduction(text) {
+  const normalizedText = String(text || "").toLowerCase();
+  const beforeAfterMatch = normalizedText.match(BEFORE_AFTER_ALERT_COUNT_PATTERN);
+  if (beforeAfterMatch) {
+    return Number(beforeAfterMatch[2]) < Number(beforeAfterMatch[1]);
+  }
+  const transitionMatch = normalizedText.match(TRANSITION_ALERT_COUNT_PATTERN);
+  if (transitionMatch) {
+    return Number(transitionMatch[2]) < Number(transitionMatch[1]);
+  }
+  return false;
+}
+
+function hasCodeqlSecurityAlertReductionEvidence(normalizedPath, patch) {
+  const normalizedPathText = String(normalizedPath || "").toLowerCase();
+  const normalizedPatch = String(patch || "").toLowerCase();
+  const combinedText = `${normalizedPathText}\n${normalizedPatch}`;
+  const codeqlSurface = /(^|\/)codeql(\.[^/]+)?$/.test(normalizedPathText)
+    || /\bcode[-_ ]scanning\b/.test(normalizedPathText)
+    || CODEQL_SECURITY_NOTIFICATION_PATTERN.test(combinedText);
+  if (!codeqlSurface) {
+    return false;
+  }
+  if (hasInlineSecurityAlertReduction(combinedText)) {
+    return true;
+  }
+  const removedCounts = splitPatchLines(patch)
+    .filter((line) => line.startsWith("-") && !line.startsWith("--- "))
+    .map((line) => extractSecurityNotificationCount(stripDiffLinePrefix(line)))
+    .filter((value) => value !== null);
+  const addedCounts = splitPatchLines(patch)
+    .filter((line) => line.startsWith("+") && !line.startsWith("+++ "))
+    .map((line) => extractSecurityNotificationCount(stripDiffLinePrefix(line)))
+    .filter((value) => value !== null);
+  if (removedCounts.length === 0 || addedCounts.length === 0) {
+    return false;
+  }
+  return Math.min(...addedCounts) < Math.max(...removedCounts);
 }
 
 function matchesWorkflowFilePath(normalizedPath) {
@@ -246,6 +546,16 @@ function hasWorkflowTextEvidence(text) {
   return /workflow_dispatch|schedule:|cron:|jobs:|steps:|runs-on:|uses:\s*actions\/|pull_request:|push:|pipeline|orchestrat/.test(text);
 }
 
+function hasWorkflowSignal(normalizedPath, text) {
+  return matchesWorkflowFilePath(normalizedPath)
+    || (matchesWorkflowScriptPath(normalizedPath) && hasWorkflowTextEvidence(text));
+}
+
+function hasCiExecutionEvidence(normalizedPath, text) {
+  return matchesWorkflowFilePath(normalizedPath)
+    && /schedule:|workflow_dispatch|pull_request:|push:|jobs:|steps:|runs-on:|uses:\s*actions\//.test(text);
+}
+
 function matchesUiPath(normalizedPath) {
   return /(^|\/)(components?|ui|views?|templates|static|styles?|themes?|frontend)(\/|$)/.test(normalizedPath)
     || /(^|\/)presentation\/apps\//.test(normalizedPath)
@@ -253,10 +563,24 @@ function matchesUiPath(normalizedPath) {
     || /\.(css|scss|sass|less|tsx|jsx|vue|svelte|html)$/.test(normalizedPath);
 }
 
-function hasUiTextEvidence(text) {
-  return /\bgr\.(blocks|button|textbox|dropdown|accordion|slider|checkbox|row|column|tabs?|html|markdown)\b/.test(text)
-    || /<(button|form|input|select|dialog|label)\b/.test(text)
-    || /\bclassname=/.test(text);
+function countUiEvidenceHits(text) {
+  const uiPatterns = [
+    /\bgr\.(blocks|button|textbox|dropdown|accordion|slider|checkbox|row|column|tabs?|html|markdown)\b/,
+    /<(button|form|input|select|dialog|label)\b/,
+    /\bclass(name)?=|styles?\.|theme|tokens?\b/
+  ];
+  return uiPatterns.reduce((count, pattern) => count + Number(pattern.test(text)), 0);
+}
+
+function hasUiTextEvidence(normalizedPath, text) {
+  const hitCount = countUiEvidenceHits(text);
+  if (hitCount < 1) {
+    return false;
+  }
+  if (matchesUiPath(normalizedPath)) {
+    return true;
+  }
+  return hitCount >= 2;
 }
 
 function hasApiPathEvidence(normalizedPath) {
@@ -276,9 +600,13 @@ function hasQueryParameterEvidence(text) {
     || /\?[a-z_][a-z0-9_]*=/.test(text);
 }
 
-function hasRuntimePathEvidence(normalizedPath) {
+function hasDockerPathEvidence(normalizedPath) {
   return /^docker\//.test(normalizedPath)
-    || /(^|\/)(dockerfile|compose\.ya?ml)$/.test(normalizedPath)
+    || /(^|\/)(dockerfile|compose\.ya?ml)$/.test(normalizedPath);
+}
+
+function hasRuntimePathEvidence(normalizedPath) {
+  return hasDockerPathEvidence(normalizedPath)
     || /(^|\/)(platform|runtime|system|cuda)(\/|$)/.test(normalizedPath)
     || /(^|\/)(pyproject\.toml|tox\.ini|setup\.(cfg|py))$/.test(normalizedPath);
 }
@@ -294,8 +622,17 @@ function hasRuntimePatchEvidence(patch) {
     || /\bnvidia\b/.test(patch);
 }
 
-function hasShellCommandEvidence(patch) {
-  return /\bcmd(?:\.exe)?\s*\/[ck]\b/.test(patch)
+function isDocumentationPath(normalizedPath) {
+  return /^docs\//.test(normalizedPath)
+    || /(^|\/)(readme|contributing|changelog|license)(\.[^/]+)?$/.test(normalizedPath)
+    || /\.(md|mdx|rst|txt)$/.test(normalizedPath);
+}
+
+function hasShellCommandEvidence(normalizedPath, patch) {
+  if (isDocumentationPath(normalizedPath)) {
+    return false;
+  }
+  return /\bcmd(?:\.exe)?\b[^\n]{0,24}\/[ck]\b/.test(patch)
     || /\bpowershell(?:\.exe)?\b/.test(patch)
     || /\/(?:bin\/)?(?:sh|bash)\b/.test(patch)
     || /\b(?:bash|sh)\s+-[cl]\b/.test(patch)
@@ -304,8 +641,14 @@ function hasShellCommandEvidence(patch) {
     || /\bshell\s*=\s*(?:true|false)\b/.test(patch);
 }
 
-function hasFilesystemPatchEvidence(patch) {
-  return /\b(filesystem|file system|path separator|filepath|ntpath|posixpath)\b/.test(patch)
+function hasFilesystemPathEvidence(normalizedPath) {
+  return /(^|\/)(filesystem|file-system|fileio|paths?|pathing|storage)(\/|$)/.test(normalizedPath)
+    || /(^|\/)(path_utils?|file_utils?|path_helpers?|filesystem_helpers?)\.(js|ts|py|cjs|mjs)$/.test(normalizedPath);
+}
+
+function hasFilesystemPatchEvidence(normalizedPath, patch) {
+  return hasFilesystemPathEvidence(normalizedPath)
+    || /\b(filesystem|file system|path separator|filepath|ntpath|posixpath|normpath|realpath|abspath)\b/.test(patch)
     || /\\\\/.test(patch);
 }
 
@@ -332,57 +675,116 @@ function hasSchemaEvidence(normalizedPath, patch) {
 }
 
 function hasMigrationEvidence(normalizedPath, patch) {
-  return /(^|\/)(migrations?|alembic)(\/|$)/.test(normalizedPath)
-    || /\.sql$/.test(normalizedPath)
-    || /\bmigrations?\b|\balembic\b|upgrade\s*\(|downgrade\s*\(/.test(patch);
+  return /(^|\/)migrations?(\/|$)/.test(normalizedPath)
+    || /(^|\/)alembic(\/|$)/.test(normalizedPath)
+    || /\balembic(?:\s+(?:revision|upgrade|downgrade|stamp|merge|history|current|heads))\b/.test(patch);
 }
 
 function hasDatabaseEvidence(normalizedPath, patch) {
-  const pathEvidence = /(^|\/)(database|databases|db|sql)(\/|$)/.test(normalizedPath)
-    || /\.sql$/.test(normalizedPath);
+  if (/\.sql$/.test(normalizedPath)) {
+    return true;
+  }
+  if (/\bcreate\s+table\b/.test(patch)) {
+    return true;
+  }
+  const pathEvidence = /(^|\/)(database|databases|db|sql|queries?|repositories)(\/|$)/.test(normalizedPath);
   const patchEvidence = /\b(database|sql|sqlite|postgres(?:ql)?|mysql|orm)\b/.test(patch)
-    || /\b(create|alter|drop)\s+table\b/.test(patch)
-    || /\b(insert\s+into|delete\s+from)\b/.test(patch);
-  return /\.sql$/.test(normalizedPath) || pathEvidence && patchEvidence || /\b(create|alter|drop)\s+table\b/.test(patch);
+    || /\b(insert\s+into|delete\s+from|update\s+[a-z_][a-z0-9_]*\s+set)\b/.test(patch)
+    || /\bselect\s+.+\s+from\b/.test(patch);
+  return pathEvidence && patchEvidence;
+}
+
+function hasObservabilityPathEvidence(normalizedPath) {
+  return OBSERVABILITY_PATH_PATTERN.test(normalizedPath)
+    || /(^|\/)(opentelemetry|otel|prometheus)(\.[^/]+)?$/.test(normalizedPath);
+}
+
+function hasObservabilityTextEvidence(patch) {
+  return OBSERVABILITY_TEXT_PATTERN.test(patch);
+}
+
+function hasObservabilityEvidence(normalizedPath, patch) {
+  return hasObservabilityPathEvidence(normalizedPath)
+    || hasObservabilityTextEvidence(patch) && isSourceCodePath(normalizedPath);
+}
+
+function hasVisualOnlyStyleChange(normalizedPath, patch) {
+  return matchesUiPath(normalizedPath)
+    && VISUAL_STYLE_TEXT_PATTERN.test(patch)
+    && !VISUAL_LOGIC_GUARD_PATTERN.test(patch);
 }
 
 function hasApiEvidence(normalizedPath, patch) {
   return hasApiPathEvidence(normalizedPath);
 }
 
-function hasVulnerabilityEvidence(text) {
-  return /\b(vulnerab\w*|advisory|cve-\d{4}-\d+|ghsa-[a-z0-9-]+|exploit(?:able)?|security advisory)\b/.test(text);
+function hasSecurityPathEvidence(normalizedPath) {
+  return /(^|\/)(security|auth|policy)(\/|$)/.test(normalizedPath)
+    || /(^|\/)(codeql|dependabot|security)(\.[^/]+)?$/.test(normalizedPath);
 }
 
-function hasComplianceEvidence(text) {
-  return /\b(compliance|soc ?2|pci(?:-dss)?|gdpr|hipaa|iso ?27001|nist|fedramp)\b/.test(text)
-    || /\bsarbanes[-\s]+oxley\b/.test(text)
-    || /\bsox\s+(?:compliance|controls?|control matrix|attestation|audit)\b/.test(text);
-}
-
-function hasHardeningEvidence(text) {
-  return /\b(hardening|harden|least privilege|defense in depth|deny by default|sandbox|mitigation|sanitize|sanitiz)\b/.test(text);
-}
-
-function hasPenTestEvidence(text) {
-  return /\b(pen[\s-]?test|penetration test|red team)\b/.test(text);
+function hasSecurityTextEvidence(patch) {
+  return /authorization:\s*bearer/.test(patch)
+    || /\b(api key|access token|bearer token|secret|secrets|credential|credentials)\b/.test(patch)
+    || /\bcsrf\b/.test(patch)
+    || /\bxss\b/.test(patch)
+    || /\bjwt\b/.test(patch)
+    || /\brauth(?:entication|orization)?\b/.test(patch)
+    || /\brauthz\b/.test(patch)
+    || /\brbac\b/.test(patch)
+    || /\bleast privilege\b/.test(patch)
+    || /\bpermissions?\s*[:=]/.test(patch);
 }
 
 function hasSecurityEvidence(normalizedPath, patch) {
   const text = `${normalizedPath}\n${patch}`;
-  return /(^|\/)(security|auth|policy)(\/|$)/.test(normalizedPath)
-    || /(^|\/)(codeql|dependabot|security)(\.[^/]+)?$/.test(normalizedPath)
-    || /authorization:\s*bearer/.test(patch)
-    || /permissions:\s*(\{|\n)/.test(patch)
-    || /\b(access token|bearer token|secret|secrets|credential|sanitize|sanitiz|csrf|xss|auth(?:entication|orization)?|least privilege|permissions?)\b/.test(patch)
-    || hasVulnerabilityEvidence(text)
-    || hasComplianceEvidence(text)
-    || hasHardeningEvidence(text)
-    || hasPenTestEvidence(text);
+  const pathBased = hasSecurityPathEvidence(normalizedPath);
+
+  return pathBased && (
+    hasSecurityTextEvidence(patch)
+    || hasVulnerabilityEvidence(text, pathBased)
+    || hasComplianceEvidence(text, pathBased)
+    || hasHardeningEvidence(text, pathBased)
+    || hasPenTestEvidence(text, pathBased)
+  );
 }
 
-function hasBreakingChangeEvidence(patch) {
+function hasVulnerabilityEvidence(text, hasSecurityPath = false) {
+  return hasSecurityPath && hasVulnerabilityKeywordEvidence(text);
+}
+
+function hasComplianceEvidence(text, hasSecurityPath = false) {
+  return hasSecurityPath && (
+    /\b(compliance|soc ?2|pci(?:-dss)?|gdpr|hipaa|iso ?27001|nist|fedramp)\b/.test(text)
+    || /\bsarbanes[-\s]+oxley\b/.test(text)
+    || /\bsox\s+(?:compliance|controls?|control matrix|attestation|audit)\b/.test(text)
+  );
+}
+
+function hasHardeningEvidence(text, hasSecurityPath = false) {
+  return hasSecurityPath && /\b(hardening|harden|least privilege|defense in depth|deny by default|sandbox|mitigation|sanitize|sanitiz)\b/.test(text);
+}
+
+function hasPenTestEvidence(text, hasSecurityPath = false) {
+  return hasSecurityPath && /\b(pen[\s-]?test|penetration test|red team)\b/.test(text);
+}
+
+function hasBreakingChangeTextEvidence(patch) {
   return /\bbreaking[\s-]?change\b|\bbackward[\s-]?incompatible\b|\bincompatible api\b|\bconsumer adaptation\b|\brequires migration\b|\bmust update (callers|consumers)\b/.test(patch);
+}
+
+function hasBreakingChangeStructuralEvidence(normalizedPath, patch) {
+  return isPublicPackageContractPath(normalizedPath)
+    || hasApiPathEvidence(normalizedPath)
+    || hasSchemaEvidence(normalizedPath, patch)
+    || hasDatabaseEvidence(normalizedPath, patch)
+    || hasMigrationEvidence(normalizedPath, patch)
+    || hasRuntimePathEvidence(normalizedPath);
+}
+
+function hasBreakingChangeEvidence(normalizedPath, patch) {
+  return hasBreakingChangeTextEvidence(patch)
+    && hasBreakingChangeStructuralEvidence(normalizedPath, patch);
 }
 
 function deriveTitleSignals(prSignalText) {
@@ -436,7 +838,7 @@ function classifyFile(file) {
   ) {
     categories.add("docker");
   }
-  if (/^scripts\//.test(normalized) || /^\.vscode\//.test(normalized)) {
+  if (/^scripts\//.test(normalized) || /^\.github\/scripts\//.test(normalized) || /^\.vscode\//.test(normalized)) {
     categories.add("tooling");
   }
   if (hasDependencySurfaceChange(normalized, patch)) {
@@ -444,13 +846,22 @@ function classifyFile(file) {
   }
   if (
     /^pyproject\.toml$/.test(normalized)
+    || /^package\.json$/.test(normalized)
     || /^manifest\.in$/.test(normalized)
     || /^tox\.ini$/.test(normalized)
     || /^setup\.(cfg|py)$/.test(normalized)
     || /^ruff\.toml$/.test(normalized)
     || /^\.editorconfig$/.test(normalized)
     || /^\.pre-commit-config\.(yaml|yml)$/.test(normalized)
-    || /\.(toml|ya?ml|json|ini|cfg)$/.test(normalized)
+    || /^\.eslintrc(?:\.[^/]+)?$/.test(normalized)
+    || /^eslint\.config\.(js|cjs|mjs|ts)$/.test(normalized)
+    || /^vitest\.config\.(js|cjs|mjs|ts)$/.test(normalized)
+    || /^tsup\.config\.(js|cjs|mjs|ts)$/.test(normalized)
+    || /^tsconfig(?:\/[^/]+)?\.json$/.test(normalized)
+    || /^\.npmrc$/.test(normalized)
+    || /^\.yarnrc(?:\.yml)?$/.test(normalized)
+    || /^\.pnpmfile\.cjs$/.test(normalized)
+    || /(^|\/)(config|configs|settings?|tsconfig)(\/|$)/.test(normalized) && /\.(json|ya?ml|toml|ini|cfg|conf)$/.test(normalized)
   ) {
     categories.add("config");
   }
@@ -465,7 +876,7 @@ function isBehavioralSurfaceFile(file) {
 }
 
 function isPublicPackageContractPath(normalizedPath) {
-  return /^src\/definers\/(?:__init__\.py|[^/]+\.py|[^/]+\/__init__\.py|[^/]+\/[^/]+\.py)$/.test(normalizedPath);
+  return /^src\/[^/]+\/(?:__init__\.py|[^/]+\.py|[^/]+\/__init__\.py|[^/]+\/[^/]+\.py)$/.test(normalizedPath);
 }
 
 function countBehavioralSurfaceAdditions(filesWithContext) {
@@ -499,10 +910,10 @@ function isExplicitPublicCapabilityFile(file) {
   const patch = String(file.patch || "").toLowerCase();
   return /(^|\/)__init__\.py$/.test(normalizedPath)
     || matchesUiPath(normalizedPath)
-    || hasUiTextEvidence(patch)
+    || hasUiTextEvidence(normalizedPath, patch)
     || hasApiEvidence(normalizedPath, patch)
     || hasSchemaEvidence(normalizedPath, patch)
-    || FEATURE_FLAG_TEXT_PATTERN.test(patch);
+    || hasFeatureFlagEvidence(normalizedPath, patch);
 }
 
 function hasPublicFacingCapabilityAddition(filesWithContext) {
@@ -531,17 +942,17 @@ function deriveSignals(file) {
   const text = `${normalizedPath}\n${patch}`;
   const categories = new Set(file.categories || classifyFile(file));
   const allowsVersionCriticalTextSignals = !categories.has("documentation") && !categories.has("test");
+  const sourceTextSurface = allowsVersionCriticalTextSignals && isSourceCodePath(normalizedPath);
   const signals = new Set();
   const autobotClassificationInfrastructure = isAutobotClassificationInfrastructure(normalizedPath);
-  const workflowSignal = matchesWorkflowFilePath(normalizedPath)
-    || matchesWorkflowScriptPath(normalizedPath) && hasWorkflowTextEvidence(text);
+  const workflowSignal = hasWorkflowSignal(normalizedPath, text);
 
   if (workflowSignal) {
     signals.add("workflow");
-    if (/schedule:|workflow_dispatch|pull_request:|issues:|uses:\s*actions\/|jobs:|steps:|runs-on:|push:/.test(text)) {
+    if (hasCiExecutionEvidence(normalizedPath, text)) {
       signals.add("ci");
     }
-    if (/autobot|automation|label|triage|milestone|release/.test(text)) {
+    if (AUTOMATION_TEXT_PATTERN.test(text)) {
       signals.add("automation");
     }
   }
@@ -551,10 +962,13 @@ function deriveSignals(file) {
   if (autobotClassificationInfrastructure) {
     return [...signals];
   }
-  if (matchesUiPath(normalizedPath) || hasUiTextEvidence(text)) {
+  if (matchesUiPath(normalizedPath) || hasUiTextEvidence(normalizedPath, text)) {
     signals.add("ui");
   }
-  if (/^docker\//.test(normalizedPath) || /(^|\/)dockerfile$/.test(normalizedPath) || /compose\.ya?ml/.test(normalizedPath)) {
+  if (hasVisualOnlyStyleChange(normalizedPath, patch)) {
+    signals.add("style");
+  }
+  if (hasDockerPathEvidence(normalizedPath)) {
     signals.add("docker");
     signals.add("runtime");
   }
@@ -573,23 +987,33 @@ function deriveSignals(file) {
   if (allowsVersionCriticalTextSignals && hasSecurityEvidence(normalizedPath, patch)) {
     signals.add("security");
   }
-  if (hasBreakingChangeEvidence(patch)) {
+  const structuralBreakingSignal = hasBreakingChangeStructuralEvidence(normalizedPath, patch)
+    && (
+      ["removed", "renamed"].includes(file.status)
+      || hasPatchLineMatch(file, "-", /\b(remove|drop|delete|deprecat|disable|rename|migrate)\b/)
+    );
+  if (hasBreakingChangeEvidence(normalizedPath, patch) || structuralBreakingSignal) {
     signals.add("breaking-change");
   }
+  const compatibilityPathSurface = isCompatibilityPath(normalizedPath);
   if (allowsVersionCriticalTextSignals && (
-    /(^|\/)(compat|compatibility|interop|polyfill|shim)(\/|$)/.test(normalizedPath)
+    compatibilityPathSurface
     || /\b(backward compatibility|compatibility|interop|polyfill|shim)\b/.test(patch)
+      && (hasApiPathEvidence(normalizedPath) || isPublicPackageContractPath(normalizedPath) || compatibilityPathSurface)
   )) {
     signals.add("compatibility");
   }
-  if (allowsVersionCriticalTextSignals && /feature[\s-]?flag|kill switch|rollout/.test(text)) {
+  if (allowsVersionCriticalTextSignals && hasFeatureFlagEvidence(normalizedPath, text)) {
     signals.add("feature-flag");
   }
   if (allowsVersionCriticalTextSignals && hasRuntimePathEvidence(normalizedPath) && hasRuntimePatchEvidence(patch)) {
     signals.add("runtime");
   }
-  if (hasPerformancePatchEvidence(patch)) {
+  if (sourceTextSurface && hasPerformancePatchEvidence(patch)) {
     signals.add("performance");
+  }
+  if (sourceTextSurface && hasObservabilityEvidence(normalizedPath, patch)) {
+    signals.add("observability");
   }
   return [...signals];
 }
@@ -608,6 +1032,14 @@ function isTestPath(normalizedPath) {
     || /\.(spec|test)\.(js|jsx|ts|tsx|py|cjs|mjs|cts|mts)$/.test(normalizedPath);
 }
 
+function isSourceCodePath(normalizedPath) {
+  if (!normalizedPath || isDocumentationPath(normalizedPath) || isTestPath(normalizedPath)) {
+    return false;
+  }
+  return /(^|\/)(src|app|lib|server|client|balancer|shared|packages)(\/|$)/.test(normalizedPath)
+    || /\.(cjs|mjs|js|jsx|ts|tsx|py|go|rs|java|kt|swift|rb|php|cs|cpp|cc|c|h)$/.test(normalizedPath);
+}
+
 function isDevcontainerPath(normalizedPath) {
   return /^\.devcontainer\//.test(normalizedPath)
     || /(^|\/)devcontainer\.json$/.test(normalizedPath);
@@ -617,6 +1049,26 @@ function isInfrastructurePath(normalizedPath) {
   return /(^|\/)(infra|infrastructure|deploy|k8s|kubernetes|terraform|helm)(\/|$)/.test(normalizedPath)
     || /\.(tf|tfvars)$/.test(normalizedPath)
     || /chart\.ya?ml$/.test(normalizedPath);
+}
+
+function isCompatibilityPath(normalizedPath) {
+  return /(^|\/)(compat|compatibility|interop|polyfill|shim)(\/|$)/.test(normalizedPath);
+}
+
+function deriveCleanupOccurrenceWeight(categories, normalizedPath) {
+  if (categories.has("documentation") || categories.has("test")) {
+    return 0.2;
+  }
+  if (categories.has("workflow") || categories.has("github")) {
+    return 0.35;
+  }
+  if (categories.has("config") || categories.has("dependencies")) {
+    return 0.45;
+  }
+  if (categories.has("source") || categories.has("ui") || isSourceCodePath(normalizedPath)) {
+    return 1;
+  }
+  return 0.6;
 }
 
 function addTechnicalLabel(labels, label) {
@@ -727,8 +1179,19 @@ function deriveSpecificReplacementLabels(labelMetrics, context = {}, options = {
   return descendants.slice(0, 2).map((entry) => entry.metrics.normalizedLabel);
 }
 
+function resolveOutputLabelLimit(rawLimit) {
+  if (rawLimit === undefined || rawLimit === null || rawLimit === "") {
+    return Number.POSITIVE_INFINITY;
+  }
+  const parsedLimit = Number(rawLimit);
+  if (!Number.isFinite(parsedLimit)) {
+    return Number.POSITIVE_INFINITY;
+  }
+  return Math.max(parsedLimit, 1);
+}
+
 function enforcePrecisionEmissionParameters(labels, context = {}, options = {}) {
-  const limit = Math.max(Number(options.limit) || MAX_AUTOBOT_LABELS, 1);
+  const limit = resolveOutputLabelLimit(options.limit);
   const maxWords = Math.max(Number(options.maxWords) || MAX_LABEL_WORDS, 1);
   const normalizedLabels = applyLabelWordBudgetFromMeasurement(labels, { maxWords });
   const selectedLabels = [];
@@ -764,6 +1227,16 @@ function enforcePrecisionEmissionParameters(labels, context = {}, options = {}) 
 
 function deriveTechnicalLabels(filesWithContext) {
   const technicalLabels = new Set();
+  const publicPackageRootsWithInitializers = new Set(
+    filesWithContext
+      .map((candidateFile) => String(candidateFile.filename || "").toLowerCase())
+      .map((candidatePath) => candidatePath.match(/^src\/([^/]+)\/(?:__init__\.py|[^/]+\/__init__\.py)$/))
+      .filter(Boolean)
+      .map((match) => match[1])
+  );
+  const pythonPackageMetadataTouched = filesWithContext.some((candidateFile) =>
+    /^(pyproject\.toml|setup\.(cfg|py)|manifest\.in)$/.test(String(candidateFile.filename || "").toLowerCase())
+  );
 
   for (const file of filesWithContext) {
     const normalizedPath = String(file.filename || "").toLowerCase();
@@ -777,24 +1250,27 @@ function deriveTechnicalLabels(filesWithContext) {
       || /(^|\/)(readme|contributing|changelog)(\.[^/]+)?$/.test(normalizedPath)
       || /\.(md|mdx|rst|txt)$/.test(normalizedPath);
     const testSurface = isTestPath(normalizedPath);
+    const sourceCodeSurface = !documentationSurface && !testSurface && isSourceCodePath(normalizedPath);
     const runtimeContractSurface = isRuntimeSupportContractPath(normalizedPath);
-    const runtimeTextSurface = hasRuntimePatchEvidence(patch) && !categories.has("dependencies") && !categories.has("workflow");
+    const runtimePathEvidence = hasRuntimePathEvidence(normalizedPath);
+    const runtimeTextSurface = runtimePathEvidence && hasRuntimePatchEvidence(patch) && !categories.has("dependencies") && !categories.has("workflow");
     const cemExcludedFromApiText = categories.has("workflow") || categories.has("github") || autobotClassificationInfrastructure || matchesWorkflowFilePath(normalizedPath);
     const apiSurface = hasApiPathEvidence(normalizedPath)
       || (!cemExcludedFromApiText && /\b(fastapi|flask|router|route|endpoint|webhook|graphql)\b/.test(text));
 
     if (matchesWorkflowFilePath(normalizedPath)) {
+      const workflowPatchText = changedPatchBodyText(patch);
       addTechnicalLabel(technicalLabels, "github actions");
-      if (/strategy:\s*|matrix:/.test(patch)) addTechnicalLabel(technicalLabels, "matrix job");
-      if (/python-version|python_version/.test(patch)) addTechnicalLabel(technicalLabels, "python matrix");
-      if (/ubuntu|windows|macos/.test(patch)) addTechnicalLabel(technicalLabels, "os matrix");
-      if (/branches:|branches-ignore:|tags:|tags-ignore:|paths:|paths-ignore:/.test(patch)) addTechnicalLabel(technicalLabels, "branch filter");
-      if (/upload-artifact|download-artifact/.test(patch)) addTechnicalLabel(technicalLabels, "artifact upload");
-      if (/actions\/cache|cache-hit|restore-keys|cache:/.test(patch)) addTechnicalLabel(technicalLabels, "cache restore");
-      if (/uses:\s*actions\//.test(patch)) addTechnicalLabel(technicalLabels, "action pin");
+      if (hasWorkflowMatrixSignal(workflowPatchText)) addTechnicalLabel(technicalLabels, "matrix job");
+      if (hasPythonMatrixSignal(workflowPatchText)) addTechnicalLabel(technicalLabels, "python matrix");
+      if (hasOsMatrixSignal(workflowPatchText)) addTechnicalLabel(technicalLabels, "os matrix");
+      if (/branches:|branches-ignore:|tags:|tags-ignore:|paths:|paths-ignore:/.test(workflowPatchText)) addTechnicalLabel(technicalLabels, "branch filter");
+      if (/upload-artifact|download-artifact/.test(workflowPatchText)) addTechnicalLabel(technicalLabels, "artifact upload");
+      if (/actions\/cache|cache-hit|restore-keys|cache:/.test(workflowPatchText)) addTechnicalLabel(technicalLabels, "cache restore");
+      if (/uses:\s*actions\//.test(workflowPatchText)) addTechnicalLabel(technicalLabels, "action pin");
     }
 
-    if (matchesUiPath(normalizedPath) || hasUiTextEvidence(text)) {
+    if (matchesUiPath(normalizedPath) || hasUiTextEvidence(normalizedPath, text)) {
       addTechnicalLabel(technicalLabels, "view");
       if (/\.(html|tsx|jsx|vue|svelte)$/.test(normalizedPath) || /<(button|form|input|select|dialog|label)\b/.test(text)) {
         addTechnicalLabel(technicalLabels, "template");
@@ -813,7 +1289,7 @@ function deriveTechnicalLabels(filesWithContext) {
       if (/focus/.test(text)) addTechnicalLabel(technicalLabels, "focus order");
     }
 
-    if (LOCALIZATION_TEXT_PATTERN.test(text)) {
+    if (sourceCodeSurface && LOCALIZATION_TEXT_PATTERN.test(text)) {
       addTechnicalLabel(technicalLabels, "localization");
       if (/translation|translations|gettext|catalog/.test(text)) addTechnicalLabel(technicalLabels, "translation catalog");
       if (/locale|message|string/.test(text)) addTechnicalLabel(technicalLabels, "locale string");
@@ -822,9 +1298,14 @@ function deriveTechnicalLabels(filesWithContext) {
 
     if (isPublicPackageContractPath(normalizedPath)) {
       const packageInitializer = /__init__\.py$/.test(normalizedPath);
-      const topLevelModule = /^src\/definers\/[^/]+\.py$/.test(normalizedPath);
+      const topLevelModule = /^src\/[^/]+\/[^/]+\.py$/.test(normalizedPath);
       const destructivePublicMove = ["removed", "renamed"].includes(file.status) || destructive;
-      if (packageInitializer || topLevelModule || destructivePublicMove) addTechnicalLabel(technicalLabels, "public export");
+      const packageRootMatch = normalizedPath.match(/^src\/([^/]+)\//);
+      const packageRoot = packageRootMatch ? packageRootMatch[1] : "";
+      const hasInitializerSignal = packageRoot ? publicPackageRootsWithInitializers.has(packageRoot) : false;
+      const topLevelPublicContract = topLevelModule && (hasInitializerSignal || pythonPackageMetadataTouched);
+
+      if (packageInitializer || topLevelPublicContract || destructivePublicMove) addTechnicalLabel(technicalLabels, "public export");
       if (packageInitializer) addTechnicalLabel(technicalLabels, "facade module");
       if (destructivePublicMove) addTechnicalLabel(technicalLabels, "import path");
     }
@@ -870,6 +1351,9 @@ function deriveTechnicalLabels(filesWithContext) {
       && !/\.(spec|test)\.(js|jsx|ts|tsx|py|cjs|mjs|cts|mts)$/.test(normalizedPath)
       && !destructive
     ) {
+      addTechnicalLabel(technicalLabels, "shim module");
+    }
+    if (!documentationSurface && !testSurface && isCompatibilityPath(normalizedPath)) {
       addTechnicalLabel(technicalLabels, "shim module");
     }
 
@@ -936,33 +1420,39 @@ function deriveTechnicalLabels(filesWithContext) {
     }
 
     if (apiSurface) {
-      if (/graphql|\.gql$|\.graphql$/.test(text)) {
-        addTechnicalLabel(technicalLabels, "graphql");
-        if (/resolver/.test(text)) addTechnicalLabel(technicalLabels, "resolver");
-        if (/type\s+\w+|extend type|input\s+\w+/.test(text)) addTechnicalLabel(technicalLabels, "schema field");
-      } else if (/webhook/.test(text)) {
-        addTechnicalLabel(technicalLabels, "webhook");
-        if (/payload|event/.test(text)) addTechnicalLabel(technicalLabels, "webhook payload");
-        if (/retry/.test(text)) addTechnicalLabel(technicalLabels, "webhook retry");
-      } else {
-        addTechnicalLabel(technicalLabels, "route");
-        if (hasRouteParameterEvidence(patch)) addTechnicalLabel(technicalLabels, "route param");
-        if (hasQueryParameterEvidence(patch)) addTechnicalLabel(technicalLabels, "query param");
-        if (/\brest\b|\bhttp\b/.test(text)) addTechnicalLabel(technicalLabels, "rest");
+      const hasApiText = /\b(api|endpoint|route|webhook)\b/.test(text);
+      if (hasApiText) {
+        if (/graphql|\.gql$|\.graphql$/.test(text)) {
+          addTechnicalLabel(technicalLabels, "graphql");
+          if (/resolver/.test(text)) addTechnicalLabel(technicalLabels, "resolver");
+          if (/type\s+\w+|extend type|input\s+\w+/.test(text)) addTechnicalLabel(technicalLabels, "schema field");
+        } else if (/webhook/.test(text)) {
+          addTechnicalLabel(technicalLabels, "webhook");
+          if (/payload|event/.test(text)) addTechnicalLabel(technicalLabels, "webhook payload");
+          if (/retry/.test(text)) addTechnicalLabel(technicalLabels, "webhook retry");
+        } else {
+          addTechnicalLabel(technicalLabels, "route");
+          if (hasRouteParameterEvidence(patch)) addTechnicalLabel(technicalLabels, "route param");
+          if (hasQueryParameterEvidence(patch)) addTechnicalLabel(technicalLabels, "query param");
+          if (/\brest\b|\bhttp\b/.test(text)) addTechnicalLabel(technicalLabels, "rest");
+        }
       }
+      if (hasApiText && /openapi|swagger/.test(text)) addTechnicalLabel(technicalLabels, "openapi spec");
+      if (hasApiText && /request body|request_model|request schema|payload/.test(text)) addTechnicalLabel(technicalLabels, "request body");
+      if (hasApiText && /response body|response_model|serializer|json response/.test(text)) addTechnicalLabel(technicalLabels, "response body");
+      if (hasApiText && /validate|validator|pydantic/.test(text)) addTechnicalLabel(technicalLabels, "body validation");
+      if (hasApiText && /input schema/.test(text)) addTechnicalLabel(technicalLabels, "input schema");
+      if (hasApiText && /output schema/.test(text)) addTechnicalLabel(technicalLabels, "output schema");
+      if (hasApiText && /error payload|error response/.test(text)) addTechnicalLabel(technicalLabels, "error payload");
     }
-    if (apiSurface && /openapi|swagger/.test(text)) addTechnicalLabel(technicalLabels, "openapi spec");
-    if (apiSurface && /request body|request_model|request schema|payload/.test(text)) addTechnicalLabel(technicalLabels, "request body");
-    if (apiSurface && /response body|response_model|serializer|json response/.test(text)) addTechnicalLabel(technicalLabels, "response body");
-    if (apiSurface && /validate|validator|pydantic/.test(text)) addTechnicalLabel(technicalLabels, "body validation");
-    if (apiSurface && /input schema/.test(text)) addTechnicalLabel(technicalLabels, "input schema");
-    if (apiSurface && /output schema/.test(text)) addTechnicalLabel(technicalLabels, "output schema");
-    if (apiSurface && /error payload|error response/.test(text)) addTechnicalLabel(technicalLabels, "error payload");
 
     if (hasSecurityEvidence(normalizedPath, patch) && !matchesWorkflowFilePath(normalizedPath) && !autobotClassificationInfrastructure) {
-      addTechnicalLabel(technicalLabels, "auth");
+      const hasAuthText = /\b(auth(?:entication|orization)?|permissions?|credential|credentials|secret|secrets)\b/.test(text);
+      if (hasAuthText) {
+        addTechnicalLabel(technicalLabels, "auth");
+        addTechnicalLabel(technicalLabels, "permission");
+      }
       if (/(?:^|[^a-z0-9])token(?:[^a-z0-9]|$)|authorization:\s*bearer/.test(text)) addTechnicalLabel(technicalLabels, "token");
-      if (/\bpermissions?\b|\bauth(?:entication|orization)?\b/.test(text)) addTechnicalLabel(technicalLabels, "permission");
       if (/\bsession\b|\bcookie\b/.test(text)) addTechnicalLabel(technicalLabels, "session");
       if (/\bapi key\b/.test(text)) addTechnicalLabel(technicalLabels, "api key");
       if (/\btls\b|certificate/.test(text)) addTechnicalLabel(technicalLabels, "tls");
@@ -988,10 +1478,10 @@ function deriveTechnicalLabels(filesWithContext) {
       }
       if (/\bcsrf\b/.test(text)) addTechnicalLabel(technicalLabels, "csrf");
       if (/\bauthz\b|authorization|authorize/.test(text)) addTechnicalLabel(technicalLabels, "authz");
-      if (hasVulnerabilityEvidence(text)) addTechnicalLabel(technicalLabels, "vulnerability");
-      if (hasComplianceEvidence(text)) addTechnicalLabel(technicalLabels, "compliance");
-      if (hasHardeningEvidence(text)) addTechnicalLabel(technicalLabels, "hardening");
-      if (hasPenTestEvidence(text)) addTechnicalLabel(technicalLabels, "pen-test");
+      if (hasVulnerabilityEvidence(text, true)) addTechnicalLabel(technicalLabels, "vulnerability");
+      if (hasComplianceEvidence(text, true)) addTechnicalLabel(technicalLabels, "compliance");
+      if (hasHardeningEvidence(text, true)) addTechnicalLabel(technicalLabels, "hardening");
+      if (hasPenTestEvidence(text, true)) addTechnicalLabel(technicalLabels, "pen-test");
     }
 
     if (hasSchemaEvidence(normalizedPath, patch)) {
@@ -1047,63 +1537,83 @@ function deriveTechnicalLabels(filesWithContext) {
     }
 
     if (!matchesWorkflowFilePath(normalizedPath) && (runtimeContractSurface || runtimeTextSurface)) {
-      const runtimeSpecificEvidence = hasRuntimePathEvidence(normalizedPath)
-        || /requires-python|python 3\.|\bwindows\b|\blinux\b|\bubuntu\b|\bmacos\b|\bcuda\b|\bnvidia\b|\bffmpeg\b|platform_system|env[_ -]?var|os\.environ|getenv|dotenv|subprocess|spawn|fork|exec\(|timezone|\btz\b|locale|path separator|filesystem|file system/.test(text);
+      const runtimeSpecificEvidence = runtimePathEvidence && (
+        /requires-python|python 3\.|\bwindows\b|\blinux\b|\bubuntu\b|\bmacos\b|\bcuda\b|\bnvidia\b|\bffmpeg\b|platform_system|env[_ -]?var|os\.environ|getenv|dotenv|timezone|\btz\b|locale/.test(text)
+      );
       if (runtimeSpecificEvidence) addTechnicalLabel(technicalLabels, "platform");
-      if (/docker|compose/.test(text) || /^docker\//.test(normalizedPath)) addTechnicalLabel(technicalLabels, "container");
-      if (!testSurface && hasShellCommandEvidence(patch)) addTechnicalLabel(technicalLabels, "shell");
-      if (hasFilesystemPatchEvidence(patch)) {
-        addTechnicalLabel(technicalLabels, "filesystem");
-        addSpecificFilesystemLabels(technicalLabels, text);
-      }
-      if (/subprocess|spawn|fork|exec\(|child_process/.test(text)) {
-        addTechnicalLabel(technicalLabels, "process");
-        addSpecificProcessLabels(technicalLabels, text);
-      }
-      if (/locale/.test(text)) addTechnicalLabel(technicalLabels, "locale");
-      if (/timezone|\btz\b/.test(text)) addTechnicalLabel(technicalLabels, "timezone");
-      if (/\bx86_64\b|\barm64\b|\baarch64\b|\barchitecture\b/.test(text)) addTechnicalLabel(technicalLabels, "architecture");
-      if (/requires-python|python 3\./.test(text)) {
+      if (hasDockerPathEvidence(normalizedPath) || /docker|compose/.test(text) && runtimePathEvidence) addTechnicalLabel(technicalLabels, "container");
+      if (runtimePathEvidence && /locale/.test(text)) addTechnicalLabel(technicalLabels, "locale");
+      if (runtimePathEvidence && /timezone|\btz\b/.test(text)) addTechnicalLabel(technicalLabels, "timezone");
+      if (runtimePathEvidence && /\bx86_64\b|\barm64\b|\baarch64\b|\barchitecture\b/.test(text)) addTechnicalLabel(technicalLabels, "architecture");
+      if (runtimePathEvidence && /requires-python|python 3\./.test(text)) {
         addTechnicalLabel(technicalLabels, "python");
         addTechnicalLabel(technicalLabels, "python version");
         addTechnicalLabel(technicalLabels, "support matrix");
       }
-      if (/\bwindows\b/.test(text) || /windows/.test(normalizedPath)) {
+      if (runtimePathEvidence && (/\bwindows\b/.test(text) || /windows/.test(normalizedPath))) {
         addTechnicalLabel(technicalLabels, "os");
         addTechnicalLabel(technicalLabels, "windows");
         if (/path separator|\\\\/.test(patch) || PATH_NORMALIZATION_TEXT_PATTERN.test(text)) addTechnicalLabel(technicalLabels, "path separator");
-        if (hasShellCommandEvidence(patch)) addTechnicalLabel(technicalLabels, "shell command");
       }
-      if (/\blinux\b|\bubuntu\b/.test(text) || /linux/.test(normalizedPath)) {
+      if (runtimePathEvidence && (/\blinux\b|\bubuntu\b/.test(text) || /linux/.test(normalizedPath))) {
         addTechnicalLabel(technicalLabels, "os");
         addTechnicalLabel(technicalLabels, "linux");
         if (/apt-get|dnf|pacman|yum/.test(text)) addTechnicalLabel(technicalLabels, "package install");
         if (/shared lib|ld_library_path|\.so\b/.test(text)) addTechnicalLabel(technicalLabels, "shared lib");
       }
-      if (/\bmacos\b/.test(text)) {
+      if (runtimePathEvidence && /\bmacos\b/.test(text)) {
         addTechnicalLabel(technicalLabels, "os");
         addTechnicalLabel(technicalLabels, "macos");
       }
-      if (/\bcuda\b|\bnvidia\b/.test(text)) {
+      if (runtimePathEvidence && /\bcuda\b|\bnvidia\b/.test(text)) {
         addTechnicalLabel(technicalLabels, "cuda");
         if (/gpu memory|vram/.test(text)) addTechnicalLabel(technicalLabels, "gpu memory");
         if (/kernel launch|cuda launch/.test(text)) addTechnicalLabel(technicalLabels, "kernel launch");
       }
-      if (/env[_ -]?var|os\.environ|getenv|dotenv/.test(text)) {
+      if (runtimePathEvidence && /env[_ -]?var|os\.environ|getenv|dotenv/.test(text)) {
         addTechnicalLabel(technicalLabels, "env var");
         if (/dotenv|load env/.test(text)) addTechnicalLabel(technicalLabels, "env loading");
         if (/\bdefault\b/.test(text)) addTechnicalLabel(technicalLabels, "env default");
       }
     }
 
-    if (FEATURE_FLAG_TEXT_PATTERN.test(text)) {
+    if (!testSurface && hasShellCommandEvidence(normalizedPath, patch)) {
+      addTechnicalLabel(technicalLabels, "shell");
+      if (/\bwindows\b/.test(text) || /windows/.test(normalizedPath)) {
+        addTechnicalLabel(technicalLabels, "shell command");
+      }
+    }
+    if (hasFilesystemPatchEvidence(normalizedPath, patch)) {
+      addTechnicalLabel(technicalLabels, "filesystem");
+      addSpecificFilesystemLabels(technicalLabels, text);
+    }
+    if (SUBPROCESS_IO_TEXT_PATTERN.test(text) || /\bsubprocess\b|\bspawn\b|\bfork\b|exec\(|child_process/.test(text)) {
+      addTechnicalLabel(technicalLabels, "process");
+      addSpecificProcessLabels(technicalLabels, text);
+    }
+
+    if (hasFeatureFlagEvidence(normalizedPath, text)) {
       addTechnicalLabel(technicalLabels, "feature toggle");
       if (/kill switch/.test(text)) addTechnicalLabel(technicalLabels, "kill switch");
       if (/default/.test(text)) addTechnicalLabel(technicalLabels, "default state");
       if (/cohort|segment|bucket|target/.test(text)) addTechnicalLabel(technicalLabels, "cohort rule");
     }
 
-    const performanceEligibleSurface = !documentationSurface && !testSurface && !matchesWorkflowFilePath(normalizedPath) && !autobotClassificationInfrastructure;
+    if (sourceCodeSurface && hasObservabilityEvidence(normalizedPath, patch)) {
+      addTechnicalLabel(technicalLabels, "observability");
+      if (/telemetry|otel|opentelemetry/.test(text)) addTechnicalLabel(technicalLabels, "telemetry");
+      if (/prometheus|monitoring|metrics?|histogram|counter|gauge/.test(text)) addTechnicalLabel(technicalLabels, "monitoring");
+      if (/tracing?|trace(?: id)?|span(?: id)?|opentelemetry|otel/.test(text)) {
+        addTechnicalLabel(technicalLabels, "request tracing");
+      }
+    }
+
+    if (hasVisualOnlyStyleChange(normalizedPath, patch)) {
+      addTechnicalLabel(technicalLabels, "style");
+      addTechnicalLabel(technicalLabels, "formatting");
+    }
+
+    const performanceEligibleSurface = sourceCodeSurface && !matchesWorkflowFilePath(normalizedPath) && !autobotClassificationInfrastructure;
     if (performanceEligibleSurface && hasPerformancePatchEvidence(patch)) {
       if (hasHeapUsageEvidence(patch)) {
         addTechnicalLabel(technicalLabels, "heap usage");
@@ -1146,7 +1656,7 @@ function isDestructiveFileChange(file) {
   const normalizedPath = String(file.filename || "").toLowerCase();
   const patch = String(file.patch || "").toLowerCase();
   return ["removed", "renamed"].includes(file.status)
-    || hasBreakingChangeEvidence(patch)
+    || hasBreakingChangeEvidence(normalizedPath, patch)
     || hasPatchLineMatch(file, "-", /\b(remove|drop|delete|deprecat|disable|rename|migrate)\b/)
     || isPublicPackageContractPath(normalizedPath) && Number(file.deletions || 0) > Number(file.additions || 0);
 }
@@ -1237,10 +1747,10 @@ function applyPrLabelPolicy(labels, options = {}) {
 }
 
 function ensureRequiredLabelFamily(labels, requiredLabel, preferredLabels = [], options = {}) {
-  const limit = Math.max(Number(options.limit) || MAX_AUTOBOT_LABELS, 1);
+  const limit = resolveOutputLabelLimit(options.limit);
   const rankedLabels = applyPrLabelPolicy(labels, {
     ...options,
-    limit: Math.max(limit * 3, MAX_AUTOBOT_LABELS)
+    limit: Number.isFinite(limit) ? Math.max(limit * 3, 1) : Number.POSITIVE_INFINITY
   });
   if (rankedLabels.some((label) => AutobotLabelRegistry.matchesExpectedLabel(label, requiredLabel))) {
     return rankedLabels.slice(0, limit);
@@ -1596,6 +2106,7 @@ function buildDeterministicEvidence(filesWithContext, context) {
   const configFiles = [];
   const dependencyExpansionFiles = [];
   const dependencyTighteningFiles = [];
+  const dependencyVulnerabilityRemediationFiles = [];
   const dockerExpansionFiles = [];
   const dockerDroppedFiles = [];
   const devcontainerFiles = [];
@@ -1606,6 +2117,7 @@ function buildDeterministicEvidence(filesWithContext, context) {
   const localizationFiles = [];
   const securityAuthFiles = [];
   const securitySecretFiles = [];
+  const codeqlSecurityReductionFiles = [];
   const vulnerabilityFiles = [];
   const complianceFiles = [];
   const hardeningFiles = [];
@@ -1625,7 +2137,11 @@ function buildDeterministicEvidence(filesWithContext, context) {
   const runtimeSupportDroppedFiles = [];
   const runtimePolicyFiles = [];
   const performanceFiles = [];
+  const observabilityFiles = [];
+  const styleOnlyVisualFiles = [];
+  const refactorCandidateFiles = [];
   const cleanupFiles = [];
+  let cleanupWeightedCount = 0;
   const publicRemovedFiles = [];
   const publicRenamedFiles = [];
   const publicAddedFiles = [];
@@ -1687,6 +2203,17 @@ function buildDeterministicEvidence(filesWithContext, context) {
       } else {
         dependencyExpansionFiles.push(file.filename);
       }
+      if (hasDependencyVulnerabilityRemediationEvidence({
+        normalizedPath,
+        patch,
+        securityContextText
+      })) {
+        dependencyVulnerabilityRemediationFiles.push(file.filename);
+      }
+    }
+
+    if (hasCodeqlSecurityAlertReductionEvidence(normalizedPath, patch)) {
+      codeqlSecurityReductionFiles.push(file.filename);
     }
 
     if (categories.has("docker")) {
@@ -1714,22 +2241,29 @@ function buildDeterministicEvidence(filesWithContext, context) {
       if (ACCESSIBILITY_TEXT_PATTERN.test(patch)) {
         accessibilityFiles.push(file.filename);
       }
-      if (LOCALIZATION_TEXT_PATTERN.test(patch)) {
+      if (LOCALIZATION_TEXT_PATTERN.test(patch) && isSourceCodePath(normalizedPath)) {
         localizationFiles.push(file.filename);
+      }
+      if (hasVisualOnlyStyleChange(normalizedPath, patch)) {
+        styleOnlyVisualFiles.push(file.filename);
       }
     }
 
-    if (signals.has("security")) {
-      if (hasVulnerabilityEvidence(text)) {
+    if (signals.has("observability") && hasObservabilityEvidence(normalizedPath, patch)) {
+      observabilityFiles.push(file.filename);
+    }
+
+    if (signals.has("security") && hasSecurityPathEvidence(normalizedPath)) {
+      if (hasVulnerabilityEvidence(text, true)) {
         vulnerabilityFiles.push(file.filename);
       }
-      if (hasComplianceEvidence(text)) {
+      if (hasComplianceEvidence(text, true)) {
         complianceFiles.push(file.filename);
       }
-      if (hasHardeningEvidence(text)) {
+      if (hasHardeningEvidence(text, true)) {
         hardeningFiles.push(file.filename);
       }
-      if (hasPenTestEvidence(text)) {
+      if (hasPenTestEvidence(text, true)) {
         penTestFiles.push(file.filename);
       }
       if (SECURITY_SECRET_TEXT_PATTERN.test(patch)) {
@@ -1775,7 +2309,7 @@ function buildDeterministicEvidence(filesWithContext, context) {
       }
     }
 
-    if (!autobotClassificationInfrastructure && (signals.has("feature-flag") || FEATURE_FLAG_TEXT_PATTERN.test(patch))) {
+    if (!autobotClassificationInfrastructure && signals.has("feature-flag")) {
       if (destructive) {
         featureFlagContractFiles.push(file.filename);
       } else {
@@ -1799,6 +2333,16 @@ function buildDeterministicEvidence(filesWithContext, context) {
 
     if (file.status === "removed" && !isPublicPackageContractPath(normalizedPath) && !categories.has("test")) {
       cleanupFiles.push(file.filename);
+      cleanupWeightedCount += deriveCleanupOccurrenceWeight(categories, normalizedPath);
+    }
+
+    if (
+      file.status === "modified"
+      && !categories.has("documentation")
+      && !categories.has("test")
+      && (categories.has("source") || categories.has("ui") || categories.has("tooling"))
+    ) {
+      refactorCandidateFiles.push(file.filename);
     }
 
     if (isPublicPackageContractPath(normalizedPath)) {
@@ -1818,6 +2362,16 @@ function buildDeterministicEvidence(filesWithContext, context) {
     }
   }
 
+  const aggregateAdditions = Math.max(Number(context.totalAdditions) || 0, 0);
+  const aggregateDeletions = Math.max(Number(context.totalDeletions) || 0, 0);
+  const aggregateChanges = Math.max(Number(context.totalChanges) || aggregateAdditions + aggregateDeletions, 0);
+  const netLineChangeRatio = aggregateChanges > 0
+    ? Math.abs(aggregateAdditions - aggregateDeletions) / aggregateChanges
+    : 1;
+  const refactorRatioSignal = !context.capabilityExpansionSignal
+    && aggregateChanges >= 40
+    && netLineChangeRatio <= 0.25;
+
   const publicCapabilityFiles = publicAddedFiles;
 
   addEvidenceItem(evidenceMap, "documentation-surface", { occurrenceCount: documentationFiles.length, scope: "repo", confidence: "structural", sampleFiles: documentationFiles });
@@ -1832,6 +2386,7 @@ function buildDeterministicEvidence(filesWithContext, context) {
   addEvidenceItem(evidenceMap, "config-surface-change", { occurrenceCount: configFiles.length, scope: "repo", confidence: "structural", sampleFiles: configFiles });
   addEvidenceItem(evidenceMap, "dependency-capability-expansion", { occurrenceCount: dependencyExpansionFiles.length, scope: "repo", confidence: "corroborated", sampleFiles: dependencyExpansionFiles });
   addEvidenceItem(evidenceMap, "dependency-compatibility-tightening", { occurrenceCount: dependencyTighteningFiles.length, scope: "repo", confidence: "corroborated", sampleFiles: dependencyTighteningFiles });
+  addEvidenceItem(evidenceMap, "dependency-vulnerability-remediation", { occurrenceCount: dependencyVulnerabilityRemediationFiles.length, scope: "repo", confidence: "corroborated", sampleFiles: dependencyVulnerabilityRemediationFiles });
   addEvidenceItem(evidenceMap, "docker-runtime-expansion", { occurrenceCount: dockerExpansionFiles.length, scope: "repo", confidence: "structural", sampleFiles: dockerExpansionFiles });
   addEvidenceItem(evidenceMap, "docker-runtime-drop", { occurrenceCount: dockerDroppedFiles.length, scope: "repo", confidence: "structural", sampleFiles: dockerDroppedFiles });
   addEvidenceItem(evidenceMap, "devcontainer-surface-change", { occurrenceCount: devcontainerFiles.length, scope: "repo", confidence: "structural", sampleFiles: devcontainerFiles });
@@ -1846,6 +2401,7 @@ function buildDeterministicEvidence(filesWithContext, context) {
   addEvidenceItem(evidenceMap, "security-compliance", { occurrenceCount: complianceFiles.length, scope: "repo", confidence: "corroborated", sampleFiles: complianceFiles });
   addEvidenceItem(evidenceMap, "security-hardening", { occurrenceCount: hardeningFiles.length, scope: "repo", confidence: "corroborated", sampleFiles: hardeningFiles });
   addEvidenceItem(evidenceMap, "security-pen-test", { occurrenceCount: penTestFiles.length, scope: "repo", confidence: "corroborated", sampleFiles: penTestFiles });
+  addEvidenceItem(evidenceMap, "codeql-security-alert-reduction", { occurrenceCount: codeqlSecurityReductionFiles.length, scope: "repo", confidence: "corroborated", sampleFiles: codeqlSecurityReductionFiles });
   const securityContextFiles = [...new Set([
     ...vulnerabilityFiles,
     ...complianceFiles,
@@ -1856,25 +2412,25 @@ function buildDeterministicEvidence(filesWithContext, context) {
   ])];
   if (securityContextFiles.length > 0) {
     addEvidenceItem(evidenceMap, "security-vulnerability", {
-      occurrenceCount: hasVulnerabilityEvidence(securityContextText) ? 1 : 0,
+      occurrenceCount: hasVulnerabilityEvidence(securityContextText, true) ? 1 : 0,
       scope: "repo",
       confidence: "title",
       sampleFiles: securityContextFiles
     });
     addEvidenceItem(evidenceMap, "security-compliance", {
-      occurrenceCount: hasComplianceEvidence(securityContextText) ? 1 : 0,
+      occurrenceCount: hasComplianceEvidence(securityContextText, true) ? 1 : 0,
       scope: "repo",
       confidence: "title",
       sampleFiles: securityContextFiles
     });
     addEvidenceItem(evidenceMap, "security-hardening", {
-      occurrenceCount: hasHardeningEvidence(securityContextText) ? 1 : 0,
+      occurrenceCount: hasHardeningEvidence(securityContextText, true) ? 1 : 0,
       scope: "repo",
       confidence: "title",
       sampleFiles: securityContextFiles
     });
     addEvidenceItem(evidenceMap, "security-pen-test", {
-      occurrenceCount: hasPenTestEvidence(securityContextText) ? 1 : 0,
+      occurrenceCount: hasPenTestEvidence(securityContextText, true) ? 1 : 0,
       scope: "repo",
       confidence: "title",
       sampleFiles: securityContextFiles
@@ -1895,7 +2451,15 @@ function buildDeterministicEvidence(filesWithContext, context) {
   addEvidenceItem(evidenceMap, "runtime-support-dropped", { occurrenceCount: runtimeSupportDroppedFiles.length, scope: "public", confidence: "corroborated", sampleFiles: runtimeSupportDroppedFiles });
   addEvidenceItem(evidenceMap, "runtime-policy-change", { occurrenceCount: runtimePolicyFiles.length, scope: "repo", confidence: "corroborated", sampleFiles: runtimePolicyFiles });
   addEvidenceItem(evidenceMap, "performance-optimization", { occurrenceCount: performanceFiles.length, scope: "subsystem", confidence: "corroborated", sampleFiles: performanceFiles });
-  addEvidenceItem(evidenceMap, "cleanup-removal", { occurrenceCount: cleanupFiles.length, scope: "subsystem", confidence: "structural", sampleFiles: cleanupFiles });
+  addEvidenceItem(evidenceMap, "observability-telemetry-change", { occurrenceCount: observabilityFiles.length, scope: "subsystem", confidence: "corroborated", sampleFiles: observabilityFiles });
+  addEvidenceItem(evidenceMap, "style-visual-only-change", { occurrenceCount: styleOnlyVisualFiles.length, scope: "public", confidence: "corroborated", sampleFiles: styleOnlyVisualFiles });
+  addEvidenceItem(evidenceMap, "cleanup-removal", { occurrenceCount: cleanupWeightedCount, scope: "subsystem", confidence: "structural", sampleFiles: cleanupFiles });
+  addEvidenceItem(evidenceMap, "refactor-net-line-change", {
+    occurrenceCount: refactorRatioSignal ? Math.max(Math.min(refactorCandidateFiles.length, 3), 1) : 0,
+    scope: "subsystem",
+    confidence: "corroborated",
+    sampleFiles: refactorCandidateFiles
+  });
   addEvidenceItem(evidenceMap, "removed-public-export", { occurrenceCount: publicRemovedFiles.length, scope: "public", confidence: "structural", sampleFiles: publicRemovedFiles });
   addEvidenceItem(evidenceMap, "renamed-public-module", { occurrenceCount: publicRenamedFiles.length, scope: "public", confidence: "structural", sampleFiles: publicRenamedFiles });
   addEvidenceItem(evidenceMap, "added-public-capability", { occurrenceCount: publicCapabilityFiles.length, scope: "public", confidence: "structural", sampleFiles: publicCapabilityFiles });
@@ -1908,6 +2472,19 @@ function buildDeterministicEvidence(filesWithContext, context) {
       sampleFiles: behavioralAdditionFiles
     });
   }
+
+  addEvidenceItem(evidenceMap, "pr-title-bug-signal", {
+    occurrenceCount: context.hasBehavioralSurfaceChange && context.titleSignals?.bug ? 1 : 0,
+    scope: "subsystem",
+    confidence: "title",
+    sampleFiles: behavioralAdditionFiles
+  });
+  addEvidenceItem(evidenceMap, "pr-title-enhancement-signal", {
+    occurrenceCount: context.hasBehavioralSurfaceChange && context.titleSignals?.enhancement ? 1 : 0,
+    scope: "subsystem",
+    confidence: "title",
+    sampleFiles: behavioralAdditionFiles
+  });
 
   return finalizeEvidenceItems(evidenceMap);
 }
@@ -1969,27 +2546,39 @@ function analyzePullRequestSnapshotData(snapshot) {
   if (structuralPublicBreakingSignal) {
     signalSet.add("breaking-change");
   }
-  const hasDirectSecuritySurface = filesWithContext.some((file) => {
+  const hasDirectSecurityEvidence = filesWithContext.some((file) => {
     const normalizedPath = String(file.filename || "").toLowerCase();
-    return file.signals.includes("security")
-      && !isAutobotClassificationInfrastructure(normalizedPath)
-      && !isDependencyLockfilePath(normalizedPath);
+    if (
+      isDocumentationPath(normalizedPath)
+      || isAutobotClassificationInfrastructure(normalizedPath)
+      || isTestPath(normalizedPath)
+    ) {
+      return false;
+    }
+    const patch = String(file.patch || "").toLowerCase();
+    return hasSecurityEvidence(normalizedPath, patch)
+      || hasCodeqlSecurityAlertReductionEvidence(normalizedPath, patch)
+      || hasDependencyVulnerabilityRemediationEvidence({
+        normalizedPath,
+        patch,
+        securityContextText
+      });
   });
-  if (titleSignals.security && hasDirectSecuritySurface) {
+  if (titleSignals.security && hasDirectSecurityEvidence) {
     signalSet.add("security");
   }
 
   const technicalSignalSet = new Set(deriveTechnicalLabels(filesWithContext));
-  if (hasDirectSecuritySurface && hasVulnerabilityEvidence(securityContextText)) {
+  if (hasDirectSecurityEvidence && hasVulnerabilityEvidence(securityContextText, true)) {
     technicalSignalSet.add("vulnerability");
   }
-  if (hasDirectSecuritySurface && hasComplianceEvidence(securityContextText)) {
+  if (hasDirectSecurityEvidence && hasComplianceEvidence(securityContextText, true)) {
     technicalSignalSet.add("compliance");
   }
-  if (hasDirectSecuritySurface && hasHardeningEvidence(securityContextText)) {
+  if (hasDirectSecurityEvidence && hasHardeningEvidence(securityContextText, true)) {
     technicalSignalSet.add("hardening");
   }
-  if (hasDirectSecuritySurface && hasPenTestEvidence(securityContextText)) {
+  if (hasDirectSecurityEvidence && hasPenTestEvidence(securityContextText, true)) {
     technicalSignalSet.add("pen-test");
   }
   const technicalSignals = sortLabels([...technicalSignalSet]);
@@ -2015,6 +2604,14 @@ function analyzePullRequestSnapshotData(snapshot) {
   const maintenanceOnlyEligible = filesWithContext.length > 0
     && [...categoryCounts.keys()].every((category) => MAINTENANCE_ONLY_CATEGORIES.has(category))
     && !AutobotLabelRegistry.RELEASE_CRITICAL_LABELS.some((label) => signalSet.has(label));
+  const hasTokenSecurityEvidence = filesWithContext.some((file) => {
+    const normalizedPath = String(file.filename || "").toLowerCase();
+    if (!hasSecurityPathEvidence(normalizedPath) || isAutobotClassificationInfrastructure(normalizedPath)) {
+      return false;
+    }
+    const text = `${normalizedPath}\n${String(file.patch || "").toLowerCase()}`;
+    return /(?:^|[^a-z0-9])token(?:[^a-z0-9]|$)|authorization:\s*bearer|\bjwt\b/.test(text);
+  });
   const smallPullRequest = isSmallPullRequest(filesWithContext.length, totalChanges);
   const prLabelLimit = derivePrLabelBudget(smallPullRequest);
   const genericMaintenanceLabelLimit = deriveGenericMaintenanceLabelLimit(smallPullRequest);
@@ -2023,19 +2620,24 @@ function analyzePullRequestSnapshotData(snapshot) {
     limit: prLabelLimit,
     maxWords: MAX_LABEL_WORDS
   };
-  const prCollectionLimit = Math.max(prLabelLimit * 2, MAX_AUTOBOT_LABELS);
+  const prCollectionLimit = Number.isFinite(prLabelLimit) ? Math.max(prLabelLimit * 2, 1) : Number.POSITIVE_INFINITY;
   const evidenceItems = buildDeterministicEvidence(filesWithContext, {
     behavioralSurfaceAdditions,
     capabilityExpansionSignal,
+    hasBehavioralSurfaceChange,
     securityContextText,
-    structuralPublicBreakingSignal
+    structuralPublicBreakingSignal,
+    titleSignals,
+    totalAdditions,
+    totalChanges,
+    totalDeletions
   });
   const contentEvidenceMap = buildContentEvidenceMap(filesWithContext, technicalSignals, evidenceItems);
   const cemFilteredTechnicalSignals = applyCemGate(technicalSignals, contentEvidenceMap);
   const cemFilteredOrderedSignals = applyCemGate(orderedSignals, contentEvidenceMap);
   const scoring = scoreDeterministicEvidence({
     evidenceItems,
-    options: { maxLabels: MAX_AUTOBOT_LABELS }
+    options: {}
   });
   const scorerEmittedLabels = applyPrLabelPolicy(scoring.emittedLabels.map((entry) => entry.label), {
     ...prLabelPolicy,
@@ -2340,7 +2942,9 @@ function analyzePullRequestSnapshotData(snapshot) {
       prLabelPolicy
     );
   }
-  if (maintenanceOnlyEligible && categoryCounts.get("test")) {
+  const maintenanceLikeOperationalSurface = !hasBehavioralSurfaceChange
+    && (maintenanceOnlyEligible || categoryCounts.get("test") || categoryCounts.get("workflow") || signalSet.has("workflow"));
+  if (maintenanceLikeOperationalSurface && categoryCounts.get("test")) {
     deterministicLabels = ensureRequiredLabelFamily(
       deterministicLabels,
       "test",
@@ -2348,13 +2952,41 @@ function analyzePullRequestSnapshotData(snapshot) {
       prLabelPolicy
     );
   }
-  if (maintenanceOnlyEligible && (categoryCounts.get("workflow") || signalSet.has("workflow"))) {
+  if (maintenanceLikeOperationalSurface && (categoryCounts.get("workflow") || signalSet.has("workflow"))) {
     deterministicLabels = ensureRequiredLabelFamily(
       deterministicLabels,
       "workflow",
       ["github actions", "workflow file"],
       prLabelPolicy
     );
+  }
+  if (hasDirectSecurityEvidence) {
+    deterministicLabels = ensureRequiredLabelFamily(
+      deterministicLabels,
+      "security",
+      ["auth", "token", "vulnerability", "hardening", "compliance", "policy"],
+      prLabelPolicy
+    );
+  }
+  if (
+    hasDirectSecurityEvidence
+    && hasTokenSecurityEvidence
+    && !deterministicLabels.some((label) => ["auth", "token", "jwt", "authz"].some((expected) => AutobotLabelRegistry.matchesExpectedLabel(label, expected)))
+  ) {
+    const normalizedTokenLabel = AutobotLabelRegistry.normalizeLabelName("auth header");
+    const tokenReplacementIndex = deterministicLabels.findIndex((label) => AutobotLabelRegistry.matchesExpectedLabel(label, "security"));
+    if (tokenReplacementIndex >= 0) {
+      const replacedLabels = [...deterministicLabels];
+      replacedLabels[tokenReplacementIndex] = normalizedTokenLabel;
+      deterministicLabels = applyPrLabelPolicy(replacedLabels, prLabelPolicy);
+    } else {
+      deterministicLabels = ensureRequiredLabelFamily(
+        deterministicLabels,
+        "auth",
+        ["auth header", "token", "auth", "jwt", "authz"],
+        prLabelPolicy
+      );
+    }
   }
   if (signalSet.has("migration")
     || scoring.semver.hardSignals.includes("destructive-database-change")

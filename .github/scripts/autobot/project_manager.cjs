@@ -6,7 +6,6 @@ const {
   AutobotLabelRegistry,
   FORCE_RELEASE_TYPES,
   LABEL_DEFINITIONS,
-  MAX_AUTOBOT_LABELS,
   VERSION_BUMP_BY_LABEL,
   hasReleaseRelevantLabel,
   labelNamesFromIssue,
@@ -141,7 +140,7 @@ function resolvePrLabelDelta(input) {
   const previousLabels = uniqueValidLabels(previousBotLabels);
   const currentLabels = uniqueValidLabels(currentPrLabels);
   const rawAutobotLabels = String(autobotLabelsRaw ?? input.aiLabelsRaw ?? "").trim();
-  const parsedAutobotLabels = trimLowSignalLabels(parseAutobotLabels(rawAutobotLabels)).slice(0, MAX_AUTOBOT_LABELS);
+  const parsedAutobotLabels = trimLowSignalLabels(parseAutobotLabels(rawAutobotLabels));
   const hasFreshPrLabelResult = rawAutobotLabels !== "";
 
   let nextAutobotLabels = [];
@@ -173,7 +172,7 @@ function inferIssueLabels(issue) {
     ...(analysis.labels || []),
     ...(analysis.deterministicPrimaryLabels || []),
     ...(analysis.deterministicLabels || [])
-  ]), { limit: MAX_AUTOBOT_LABELS })
+  ]))
     .map((label) => normalizeLabelName(label))
     .filter((label) => AutobotLabelRegistry.VALID_LABELS.has(label));
 }
@@ -577,7 +576,7 @@ async function prepareProjectState(input) {
   const currentPrLabels = isPR ? labelNamesFromIssue(livePrIssue?.data) : [];
   const existingIssueLabels = labelNamesFromIssue(payloadIssue);
   const rawAutobotLabels = String(autobotLabelsRaw ?? input.aiLabelsRaw ?? "").trim();
-  const parsedAutobotLabels = trimLowSignalLabels(parseAutobotLabels(rawAutobotLabels)).slice(0, MAX_AUTOBOT_LABELS);
+  const parsedAutobotLabels = trimLowSignalLabels(parseAutobotLabels(rawAutobotLabels));
   const deterministicSemver = isPR ? parseDeterministicSemver(deterministicSemverRaw) : null;
 
   let issueLabelsToAdd = [];
@@ -665,7 +664,6 @@ async function syncPreparedProjectState({ github, owner, repo, issueNumber, stat
         body: state.commentBody,
         metadata: {
           autobotLabels: state.nextAutobotLabels,
-          maxAutobotLabels: MAX_AUTOBOT_LABELS,
           semverDecision: normalizeBumpType(state.semverDecision),
           deterministicSemver: state.deterministicSemver || null
         }

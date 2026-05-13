@@ -817,9 +817,9 @@ function derivePrimaryPackageName(files) {
   const sourceFile = (files || [])
     .map((file) => String(file.filename || "").replace(/\\/g, "/"))
     .find((filename) => filename.startsWith("src/"));
-  if (!sourceFile) return "definers";
+  if (!sourceFile) return "repo";
   const parts = sourceFile.split("/").filter(Boolean);
-  return parts[1] || "definers";
+  return parts[1] || "repo";
 }
 
 function buildMockIssueRecordFromEntity(entity, overrides = {}) {
@@ -832,7 +832,7 @@ function buildMockIssueRecordFromEntity(entity, overrides = {}) {
     labels: overrides.labels || entity.labels || [],
     milestone: overrides.milestone !== undefined ? overrides.milestone : entity.milestone,
     number: issueNumber,
-    repository_full_name: String(overrides.repository_full_name || entity.repoFullName || "octo/definers"),
+    repository_full_name: String(overrides.repository_full_name || entity.repoFullName || "octo/repo"),
     state: String(overrides.state || entity.state || "open"),
     title: String(overrides.title || entity.title || `Issue ${issueNumber}`),
     updated_at: String(overrides.updated_at || entity.timestamps?.updatedAt || "2026-04-13T00:00:00Z"),
@@ -1045,7 +1045,7 @@ function createAdditiveFeatureSnapshot(random, index, seed) {
       },
       files: [
         {
-          filename: `src/definers/api/${featureWords[0]}_${index}.py`,
+          filename: `src/repo/api/${featureWords[0]}_${index}.py`,
           status: "added",
           additions: 95,
           deletions: 0,
@@ -1056,7 +1056,7 @@ function createAdditiveFeatureSnapshot(random, index, seed) {
           rawPatchAvailable: true
         },
         {
-          filename: "src/definers/__init__.py",
+          filename: "src/repo/__init__.py",
           status: "modified",
           additions: 3,
           deletions: 0,
@@ -1105,7 +1105,7 @@ function createSecurityPatchSnapshot(random, index, seed) {
           rawPatchAvailable: true
         },
         {
-          filename: `src/definers/security/${token}_${index}.py`,
+          filename: `src/repo/security/${token}_${index}.py`,
           status: "modified",
           additions: 20,
           deletions: 3,
@@ -1156,7 +1156,7 @@ function createBreakingContractSnapshot(random, index, seed) {
       },
       files: [
         {
-          filename: `src/definers/compat/legacy_${token}.py`,
+          filename: `src/repo/compat/legacy_${token}.py`,
           status: "removed",
           additions: 0,
           deletions: 58,
@@ -1167,7 +1167,7 @@ function createBreakingContractSnapshot(random, index, seed) {
           rawPatchAvailable: true
         },
         {
-          filename: `src/definers/api/legacy_${token}_contract.py`,
+          filename: `src/repo/api/legacy_${token}_contract.py`,
           status: "removed",
           additions: 0,
           deletions: 42,
@@ -1178,7 +1178,7 @@ function createBreakingContractSnapshot(random, index, seed) {
           rawPatchAvailable: true
         },
         {
-          filename: `src/definers/legacy_${token}_adapter.py`,
+          filename: `src/repo/legacy_${token}_adapter.py`,
           status: "renamed",
           additions: 8,
           deletions: 31,
@@ -1189,7 +1189,7 @@ function createBreakingContractSnapshot(random, index, seed) {
           rawPatchAvailable: true
         },
         {
-          filename: "src/definers/__init__.py",
+          filename: "src/repo/__init__.py",
           status: "modified",
           additions: 2,
           deletions: 3,
@@ -1200,7 +1200,7 @@ function createBreakingContractSnapshot(random, index, seed) {
           rawPatchAvailable: true
         },
         {
-          filename: `src/definers/api/${token}_adapter.py`,
+          filename: `src/repo/api/${token}_adapter.py`,
           status: "added",
           additions: 44,
           deletions: 0,
@@ -1264,7 +1264,7 @@ function createRuntimeSupportAddSnapshot(random, index, seed) {
           rawPatchAvailable: true
         },
         {
-          filename: `src/definers/runtime/${token}_support.py`,
+          filename: `src/repo/runtime/${token}_support.py`,
           status: "added",
           additions: 48,
           deletions: 0,
@@ -1386,7 +1386,7 @@ function createCompatibilityShimSnapshot(random, index, seed) {
       },
       files: [
         {
-          filename: `src/definers/compat/${token}_shim.py`,
+          filename: `src/repo/compat/${token}_shim.py`,
           status: "added",
           additions: 36,
           deletions: 0,
@@ -1450,13 +1450,13 @@ function createDatabaseMigrationSnapshot(random, index, seed) {
           additions: 18,
           deletions: 0,
           patch: [
-            "+ALTER TABLE definers_records DROP COLUMN legacy_value;",
-            "+ALTER TABLE definers_records ADD COLUMN normalized_value TEXT;"
+            "+ALTER TABLE repo_records DROP COLUMN legacy_value;",
+            "+ALTER TABLE repo_records ADD COLUMN normalized_value TEXT;"
           ].join("\n"),
           rawPatchAvailable: true
         },
         {
-          filename: `src/definers/database/${token}_repository.py`,
+          filename: `src/repo/database/${token}_repository.py`,
           status: "modified",
           additions: 28,
           deletions: 14,
@@ -1467,7 +1467,7 @@ function createDatabaseMigrationSnapshot(random, index, seed) {
           rawPatchAvailable: true
         },
         {
-          filename: `src/definers/schema/${token}_record.py`,
+          filename: `src/repo/schema/${token}_record.py`,
           status: "modified",
           additions: 12,
           deletions: 5,
@@ -1543,7 +1543,7 @@ function createInfrastructureEchoSnapshot(random, index, seed) {
           rawPatchAvailable: true
         },
         {
-          filename: "test/deterministic_scenario_engine.cjs",
+          filename: "tests/deterministic_scenario_engine.cjs",
           status: "modified",
           additions: 48,
           deletions: 14,
@@ -1657,7 +1657,7 @@ function createPatchUnavailableFeatureSnapshot(random, index, seed) {
       },
       files: [
         {
-          filename: `src/definers/api/${token}_preview_${index}.py`,
+          filename: `src/repo/api/${token}_preview_${index}.py`,
           status: "added",
           additions: 124,
           deletions: 0,
@@ -1665,7 +1665,7 @@ function createPatchUnavailableFeatureSnapshot(random, index, seed) {
           rawPatchAvailable: false
         },
         {
-          filename: "src/definers/__init__.py",
+          filename: "src/repo/__init__.py",
           status: "modified",
           additions: 24,
           deletions: 4,
@@ -2031,7 +2031,7 @@ function buildAutobotPipelineActualResult(result) {
 
 async function executeAutobotPipelineScenario(scenario) {
   const owner = "octo";
-  const repo = "definers";
+  const repo = "repo";
   const pullRequest = buildAutobotPipelinePullRequest(scenario);
   const issueNumber = pullRequest.number;
   const github = createAutobotPipelineGithubMock({
@@ -2143,7 +2143,7 @@ function createCloseIssueScenario(random, index, seed) {
     name: buildScenarioName("smart-link", "closes-issue", index, seed),
     source: createSmartLinkEntity({
       body: `Implements #${issueNumber}. ${randomWords(random, 3).join(" ")}`,
-      changedFiles: [`src/definers/${token}_${index}.py`],
+      changedFiles: [`src/repo/${token}_${index}.py`],
       kind: "pull_request",
       labels: [pick(random, ["enhancement", "runtime", "security"])],
       number: 800 + index,
@@ -2274,7 +2274,7 @@ function createDependsOnIssueScenario(random, index, seed) {
   return {
     candidate: createSmartLinkEntity({
       body: `Dependency gate for ${token}.`,
-      changedFiles: [`src/definers/${token}/dependency_${index}.py`],
+      changedFiles: [`src/repo/${token}/dependency_${index}.py`],
       labels: ["runtime"],
       milestone,
       number: issueNumber,
@@ -2289,7 +2289,7 @@ function createDependsOnIssueScenario(random, index, seed) {
     name: buildScenarioName("smart-link", "depends-on-issue", index, seed),
     source: createSmartLinkEntity({
       body: `Depends on #${issueNumber}. ${randomWords(random, 2).join(" ")}`,
-      changedFiles: [`src/definers/${token}/runtime_${index}.py`],
+      changedFiles: [`src/repo/${token}/runtime_${index}.py`],
       kind: "pull_request",
       labels: ["runtime"],
       milestone,
@@ -2308,7 +2308,7 @@ function createReciprocalConnectScenario(random, index, seed) {
   return {
     candidate: createSmartLinkEntity({
       body: `References #${sourceNumber}. Reciprocal ${token} work.`,
-      changedFiles: [`src/definers/${token}/shared_${index}.py`],
+      changedFiles: [`src/repo/${token}/shared_${index}.py`],
       labels: ["compatibility"],
       milestone,
       number: candidateNumber,
@@ -2323,7 +2323,7 @@ function createReciprocalConnectScenario(random, index, seed) {
     name: buildScenarioName("smart-link", "reciprocal-connect", index, seed),
     source: createSmartLinkEntity({
       body: `References #${candidateNumber}. ${randomWords(random, 2).join(" ")}`,
-      changedFiles: [`src/definers/${token}/shared_${index}.py`],
+      changedFiles: [`src/repo/${token}/shared_${index}.py`],
       kind: "issue",
       labels: ["compatibility"],
       milestone,
@@ -2375,7 +2375,7 @@ function createBranchReferenceScenario(random, index, seed) {
   return {
     candidate: createSmartLinkEntity({
       body: `References #${sourceNumber}. ${token} dependency issue.`,
-      changedFiles: [`src/definers/${token}/bridge_${index}.py`],
+      changedFiles: [`src/repo/${token}/bridge_${index}.py`],
       labels: ["compatibility"],
       milestone,
       number: issueNumber,
@@ -2391,7 +2391,7 @@ function createBranchReferenceScenario(random, index, seed) {
     source: createSmartLinkEntity({
       body: `${randomWords(random, 2).join(" ")}`,
       branch: `feature/${issueNumber}-${token}`,
-      changedFiles: [`src/definers/${token}/bridge_${index}.py`],
+      changedFiles: [`src/repo/${token}/bridge_${index}.py`],
       kind: "pull_request",
       labels: ["compatibility"],
       milestone,
@@ -2413,7 +2413,7 @@ function createBatchDirectiveScenario(random, index, seed) {
     candidates: [
       createSmartLinkEntity({
         body: `${token} feature request`,
-        changedFiles: [`src/definers/${token}/feature_${index}.py`],
+        changedFiles: [`src/repo/${token}/feature_${index}.py`],
         kind: "issue",
         labels: ["runtime"],
         milestone,
@@ -2422,7 +2422,7 @@ function createBatchDirectiveScenario(random, index, seed) {
       }),
       createSmartLinkEntity({
         body: `${token} dependency gate`,
-        changedFiles: [`src/definers/${token}/dependency_${index}.py`],
+        changedFiles: [`src/repo/${token}/dependency_${index}.py`],
         kind: "issue",
         labels: ["runtime"],
         milestone,
@@ -2431,7 +2431,7 @@ function createBatchDirectiveScenario(random, index, seed) {
       }),
       createSmartLinkEntity({
         body: `${token} refactor rollout`,
-        changedFiles: [`src/definers/${token}/refactor_${index}.py`],
+        changedFiles: [`src/repo/${token}/refactor_${index}.py`],
         kind: "pull_request",
         labels: ["runtime"],
         milestone,
@@ -2460,7 +2460,7 @@ function createBatchDirectiveScenario(random, index, seed) {
     name: buildScenarioName("smart-link", "batch-directives", index, seed),
     source: createSmartLinkEntity({
       body: `Implements #${closeId}. Depends on #${dependencyId}. Connects to #${connectId}.`,
-      changedFiles: [`src/definers/${token}/feature_${index}.py`, `src/definers/${token}/dependency_${index}.py`],
+      changedFiles: [`src/repo/${token}/feature_${index}.py`, `src/repo/${token}/dependency_${index}.py`],
       kind: "pull_request",
       labels: ["runtime"],
       milestone,
@@ -2515,7 +2515,7 @@ function createUnifiedPullRequestDirectiveScenario(random, index, seed) {
     changedFiles: autobotScenario.input.files.map((file) => ({ filename: file.filename, status: file.status })),
     kind: "pull_request",
     number: sourceNumber,
-    repoFullName: "octo/definers",
+    repoFullName: "octo/repo",
     title: autobotScenario.input.pullRequest.title,
     updatedAt: "2026-04-13T00:00:00Z"
   });
@@ -2524,7 +2524,7 @@ function createUnifiedPullRequestDirectiveScenario(random, index, seed) {
     kind: "issue",
     labels: ["bug"],
     number: closeIssueNumber,
-    repoFullName: "octo/definers",
+    repoFullName: "octo/repo",
     title: `Fix ${token} bug`,
     updatedAt: "2026-04-12T00:00:00Z"
   });
@@ -2533,7 +2533,7 @@ function createUnifiedPullRequestDirectiveScenario(random, index, seed) {
     kind: "issue",
     labels: ["documentation"],
     number: dependencyIssueNumber,
-    repoFullName: "octo/definers",
+    repoFullName: "octo/repo",
     title: `Document ${token} dependency`,
     updatedAt: "2026-04-12T00:00:00Z"
   });
@@ -2542,7 +2542,7 @@ function createUnifiedPullRequestDirectiveScenario(random, index, seed) {
     kind: "pull_request",
     labels: [sharedLabel],
     number: connectPullNumber,
-    repoFullName: "octo/definers",
+    repoFullName: "octo/repo",
     title: `Coordinate ${token} rollout`,
     updatedAt: "2026-04-13T00:00:00Z"
   });
@@ -2550,7 +2550,7 @@ function createUnifiedPullRequestDirectiveScenario(random, index, seed) {
     body: randomWords(random, 6).join(" "),
     kind: "issue",
     number: noiseIssueNumber,
-    repoFullName: "octo/definers",
+    repoFullName: "octo/repo",
     title: randomWords(random, 3).join(" "),
     updatedAt: "2025-01-01T00:00:00Z"
   });
@@ -2625,7 +2625,7 @@ function createUnifiedIssueRelationshipScenario(random, index, seed) {
     kind: "issue",
     milestone,
     number: sourceNumber,
-    repoFullName: "octo/definers",
+    repoFullName: "octo/repo",
     title: `Bug: ${token} runtime failure on Windows`,
     updatedAt: "2026-04-13T00:00:00Z"
   });
@@ -2635,7 +2635,7 @@ function createUnifiedIssueRelationshipScenario(random, index, seed) {
     labels: ["bug"],
     milestone,
     number: dependencyIssueNumber,
-    repoFullName: "octo/definers",
+    repoFullName: "octo/repo",
     title: `Investigate ${token} runtime bug`,
     updatedAt: "2026-04-12T00:00:00Z"
   });
@@ -2645,7 +2645,7 @@ function createUnifiedIssueRelationshipScenario(random, index, seed) {
     labels: ["bug"],
     milestone,
     number: connectPullNumber,
-    repoFullName: "octo/definers",
+    repoFullName: "octo/repo",
     title: `Patch ${token} runtime path`,
     updatedAt: "2026-04-13T00:00:00Z"
   });
@@ -2717,7 +2717,7 @@ function createUnifiedStaleReopenedIssueScenario(random, index, seed) {
     kind: "issue",
     milestone,
     number: sourceNumber,
-    repoFullName: "octo/definers",
+    repoFullName: "octo/repo",
     title: `Bug: ${token} runtime issue reopened after partial fix`,
     updatedAt: recentUpdatedAt
   });
@@ -2727,7 +2727,7 @@ function createUnifiedStaleReopenedIssueScenario(random, index, seed) {
     labels: ["bug"],
     milestone,
     number: dependencyIssueNumber,
-    repoFullName: "octo/definers",
+    repoFullName: "octo/repo",
     title: `Investigate ${token} dependency regression`,
     updatedAt: recentUpdatedAt
   });
@@ -2737,7 +2737,7 @@ function createUnifiedStaleReopenedIssueScenario(random, index, seed) {
     labels: ["bug"],
     milestone,
     number: stalePullNumber,
-    repoFullName: "octo/definers",
+    repoFullName: "octo/repo",
     title: `Historic ${token} runtime workaround`,
     updatedAt: staleUpdatedAt
   });
@@ -2814,7 +2814,7 @@ function createUnifiedAlertScenario(random, index, seed) {
     body: `Track ${token} advisory resolution.`,
     kind: "issue",
     number: renderTargetIssueNumber,
-    repoFullName: "octo/definers",
+    repoFullName: "octo/repo",
     title: `Track ${token} advisory`,
     updatedAt: "2026-04-13T00:00:00Z"
   });
@@ -2825,7 +2825,7 @@ function createUnifiedAlertScenario(random, index, seed) {
     kind: "pull_request",
     number: remediationPullNumber,
     packageSignals: [`package:${token}`],
-    repoFullName: "octo/definers",
+    repoFullName: "octo/repo",
     title: `Patch ${token} advisory`,
     updatedAt: "2026-04-13T00:00:00Z"
   });
@@ -2899,7 +2899,7 @@ function createUnifiedSuppressedPullRequestScenario(random, index, seed) {
     changedFiles: autobotScenario.input.files.map((file) => ({ filename: file.filename, status: file.status })),
     kind: "pull_request",
     number: sourceNumber,
-    repoFullName: "octo/definers",
+    repoFullName: "octo/repo",
     title: autobotScenario.input.pullRequest.title,
     updatedAt: "2026-04-13T00:00:00Z"
   });
@@ -2908,7 +2908,7 @@ function createUnifiedSuppressedPullRequestScenario(random, index, seed) {
     kind: "issue",
     labels: ["bug"],
     number: closedIssueNumber,
-    repoFullName: "octo/definers",
+    repoFullName: "octo/repo",
     state: "closed",
     title: `Closed ${token} bug`,
     updatedAt: "2026-04-12T00:00:00Z"
@@ -2967,7 +2967,7 @@ function createUnifiedReleaseFinalizeScenario(random, index, seed) {
     kind: "pull_request",
     labels: ["security"],
     number: sourceNumber,
-    repoFullName: "octo/definers",
+    repoFullName: "octo/repo",
     state: "closed",
     title: `Patch ${token} security flow`,
     updatedAt: "2026-04-13T00:00:00Z"
@@ -3040,7 +3040,7 @@ function createUnifiedUntrustedForkScenario(random, index, seed) {
     body,
     kind: "pull_request",
     number: sourceNumber,
-    repoFullName: "octo/definers",
+    repoFullName: "octo/repo",
     title: autobotScenario.input.pullRequest.title,
     updatedAt: "2026-04-13T00:00:00Z"
   }), {
@@ -3071,7 +3071,7 @@ function createUnifiedUntrustedForkScenario(random, index, seed) {
         kind: "issue",
         labels: ["enhancement"],
         number: linkedIssueNumber,
-        repoFullName: "octo/definers",
+        repoFullName: "octo/repo",
         title: `Track ${token} followup`
       }))],
       issueNumber: sourceNumber,
@@ -3262,7 +3262,7 @@ function buildUnifiedAutomationActualResult(result) {
 
 async function executeUnifiedAutomationScenario(scenario) {
   const owner = "octo";
-  const repo = "definers";
+  const repo = "repo";
   const github = createAutobotPipelineGithubMock(scenario.githubOptions);
   const core = createWorkflowCoreMock();
   const workspaceKey = scenario.issueNumber || scenario.renderTargetIssueNumber || 0;

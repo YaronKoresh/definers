@@ -15,8 +15,11 @@ const PR_CANONICAL_LABEL_REPLACEMENTS = Object.freeze({
   examples: "documentation",
   "feature-flag": "feature toggle",
   migration: "migration file",
+  monitoring: "request tracing",
+  observability: "request tracing",
   "release-notes": "documentation",
   serialization: "format",
+  telemetry: "request tracing",
   types: "type",
   ui: "view"
 });
@@ -72,8 +75,8 @@ const SMALL_PR_TOTAL_CHANGE_LIMIT = 120;
 const LARGE_PR_GENERIC_LABEL_LIMIT = 3;
 const LARGE_PR_LABEL_LIMIT = 4;
 const ACCESSIBILITY_TEXT_PATTERN = /\baria-|accessib|a11y|screen reader|keyboard nav/;
-const AUTOMATION_TEXT_PATTERN = /\b(autobot|automation|label|triage|milestone|release)\b/;
-const FEATURE_FLAG_TEXT_PATTERN = /feature[\s-]?flag|kill switch|rollout/;
+const AUTOMATION_TEXT_PATTERN = /\b(autobot|release[-_ ]script|automation[-_ ]bot|repo automation)\b/;
+const FEATURE_FLAG_TEXT_PATTERN = /\b(feature[\s_-]?(?:flag|toggle)|kill[\s_-]?switch|rollout(?:\s+gate|\s+policy)?|cohort(?:\s+rule)?|segment(?:ation)?|bucket(?:ing)?)\b/;
 const LOCALIZATION_TEXT_PATTERN = /\bi18n\b|\bl10n\b|\blocale\b|\btranslations?\b|\bgettext\b/;
 const PACKAGE_JSON_DEPENDENCY_CONTEXT_PATTERNS = Object.freeze([/^(?:\+|-)?\s*\"(dependencies|devDependencies|peerDependencies|optionalDependencies|bundledDependencies|bundleDependencies)\"\s*:\s*\{,?$/i]);
 const PACKAGE_JSON_DEPENDENCY_METADATA_KEYS = new Set(["browser", "description", "directories", "engines", "exports", "keywords", "main", "module", "name", "overrides", "packageManager", "repository", "resolutions", "scripts", "type", "version", "volta"]);
@@ -96,20 +99,44 @@ const LABEL_SUPPORT_PATTERNS = Object.freeze({
   container: Object.freeze([/^docker\//, /dockerfile|compose\.ya?ml|\bcontainer\b|\bimage\b/]),
   cuda: Object.freeze([/\b(cuda|nvidia|gpu)\b/]),
   "destructive migration": Object.freeze([/\b(migration|migrate|drop column|drop table|table drop|column drop|rename table)\b/, /migrations?\//]),
-  "facade module": Object.freeze([/__init__\.py$/, /^src\/definers\/[^/]+\/__init__\.py$/, /^src\/definers\/[^/]+\.py$/]),
-  filesystem: Object.freeze([/\b(filesystem|file system|path separator|filepath|ntpath|posixpath)\b/, /\\\\/]),
+  "facade module": Object.freeze([/__init__\.py$/, /^src\/[^/]+\/[^/]+\/__init__\.py$/, /^src\/[^/]+\/[^/]+\.py$/]),
+  filesystem: Object.freeze([/\b(filesystem|file system|path separator|filepath|ntpath|posixpath|normpath|realpath|abspath)\b/, /\\\\/]),
   "heap usage": Object.freeze([/\b(heap|peak memory|memory usage|memory footprint|memory pressure|buffer copy|buffer copies)\b/]),
   "import time": Object.freeze([/\bimport[-\s]+time\b.*\b(duration|latency|measure(?:d|ment)?|benchmark|startup|cold start|ms)\b/, /\b(duration|latency|measure(?:d|ment)?|benchmark|startup|cold start|ms)\b.*\bimport[-\s]+time\b/]),
   "image tag": Object.freeze([/from\s+[^\n]+:[^\s]+/, /image:\s*[^\s]+:[^\s]+/]),
   lockfile: Object.freeze([/package-lock\.json|pnpm-lock\.yaml|yarn\.lock|poetry\.lock|uv\.lock|pdm\.lock|requirements.*\.txt/]),
-  process: Object.freeze([/\bsubprocess\b|\bspawn\b|\bfork\b|exec\(|child_process/]),
+  process: Object.freeze([/(subprocess\.(?:popen|run|call|check_call|check_output)\s*\(|child_process\.(?:spawn|fork|exec|execfile|execsync|spawnsync)\s*\(|\bpopen\s*\(|\bcommunicate\s*\(|\bstdin\b|\bstdout\b|\bstderr\b|\bpipe(?:line)?\b)/]),
   "query param": Object.freeze([/\bquery param\b/, /\b(searchparams?|urlsearchparams)\b/, /\?[a-z_][a-z0-9_]*=/]),
   route: Object.freeze([/\broute\b/, /\brouter\b/, /@\w*router\.(get|post|put|delete|patch|options|head)\b/, /\.route\(/]),
   "route param": Object.freeze([/\b(route param|path param)\b/, /\/:[a-z_][a-z0-9_]*/, /\/\{[a-z_][a-z0-9_]*\}/, /\/<[a-z0-9_:.-]+>/]),
-  shell: Object.freeze([/\bcmd(?:\.exe)?\s*\/[ck]\b/, /\bpowershell(?:\.exe)?\b/, /\/(?:bin\/)?(?:sh|bash)\b/, /\b(?:bash|sh)\s+-[cl]\b/, /^#!.*\b(?:bash|sh)\b/m, /\bshell command\b/, /\bshell script\b/, /\bshell\s*=\s*(?:true|false)\b/]),
-  "shell command": Object.freeze([/\bcmd(?:\.exe)?\s*\/[ck]\b/, /\bpowershell(?:\.exe)?\b/, /\/(?:bin\/)?(?:sh|bash)\b/, /\b(?:bash|sh)\s+-[cl]\b/, /^#!.*\b(?:bash|sh)\b/m, /\bshell command\b/, /\bshell script\b/, /\bshell\s*=\s*(?:true|false)\b/]),
+  shell: Object.freeze([/\bcmd(?:\.exe)?\b[^\n]{0,24}\/[ck]\b/, /\bpowershell(?:\.exe)?\b/, /\/(?:bin\/)?(?:sh|bash)\b/, /\b(?:bash|sh)\s+-[cl]\b/, /^#!.*\b(?:bash|sh)\b/m, /\bshell command\b/, /\bshell script\b/, /\bshell\s*=\s*(?:true|false)\b/]),
+  "shell command": Object.freeze([/\bcmd(?:\.exe)?\b[^\n]{0,24}\/[ck]\b/, /\bpowershell(?:\.exe)?\b/, /\/(?:bin\/)?(?:sh|bash)\b/, /\b(?:bash|sh)\s+-[cl]\b/, /^#!.*\b(?:bash|sh)\b/m, /\bshell command\b/, /\bshell script\b/, /\bshell\s*=\s*(?:true|false)\b/]),
   "support matrix": Object.freeze([/requires-python|python 3\.|classifiers?.*python|support matrix|runs-on:|windows-latest|ubuntu-latest|macos-latest/]),
-  windows: Object.freeze([/\b(windows|win32|winreg|shell32)\b/, /windows/])
+  windows: Object.freeze([/\b(windows|win32|winreg|shell32)\b/, /windows/]),
+  token: Object.freeze([/(?:^|[^a-z0-9])token(?:[^a-z0-9]|$)|authorization:\s*bearer|\bjwt\b/]),
+    ci: Object.freeze([
+    /\b(ci|continuous integration|jobs:|steps:|runs-on:|uses:\s*actions\/)\b/
+  ]),
+  workflow: Object.freeze([
+    /\.github\/workflows\/|\.gitlab-ci\.ya?ml|\.circleci\/config\.ya?ml|\.buildkite\/|jenkinsfile|\bworkflow\b|\bpipeline\b|\bjobs:\b|\bsteps:\b/
+  ]),
+  dependencies: Object.freeze([
+    /\b(dependencies|devDependencies|peerDependencies|optionalDependencies|bundledDependencies|bundleDependencies)\b/,
+    /package-lock\.json|pnpm-lock\.yaml|yarn\.lock|poetry\.lock|uv\.lock|pdm\.lock|requirements.*\.txt/
+  ]),
+  security: Object.freeze([
+    /(^|\/)(security|auth|policy|oauth|jwt|rbac|token)(\/|$)/,
+    /(^|\/)(codeql|dependabot|security)(\.[^/]+)?$/
+  ]),
+  vulnerability: Object.freeze([
+    /\b(vulnerab\w*|advisory|cve-\d{4}-\d+|ghsa-[a-z0-9-]+|exploit(?:able)?|security advisory)\b/,
+    /(^|\/)(security|auth|policy|oauth|jwt|rbac|token)(\/|$)/
+  ]),
+  observability: Object.freeze([/\b(observability|telemetry|prometheus|opentelemetry|otel|metrics?|histogram|counter|gauge|tracing?|trace id|span(?: id)?|monitoring|datadog|newrelic)\b/, /(^|\/)(observability|telemetry|monitoring|metrics?|prometheus|tracing)(\/|$)/]),
+  monitoring: Object.freeze([/\b(monitoring|prometheus|metrics?|histogram|counter|gauge|alert|sli|slo)\b/]),
+  telemetry: Object.freeze([/\b(telemetry|opentelemetry|otel|trace(?:s|d|ing)?|span(?: id)?)\b/]),
+  style: Object.freeze([/\b(class(name)?=|style=|styles?\.|theme|color|font|spacing|margin|padding|border(?:-radius)?|box-shadow|background|tailwind|var\(--|display\s*:\s*(flex|grid))\b/]),
+  formatting: Object.freeze([/\b(prettier|format\(|formatted|whitespace|indent(?:ation)?)\b/, /\.(css|scss|sass|less)$/]),
 });
 
 module.exports = {

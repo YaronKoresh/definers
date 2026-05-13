@@ -72,6 +72,7 @@ function collectDirectEvidenceForLabel(label, evidenceItems) {
 }
 
 function collectSupportFilesForLabel(label, filesWithContext) {
+  const normalizedLabel = AutobotLabelRegistry.normalizeLabelName(label);
   const patterns = getLabelSupportKeys(label)
     .flatMap((supportKey) => LABEL_SUPPORT_PATTERNS[supportKey] || buildDefaultLabelSupportPatterns(supportKey));
   const matchingFiles = (filesWithContext || [])
@@ -92,9 +93,15 @@ function collectSupportFilesForLabel(label, filesWithContext) {
       && !isTestPath(normalizedPath)
       && !/^docs\//.test(normalizedPath);
   });
-  return (preferredFiles.length > 0 ? preferredFiles : [])
-    .slice(0, 3)
-    .map((file) => file.filename);
+
+  const securityRelatedLabels = new Set(["security", "vulnerability", "hardening", "pen-test", "compliance"]);
+  const supportFiles = preferredFiles.length > 0
+    ? preferredFiles
+    : securityRelatedLabels.has(normalizedLabel)
+      ? []
+      : matchingFiles;
+
+  return supportFiles.slice(0, 3).map((file) => file.filename);
 }
 
 function deriveLabelConfidence(scoreEntry, directEvidence, supportFiles) {
@@ -292,15 +299,28 @@ function buildPrDeterministicSummary(context) {
       ? "Structural public package moves indicate a likely breaking import or integration surface."
       : null
   ].filter(Boolean);
-  const evidenceBullets = highestSignalFiles.length > 0
-    ? highestSignalFiles
+  const labelEvidenceBullets = (summaryLabels || []).flatMap((label) => {
+    const supportFiles = collectSupportFilesForLabel(label, context.filesWithContext);
+    if (supportFiles.length > 0) {
+      return [`${label}: support in ${supportFiles.join(", ")}`];
+    }
+    const directEvidence = collectDirectEvidenceForLabel(label, context.evidenceItems);
+    if (directEvidence.length > 0) {
+      return directEvidence.slice(0, 2).map((item) => `${label}: ${describeEvidenceItem(item)}`);
+    }
+    return [];
+  });
+  const evidenceBullets = labelEvidenceBullets.length > 0
+    ? labelEvidenceBullets.slice(0, 4)
     : context.topEvidenceItems.length > 0
       ? context.topEvidenceItems.map((item) => describeEvidenceItem(item))
-      : [
-          context.maintenanceOnlyEligible
-            ? `The diff stayed inside maintenance surfaces: ${context.maintenanceCategoriesList.join(", ") || "none"}.`
-            : "No strong evidence item exceeded the explanation threshold."
-        ];
+      : highestSignalFiles.length > 0
+        ? highestSignalFiles
+        : [
+            context.maintenanceOnlyEligible
+              ? `The diff stayed inside maintenance surfaces: ${context.maintenanceCategoriesList.join(", ") || "none"}.`
+              : "No strong evidence item exceeded the explanation threshold."
+          ];
   const reviewBullets = context.maintenanceOnlyEligible
     ? [
         `Review ${context.topFiles.slice(0, 3).map((file) => file.filename).join(", ") || "the touched files"} for wording, workflow, or expectation drift.`,

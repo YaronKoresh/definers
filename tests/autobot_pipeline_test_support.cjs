@@ -143,7 +143,7 @@ function matchesSearchQuery(issue, query) {
   const repoFilter = repoMatch ? repoMatch[1].toLowerCase() : "";
   const labelMatches = [...normalizedQuery.matchAll(/label:"([^"]+)"/g)].map((match) => match[1].toLowerCase());
   const terms = tokenizeSearchText(normalizedQuery.replace(/repo:[^\s]+/g, " ").replace(/label:"[^"]+"/g, " "));
-  const issueRepo = String(issue.repository_full_name || "octo/definers").toLowerCase();
+  const issueRepo = String(issue.repository_full_name || "octo/repo").toLowerCase();
   if (repoFilter && issueRepo !== repoFilter) return false;
   const issueLabels = (issue.labels || []).map((label) => label.name.toLowerCase());
   if (labelMatches.some((label) => !issueLabels.includes(label))) return false;
@@ -152,7 +152,7 @@ function matchesSearchQuery(issue, query) {
 }
 
 function createAutobotPipelineGithubMock(options = {}) {
-  const repositoryFullName = String(options.repositoryFullName || "octo/definers");
+  const repositoryFullName = String(options.repositoryFullName || "octo/repo");
   const issueNumber = Number(options.issueNumber || options.pullRequest?.number || 12);
   const issueLabels = normalizeLabelEntries(options.issueLabels || []);
   const issueMilestone = cloneMilestone(options.issueMilestone || null);

@@ -10,6 +10,8 @@ const {
   normalizeSmartLinkEntity
 } = require("./smart_link/core.cjs");
 
+const SMART_LINK_ALLOWED_DISPATCH_SOURCE_KINDS = new Set(["security_alert"]);
+
 function mergeLabels(primaryLabels, additionalLabels) {
   const left = Array.isArray(primaryLabels) ? primaryLabels : [];
   const right = Array.isArray(additionalLabels) ? additionalLabels : [];
@@ -324,7 +326,8 @@ async function retrieveCandidateSnapshots({ github, owner, repo, source }) {
 async function collectSmartLinkSource({ additionalLabels, context, core, github, owner, repo, sourceFile, thresholdInput }) {
   const threshold = clampThreshold(thresholdInput);
   let source = null;
-  if (context.eventName === "pull_request") {
+  const eventName = context.eventName;
+  if (eventName === "pull_request") {
     const pullRequest = context.payload.pull_request;
     const isForkSource = pullRequest.head && pullRequest.head.repo && pullRequest.head.repo.full_name !== `${owner}/${repo}`;
     if (isForkSource && !TRUSTED_ASSOCIATIONS.has(String(pullRequest.author_association || "").toUpperCase())) {
@@ -335,14 +338,14 @@ async function collectSmartLinkSource({ additionalLabels, context, core, github,
     source = await collectPullRequestSource({ additionalLabels, github, owner, pullRequest, repo });
     source.renderTarget = { kind: "pull_request", number: source.number };
   }
-  if (context.eventName === "issues") {
+  if (eventName === "issues") {
     source = collectIssueSource({ additionalLabels, issue: context.payload.issue, owner, repo });
     source.renderTarget = { kind: "issue", number: source.number };
   }
-  if (context.eventName === "repository_dispatch") {
+  if (eventName === "repository_dispatch") {
     source = collectAlertSource({ owner, payload: context.payload.client_payload, repo });
   }
-  if (context.eventName === "workflow_dispatch") {
+  if (eventName === "workflow_dispatch") {
     const payloadText = String(context.payload.inputs && context.payload.inputs.payload || "").trim();
     if (!payloadText) {
       core.setOutput("ready", "false");
@@ -367,6 +370,14 @@ async function collectSmartLinkSource({ additionalLabels, context, core, github,
     core.setOutput("ready", "false");
     core.setOutput("reason", "unsupported-event");
     return { ready: "false", reason: "unsupported-event", threshold: String(threshold) };
+  }
+  if (eventName === "repository_dispatch" || eventName === "workflow_dispatch") {
+    const normalizedKind = String(source.kind || "").trim().toLowerCase();
+    if (!SMART_LINK_ALLOWED_DISPATCH_SOURCE_KINDS.has(normalizedKind)) {
+      core.setOutput("ready", "false");
+      core.setOutput("reason", "unsupported-dispatch-source");
+      return { ready: "false", reason: "unsupported-dispatch-source", threshold: String(threshold) };
+    }
   }
   if (!source.renderTarget && source.kind === "security_alert") {
     const remediationReference = source.remediationReferences[0];

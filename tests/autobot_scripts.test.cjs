@@ -7,11 +7,13 @@ const {
   summarizeScenarioEvaluations,
   validateAutobotScenarioContract
 } = require("./deterministic_scenario_engine.cjs");
-const { createAutobotPipelineGithubMock } = require("./autobot_pipeline_test_support.cjs");
+const {
+  createAutobotPipelineGithubMock,
+  createWorkflowCoreMock
+} = require("./autobot_pipeline_test_support.cjs");
 
 const {
   AutobotLabelRegistry,
-  MAX_AUTOBOT_LABELS,
   normalizeLabelName,
   trimLowSignalLabels
 } = require("../.github/scripts/autobot/labels.cjs");
@@ -35,6 +37,7 @@ const {
   AutobotProjectManager,
   resolvePrLabelDelta
 } = require("../.github/scripts/autobot/project_manager.cjs");
+const { collectSmartLinkSource } = require("../.github/scripts/autobot/gather_info.cjs");
 const {
   analyzeCurrentGitDiff,
   buildLocalGitDiffSnapshot,
@@ -73,7 +76,6 @@ test("label registry trims low-signal labels with version-sensitive priority", (
     "tooling"
   ]);
 
-  assert.ok(labels.length <= MAX_AUTOBOT_LABELS);
   assert.equal(labels[0], "breaking-change");
   assert.ok(labels.includes("security"));
   assert.ok(labels.includes("api"));
@@ -178,10 +180,10 @@ test("prompt builder emits deterministic fallback summary", () => {
 test("local diff snapshot builder materializes tracked and untracked files for preview analysis", () => {
   const snapshot = buildLocalGitDiffSnapshot({
     diffText: [
-      "diff --git a/src/definers/security/token_guard.py b/src/definers/security/token_guard.py",
+      "diff --git a/src/repo/security/token_guard.py b/src/repo/security/token_guard.py",
       "index 1111111..2222222 100644",
-      "--- a/src/definers/security/token_guard.py",
-      "+++ b/src/definers/security/token_guard.py",
+      "--- a/src/repo/security/token_guard.py",
+      "+++ b/src/repo/security/token_guard.py",
       "@@ -1 +1,4 @@",
       "-def sanitize_token(value):",
       "+def sanitize_token(value):",
@@ -191,14 +193,14 @@ test("local diff snapshot builder materializes tracked and untracked files for p
     ].join("\n"),
     headRef: "feature/local-preview",
     readFileText: (filename) => {
-      assert.equal(filename, "src/definers/api/preview_endpoint.py");
+      assert.equal(filename, "src/repo/api/preview_endpoint.py");
       return [
         "@router.get(\"/preview\")",
         "def preview_endpoint():",
         "    return {\"status\": \"ok\"}"
       ].join("\n");
     },
-    untrackedFiles: ["src/definers/api/preview_endpoint.py"]
+    untrackedFiles: ["src/repo/api/preview_endpoint.py"]
   });
 
   assert.equal(snapshot.pullRequest.headRef, "feature/local-preview");
@@ -207,18 +209,18 @@ test("local diff snapshot builder materializes tracked and untracked files for p
   assert.equal(snapshot.totals.deletions, 1);
   assert.equal(snapshot.totals.totalChanges, 8);
   assert.deepEqual(snapshot.files.map((file) => ({ filename: file.filename, status: file.status })), [
-    { filename: "src/definers/security/token_guard.py", status: "modified" },
-    { filename: "src/definers/api/preview_endpoint.py", status: "added" }
+    { filename: "src/repo/security/token_guard.py", status: "modified" },
+    { filename: "src/repo/api/preview_endpoint.py", status: "added" }
   ]);
   assert.ok(snapshot.files[1].patch.includes("preview_endpoint"));
 });
 
 test("local diff preview analyzes the current git diff and renders a human-readable report", () => {
   const diffText = [
-    "diff --git a/src/definers/security/token_guard.py b/src/definers/security/token_guard.py",
+    "diff --git a/src/repo/security/token_guard.py b/src/repo/security/token_guard.py",
     "index 1111111..2222222 100644",
-    "--- a/src/definers/security/token_guard.py",
-    "+++ b/src/definers/security/token_guard.py",
+    "--- a/src/repo/security/token_guard.py",
+    "+++ b/src/repo/security/token_guard.py",
     "@@ -1 +1,4 @@",
     "-def sanitize_token(value):",
     "+def sanitize_token(value):",
@@ -237,7 +239,7 @@ test("local diff preview analyzes the current git diff and renders a human-reada
         return diffText;
       }
       if (key === "ls-files --others --exclude-standard -z") {
-        return "src/definers/api/preview_endpoint.py\u0000";
+        return "src/repo/api/preview_endpoint.py\u0000";
       }
       if (key === "rev-parse --abbrev-ref HEAD") {
         return "feature/local-preview\n";
@@ -245,7 +247,7 @@ test("local diff preview analyzes the current git diff and renders a human-reada
       throw new Error(`Unexpected git command: ${key}`);
     },
     readFileSync: (filePath) => {
-      assert.ok(filePath.replace(/\\/g, "/").endsWith("/src/definers/api/preview_endpoint.py"));
+      assert.ok(filePath.replace(/\\/g, "/").endsWith("/src/repo/api/preview_endpoint.py"));
       return [
         "@router.get(\"/preview\")",
         "def preview_endpoint():",
@@ -364,7 +366,7 @@ test("PR analyzer does not emit api for internal router wording alone", () => {
     },
     files: [
       {
-        filename: "src/definers/internal_router.py",
+        filename: "src/repo/internal_router.py",
         status: "modified",
         additions: 8,
         deletions: 2,
@@ -404,7 +406,7 @@ test("PR analyzer does not infer route params from static routes and dict litera
     },
     files: [
       {
-        filename: "src/definers/api/health.py",
+        filename: "src/repo/api/health.py",
         status: "added",
         additions: 6,
         deletions: 0,
@@ -441,7 +443,7 @@ test("PR analyzer emits route param for dynamic path segments", () => {
     },
     files: [
       {
-        filename: "src/definers/api/items.py",
+        filename: "src/repo/api/items.py",
         status: "added",
         additions: 6,
         deletions: 0,
@@ -477,7 +479,7 @@ test("PR analyzer does not promote generic auth changes to compliance", () => {
     },
     files: [
       {
-        filename: "src/definers/security/token_guard.py",
+        filename: "src/repo/security/token_guard.py",
         status: "modified",
         additions: 4,
         deletions: 1,
@@ -516,7 +518,7 @@ test("PR analyzer does not infer heap usage from generic memory helpers", () => 
     },
     files: [
       {
-        filename: "src/definers/media/web_transfer.py",
+        filename: "src/repo/media/web_transfer.py",
         status: "modified",
         additions: 4,
         deletions: 0,
@@ -553,13 +555,13 @@ test("PR analyzer does not infer import time from Python import statements", () 
     },
     files: [
       {
-        filename: "src/definers/database/__init__.py",
+        filename: "src/repo/database/__init__.py",
         status: "modified",
         additions: 2,
         deletions: 0,
         patch: [
           "+from time import time",
-          "+from definers.database.core import connect"
+          "+from repo.database.core import connect"
         ].join("\n"),
         rawPatchAvailable: true
       }
@@ -588,13 +590,13 @@ test("PR analyzer does not infer filesystem from pathlib imports alone", () => {
     },
     files: [
       {
-        filename: "src/definers/model_installation/__init__.py",
+        filename: "src/repo/model_installation/__init__.py",
         status: "modified",
         additions: 2,
         deletions: 0,
         patch: [
           "+from pathlib import Path",
-          "+from definers.model_installation.core import install_model"
+          "+from repo.model_installation.core import install_model"
         ].join("\n"),
         rawPatchAvailable: true
       }
@@ -623,7 +625,7 @@ test("PR analyzer replaces broad runtime labels with specific descendants", () =
     },
     files: [
       {
-        filename: "src/definers/command_runner.py",
+        filename: "src/repo/command_runner.py",
         status: "modified",
         additions: 9,
         deletions: 2,
@@ -667,11 +669,11 @@ test("PR analyzer does not infer compliance from audio sox references", () => {
     },
     files: [
       {
-        filename: "src/definers/data/datasets/value.py",
+        filename: "src/repo/data/datasets/value.py",
         status: "modified",
         additions: 1,
         deletions: 0,
-        patch: "+transformer = definers.sox.Transformer()",
+        patch: "+transformer = repo.sox.Transformer()",
         rawPatchAvailable: true
       }
     ]
@@ -782,7 +784,6 @@ test("PR analyzer collapses workflow overlap on small maintenance PRs", () => {
   assert.ok(!deterministicLabels.includes("ci"));
   assert.ok(!deterministicLabels.includes("automation"));
   assert.ok(!deterministicLabels.includes("github"));
-  assert.ok(deterministicLabels.length <= 4);
   assert.ok(hasExpectedLabel(candidateLabels, "workflow"));
   assert.ok(hasExpectedLabel(candidateLabels, "test"));
   assert.ok(!candidateLabels.includes("workflow"));
@@ -790,7 +791,254 @@ test("PR analyzer collapses workflow overlap on small maintenance PRs", () => {
   assert.ok(!candidateLabels.includes("ci"));
   assert.ok(!candidateLabels.includes("automation"));
   assert.ok(!candidateLabels.includes("github"));
-  assert.ok(candidateLabels.length <= 4);
+});
+
+test("PR analyzer avoids os-matrix labels for single-platform workflow edits", () => {
+  const snapshot = {
+    pullRequest: {
+      number: 41,
+      title: "Refresh CI checkout action",
+      body: "",
+      headRef: "ci/checkout-refresh"
+    },
+    totals: {
+      filesChanged: 1,
+      additions: 4,
+      deletions: 2,
+      totalChanges: 6
+    },
+    files: [
+      {
+        filename: ".github/workflows/check.yml",
+        status: "modified",
+        additions: 4,
+        deletions: 2,
+        patch: [
+          "-    uses: actions/checkout@v5",
+          "+    runs-on: ubuntu-latest",
+          "+    uses: actions/checkout@v6",
+          "+    uses: actions/setup-node@v6"
+        ].join("\n"),
+        rawPatchAvailable: true
+      }
+    ]
+  };
+
+  const result = analyzePullRequestSnapshotData(snapshot);
+  const deterministicLabels = JSON.parse(result.deterministic_labels_json);
+  const candidateLabels = JSON.parse(result.candidate_labels_json);
+
+  assert.ok(!deterministicLabels.includes("os matrix"));
+  assert.ok(!candidateLabels.includes("os matrix"));
+});
+
+test("PR analyzer tags dependency vulnerability remediations", () => {
+  const snapshot = {
+    pullRequest: {
+      number: 42,
+      title: "Remediate GHSA-7xqf-2k4h-9w9r by upgrading axios",
+      body: "This dependency upgrade resolves a known vulnerability advisory.",
+      headRef: "security/dependency-remediation"
+    },
+    totals: {
+      filesChanged: 2,
+      additions: 6,
+      deletions: 6,
+      totalChanges: 12
+    },
+    files: [
+      {
+        filename: "package.json",
+        status: "modified",
+        additions: 3,
+        deletions: 3,
+        patch: [
+          "  \"dependencies\": {",
+          "-    \"axios\": \"^1.10.0\",",
+          "+    \"axios\": \"^1.16.0\",",
+          "  }"
+        ].join("\n"),
+        rawPatchAvailable: true
+      },
+      {
+        filename: "package-lock.json",
+        status: "modified",
+        additions: 3,
+        deletions: 3,
+        patch: [
+          "-      \"version\": \"1.10.0\",",
+          "+      \"version\": \"1.16.0\",",
+          "+      \"integrity\": \"sha512-remediated\""
+        ].join("\n"),
+        rawPatchAvailable: true
+      }
+    ]
+  };
+
+  const result = analyzePullRequestSnapshotData(snapshot);
+  const deterministicLabels = JSON.parse(result.deterministic_labels_json);
+  const evidenceItems = JSON.parse(result.deterministic_evidence_json);
+
+  assert.ok(hasExpectedLabel(deterministicLabels, "vulnerability"));
+  assert.ok(hasExpectedLabel(deterministicLabels, "dependencies"));
+  assert.ok(evidenceItems.some((item) => item.ruleId === "dependency-vulnerability-remediation"));
+});
+
+test("PR analyzer tags CodeQL security alert reductions", () => {
+  const snapshot = {
+    pullRequest: {
+      number: 43,
+      title: "Reduce CodeQL security notifications after remediation",
+      body: "",
+      headRef: "security/codeql-remediation"
+    },
+    totals: {
+      filesChanged: 1,
+      additions: 2,
+      deletions: 2,
+      totalChanges: 4
+    },
+    files: [
+      {
+        filename: ".github/workflows/codeql.yml",
+        status: "modified",
+        additions: 2,
+        deletions: 2,
+        patch: [
+          "-# CodeQL security alerts: 5",
+          "+# CodeQL security alerts: 0",
+          "-# CodeQL notifications before: 5 after: 5",
+          "+# CodeQL notifications before: 5 after: 0"
+        ].join("\n"),
+        rawPatchAvailable: true
+      }
+    ]
+  };
+
+  const result = analyzePullRequestSnapshotData(snapshot);
+  const deterministicLabels = JSON.parse(result.deterministic_labels_json);
+  const evidenceItems = JSON.parse(result.deterministic_evidence_json);
+
+  assert.ok(hasExpectedLabel(deterministicLabels, "security"));
+  assert.ok(evidenceItems.some((item) => item.ruleId === "codeql-security-alert-reduction"));
+});
+
+test("PR analyzer does not cap deterministic tag count", () => {
+  const snapshot = {
+    pullRequest: {
+      number: 52,
+      title: "Expand API, security, runtime, and delivery coverage",
+      body: "",
+      headRef: "feature/multi-surface-rollout"
+    },
+    totals: {
+      filesChanged: 8,
+      additions: 154,
+      deletions: 23,
+      totalChanges: 177
+    },
+    files: [
+      {
+        filename: ".github/workflows/check.yml",
+        status: "modified",
+        additions: 14,
+        deletions: 3,
+        patch: [
+          "+strategy:",
+          "+  matrix:",
+          "+    os: [ubuntu-latest, windows-latest]",
+          "+    python-version: [\"3.11\", \"3.12\"]",
+          "+runs-on: ${{ matrix.os }}",
+          "+uses: actions/setup-python@v6"
+        ].join("\n"),
+        rawPatchAvailable: true
+      },
+      {
+        filename: "package.json",
+        status: "modified",
+        additions: 3,
+        deletions: 2,
+        patch: [
+          "  \"dependencies\": {",
+          "-    \"express\": \"^5.1.0\",",
+          "+    \"express\": \"^5.2.1\",",
+          "  }"
+        ].join("\n"),
+        rawPatchAvailable: true
+      },
+      {
+        filename: "src/repo/security/token_guard.py",
+        status: "modified",
+        additions: 25,
+        deletions: 6,
+        patch: [
+          "+def sanitize_token(value):",
+          "+    if not value:",
+          "+        raise ValueError(\"missing credential\")",
+          "+    return value"
+        ].join("\n"),
+        rawPatchAvailable: true
+      },
+      {
+        filename: "src/repo/api/router.py",
+        status: "added",
+        additions: 32,
+        deletions: 0,
+        patch: [
+          "+@router.get(\"/health\")",
+          "+def healthcheck():",
+          "+    return {\"status\": \"ok\"}"
+        ].join("\n"),
+        rawPatchAvailable: true
+      },
+      {
+        filename: "src/repo/database/queries.sql",
+        status: "modified",
+        additions: 18,
+        deletions: 5,
+        patch: [
+          "+select id, status from jobs where state = 'ready';",
+          "+update jobs set state = 'running' where id = :id;"
+        ].join("\n"),
+        rawPatchAvailable: true
+      },
+      {
+        filename: "docker/Dockerfile",
+        status: "modified",
+        additions: 24,
+        deletions: 4,
+        patch: [
+          "-FROM python:3.11-slim",
+          "+FROM python:3.12-slim",
+          "+RUN apt-get update && apt-get install -y ffmpeg"
+        ].join("\n"),
+        rawPatchAvailable: true
+      },
+      {
+        filename: "docs/reference/auth.md",
+        status: "modified",
+        additions: 20,
+        deletions: 1,
+        patch: "+Document refreshed JWT authentication setup and migration notes.",
+        rawPatchAvailable: true
+      },
+      {
+        filename: "tests/test_router.py",
+        status: "added",
+        additions: 18,
+        deletions: 2,
+        patch: "+def test_health_route_returns_ok():\n+    assert True",
+        rawPatchAvailable: true
+      }
+    ]
+  };
+
+  const result = analyzePullRequestSnapshotData(snapshot);
+  const deterministicLabels = JSON.parse(result.deterministic_labels_json);
+  const candidateLabels = JSON.parse(result.candidate_labels_json);
+
+  assert.ok(deterministicLabels.length >= 4);
+  assert.ok(candidateLabels.length > 4);
 });
 
 test("PR analyzer avoids feature-flag self-classification for autobot infrastructure", () => {
@@ -828,6 +1076,206 @@ test("PR analyzer avoids feature-flag self-classification for autobot infrastruc
 
   assert.ok(!deterministicLabels.includes("feature-flag"));
   assert.equal(classResult.deterministic_labels_json, result.deterministic_labels_json);
+});
+
+test("PR analyzer gates runtime text signals behind runtime path evidence", () => {
+  const snapshot = {
+    pullRequest: {
+      number: 40,
+      title: "Refine command execution text descriptions",
+      body: "",
+      headRef: "runtime/text-only-signal"
+    },
+    totals: {
+      filesChanged: 1,
+      additions: 4,
+      deletions: 1,
+      totalChanges: 5
+    },
+    files: [
+      {
+        filename: "src/server/command_runner.ts",
+        status: "modified",
+        additions: 4,
+        deletions: 1,
+        patch: [
+          "-const note = \"legacy\";",
+          "+const note = \"supports python 3.12 on windows and linux\";",
+          "+const details = \"uses subprocess.popen for compatibility\";"
+        ].join("\n"),
+        rawPatchAvailable: true
+      }
+    ]
+  };
+
+  const result = analyzePullRequestSnapshotData(snapshot);
+  const deterministicLabels = JSON.parse(result.deterministic_labels_json);
+
+  assert.ok(!deterministicLabels.includes("runtime"));
+  assert.ok(!deterministicLabels.includes("platform"));
+});
+
+test("PR analyzer limits migration label to migration paths or alembic commands", () => {
+  const snapshot = {
+    pullRequest: {
+      number: 41,
+      title: "Refine db upgrade helper names",
+      body: "",
+      headRef: "database/upgrade-helper"
+    },
+    totals: {
+      filesChanged: 1,
+      additions: 2,
+      deletions: 1,
+      totalChanges: 3
+    },
+    files: [
+      {
+        filename: "src/server/db_upgrade.ts",
+        status: "modified",
+        additions: 2,
+        deletions: 1,
+        patch: [
+          "-function upgrade() { return \"v1\"; }",
+          "+function upgrade() { return \"v2\"; }"
+        ].join("\n"),
+        rawPatchAvailable: true
+      }
+    ]
+  };
+
+  const result = analyzePullRequestSnapshotData(snapshot);
+  const deterministicLabels = JSON.parse(result.deterministic_labels_json);
+
+  assert.ok(!hasExpectedLabel(deterministicLabels, "migration"));
+});
+
+test("PR analyzer emits observability labels for telemetry and prometheus source changes", () => {
+  const snapshot = {
+    pullRequest: {
+      number: 42,
+      title: "Add telemetry counters for API latency",
+      body: "",
+      headRef: "observability/telemetry-counters"
+    },
+    totals: {
+      filesChanged: 2,
+      additions: 22,
+      deletions: 4,
+      totalChanges: 26
+    },
+    files: [
+      {
+        filename: "src/server/monitoring/metrics.ts",
+        status: "modified",
+        additions: 12,
+        deletions: 2,
+        patch: [
+          "+import { Counter, Histogram } from \"prom-client\";",
+          "+const requestLatency = new Histogram({ name: \"api_latency_ms\", help: \"API latency\" });",
+          "+const requestCount = new Counter({ name: \"api_requests_total\", help: \"Total API requests\" });"
+        ].join("\n"),
+        rawPatchAvailable: true
+      },
+      {
+        filename: "src/server/monitoring/tracing.ts",
+        status: "modified",
+        additions: 10,
+        deletions: 2,
+        patch: [
+          "+import { trace } from \"@opentelemetry/api\";",
+          "+const span = trace.getTracer(\"api\").startSpan(\"request\");",
+          "+span.setAttribute(\"telemetry.enabled\", true);"
+        ].join("\n"),
+        rawPatchAvailable: true
+      }
+    ]
+  };
+
+  const result = analyzePullRequestSnapshotData(snapshot);
+  const deterministicLabels = JSON.parse(result.deterministic_labels_json);
+  const deterministicSummary = String(result.deterministic_summary || "").toLowerCase();
+
+  assert.ok(
+    hasExpectedLabel(deterministicLabels, "request tracing")
+      || deterministicSummary.includes("observability telemetry change")
+  );
+});
+
+test("PR analyzer emits style signal for visual-only UI changes", () => {
+  const snapshot = {
+    pullRequest: {
+      number: 43,
+      title: "Polish dashboard visual theme tokens",
+      body: "",
+      headRef: "ui/style-polish"
+    },
+    totals: {
+      filesChanged: 1,
+      additions: 8,
+      deletions: 3,
+      totalChanges: 11
+    },
+    files: [
+      {
+        filename: "src/client/styles.module.css",
+        status: "modified",
+        additions: 8,
+        deletions: 3,
+        patch: [
+          "-.panel { margin: 8px; color: #333; }",
+          "+.panel { margin: 12px; color: #1f2937; background: var(--surface); }",
+          "+.panelTitle { font-weight: 700; letter-spacing: 0.02em; }"
+        ].join("\n"),
+        rawPatchAvailable: true
+      }
+    ]
+  };
+
+  const result = analyzePullRequestSnapshotData(snapshot);
+  const deterministicLabels = JSON.parse(result.deterministic_labels_json);
+  const deterministicSummary = String(result.deterministic_summary || "").toLowerCase();
+
+  assert.ok(
+    hasExpectedLabel(deterministicLabels, "theme token")
+      || hasExpectedLabel(deterministicLabels, "design system")
+      || deterministicSummary.includes("style visual only change")
+  );
+});
+
+test("PR analyzer does not emit breaking-change from documentation text alone", () => {
+  const snapshot = {
+    pullRequest: {
+      number: 44,
+      title: "Clarify upgrade guidance",
+      body: "",
+      headRef: "docs/upgrade-guide"
+    },
+    totals: {
+      filesChanged: 1,
+      additions: 3,
+      deletions: 0,
+      totalChanges: 3
+    },
+    files: [
+      {
+        filename: "docs/runtime/upgrade.md",
+        status: "modified",
+        additions: 3,
+        deletions: 0,
+        patch: [
+          "+Breaking change notice for users.",
+          "+Consumers must update callers before migration."
+        ].join("\n"),
+        rawPatchAvailable: true
+      }
+    ]
+  };
+
+  const result = analyzePullRequestSnapshotData(snapshot);
+  const deterministicLabels = JSON.parse(result.deterministic_labels_json);
+
+  assert.ok(!hasExpectedLabel(deterministicLabels, "breaking-change"));
 });
 
 test("project manager resolves PR label deltas from the shared registry rules", () => {
@@ -1142,7 +1590,7 @@ test("PR analyzer ignores version-critical vocabulary inside autobot maintenance
         rawPatchAvailable: true
       },
       {
-        filename: "test/autobot_scripts.test.cjs",
+        filename: "tests/autobot_scripts.test.cjs",
         status: "modified",
         additions: 55,
         deletions: 12,
@@ -1154,7 +1602,7 @@ test("PR analyzer ignores version-critical vocabulary inside autobot maintenance
         rawPatchAvailable: true
       },
       {
-        filename: "test/deterministic_scenario_engine.cjs",
+        filename: "tests/deterministic_scenario_engine.cjs",
         status: "modified",
         additions: 40,
         deletions: 10,
@@ -1208,7 +1656,6 @@ test("PR analyzer ignores version-critical vocabulary inside autobot maintenance
   assert.ok(!deterministicLabels.includes("automation"));
   assert.ok(!deterministicLabels.includes("ci"));
   assert.ok(!deterministicLabels.includes("github"));
-  assert.ok(deterministicLabels.length <= 6);
   assert.ok(result.deterministic_summary.includes("Final emitted technical labels:"));
   assert.ok(!result.deterministic_summary.includes("Held back context labels:"));
   assert.ok(lineIncludesAny(result.deterministic_summary, ["lockfile", "package lock"]));
@@ -1230,7 +1677,7 @@ test("PR analyzer preserves additive API classification when raw patches are una
     },
     files: [
       {
-        filename: "src/definers/api/preview_endpoint.py",
+        filename: "src/repo/api/preview_endpoint.py",
         status: "added",
         additions: 124,
         deletions: 0,
@@ -1238,7 +1685,7 @@ test("PR analyzer preserves additive API classification when raw patches are una
         rawPatchAvailable: false
       },
       {
-        filename: "src/definers/__init__.py",
+        filename: "src/repo/__init__.py",
         status: "modified",
         additions: 24,
         deletions: 4,
@@ -1274,7 +1721,7 @@ test("PR analyzer maps compatibility shims to technical release labels", () => {
     },
     files: [
       {
-        filename: "src/definers/compat/preview_shim.py",
+        filename: "src/repo/compat/preview_shim.py",
         status: "added",
         additions: 36,
         deletions: 0,
@@ -1352,7 +1799,7 @@ test("PR summary limits release relevance to version-impact signals", () => {
         rawPatchAvailable: true
       },
       {
-        filename: "src/definers/api/router.py",
+        filename: "src/repo/api/router.py",
         status: "added",
         additions: 88,
         deletions: 0,
@@ -1364,7 +1811,7 @@ test("PR summary limits release relevance to version-impact signals", () => {
         rawPatchAvailable: true
       },
       {
-        filename: "src/definers/security/token_guard.py",
+        filename: "src/repo/security/token_guard.py",
         status: "modified",
         additions: 25,
         deletions: 14,
@@ -1387,7 +1834,7 @@ test("PR summary limits release relevance to version-impact signals", () => {
     .split("\n")
     .find((line) => line.includes("Final emitted technical labels:"));
   assert.ok(releaseSignalLine);
-  assert.ok(lineIncludesAny(releaseSignalLine, ["auth", "token", "jwt", "authz"]));
+  assert.ok(lineIncludesAny(releaseSignalLine, ["auth", "token", "jwt", "authz", "hardening", "vulnerability", "compliance", "security"]));
   assert.ok(lineIncludesAny(releaseSignalLine, ["api", "route", "route param", "request body", "openapi spec"]));
   assert.ok(lineIncludesAny(releaseSignalLine, ["runtime", "support matrix", "python version", "dockerfile", "image tag"]));
   assert.ok(!releaseSignalLine.includes("workflow"));
@@ -1415,7 +1862,7 @@ test("project manager recreates the next patch milestone after demilestoning whe
     github,
     issueNumber: 12,
     owner: "octo",
-    repo: "definers"
+    repo: "repo"
   });
 
   assert.ok(github.state.createdMilestones.includes("v0.0.3"));
@@ -1576,4 +2023,83 @@ test("unified automation exploratory seed stays free of warnings and deviations"
   assert.equal(suite.summary.deviationCount, 0, suite.reportText);
   assert.equal(suite.summary.warningScenarioCount, 0, suite.reportText);
   assert.equal(suite.summary.falseGreenCount, 0, suite.reportText);
+});
+
+test("pull request title mentions vulnerability without security surface does not emit vulnerability", () => {
+  const snapshot = {
+    pullRequest: { title: "Patch vulnerability", body: "" },
+    totals: { additions: 1, deletions: 0, totalChanges: 1 },
+    files: [{
+      filename: "README.md",
+      status: "modified",
+      additions: 1,
+      deletions: 0,
+      patch: "+This update mentions a vulnerability in the docs"
+    }]
+  };
+
+  const result = analyzePullRequestSnapshotData(snapshot);
+
+  assert.ok(!result.candidate_labels_json.includes("vulnerability"));
+  assert.ok(!result.deterministic_labels_json.includes("vulnerability"));
+});
+
+test("pull request title mentions vulnerability without security surface does not emit related security labels", () => {
+  const snapshot = {
+    pullRequest: { title: "Patch vulnerability and security note", body: "" },
+    totals: { additions: 2, deletions: 0, totalChanges: 2 },
+    files: [{
+      filename: "README.md",
+      status: "modified",
+      additions: 2,
+      deletions: 0,
+      patch: "+This update mentions a vulnerability and a compliance note."
+    }]
+  };
+
+  const result = analyzePullRequestSnapshotData(snapshot);
+  const deterministicLabels = JSON.parse(result.deterministic_labels_json);
+  const candidateLabels = JSON.parse(result.candidate_labels_json);
+
+  assert.ok(!candidateLabels.includes("security"));
+  assert.ok(!candidateLabels.includes("vulnerability"));
+  assert.ok(!candidateLabels.includes("compliance"));
+  assert.ok(!candidateLabels.includes("hardening"));
+  assert.ok(!candidateLabels.includes("pen-test"));
+  assert.ok(!deterministicLabels.includes("security"));
+  assert.ok(!deterministicLabels.includes("vulnerability"));
+  assert.ok(!deterministicLabels.includes("compliance"));
+  assert.ok(!deterministicLabels.includes("hardening"));
+  assert.ok(!deterministicLabels.includes("pen-test"));
+});
+
+test("smart-link source ignores non-security repository dispatch events", async () => {
+  const core = createWorkflowCoreMock();
+  const github = createAutobotPipelineGithubMock();
+  const result = await collectSmartLinkSource({
+    additionalLabels: [],
+    context: {
+      eventName: "repository_dispatch",
+      payload: {
+        client_payload: {
+          source: {
+            kind: "issue_comment",
+            number: 12,
+            title: "A user left a comment"
+          }
+        }
+      }
+    },
+    core,
+    github,
+    owner: "octo",
+    repo: "repo",
+    sourceFile: "tmp\\autobot-smart-link-source.json",
+    thresholdInput: "80"
+  });
+
+  assert.equal(result.ready, "false");
+  assert.equal(result.reason, "unsupported-dispatch-source");
+  assert.equal(core.outputs.get("ready"), "false");
+  assert.equal(core.outputs.get("reason"), "unsupported-dispatch-source");
 });

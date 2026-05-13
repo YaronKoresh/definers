@@ -45,7 +45,7 @@ test("explicit reference extraction treats implements as a close-family signal",
 test("explicit implements on an open issue emits a closes relation above threshold 80", () => {
   const source = createEntity({
     body: "Implements #42.",
-    changedFiles: ["src/definers/runtime.py"],
+    changedFiles: ["src/repo/runtime.py"],
     kind: "pull_request",
     labels: ["enhancement"],
     number: 7,
@@ -108,20 +108,20 @@ test("lexical-only similarity is suppressed even when words overlap", () => {
 test("alert identifier and remediation reference emit advisory fix above threshold 80", () => {
   const source = createEntity({
     alertIdentifiers: ["CVE-2026-1234"],
-    body: "CVE-2026-1234 affects package:definers-core.",
+    body: "CVE-2026-1234 affects package:repo-core.",
     ecosystemSignals: ["python"],
     kind: "security_alert",
-    packageSignals: ["package:definers-core"],
+    packageSignals: ["package:repo-core"],
     remediationReferences: [77],
-    title: "Security advisory for definers-core"
+    title: "Security advisory for repo-core"
   });
   const candidate = createEntity({
     alertIdentifiers: ["CVE-2026-1234"],
-    body: "Remediates CVE-2026-1234 in definers-core.",
+    body: "Remediates CVE-2026-1234 in repo-core.",
     ecosystemSignals: ["python"],
     kind: "pull_request",
     number: 77,
-    packageSignals: ["package:definers-core"],
+    packageSignals: ["package:repo-core"],
     title: "Patch CVE-2026-1234"
   });
 

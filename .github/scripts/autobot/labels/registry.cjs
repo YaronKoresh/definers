@@ -399,20 +399,35 @@ class AutobotLabelRegistry {
     });
   }
 
+  static resolveLabelLimit(limitValue) {
+    if (limitValue === undefined || limitValue === null || limitValue === "") {
+      return Number.POSITIVE_INFINITY;
+    }
+    const parsedLimit = Number(limitValue);
+    if (!Number.isFinite(parsedLimit)) {
+      return Number.POSITIVE_INFINITY;
+    }
+    return Math.max(parsedLimit, 1);
+  }
+
   static technicalLabelsOnly(labels, options = {}) {
-    const limit = Math.max(Number(options.limit) || AutobotLabelRegistry.MAX_AUTOBOT_LABELS, 1);
-    return collapseTechnicalLabels(AutobotLabelRegistry.sortTechnicalLabels(labels)).slice(0, limit);
+    const limit = AutobotLabelRegistry.resolveLabelLimit(options.limit);
+    const collapsed = collapseTechnicalLabels(AutobotLabelRegistry.sortTechnicalLabels(labels));
+    return Number.isFinite(limit) ? collapsed.slice(0, limit) : collapsed;
   }
 
   static trimLowSignalLabels(labels, options = {}) {
-    const limit = Math.max(Number(options.limit) || AutobotLabelRegistry.MAX_AUTOBOT_LABELS, 1);
+    const limit = AutobotLabelRegistry.resolveLabelLimit(options.limit);
     const uniqueLabels = AutobotLabelRegistry.uniqueValidLabels(labels);
     if (uniqueLabels.length <= 3) {
-      return uniqueLabels.slice(0, limit);
+      return Number.isFinite(limit) ? uniqueLabels.slice(0, limit) : uniqueLabels;
     }
     const versionCritical = AutobotLabelRegistry.VERSION_SENSITIVE_LABELS.filter((label) => uniqueLabels.includes(label));
     const primary = uniqueLabels.filter((label) => !AutobotLabelRegistry.SECONDARY_LABELS.includes(label) && !versionCritical.includes(label));
     const secondary = uniqueLabels.filter((label) => AutobotLabelRegistry.SECONDARY_LABELS.includes(label));
+    if (!Number.isFinite(limit)) {
+      return [...versionCritical, ...primary, ...secondary];
+    }
     const cappedPrimary = [...versionCritical, ...primary].slice(0, limit);
     const remainingSlots = Math.max(limit - cappedPrimary.length, 0);
     const cappedSecondary = secondary.slice(0, remainingSlots);
