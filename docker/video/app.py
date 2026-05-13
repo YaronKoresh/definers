@@ -35,9 +35,13 @@ def install_runtime() -> None:
 
 def main() -> None:
     install_runtime()
-    from definers.ui.launchers import launch_installed_project
-
-    launch_installed_project(PROJECT)
+    run_command(
+        sys.executable,
+        "-m",
+        "definers",
+        "start",
+        PROJECT,
+    )
 
 
 if __name__ == "__main__":
