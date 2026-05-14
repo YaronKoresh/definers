@@ -53,6 +53,6 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           file: ./docker/${{ matrix.docker-image }}/Dockerfile
-          context: .
+          context: ./docker/${{ matrix.docker-image }}/
           push: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'false') }}
           tags: yaronkoresh/${{ matrix.docker-image }}:${{ github.event.inputs.image_tag || 'latest' }}
