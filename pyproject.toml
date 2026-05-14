@@ -217,7 +217,7 @@ cmd = "python -m ruff check ."
 cmd = "python -m ruff format --check ."
 
 [tool.poe.tasks.pre-commit]
-cmd = "python -m pre-commit run --all-files"
+cmd = "python -m pre_commit run --all-files"
 
 [tool.poe.tasks.pre-commit.env]
 SKIP = "no-commit-to-branch"
