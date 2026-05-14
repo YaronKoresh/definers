@@ -54,7 +54,7 @@ jobs:
         with:
           file: ./docker/${{ matrix.docker-image }}/Dockerfile
           context: .
-          push: (github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'false') }}
+          push: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'false') }}
           tags: yaronkoresh/${{ matrix.docker-image }}:${{ github.event.inputs.image_tag || 'latest' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
