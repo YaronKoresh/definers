@@ -95,7 +95,9 @@ def test_install_optional_target_installs_group_specs(monkeypatch):
     ]
 
 
-def test_install_optional_target_uses_madmom_install_override():
+def test_install_optional_target_uses_madmom_install_override(
+    monkeypatch,
+):
     installed = []
 
     monkeypatch.setattr(optional_dependencies, "_COMPLETED_INSTALLS", set())
