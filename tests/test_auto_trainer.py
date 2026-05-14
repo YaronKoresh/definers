@@ -1,4 +1,5 @@
 import importlib
+import json
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -20,10 +21,10 @@ class TestAutoTrainer(unittest.TestCase):
 
         with (
             patch.object(
-                ml_module, "_feed", return_value=trained_model
+                ml_module, "feed", return_value=trained_model
             ) as mock_feed,
             patch.object(
-                ml_module, "_fit", return_value=trained_model
+                ml_module, "fit", return_value=trained_model
             ) as mock_fit,
             patch.object(
                 ml_module, "_training_array_adapter", return_value=MagicMock()
@@ -47,8 +48,8 @@ class TestAutoTrainer(unittest.TestCase):
         trained_model = MagicMock()
 
         with (
-            patch.object(ml_module, "_feed", return_value=trained_model),
-            patch.object(ml_module, "_fit", return_value=trained_model),
+            patch.object(ml_module, "feed", return_value=trained_model),
+            patch.object(ml_module, "fit", return_value=trained_model),
             patch.object(
                 ml_module, "_training_array_adapter", return_value=MagicMock()
             ),
@@ -75,9 +76,9 @@ class TestAutoTrainer(unittest.TestCase):
 
         with (
             patch.object(
-                ml_module, "_feed", return_value=trained_model
+                ml_module, "feed", return_value=trained_model
             ) as mock_feed,
-            patch.object(ml_module, "_fit", return_value=trained_model),
+            patch.object(ml_module, "fit", return_value=trained_model),
             patch.object(
                 ml_module, "_training_array_adapter", return_value=MagicMock()
             ),
@@ -240,6 +241,201 @@ class TestAutoTrainer(unittest.TestCase):
         outside_path = str(Path.cwd().parent / "outside.csv")
 
         self.assertFalse(trainer._is_file_dataset(outside_path))
+
+
+class TestAutoTuneAndConvenience(unittest.TestCase):
+    def test_suggest_training_defaults_picks_validation_for_large_dataset(self):
+        from definers.ml.trainer_plan import suggest_training_defaults
+
+        defaults = suggest_training_defaults(2000)
+
+        self.assertEqual(defaults.batch_size, 64)
+        self.assertEqual(defaults.validation_split, 0.1)
+        self.assertTrue(defaults.early_stopping)
+        self.assertGreaterEqual(defaults.patience, 1)
+        self.assertTrue(defaults.notes)
+
+    def test_suggest_training_defaults_respects_caller_values(self):
+        from definers.ml.trainer_plan import suggest_training_defaults
+
+        defaults = suggest_training_defaults(
+            5000,
+            batch_size=8,
+            validation_split=0.25,
+            early_stopping=False,
+        )
+
+        self.assertEqual(defaults.batch_size, 8)
+        self.assertEqual(defaults.validation_split, 0.25)
+        self.assertFalse(defaults.early_stopping)
+
+    def test_training_plan_records_auto_tune_notes(self):
+        ml_module = _ml_module()
+        trainer = ml_module.AutoTrainer()
+        features = np.random.rand(500, 3)
+        labels = np.random.randint(0, 2, size=500)
+
+        plan = trainer.training_plan(data=features, target=labels)
+
+        self.assertTrue(plan.auto_tuned)
+        self.assertGreater(plan.validation_split, 0.0)
+        self.assertTrue(plan.early_stopping)
+        markdown = render_training_plan_markdown(plan)
+        self.assertIn("Auto-Tuned", markdown)
+        self.assertIn("Early Stopping", markdown)
+
+    def test_auto_train_convenience_invokes_trainer(self):
+        ml_module = _ml_module()
+        trained_model = MagicMock()
+
+        with (
+            patch.object(ml_module, "feed", return_value=trained_model),
+            patch.object(ml_module, "fit", return_value=trained_model),
+            patch.object(
+                ml_module, "_training_array_adapter", return_value=MagicMock()
+            ),
+            patch("joblib.dump") as mock_dump,
+        ):
+            result = ml_module.auto_train(
+                [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0], [7.0, 8.0]],
+                ["a", "b", "a", "b"],
+                save_as="quick.joblib",
+            )
+
+        self.assertIsInstance(result, ml_module.AutoTrainingResult)
+        self.assertEqual(result.artifact_path, "quick.joblib")
+        self.assertEqual(result, "quick.joblib")
+        mock_dump.assert_called_once()
+
+    def test_auto_train_uses_guided_coach_for_single_file(self):
+        ml_module = _ml_module()
+        state_payload = json.dumps(
+            {
+                "ready": True,
+                "recommendations": [],
+                "checks": [],
+                "resume_guidance": {},
+            }
+        )
+
+        with (
+            patch(
+                "definers.ui.apps.train.coach_handlers.inspect_train_coach_request",
+                return_value=(
+                    state_payload,
+                    "summary",
+                    "inspection",
+                    "validation",
+                    "use",
+                    "quick",
+                    {},
+                    {},
+                    {},
+                ),
+            ) as mock_inspect,
+            patch(
+                "definers.ui.apps.train.coach_handlers.run_train_coach_workflow",
+                return_value=(
+                    "guided.joblib",
+                    "plan",
+                    "status",
+                    "use-result",
+                ),
+            ) as mock_run,
+        ):
+            result = ml_module.auto_train("training.csv")
+
+        self.assertIsInstance(result, ml_module.AutoTrainingResult)
+        self.assertEqual(result.artifact_path, "guided.joblib")
+        self.assertEqual(result.model_path, "guided.joblib")
+        self.assertEqual(str(result), "guided.joblib")
+        mock_inspect.assert_called_once()
+        self.assertEqual(mock_inspect.call_args.args[0], "files")
+        self.assertEqual(mock_inspect.call_args.args[1], "training.csv")
+        mock_run.assert_called_once_with(state_payload)
+
+    def test_auto_train_routes_path_inputs_to_guided_by_default(self):
+        ml_module = _ml_module()
+        state_payload = json.dumps(
+            {
+                "ready": True,
+                "recommendations": [],
+                "checks": [],
+                "resume_guidance": {},
+            }
+        )
+
+        with (
+            patch(
+                "definers.ui.apps.train.coach_handlers.inspect_train_coach_request",
+                return_value=(
+                    state_payload,
+                    "summary",
+                    "inspection",
+                    "validation",
+                    "use",
+                    "quick",
+                    {},
+                    {},
+                    {},
+                ),
+            ),
+            patch(
+                "definers.ui.apps.train.coach_handlers.run_train_coach_workflow",
+                return_value=(
+                    "guided.joblib",
+                    "plan",
+                    "status",
+                    "use-result",
+                ),
+            ),
+        ):
+            result = ml_module.auto_train("training.csv")
+
+        self.assertIsInstance(result, ml_module.AutoTrainingResult)
+        self.assertEqual(result.artifact_path, "guided.joblib")
+
+    def test_auto_train_reports_guided_block_without_training(self):
+        ml_module = _ml_module()
+        state_payload = json.dumps(
+            {
+                "ready": False,
+                "unresolved_questions": ["Choose the label route."],
+                "recommendations": [],
+                "checks": [],
+                "resume_guidance": {},
+            }
+        )
+
+        with (
+            patch(
+                "definers.ui.apps.train.coach_handlers.inspect_train_coach_request",
+                return_value=(
+                    state_payload,
+                    "summary",
+                    "inspection",
+                    "validation",
+                    "use",
+                    "quick",
+                    {},
+                    {},
+                    {},
+                ),
+            ),
+            patch(
+                "definers.ui.apps.train.coach_handlers.preview_train_coach_plan",
+                return_value="blocked plan",
+            ),
+            patch(
+                "definers.ui.apps.train.coach_handlers.run_train_coach_workflow",
+            ) as mock_run,
+        ):
+            result = ml_module.auto_train("training.csv")
+
+        self.assertIsNone(result.artifact_path)
+        self.assertEqual(result.plan_markdown, "blocked plan")
+        self.assertIn("Choose the label route.", result.status_markdown)
+        mock_run.assert_not_called()
 
 
 if __name__ == "__main__":

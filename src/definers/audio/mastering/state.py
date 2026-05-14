@@ -86,6 +86,18 @@ def configure_runtime_state(
     self.pre_limiter_saturation_ratio = float(
         np.clip(cfg.pre_limiter_saturation_ratio, 0.0, 1.0)
     )
+    self.adaptive_pre_limiter_true_peak_trim_enabled = bool(
+        cfg.adaptive_pre_limiter_true_peak_trim_enabled
+    )
+    self.adaptive_pre_limiter_true_peak_max_target_dbfs = float(
+        np.clip(cfg.adaptive_pre_limiter_true_peak_max_target_dbfs, -3.0, -0.8)
+    )
+    self.anti_distortion_soft_clip_ceiling_ratio = float(
+        np.clip(cfg.anti_distortion_soft_clip_ceiling_ratio, 0.0, 0.7)
+    )
+    self.anti_distortion_saturation_ceiling_ratio = float(
+        np.clip(cfg.anti_distortion_saturation_ceiling_ratio, 0.0, 0.45)
+    )
     self.low_end_mono_tightening = (
         str(cfg.low_end_mono_tightening).strip().lower()
     )
@@ -97,6 +109,9 @@ def configure_runtime_state(
     )
     self.stem_glue_reverb_amount = float(
         np.clip(cfg.stem_glue_reverb_amount, 0.0, 1.5)
+    )
+    self.stem_vocal_glue_tail_scale = float(
+        np.clip(cfg.stem_vocal_glue_tail_scale, 0.4, 1.0)
     )
     self.stem_drum_edge_amount = float(
         np.clip(cfg.stem_drum_edge_amount, 0.0, 1.5)
@@ -251,6 +266,11 @@ def configure_runtime_state(
     self.last_headroom_recovery_closed_margin_db = None
     self.last_headroom_recovery_unused_margin_db = None
     self.last_resolved_final_true_peak_target_dbfs = None
+    self.input_analysis = None
+    self.input_analysis_metrics = None
+    self.separator_quality_flags = ()
+    self.stem_cleanup_provenance = {}
+    self.last_input_material_profile = None
 
     self.update_profile()
     self.update_bands()

@@ -138,7 +138,7 @@ def test_launch_audio_app_hides_mastering_output_column_until_result(
     monkeypatch.setattr(audio_app, "init_chat", lambda *args, **kwargs: None)
     monkeypatch.setattr(audio_app, "launch_blocks", lambda app: None)
     monkeypatch.setattr(
-        "definers.ui.apps.audio_workspace.prepare_audio_workspace",
+        "definers.ui.apps.audio.prepare_audio_workspace",
         lambda: {"svc_installed": False},
     )
     monkeypatch.setattr("definers.cuda.device", lambda: "cuda")

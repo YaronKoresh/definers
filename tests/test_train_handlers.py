@@ -232,6 +232,7 @@ def test_handle_prediction_uses_model_path(monkeypatch):
 
     artifact, status, preview = handle_prediction(
         "model.joblib",
+        "auto",
         "predict.csv",
         None,
     )
@@ -256,6 +257,7 @@ def test_handle_prediction_accepts_in_memory_payload(monkeypatch):
 
     artifact, status, preview = handle_prediction(
         "model.joblib",
+        "auto",
         None,
         "[[1, 2], [3, 4]]",
     )

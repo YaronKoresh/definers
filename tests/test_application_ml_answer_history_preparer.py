@@ -1,9 +1,7 @@
 from types import SimpleNamespace
 
-from definers.ml.answer.history import (
-    AnswerHistoryPreparer,
-)
-from definers.ml.answer.service import AnswerService
+from definers.ml.answer import service as answer_service
+from definers.ml.answer.service import answer, prepare_answer_history
 
 
 class TrackingDependencyLoader:
@@ -51,12 +49,10 @@ def test_prepare_answer_history_keeps_text_only_path_dependency_free():
         librosa_module=object(),
     )
 
-    prepared_history, image_items, audio_items = (
-        AnswerHistoryPreparer.prepare_answer_history(
-            [{"role": "user", "content": "plain english"}],
-            runtime_stub(),
-            loader,
-        )
+    prepared_history, image_items, audio_items = prepare_answer_history(
+        [{"role": "user", "content": "plain english"}],
+        runtime_stub(),
+        loader,
     )
 
     assert prepared_history == [
@@ -72,7 +68,6 @@ def test_prepare_answer_history_keeps_text_only_path_dependency_free():
 
 def test_prepare_answer_history_reuses_image_dependency(monkeypatch):
     import definers.system as system_module
-    from definers.ml.answer.images import AnswerImageLoader
 
     image_module = object()
     loader = TrackingDependencyLoader(image_module=image_module)
@@ -91,25 +86,21 @@ def test_prepare_answer_history_reuses_image_dependency(monkeypatch):
         return returned_images[len(image_reads) - 1]
 
     monkeypatch.setattr(
-        AnswerImageLoader,
-        "read_answer_image",
-        staticmethod(fake_read_answer_image),
+        answer_service, "read_answer_image", fake_read_answer_image
     )
 
-    prepared_history, image_items, audio_items = (
-        AnswerHistoryPreparer.prepare_answer_history(
-            [
-                {
-                    "role": "user",
-                    "content": (
-                        {"path": "one.jpg"},
-                        {"path": "two.png"},
-                    ),
-                }
-            ],
-            runtime_stub(),
-            loader,
-        )
+    prepared_history, image_items, audio_items = prepare_answer_history(
+        [
+            {
+                "role": "user",
+                "content": (
+                    {"path": "one.jpg"},
+                    {"path": "two.png"},
+                ),
+            }
+        ],
+        runtime_stub(),
+        loader,
     )
 
     assert prepared_history == [
@@ -131,7 +122,6 @@ def test_prepare_answer_history_uses_soundfile_without_loading_librosa(
     monkeypatch,
 ):
     import definers.system as system_module
-    from definers.ml.answer.audio import AnswerAudioLoader
 
     soundfile_module = object()
     loader = TrackingDependencyLoader(
@@ -155,25 +145,21 @@ def test_prepare_answer_history_uses_soundfile_without_loading_librosa(
         return None
 
     monkeypatch.setattr(
-        AnswerAudioLoader,
-        "read_answer_audio",
-        staticmethod(fake_read_answer_audio),
+        answer_service, "read_answer_audio", fake_read_answer_audio
     )
 
-    prepared_history, image_items, audio_items = (
-        AnswerHistoryPreparer.prepare_answer_history(
-            [
-                {
-                    "role": "user",
-                    "content": (
-                        {"path": "one.wav"},
-                        {"path": "two.mp3"},
-                    ),
-                }
-            ],
-            runtime_stub(),
-            loader,
-        )
+    prepared_history, image_items, audio_items = prepare_answer_history(
+        [
+            {
+                "role": "user",
+                "content": (
+                    {"path": "one.wav"},
+                    {"path": "two.mp3"},
+                ),
+            }
+        ],
+        runtime_stub(),
+        loader,
     )
 
     assert prepared_history == [
@@ -195,7 +181,6 @@ def test_prepare_answer_history_falls_back_to_librosa_only_after_failure(
     monkeypatch,
 ):
     import definers.system as system_module
-    from definers.ml.answer.audio import AnswerAudioLoader
 
     soundfile_module = object()
     librosa_module = object()
@@ -221,17 +206,13 @@ def test_prepare_answer_history_falls_back_to_librosa_only_after_failure(
         return None
 
     monkeypatch.setattr(
-        AnswerAudioLoader,
-        "read_answer_audio",
-        staticmethod(fake_read_answer_audio),
+        answer_service, "read_answer_audio", fake_read_answer_audio
     )
 
-    prepared_history, image_items, audio_items = (
-        AnswerHistoryPreparer.prepare_answer_history(
-            [{"role": "user", "content": {"path": "clip.wav"}}],
-            runtime_stub(),
-            loader,
-        )
+    prepared_history, image_items, audio_items = prepare_answer_history(
+        [{"role": "user", "content": {"path": "clip.wav"}}],
+        runtime_stub(),
+        loader,
     )
 
     assert prepared_history == [
@@ -272,7 +253,7 @@ def test_answer_service_text_only_flow_never_touches_optional_dependencies(
         lambda task: init_calls.append(task),
     )
 
-    response = AnswerService.answer(
+    response = answer(
         [{"role": "user", "content": "plain english"}],
         runtime_stub(model=model),
         dependency_loader=NoMediaDependencyLoader(),
@@ -305,7 +286,7 @@ def test_answer_service_bootstraps_missing_model(monkeypatch):
         fake_init_pretrained_model,
     )
 
-    assert AnswerService.answer(
+    assert answer(
         [{"role": "user", "content": "plain english"}],
         runtime,
         dependency_loader=loader,
@@ -331,12 +312,10 @@ def test_prepare_answer_history_skips_unreadable_text_attachment(monkeypatch):
 
     monkeypatch.setattr(system_module, "read", fake_read)
 
-    prepared_history, image_items, audio_items = (
-        AnswerHistoryPreparer.prepare_answer_history(
-            [{"role": "user", "content": {"path": "notes.txt"}}],
-            runtime_stub(),
-            loader,
-        )
+    prepared_history, image_items, audio_items = prepare_answer_history(
+        [{"role": "user", "content": {"path": "notes.txt"}}],
+        runtime_stub(),
+        loader,
     )
 
     assert prepared_history == [{"role": "system", "content": "system"}]
@@ -348,8 +327,6 @@ def test_prepare_answer_history_handles_mixed_media_partial_failures(
     monkeypatch,
 ):
     import definers.system as system_module
-    from definers.ml.answer.audio import AnswerAudioLoader
-    from definers.ml.answer.images import AnswerImageLoader
 
     soundfile_module = object()
     librosa_module = object()
@@ -389,32 +366,26 @@ def test_prepare_answer_history_handles_mixed_media_partial_failures(
         return None
 
     monkeypatch.setattr(
-        AnswerAudioLoader,
-        "read_answer_audio",
-        staticmethod(fake_read_answer_audio),
+        answer_service, "read_answer_audio", fake_read_answer_audio
     )
     monkeypatch.setattr(
-        AnswerImageLoader,
-        "read_answer_image",
-        staticmethod(fake_read_answer_image),
+        answer_service, "read_answer_image", fake_read_answer_image
     )
 
-    prepared_history, image_items, audio_items = (
-        AnswerHistoryPreparer.prepare_answer_history(
-            [
-                {
-                    "role": "user",
-                    "content": (
-                        {"path": "broken.jpg"},
-                        {"path": "clip.wav"},
-                        {"path": "context.txt"},
-                        {"path": "missing.txt"},
-                    ),
-                }
-            ],
-            runtime_stub(),
-            loader,
-        )
+    prepared_history, image_items, audio_items = prepare_answer_history(
+        [
+            {
+                "role": "user",
+                "content": (
+                    {"path": "broken.jpg"},
+                    {"path": "clip.wav"},
+                    {"path": "context.txt"},
+                    {"path": "missing.txt"},
+                ),
+            }
+        ],
+        runtime_stub(),
+        loader,
     )
 
     assert prepared_history == [

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import numpy as np
 
-from definers.ui.apps import audio_app_services as services
+from definers.ui.apps import audio as services
 
 
 def _patch_audio_symbol(
@@ -59,7 +59,7 @@ def test_run_mastering_tool_returns_report_and_stems(monkeypatch):
     _patch_audio_symbol(
         monkeypatch,
         "master",
-        "definers.audio.mastering",
+        "definers.audio.mastering.engine",
         fake_master,
     )
 
@@ -132,7 +132,7 @@ def test_run_mastering_tool_collects_stems_for_gui_preview(monkeypatch):
     _patch_audio_symbol(
         monkeypatch,
         "master",
-        "definers.audio.mastering",
+        "definers.audio.mastering.engine",
         fake_master,
     )
 
@@ -184,7 +184,7 @@ def test_run_mastering_tool_clamps_stem_final_pass_controls(monkeypatch):
     _patch_audio_symbol(
         monkeypatch,
         "master",
-        "definers.audio.mastering",
+        "definers.audio.mastering.engine",
         fake_master,
     )
 
@@ -247,7 +247,7 @@ def test_run_mastering_tool_writes_outputs_under_managed_root(
     _patch_audio_symbol(
         monkeypatch,
         "master",
-        "definers.audio.mastering",
+        "definers.audio.mastering.engine",
         fake_master,
     )
 
@@ -407,7 +407,7 @@ def test_run_mastering_tool_custom_profile_sends_manual_macros(monkeypatch):
     _patch_audio_symbol(
         monkeypatch,
         "master",
-        "definers.audio.mastering",
+        "definers.audio.mastering.engine",
         fake_master,
     )
 
@@ -605,7 +605,9 @@ def test_prepare_mastering_job_persists_manifest_and_input_copy(
     source_path.write_text("audio", encoding="utf-8")
 
     audio_io = importlib.import_module("definers.audio.io")
-    mastering_module = importlib.import_module("definers.audio.mastering")
+    mastering_module = importlib.import_module(
+        "definers.audio.mastering.input_analysis"
+    )
     analysis = types.SimpleNamespace(
         preset_name="balanced",
         quality_flags=("dense_low_end",),

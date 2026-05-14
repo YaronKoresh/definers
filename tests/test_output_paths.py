@@ -84,7 +84,7 @@ def test_managed_output_path_uses_isolated_pytest_root(monkeypatch):
         )
     )
 
-    assert "gui_outputs_pytest" in str(output_path)
+    assert "gui_test" in str(output_path)
 
 
 def test_cleanup_managed_output_path_removes_directory_under_root(

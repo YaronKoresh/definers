@@ -1,7 +1,6 @@
 from pathlib import Path
 
-from definers.ui.apps import image_generate_jobs as jobs
-from definers.ui.apps.image import ImageApp
+from definers.ui.apps import image as image_app, image_generate_jobs as jobs
 from definers.ui.job_state import read_manifest
 
 
@@ -38,17 +37,17 @@ def test_image_job_flow_updates_artifacts_and_status(monkeypatch, tmp_path):
     titled_source.write_text("titled", encoding="utf-8")
 
     monkeypatch.setattr(
-        ImageApp,
+        image_app,
         "generate_image",
         lambda *args: str(generated_source),
     )
     monkeypatch.setattr(
-        ImageApp,
+        image_app,
         "upscale_image",
         lambda *args: str(upscaled_source),
     )
     monkeypatch.setattr(
-        ImageApp,
+        image_app,
         "title_image",
         lambda *args: str(titled_source),
     )

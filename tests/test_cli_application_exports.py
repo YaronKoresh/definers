@@ -1,8 +1,6 @@
-from definers.cli.application import (
-    build_parser,
-    create_cli_command_registry,
-    resolve_cli_runtime_state,
-)
+from definers.cli.command_registry import create_cli_command_registry
+from definers.cli.parser import build_parser
+from definers.cli.runtime import resolve_cli_runtime_state
 
 
 def test_cli_application_catalog_builds_registered_commands():

@@ -370,7 +370,61 @@ def apply_pre_limiter_saturation(
     if saturation_ratio <= 0.0 or signal.size == 0:
         return signal
 
-    drive_scale_db = max(float(dynamic_drive_db), 0.0) * saturation_ratio * 0.2
+    crest_factor_db = float(
+        max(getattr(self, "last_processing_crest_factor_db", 0.0), 0.0)
+    )
+    transient_density = float(
+        np.clip(
+            getattr(self, "last_processing_transient_density", 0.0), 0.0, 1.0
+        )
+    )
+    punch_guard = float(
+        np.clip(
+            max(
+                (crest_factor_db - 7.0) / 3.5,
+                (transient_density - 0.12) / 0.14,
+                float(
+                    np.clip(
+                        getattr(
+                            getattr(self, "last_input_material_profile", {}),
+                            "get",
+                            lambda _key, default=0.0: default,
+                        )("percussive_pressure", 0.0),
+                        0.0,
+                        1.0,
+                    )
+                )
+                * 0.85,
+            ),
+            0.0,
+            1.0,
+        )
+    )
+    anti_distortion_ceiling = float(
+        np.clip(
+            getattr(self, "anti_distortion_saturation_ceiling_ratio", 0.16),
+            0.0,
+            0.45,
+        )
+    )
+    pre_trim_attenuation_db = float(
+        max(
+            getattr(self, "last_pre_limiter_true_peak_attenuation_db", 0.0), 0.0
+        )
+    )
+    saturation_ratio = float(min(saturation_ratio, anti_distortion_ceiling))
+    saturation_ratio *= float(np.clip(1.0 - punch_guard * 0.42, 0.45, 1.0))
+    saturation_ratio *= float(
+        np.clip(1.0 - pre_trim_attenuation_db * 0.12, 0.55, 1.0)
+    )
+    if saturation_ratio <= 0.0:
+        return signal
+
+    drive_scale_db = (
+        max(float(dynamic_drive_db), 0.0)
+        * saturation_ratio
+        * float(np.clip(0.2 - punch_guard * 0.05, 0.12, 0.2))
+    )
     drive_lin = float(10.0 ** (drive_scale_db / 20.0))
     threshold = float(np.clip(1.0 - saturation_ratio * 0.35, 0.65, 0.999))
     saturated = np.tanh((signal * drive_lin) / threshold) * threshold
@@ -409,7 +463,11 @@ def apply_soft_clip_stage(
     output[mask_neg] = -threshold - (limit_lin - threshold) * np.tanh(
         (-output[mask_neg] - threshold) / (limit_lin - threshold)
     )
-    return np.nan_to_num(output, nan=0.0, posinf=0.0, neginf=0.0)
+    output = np.nan_to_num(output, nan=0.0, posinf=0.0, neginf=0.0)
+    peak = float(np.max(np.abs(output))) if output.size else 0.0
+    if peak > limit_lin and peak > 0.0:
+        output = output * (limit_lin / peak)
+    return output
 
 
 def apply_safety_clamp(

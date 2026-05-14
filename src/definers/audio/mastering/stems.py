@@ -120,6 +120,203 @@ def _signal_rms(signal: np.ndarray) -> float:
     return float(np.sqrt(np.mean(np.square(array), dtype=np.float32)))
 
 
+def _resolve_input_analysis_metrics(
+    input_analysis: object | None,
+) -> object | None:
+    if input_analysis is None:
+        return None
+    if isinstance(input_analysis, Mapping):
+        metrics = input_analysis.get("metrics")
+        return input_analysis if metrics is None else metrics
+    return getattr(input_analysis, "metrics", input_analysis)
+
+
+def _resolve_input_metric_value(
+    input_analysis: object | None,
+    metric_name: str,
+    fallback: float = 0.0,
+) -> float:
+    metrics = _resolve_input_analysis_metrics(input_analysis)
+    if metrics is None:
+        return float(fallback)
+    if isinstance(metrics, Mapping):
+        value = metrics.get(metric_name)
+    else:
+        value = getattr(metrics, metric_name, None)
+    if value is None or not np.isfinite(value):
+        return float(fallback)
+    return float(value)
+
+
+def _resolve_input_material_profile(
+    *,
+    input_analysis: object | None,
+    quality_flags: Sequence[str] = (),
+) -> dict[str, float]:
+    metrics = _resolve_input_analysis_metrics(input_analysis)
+    normalized_quality_flags = {
+        str(flag).strip().lower() for flag in quality_flags if str(flag).strip()
+    }
+    if metrics is None:
+        return {
+            "melody_pressure": 0.0,
+            "percussive_pressure": 0.0,
+            "sparse_pressure": 0.0,
+            "low_quality_pressure": 1.0
+            if "low-quality" in normalized_quality_flags
+            else 0.0,
+            "legacy_pressure": 1.0
+            if "old-recording" in normalized_quality_flags
+            else 0.0,
+        }
+
+    bass_share = _resolve_input_metric_value(input_analysis, "bass_share", 0.0)
+    low_mid_share = _resolve_input_metric_value(
+        input_analysis,
+        "low_mid_share",
+        0.0,
+    )
+    presence_share = _resolve_input_metric_value(
+        input_analysis,
+        "presence_share",
+        0.0,
+    )
+    air_share = _resolve_input_metric_value(input_analysis, "air_share", 0.0)
+    crest_factor_db = _resolve_input_metric_value(
+        input_analysis,
+        "crest_factor_db",
+        0.0,
+    )
+    transient_density = _resolve_input_metric_value(
+        input_analysis,
+        "transient_density",
+        0.0,
+    )
+    stereo_width_ratio = _resolve_input_metric_value(
+        input_analysis,
+        "stereo_width_ratio",
+        0.0,
+    )
+    melody_pressure = float(
+        np.clip(
+            (
+                presence_share
+                + air_share * 0.88
+                - bass_share * 0.78
+                - low_mid_share * 0.32
+                - 0.05
+            )
+            / 0.22,
+            0.0,
+            1.0,
+        )
+    )
+    percussive_pressure = float(
+        np.clip(
+            max(
+                (transient_density - 0.055) / 0.075,
+                (crest_factor_db - 8.5) / 4.5,
+                (bass_share - 0.18) / 0.2,
+            ),
+            0.0,
+            1.0,
+        )
+    )
+    sparse_support = float(
+        np.clip(
+            (
+                presence_share
+                + air_share * 0.82
+                + stereo_width_ratio * 0.42
+                - bass_share * 0.54
+                - low_mid_share * 0.2
+                - 0.04
+            )
+            / 0.28,
+            0.0,
+            1.0,
+        )
+    )
+    sparse_pressure = float(
+        np.clip(
+            max(
+                (0.058 - transient_density) / 0.04,
+                (crest_factor_db - 11.0) / 4.0,
+                (0.22 - bass_share) / 0.16,
+            )
+            * max(sparse_support, 0.25),
+            0.0,
+            1.0,
+        )
+    )
+    low_quality_pressure = (
+        1.0 if "low-quality" in normalized_quality_flags else 0.0
+    )
+    legacy_pressure = (
+        1.0 if "old-recording" in normalized_quality_flags else 0.0
+    )
+    return {
+        "melody_pressure": melody_pressure,
+        "percussive_pressure": percussive_pressure,
+        "sparse_pressure": sparse_pressure,
+        "low_quality_pressure": low_quality_pressure,
+        "legacy_pressure": legacy_pressure,
+    }
+
+
+def _resolve_adaptive_remix_role_gains(
+    stem_names: Sequence[str],
+    *,
+    input_analysis: object | None,
+    quality_flags: Sequence[str] = (),
+) -> dict[str, float]:
+    material_profile = _resolve_input_material_profile(
+        input_analysis=input_analysis,
+        quality_flags=quality_flags,
+    )
+    melody_pressure = float(material_profile["melody_pressure"])
+    percussive_pressure = float(material_profile["percussive_pressure"])
+    sparse_pressure = float(material_profile["sparse_pressure"])
+    role_gains = {
+        (str(stem_name).strip().lower() or "other"): 0.0
+        for stem_name in stem_names
+    }
+    if melody_pressure > 0.0:
+        role_gains["other"] = (
+            role_gains.get("other", 0.0) + 0.46 * melody_pressure
+        )
+        role_gains["guitar"] = (
+            role_gains.get("guitar", 0.0) + 0.54 * melody_pressure
+        )
+        role_gains["piano"] = (
+            role_gains.get("piano", 0.0) + 0.5 * melody_pressure
+        )
+        role_gains["drums"] = (
+            role_gains.get("drums", 0.0) - 0.22 * melody_pressure
+        )
+        role_gains["bass"] = (
+            role_gains.get("bass", 0.0) - 0.16 * melody_pressure
+        )
+    if percussive_pressure > 0.0:
+        role_gains["drums"] = (
+            role_gains.get("drums", 0.0) + 0.24 * percussive_pressure
+        )
+        role_gains["other"] = (
+            role_gains.get("other", 0.0) - 0.08 * percussive_pressure
+        )
+    if sparse_pressure > 0.0:
+        role_gains["other"] = (
+            role_gains.get("other", 0.0) + 0.16 * sparse_pressure
+        )
+        role_gains["vocals"] = (
+            role_gains.get("vocals", 0.0) - 0.06 * sparse_pressure
+        )
+    return {
+        stem_name: float(np.clip(gain_db, -0.45, 0.7))
+        for stem_name, gain_db in role_gains.items()
+    }
+
+
 def _measure_stem_stereo_width_ratio(signal: np.ndarray) -> float:
     stereo_signal = _as_stereo(signal)
     mid = 0.5 * (stereo_signal[0] + stereo_signal[1])
@@ -206,17 +403,17 @@ def _resolve_stem_mix_target_dbfs(
 ) -> float:
     normalized_name = str(stem_name).strip().lower() or "other"
     if normalized_name == "drums":
-        return -11.9
+        return -11.5
     if normalized_name == "bass":
         return -13.1
     if normalized_name == "vocals":
         return -19.2 - float(np.clip(vocal_pullback_db, 0.0, 3.0))
     if normalized_name == "other":
-        return -16.9
+        return -16.2
     if normalized_name == "guitar":
-        return -18.6
+        return -17.8
     if normalized_name == "piano":
-        return -18.9
+        return -17.9
     return -19.0
 
 
@@ -227,7 +424,7 @@ def _resolve_stem_mix_balance_profile(
 ) -> tuple[float, float, float]:
     normalized_name = str(stem_name).strip().lower() or "other"
     if normalized_name == "drums":
-        return 0.88, -3.6, 5.4
+        return 0.9, -3.4, 5.8
     if normalized_name == "bass":
         return 0.86, -3.4, 5.6
     if normalized_name == "vocals":
@@ -238,11 +435,11 @@ def _resolve_stem_mix_balance_profile(
             1.8 - resolved_pullback_db * 0.65,
         )
     if normalized_name == "other":
-        return 0.82, -3.0, 4.8
+        return 0.86, -2.8, 5.2
     if normalized_name == "guitar":
-        return 0.56, -4.5, 2.8
+        return 0.62, -4.0, 3.4
     if normalized_name == "piano":
-        return 0.54, -4.5, 2.8
+        return 0.6, -4.0, 3.2
     return 0.64, -4.0, 3.4
 
 
@@ -544,6 +741,8 @@ def _apply_stem_glue_reverb(
     sample_rate: int,
     stem_name: str,
     base_config: SmartMasteringConfig,
+    *,
+    stem_overrides: Mapping[str, float | str | None] | None = None,
 ) -> np.ndarray:
     normalized_name = str(stem_name).strip().lower() or "other"
     if normalized_name not in {"vocals", "other"}:
@@ -556,11 +755,22 @@ def _apply_stem_glue_reverb(
     effects_macro = float(
         np.clip(getattr(base_config, "effects", 0.5), 0.0, 1.0)
     )
-    glue_reverb_amount = float(
-        np.clip(getattr(base_config, "stem_glue_reverb_amount", 1.0), 0.0, 1.5)
+    glue_reverb_amount = _resolve_stem_override_float(
+        stem_overrides,
+        "stem_glue_reverb_amount",
+        getattr(base_config, "stem_glue_reverb_amount", 1.0),
+        minimum=0.0,
+        maximum=1.6,
     )
     if glue_reverb_amount <= 1e-4:
         return stereo_signal
+    vocal_tail_scale = _resolve_stem_override_float(
+        stem_overrides,
+        "stem_vocal_glue_tail_scale",
+        getattr(base_config, "stem_vocal_glue_tail_scale", 1.0),
+        minimum=0.35,
+        maximum=1.0,
+    )
     enrichment_mix = float(
         np.clip(
             getattr(base_config, "stem_tone_enrichment_mix", 0.14),
@@ -630,6 +840,24 @@ def _apply_stem_glue_reverb(
             0.34,
         )
     )
+    if normalized_name == "vocals":
+        wet_mix = float(
+            np.clip(
+                wet_mix * (0.72 + vocal_tail_scale * 0.28),
+                0.0,
+                0.28,
+            )
+        )
+    else:
+        wet_mix = float(
+            np.clip(
+                wet_mix
+                * (1.02 + max(glue_reverb_amount - 1.0, 0.0) * 0.18)
+                * (1.0 + density_push * 0.08),
+                0.0,
+                0.36,
+            )
+        )
     wet_mix = float(
         np.clip(
             wet_mix
@@ -653,6 +881,25 @@ def _apply_stem_glue_reverb(
             2.85,
         )
     )
+    if normalized_name == "vocals":
+        tail_extension = float(
+            np.clip(
+                tail_extension
+                * vocal_tail_scale
+                * (0.9 + glue_reverb_amount * 0.18),
+                0.82,
+                2.1,
+            )
+        )
+    else:
+        tail_extension = float(
+            np.clip(
+                tail_extension
+                * (1.02 + max(glue_reverb_amount - 1.0, 0.0) * 0.14),
+                1.0,
+                3.05,
+            )
+        )
     wet = np.zeros_like(stereo_signal, dtype=np.float32)
     if normalized_name == "vocals":
         early_tap_spec = (
@@ -716,6 +963,19 @@ def _apply_stem_glue_reverb(
             1.82,
         )
     )
+    if normalized_name == "vocals":
+        late_gain_scale = float(
+            np.clip(
+                late_gain_scale
+                * (0.58 + vocal_tail_scale * 0.28 + glue_reverb_amount * 0.2),
+                0.68,
+                1.42,
+            )
+        )
+    else:
+        late_gain_scale = float(
+            np.clip(late_gain_scale * (1.04 + density_push * 0.1), 0.98, 1.95)
+        )
     for delay_ms, gain, left_weight, right_weight, feedback in late_tap_spec:
         delay_samples = int(
             max(
@@ -749,6 +1009,19 @@ def _apply_stem_glue_reverb(
         np.clip(0.14 + density_push * 0.14, 0.08, 0.3)
     )
     wet = wet - _moving_average(wet, low_cut_window) * 0.78
+    if normalized_name == "vocals" and wet.shape[-1] > 1:
+        late_start = min(max(int(sample_rate * 0.16), 1), wet.shape[-1] - 1)
+        late_tail_floor = float(
+            np.clip(0.58 + vocal_tail_scale * 0.18, 0.58, 0.8)
+        )
+        late_decay = np.ones(wet.shape[-1], dtype=np.float32)
+        late_decay[late_start:] = np.linspace(
+            1.0,
+            late_tail_floor,
+            wet.shape[-1] - late_start,
+            dtype=np.float32,
+        )
+        wet = wet * late_decay[np.newaxis, :]
 
     dry_peak = (
         float(np.max(np.abs(stereo_signal))) if stereo_signal.size else 0.0
@@ -781,6 +1054,8 @@ def _apply_drum_edge_finish(
     signal: np.ndarray,
     sample_rate: int,
     base_config: SmartMasteringConfig,
+    *,
+    stem_overrides: Mapping[str, float | str | None] | None = None,
 ) -> np.ndarray:
     stereo_signal = _as_stereo(signal)
     if stereo_signal.shape[-1] < 256 or sample_rate <= 0:
@@ -799,27 +1074,31 @@ def _apply_drum_edge_finish(
     exciter_mix = float(
         np.clip(getattr(base_config, "exciter_mix", 0.5), 0.0, 1.0)
     )
-    drum_edge_amount = float(
-        np.clip(getattr(base_config, "stem_drum_edge_amount", 1.0), 0.0, 1.5)
+    drum_edge_amount = _resolve_stem_override_float(
+        stem_overrides,
+        "stem_drum_edge_amount",
+        getattr(base_config, "stem_drum_edge_amount", 1.0),
+        minimum=0.0,
+        maximum=1.8,
     )
     if drum_edge_amount <= 1e-4:
         return stereo_signal
     edge_mix = float(
         np.clip(
-            0.08 + effects_macro * 0.05 + micro_dynamics_strength * 0.3,
+            0.1 + effects_macro * 0.06 + micro_dynamics_strength * 0.34,
             0.08,
-            0.2,
+            0.24,
         )
     )
-    edge_mix = float(np.clip(edge_mix * drum_edge_amount, 0.0, 0.26))
+    edge_mix = float(np.clip(edge_mix * drum_edge_amount, 0.0, 0.34))
     drive = float(
         np.clip(
             1.35
             + exciter_mix * 0.55
             + effects_macro * 0.35
-            + max(drum_edge_amount - 1.0, 0.0) * 0.3,
+            + max(drum_edge_amount - 1.0, 0.0) * 0.42,
             1.1,
-            2.35,
+            2.6,
         )
     )
     fast_window = max(int(sample_rate * 0.0018), 1)
@@ -848,10 +1127,15 @@ def _apply_drum_edge_finish(
         stereo_signal,
         max(int(sample_rate * 0.010), 1),
     )
-    expanded = transient_component * (1.0 + transient_mask * 0.55)
-    compressed = expanded * (1.0 - sustain_mask * 0.16)
+    expanded = transient_component * (
+        1.0 + transient_mask * (0.72 + max(drum_edge_amount - 1.0, 0.0) * 0.3)
+    )
+    compressed = expanded * (1.0 - sustain_mask * 0.22)
     distorted = np.tanh(compressed * drive) / float(np.tanh(drive))
-    finished = stereo_signal + distorted * edge_mix
+    transient_makeup = 1.0 + transient_mask * float(
+        np.clip(0.08 + max(drum_edge_amount - 1.0, 0.0) * 0.18, 0.08, 0.24)
+    )
+    finished = stereo_signal * transient_makeup + distorted * edge_mix
     return _constrain_stem_peak_growth(
         finished,
         reference_signal=stereo_signal,
@@ -975,23 +1259,23 @@ def _resolve_stem_dynamics_profile(stem_name: str) -> dict[str, float]:
     if normalized_name == "drums":
         return {
             "threshold_percentile": 72.0,
-            "ratio": 5.9,
-            "attack_ms": 2.8,
-            "release_ms": 50.0,
+            "ratio": 6.4,
+            "attack_ms": 2.4,
+            "release_ms": 48.0,
             "gain_smoothing_ms": 7.0,
-            "wet_mix": 0.88,
-            "body_mix": 0.06,
+            "wet_mix": 0.9,
+            "body_mix": 0.05,
             "body_window_ms": 3.0,
-            "sustain_bias": 0.96,
-            "threshold_mean_scale": 1.18,
-            "min_gain": 0.34,
-            "makeup_scale": 0.74,
-            "limiter_mix_bonus": 0.3,
-            "drive_bonus": 0.22,
-            "target_active_dbfs": -14.0,
-            "max_lift_db": 4.8,
-            "peak_target": 0.92,
-            "ceiling_drive": 2.1,
+            "sustain_bias": 0.94,
+            "threshold_mean_scale": 1.15,
+            "min_gain": 0.32,
+            "makeup_scale": 0.82,
+            "limiter_mix_bonus": 0.34,
+            "drive_bonus": 0.26,
+            "target_active_dbfs": -13.2,
+            "max_lift_db": 5.8,
+            "peak_target": 0.95,
+            "ceiling_drive": 2.45,
             "lift_floor_dbfs": -34.0,
         }
     if normalized_name == "bass":
@@ -1040,24 +1324,24 @@ def _resolve_stem_dynamics_profile(stem_name: str) -> dict[str, float]:
         }
     if normalized_name == "other":
         return {
-            "threshold_percentile": 77.0,
-            "ratio": 4.9,
-            "attack_ms": 5.2,
-            "release_ms": 68.0,
-            "gain_smoothing_ms": 12.0,
-            "wet_mix": 0.8,
-            "body_mix": 0.12,
+            "threshold_percentile": 75.0,
+            "ratio": 5.4,
+            "attack_ms": 4.8,
+            "release_ms": 72.0,
+            "gain_smoothing_ms": 11.0,
+            "wet_mix": 0.84,
+            "body_mix": 0.16,
             "body_window_ms": 4.2,
-            "sustain_bias": 0.98,
-            "threshold_mean_scale": 1.1,
-            "min_gain": 0.39,
-            "makeup_scale": 0.72,
-            "limiter_mix_bonus": 0.2,
-            "drive_bonus": 0.14,
-            "target_active_dbfs": -16.0,
-            "max_lift_db": 4.4,
-            "peak_target": 0.88,
-            "ceiling_drive": 1.95,
+            "sustain_bias": 0.96,
+            "threshold_mean_scale": 1.06,
+            "min_gain": 0.34,
+            "makeup_scale": 0.86,
+            "limiter_mix_bonus": 0.24,
+            "drive_bonus": 0.18,
+            "target_active_dbfs": -14.4,
+            "max_lift_db": 5.8,
+            "peak_target": 0.94,
+            "ceiling_drive": 2.22,
             "lift_floor_dbfs": -35.0,
         }
     return {
@@ -1304,12 +1588,14 @@ def _apply_stem_role_finish(
         sample_rate,
         stem_name,
         base_config,
+        stem_overrides=stem_overrides,
     )
     if str(stem_name).strip().lower() == "drums":
         finished = _apply_drum_edge_finish(
             finished,
             sample_rate,
             base_config,
+            stem_overrides=stem_overrides,
         )
     finished = _apply_stem_stereo_width_finish(
         finished,
@@ -1334,8 +1620,24 @@ def _apply_stem_role_finish(
 def resolve_stem_mastering_plan(
     stem_name: str,
     base_config: SmartMasteringConfig,
+    *,
+    input_analysis: object | None = None,
+    quality_flags: Sequence[str] = (),
 ) -> StemMasteringPlan:
     normalized_name = str(stem_name).strip().lower() or "other"
+    material_profile = _resolve_input_material_profile(
+        input_analysis=input_analysis,
+        quality_flags=quality_flags,
+    )
+    melody_pressure = float(material_profile["melody_pressure"])
+    percussive_pressure = float(material_profile["percussive_pressure"])
+    sparse_pressure = float(material_profile["sparse_pressure"])
+    repair_pressure = float(
+        max(
+            material_profile["low_quality_pressure"] * 0.72,
+            material_profile["legacy_pressure"] * 0.86,
+        )
+    )
     base_cleanup_strength = float(
         np.clip(getattr(base_config, "stem_cleanup_strength", 1.0), 0.0, 1.5)
     )
@@ -1382,7 +1684,12 @@ def resolve_stem_mastering_plan(
     }
 
     if normalized_name == "drums":
-        shared_mix_gain_db = 1.68
+        shared_mix_gain_db = (
+            1.98
+            + percussive_pressure * 0.16
+            - melody_pressure * 0.24
+            - sparse_pressure * 0.1
+        )
         shared_overrides.update(
             {
                 "drive_db": shared_drive_db + 0.58,
@@ -1414,10 +1721,21 @@ def resolve_stem_mastering_plan(
                     )
                 ),
                 "stereo_width": float(np.clip(shared_width + 0.04, 1.02, 1.16)),
-                "stem_dynamics_target_active_dbfs": -13.4,
-                "stem_dynamics_max_lift_db": 5.6,
+                "stem_drum_edge_amount": float(
+                    np.clip(1.18 + percussive_pressure * 0.22, 1.0, 1.55)
+                ),
+                "stem_dynamics_target_active_dbfs": float(
+                    np.clip(
+                        -13.0
+                        + percussive_pressure * 0.28
+                        - melody_pressure * 0.18,
+                        -13.6,
+                        -12.6,
+                    )
+                ),
+                "stem_dynamics_max_lift_db": 6.2,
                 "stem_dynamics_peak_target": 0.95,
-                "stem_dynamics_ceiling_drive": 2.35,
+                "stem_dynamics_ceiling_drive": 2.48,
             }
         )
     elif normalized_name == "bass":
@@ -1481,14 +1799,37 @@ def resolve_stem_mastering_plan(
                 "exciter_max_drive": base_config.exciter_max_drive + 0.2,
                 "stereo_width": float(np.clip(shared_width + 0.18, 1.08, 1.42)),
                 "stem_cleanup_strength": float(
-                    np.clip(base_cleanup_strength * 0.22, 0.0, 1.5)
+                    np.clip(
+                        base_cleanup_strength
+                        * 0.22
+                        * (1.0 - repair_pressure * 0.26),
+                        0.0,
+                        1.5,
+                    )
                 ),
                 "stem_noise_gate_strength": float(
-                    np.clip(base_noise_gate_strength * 0.18, 0.0, 1.5)
+                    np.clip(
+                        base_noise_gate_strength
+                        * 0.18
+                        * (1.0 - repair_pressure * 0.24),
+                        0.0,
+                        1.5,
+                    )
                 ),
                 "micro_dynamics_strength": float(
                     np.clip(
                         base_config.micro_dynamics_strength + 0.03, 0.0, 0.26
+                    )
+                ),
+                "stem_glue_reverb_amount": float(
+                    np.clip(0.94 + sparse_pressure * 0.08, 0.82, 1.08)
+                ),
+                "stem_vocal_glue_tail_scale": float(
+                    np.clip(
+                        base_config.stem_vocal_glue_tail_scale
+                        * (1.0 - sparse_pressure * 0.16),
+                        0.4,
+                        1.0,
                     )
                 ),
                 "start_treble_boost_hz": max(
@@ -1503,11 +1844,16 @@ def resolve_stem_mastering_plan(
             }
         )
     elif normalized_name == "other":
-        shared_mix_gain_db = 0.72
+        shared_mix_gain_db = (
+            1.02
+            + melody_pressure * 0.3
+            + sparse_pressure * 0.12
+            - percussive_pressure * 0.08
+        )
         shared_overrides.update(
             {
                 "target_lufs": shared_target_lufs + 0.45,
-                "drive_db": shared_drive_db + 0.18,
+                "drive_db": shared_drive_db + 0.26,
                 "bass_boost_db_per_oct": base_config.bass_boost_db_per_oct
                 + 0.28,
                 "treble_boost_db_per_oct": base_config.treble_boost_db_per_oct
@@ -1519,26 +1865,49 @@ def resolve_stem_mastering_plan(
                 "stereo_width": float(np.clip(shared_width + 0.22, 1.1, 1.44)),
                 "mono_bass_hz": max(base_config.mono_bass_hz, 145.0),
                 "stem_cleanup_strength": float(
-                    np.clip(base_cleanup_strength * 0.1, 0.0, 1.5)
+                    np.clip(
+                        base_cleanup_strength
+                        * 0.1
+                        * (1.0 - repair_pressure * 0.3),
+                        0.0,
+                        1.5,
+                    )
                 ),
                 "stem_noise_gate_strength": float(
-                    np.clip(base_noise_gate_strength * 0.02, 0.0, 1.5)
+                    np.clip(
+                        base_noise_gate_strength
+                        * 0.02
+                        * (1.0 - repair_pressure * 0.22),
+                        0.0,
+                        1.5,
+                    )
                 ),
                 "micro_dynamics_strength": float(
                     np.clip(
                         base_config.micro_dynamics_strength + 0.01, 0.0, 0.24
                     )
                 ),
+                "stem_glue_reverb_amount": float(
+                    np.clip(
+                        1.22 + melody_pressure * 0.18 + sparse_pressure * 0.12,
+                        1.0,
+                        1.5,
+                    )
+                ),
                 "low_end_mono_tightening": "balanced",
                 "low_end_mono_tightening_amount": 0.68,
-                "stem_dynamics_target_active_dbfs": -15.0,
-                "stem_dynamics_max_lift_db": 5.1,
-                "stem_dynamics_peak_target": 0.93,
-                "stem_dynamics_ceiling_drive": 2.16,
+                "stem_dynamics_target_active_dbfs": float(
+                    np.clip(-14.2 + melody_pressure * 0.45, -14.4, -13.7)
+                ),
+                "stem_dynamics_max_lift_db": float(
+                    np.clip(6.0 + melody_pressure * 0.7, 6.0, 6.8)
+                ),
+                "stem_dynamics_peak_target": 0.94,
+                "stem_dynamics_ceiling_drive": 2.24,
             }
         )
     elif normalized_name == "guitar":
-        shared_mix_gain_db = -0.18
+        shared_mix_gain_db = 0.18 + melody_pressure * 0.34
         shared_overrides.update(
             {
                 "drive_db": shared_drive_db + 0.05,
@@ -1559,16 +1928,23 @@ def resolve_stem_mastering_plan(
                         base_config.micro_dynamics_strength + 0.02, 0.0, 0.25
                     )
                 ),
+                "stem_glue_reverb_amount": float(
+                    np.clip(1.08 + melody_pressure * 0.14, 1.0, 1.34)
+                ),
                 "low_end_mono_tightening": "gentle",
                 "low_end_mono_tightening_amount": 0.35,
-                "stem_dynamics_target_active_dbfs": -16.2,
-                "stem_dynamics_max_lift_db": 4.2,
-                "stem_dynamics_peak_target": 0.91,
-                "stem_dynamics_ceiling_drive": 2.0,
+                "stem_dynamics_target_active_dbfs": float(
+                    np.clip(-15.6 + melody_pressure * 0.38, -15.8, -15.1)
+                ),
+                "stem_dynamics_max_lift_db": float(
+                    np.clip(4.8 + melody_pressure * 0.45, 4.8, 5.4)
+                ),
+                "stem_dynamics_peak_target": 0.92,
+                "stem_dynamics_ceiling_drive": 2.08,
             }
         )
     elif normalized_name == "piano":
-        shared_mix_gain_db = -0.22
+        shared_mix_gain_db = 0.12 + melody_pressure * 0.32
         shared_overrides.update(
             {
                 "drive_db": shared_drive_db + 0.03,
@@ -1589,12 +1965,19 @@ def resolve_stem_mastering_plan(
                         base_config.micro_dynamics_strength + 0.03, 0.0, 0.28
                     )
                 ),
+                "stem_glue_reverb_amount": float(
+                    np.clip(1.06 + melody_pressure * 0.12, 1.0, 1.3)
+                ),
                 "low_end_mono_tightening": "gentle",
                 "low_end_mono_tightening_amount": 0.3,
-                "stem_dynamics_target_active_dbfs": -16.3,
-                "stem_dynamics_max_lift_db": 4.0,
-                "stem_dynamics_peak_target": 0.9,
-                "stem_dynamics_ceiling_drive": 1.98,
+                "stem_dynamics_target_active_dbfs": float(
+                    np.clip(-15.8 + melody_pressure * 0.34, -16.0, -15.3)
+                ),
+                "stem_dynamics_max_lift_db": float(
+                    np.clip(4.6 + melody_pressure * 0.42, 4.6, 5.2)
+                ),
+                "stem_dynamics_peak_target": 0.91,
+                "stem_dynamics_ceiling_drive": 2.04,
             }
         )
     else:
@@ -1677,6 +2060,20 @@ def process_stem_layers(
 ) -> tuple[int, np.ndarray]:
     separated_output_dir: str | None = None
     resolved_pitch_shift_fn = pitch_shift_fn or _load_pitch_shift_fn()
+    resolved_quality_flags = tuple(
+        str(flag).strip() for flag in quality_flags if str(flag).strip()
+    )
+    input_analysis = getattr(base_config, "input_analysis", None)
+
+    get_stem_separation_provenance = None
+    try:
+        from ..stems import (
+            get_stem_separation_provenance as _get_stem_separation_provenance,
+        )
+
+        get_stem_separation_provenance = _get_stem_separation_provenance
+    except Exception:
+        get_stem_separation_provenance = None
 
     bind_download_activity_scope = None
     activity_scope_id: str | None = None
@@ -1696,11 +2093,26 @@ def process_stem_layers(
         stem_name: str,
         stem_path: str,
     ) -> tuple[str, tuple[int, np.ndarray]]:
-        plan = resolve_stem_mastering_plan(stem_name, base_config)
+        plan = resolve_stem_mastering_plan(
+            stem_name,
+            base_config,
+            input_analysis=input_analysis,
+            quality_flags=resolved_quality_flags,
+        )
         stem_sample_rate, stem_signal = read_audio_fn(stem_path)
         mastering_kwargs = dict(base_mastering_kwargs)
         mastering_kwargs.update(plan.overrides)
         mastering_kwargs["stem_role"] = plan.stem_name
+        mastering_kwargs["input_analysis"] = input_analysis
+        mastering_kwargs["separator_quality_flags"] = resolved_quality_flags
+        if callable(get_stem_separation_provenance):
+            mastering_kwargs["stem_cleanup_provenance"] = (
+                get_stem_separation_provenance(
+                    stem_path,
+                    output_dir=separated_output_dir,
+                    stem_name=plan.stem_name,
+                )
+            )
         processed_sample_rate, processed_signal = process_stem_fn(
             stem_signal,
             stem_sample_rate,
@@ -1752,9 +2164,7 @@ def process_stem_layers(
             audio_path,
             model_name=model_name,
             shifts=shifts,
-            quality_flags=tuple(
-                str(flag).strip() for flag in quality_flags if str(flag).strip()
-            ),
+            quality_flags=resolved_quality_flags,
         )
         if not stem_paths:
             raise ValueError("No mastering stems were produced")
@@ -1783,6 +2193,28 @@ def process_stem_layers(
                         stem_name
                     ].result()
                     mastered_layers[normalized_name] = processed_result
+
+        adaptive_remix_gains_db = _resolve_adaptive_remix_role_gains(
+            tuple(mastered_layers.keys()),
+            input_analysis=input_analysis,
+            quality_flags=resolved_quality_flags,
+        )
+        if any(
+            abs(gain_db) > 1e-4 for gain_db in adaptive_remix_gains_db.values()
+        ):
+            mastered_layers = {
+                stem_name: (
+                    sample_rate,
+                    _sanitize_stem_signal(
+                        np.asarray(signal, dtype=np.float32)
+                        * _stem_mix_gain_linear(
+                            adaptive_remix_gains_db.get(stem_name, 0.0)
+                        ),
+                        peak_ceiling=_STEM_SAVED_PEAK_CEILING_LINEAR,
+                    ),
+                )
+                for stem_name, (sample_rate, signal) in mastered_layers.items()
+            }
 
         mixed_sample_rate, aligned_layers, mixed_signal = (
             _prepare_mixed_stem_layers(

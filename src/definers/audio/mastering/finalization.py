@@ -61,6 +61,160 @@ class PeakCatchEvent:
 _PRE_LIMITER_TRUE_PEAK_TARGET_DBFS = -3.0
 
 
+def _resolve_input_metric_value(
+    self,
+    metric_name: str,
+    fallback: float = 0.0,
+) -> float:
+    metrics = getattr(self, "input_analysis_metrics", None)
+    if metrics is None:
+        metrics = getattr(
+            getattr(self, "input_analysis", None), "metrics", None
+        )
+    if metrics is None:
+        return float(fallback)
+    value = (
+        metrics.get(metric_name)
+        if isinstance(metrics, dict)
+        else getattr(metrics, metric_name, None)
+    )
+    if value is None or not np.isfinite(value):
+        return float(fallback)
+    return float(value)
+
+
+def _resolve_input_material_profile(self) -> dict[str, float]:
+    metrics = getattr(self, "input_analysis_metrics", None)
+    if metrics is None:
+        metrics = getattr(
+            getattr(self, "input_analysis", None), "metrics", None
+        )
+    quality_flags = {
+        str(flag).strip().lower()
+        for flag in getattr(self, "separator_quality_flags", ())
+        if str(flag).strip()
+    }
+    if metrics is None:
+        return {
+            "melody_pressure": 0.0,
+            "percussive_pressure": 0.0,
+            "sparse_pressure": 0.0,
+            "low_quality_pressure": 1.0
+            if "low-quality" in quality_flags
+            else 0.0,
+            "legacy_pressure": 1.0 if "old-recording" in quality_flags else 0.0,
+        }
+
+    bass_share = _resolve_input_metric_value(self, "bass_share", 0.0)
+    low_mid_share = _resolve_input_metric_value(self, "low_mid_share", 0.0)
+    presence_share = _resolve_input_metric_value(self, "presence_share", 0.0)
+    air_share = _resolve_input_metric_value(self, "air_share", 0.0)
+    crest_factor_db = _resolve_input_metric_value(self, "crest_factor_db", 0.0)
+    transient_density = _resolve_input_metric_value(
+        self, "transient_density", 0.0
+    )
+    stereo_width_ratio = _resolve_input_metric_value(
+        self,
+        "stereo_width_ratio",
+        0.0,
+    )
+    melody_pressure = float(
+        np.clip(
+            (
+                presence_share
+                + air_share * 0.86
+                - bass_share * 0.74
+                - low_mid_share * 0.3
+                - 0.05
+            )
+            / 0.22,
+            0.0,
+            1.0,
+        )
+    )
+    percussive_pressure = float(
+        np.clip(
+            max(
+                (transient_density - 0.055) / 0.075,
+                (crest_factor_db - 8.5) / 4.5,
+                (bass_share - 0.18) / 0.22,
+            ),
+            0.0,
+            1.0,
+        )
+    )
+    sparse_support = float(
+        np.clip(
+            (
+                presence_share
+                + air_share * 0.8
+                + stereo_width_ratio * 0.4
+                - bass_share * 0.52
+                - low_mid_share * 0.18
+                - 0.04
+            )
+            / 0.28,
+            0.0,
+            1.0,
+        )
+    )
+    sparse_pressure = float(
+        np.clip(
+            max(
+                (0.058 - transient_density) / 0.04,
+                (crest_factor_db - 11.0) / 4.0,
+                (0.2 - bass_share) / 0.16,
+            )
+            * max(sparse_support, 0.25),
+            0.0,
+            1.0,
+        )
+    )
+    low_quality_pressure = 1.0 if "low-quality" in quality_flags else 0.0
+    legacy_pressure = 1.0 if "old-recording" in quality_flags else 0.0
+    profile = {
+        "melody_pressure": melody_pressure,
+        "percussive_pressure": percussive_pressure,
+        "sparse_pressure": sparse_pressure,
+        "low_quality_pressure": low_quality_pressure,
+        "legacy_pressure": legacy_pressure,
+    }
+    self.last_input_material_profile = dict(profile)
+    return profile
+
+
+def _resolve_punch_guard(self) -> float:
+    crest_factor_db = float(
+        max(getattr(self, "last_processing_crest_factor_db", 0.0), 0.0)
+    )
+    transient_density = float(
+        np.clip(
+            getattr(self, "last_processing_transient_density", 0.0), 0.0, 1.0
+        )
+    )
+    base_guard = float(
+        np.clip(
+            max(
+                (crest_factor_db - 7.0) / 3.5,
+                (transient_density - 0.12) / 0.14,
+            ),
+            0.0,
+            1.0,
+        )
+    )
+    return float(
+        np.clip(
+            max(
+                base_guard,
+                _resolve_input_material_profile(self)["percussive_pressure"]
+                * 0.85,
+            ),
+            0.0,
+            1.0,
+        )
+    )
+
+
 def _measure_signal_crest_factor_db(y: np.ndarray) -> float:
     signal = np.nan_to_num(
         np.asarray(y, dtype=np.float32),
@@ -117,6 +271,7 @@ def _resolve_headroom_recovery_profile(
             crest_factor_db = float(metric_crest_factor)
 
     transient_density = float(measure_transient_density(signal, sample_rate))
+    input_material_profile = _resolve_input_material_profile(self)
     contract = getattr(self, "last_mastering_contract", None)
     crest_safety = 1.0
     min_crest_factor_db = None
@@ -160,6 +315,9 @@ def _resolve_headroom_recovery_profile(
                 loudness_need * 0.75,
                 crest_pressure * 0.65,
                 transient_pressure * 0.85,
+                input_material_profile["percussive_pressure"] * 0.78,
+                input_material_profile["sparse_pressure"] * 0.42,
+                input_material_profile["melody_pressure"] * 0.32,
             )
             * (0.45 + crest_safety * 0.55),
             0.0,
@@ -169,6 +327,11 @@ def _resolve_headroom_recovery_profile(
 
     if loudness_deficit_db <= 0.05:
         mode = "disabled"
+    elif (
+        input_material_profile["sparse_pressure"] >= 0.45
+        or input_material_profile["melody_pressure"] >= 0.55
+    ):
+        mode = "guarded"
     elif clip_pressure < 0.18:
         mode = "makeup_only"
     elif transient_pressure >= 0.45 or crest_pressure >= 0.55:
@@ -179,9 +342,27 @@ def _resolve_headroom_recovery_profile(
     if mode == "disabled":
         max_step_db = 0.0
     elif mode == "makeup_only":
-        max_step_db = min(1.35, 0.75 + loudness_need * 0.6 + crest_safety * 0.2)
+        max_step_db = min(
+            1.35,
+            (
+                0.75
+                + loudness_need * 0.6
+                + crest_safety * 0.2
+                - input_material_profile["sparse_pressure"] * 0.18
+                - input_material_profile["melody_pressure"] * 0.12
+            ),
+        )
     else:
-        max_step_db = min(1.0, 0.45 + loudness_need * 0.4 + crest_safety * 0.15)
+        max_step_db = min(
+            1.0,
+            (
+                0.45
+                + loudness_need * 0.4
+                + crest_safety * 0.15
+                - input_material_profile["sparse_pressure"] * 0.12
+                - input_material_profile["melody_pressure"] * 0.08
+            ),
+        )
 
     return {
         "mode": mode,
@@ -212,6 +393,16 @@ def compute_dynamic_drive(self, current_lufs: float) -> float:
         )
     )
 
+    input_material_profile = _resolve_input_material_profile(self)
+    adaptive_drive_delta_db = float(
+        -input_material_profile["percussive_pressure"] * 0.65
+        - input_material_profile["sparse_pressure"] * 0.4
+        - input_material_profile["melody_pressure"] * 0.28
+        + max(
+            input_material_profile["low_quality_pressure"] * 0.16,
+            input_material_profile["legacy_pressure"] * 0.22,
+        )
+    )
     return float(
         np.clip(
             self.target_lufs
@@ -219,7 +410,8 @@ def compute_dynamic_drive(self, current_lufs: float) -> float:
             + self.drive_db
             + rescue_factor * self.spectral_drive_bias_db
             + restoration_factor * 0.9
-            + body_restoration_factor * 0.35,
+            + body_restoration_factor * 0.35
+            + adaptive_drive_delta_db,
             -12.0,
             18.0,
         )
@@ -241,18 +433,56 @@ def compute_primary_soft_clip_ratio(self, dynamic_drive_db: float) -> float:
             1.0,
         )
     )
-    max(float(dynamic_drive_db), 0.0) * 0.006
-    return float(
+    punch_guard = _resolve_punch_guard(self)
+    input_material_profile = _resolve_input_material_profile(self)
+    resolved_ratio = float(
+        self.limiter_soft_clip_ratio
+        + rescue_factor * 0.04
+        + restoration_factor * 0.03
+        + body_restoration_factor * 0.02
+        + max(float(dynamic_drive_db), 0.0) * 0.004
+    )
+    resolved_ratio *= float(
         np.clip(
-            self.limiter_soft_clip_ratio
-            + rescue_factor * 0.04
-            + restoration_factor * 0.03
-            + body_restoration_factor * 0.02
-            + max(float(dynamic_drive_db), 0.0) * 0.004,
+            1.0
+            - punch_guard * 0.24
+            - input_material_profile["sparse_pressure"] * 0.16
+            - input_material_profile["melody_pressure"] * 0.12,
+            0.55,
+            1.0,
+        )
+    )
+    anti_distortion_ceiling = float(
+        np.clip(
+            getattr(self, "anti_distortion_soft_clip_ceiling_ratio", 0.28),
             0.0,
             0.45,
         )
     )
+    if punch_guard > 0.0:
+        anti_distortion_ceiling = float(
+            min(
+                anti_distortion_ceiling,
+                max(
+                    float(self.limiter_soft_clip_ratio)
+                    + 0.06
+                    - punch_guard * 0.04,
+                    float(self.limiter_soft_clip_ratio),
+                ),
+            )
+        )
+    anti_distortion_ceiling = float(
+        max(
+            anti_distortion_ceiling
+            - input_material_profile["sparse_pressure"] * 0.03
+            - input_material_profile["melody_pressure"] * 0.02,
+            min(
+                float(self.limiter_soft_clip_ratio),
+                anti_distortion_ceiling,
+            ),
+        )
+    )
+    return float(np.clip(resolved_ratio, 0.0, anti_distortion_ceiling))
 
 
 def resolve_final_true_peak_target(self) -> float:
@@ -300,6 +530,7 @@ def plan_follow_up_action(
     metrics: MasteringLoudnessMetrics,
     contract: MasteringContract,
 ) -> FinalizationAction:
+    input_material_profile = _resolve_input_material_profile(self)
     integrated_gap_db = float(contract.target_lufs - metrics.integrated_lufs)
     short_term_over_db = max(
         0.0,
@@ -345,7 +576,10 @@ def plan_follow_up_action(
             - short_term_over_db * 0.4
             - momentary_over_db * 0.6
             - stereo_over_ratio * 1.2
-            - low_end_mono_under_ratio * 1.6,
+            - low_end_mono_under_ratio * 1.6
+            - input_material_profile["percussive_pressure"] * 0.35
+            - input_material_profile["sparse_pressure"] * 0.3
+            - input_material_profile["melody_pressure"] * 0.22,
             0.0,
         )
     gain_db = min(safe_gain_db, self.max_final_boost_db)
@@ -359,27 +593,46 @@ def plan_follow_up_action(
         clipping_push = max(
             clipping_push - min(0.05, crest_under_db * 0.02), 0.0
         )
+    clipping_push = max(
+        clipping_push
+        - input_material_profile["percussive_pressure"] * 0.018
+        - input_material_profile["sparse_pressure"] * 0.014
+        - input_material_profile["melody_pressure"] * 0.01,
+        0.0,
+    )
 
     stereo_width_scale = 1.0
     if stereo_over_ratio > 0.0 or low_end_mono_under_ratio > 0.0:
         stereo_width_scale = float(
             np.clip(
-                1.0 - stereo_over_ratio * 2.2 - low_end_mono_under_ratio * 2.8,
+                1.0
+                - stereo_over_ratio
+                * (2.2 - input_material_profile["melody_pressure"] * 0.25)
+                - low_end_mono_under_ratio * 2.8,
                 0.7,
                 1.0,
             )
         )
 
+    anti_distortion_ceiling = float(
+        np.clip(
+            getattr(self, "anti_distortion_soft_clip_ceiling_ratio", 0.28),
+            0.0,
+            0.7,
+        )
+    )
     if gain_db > 0.0:
         soft_clip_ratio = float(
             np.clip(
                 self.compute_primary_soft_clip_ratio(gain_db) + clipping_push,
                 0.0,
-                0.7,
+                anti_distortion_ceiling,
             )
         )
     else:
-        soft_clip_ratio = float(np.clip(self.limiter_soft_clip_ratio, 0.0, 0.7))
+        soft_clip_ratio = float(
+            np.clip(self.limiter_soft_clip_ratio, 0.0, anti_distortion_ceiling)
+        )
 
     reasons: list[str] = []
     if gain_db > 0.0:
@@ -412,9 +665,25 @@ def apply_pre_limiter_true_peak_trim(
         posinf=0.0,
         neginf=0.0,
     )
-    self.last_pre_limiter_true_peak_target_dbfs = float(
-        _PRE_LIMITER_TRUE_PEAK_TARGET_DBFS
-    )
+    target_dbfs = float(_PRE_LIMITER_TRUE_PEAK_TARGET_DBFS)
+    if bool(getattr(self, "adaptive_pre_limiter_true_peak_trim_enabled", True)):
+        relaxed_target_dbfs = float(
+            np.clip(
+                getattr(
+                    self,
+                    "adaptive_pre_limiter_true_peak_max_target_dbfs",
+                    -1.6,
+                ),
+                _PRE_LIMITER_TRUE_PEAK_TARGET_DBFS,
+                -0.1,
+            )
+        )
+        target_dbfs = float(
+            _PRE_LIMITER_TRUE_PEAK_TARGET_DBFS
+            + (relaxed_target_dbfs - _PRE_LIMITER_TRUE_PEAK_TARGET_DBFS)
+            * _resolve_punch_guard(self)
+        )
+    self.last_pre_limiter_true_peak_target_dbfs = float(target_dbfs)
     self.last_pre_limiter_true_peak_input_dbfs = None
     self.last_pre_limiter_true_peak_output_dbfs = None
     self.last_pre_limiter_true_peak_attenuation_db = 0.0
@@ -431,12 +700,10 @@ def apply_pre_limiter_true_peak_trim(
 
     self.last_pre_limiter_true_peak_input_dbfs = float(measured_true_peak_dbfs)
     self.last_pre_limiter_true_peak_output_dbfs = float(measured_true_peak_dbfs)
-    if measured_true_peak_dbfs <= _PRE_LIMITER_TRUE_PEAK_TARGET_DBFS:
+    if measured_true_peak_dbfs <= target_dbfs:
         return signal
 
-    attenuation_db = float(
-        measured_true_peak_dbfs - _PRE_LIMITER_TRUE_PEAK_TARGET_DBFS
-    )
+    attenuation_db = float(measured_true_peak_dbfs - target_dbfs)
     self.last_pre_limiter_true_peak_attenuation_db = attenuation_db
     output = signal * float(10.0 ** (-attenuation_db / 20.0))
     output_true_peak_dbfs = measure_true_peak_fn(

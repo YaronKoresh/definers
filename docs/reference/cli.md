@@ -66,9 +66,9 @@ Definers is standardizing the CLI around these rules:
 - runtime discovery of launcher surfaces should remain explicit and deterministic
 - parser construction, request shaping, and dispatch should stay thin once command definitions are centralized
 
-The compatibility import path `definers.cli.command_registry` still re-exports the command catalog, but the owner implementation lives in `definers.cli.application.catalog`. Parser construction still lives in `definers.cli.command_parser` and `definers.cli.command_dispatcher`, while application-level assembly lives in `definers.cli.application`.
+The authoritative command catalog lives in `definers.cli.command_registry`. Parser construction lives in `definers.cli.parser`, runtime binding lives in `definers.cli.runtime`, and CLI entry assembly lives in `definers.cli.dispatch`.
 
-The direct owner package for command catalog, parser assembly, runtime binding, and service flow is `definers.cli.application`. The older `definers.cli.command_registry`, `definers.cli.parser`, `definers.cli.runtime`, and `definers.cli.dispatch` modules remain compatibility facades.
+`definers.cli.command_parser` and `definers.cli.command_dispatcher` stay focused on converting shaped requests into command objects and executing those command objects. The legacy intermediate application package is no longer part of the CLI ownership model.
 
 ## Compatibility Rules
 
@@ -77,6 +77,4 @@ The direct owner package for command catalog, parser assembly, runtime binding, 
 - Treat registered launcher names as part of the public command surface while they are exposed directly.
 - Preserve install kinds: `group`, `task`, `module`, `model-domain`, `model-task`.
 - Fail unknown commands explicitly.
-- New internal imports should prefer `definers.cli.application` over the compatibility facade modules.
-
-The authoritative command catalog lives in `definers.cli.application.catalog`, and parser construction lives in `definers.cli.application.parsing`.
+- New internal imports should prefer the direct owner modules under `definers.cli`.

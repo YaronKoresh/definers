@@ -1,6 +1,6 @@
 from contextlib import nullcontext
 
-from definers.ui.apps.audio_workspace import (
+from definers.ui.apps.audio import (
     AUDIO_TOOL_MAP,
     get_audio_language_choices,
     prepare_audio_workspace,

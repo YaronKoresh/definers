@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from definers.cli.application.catalog import get_known_cli_names
+from definers.cli.command_registry import get_known_cli_names
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,7 +71,7 @@ def validate_cli_health_snapshot(snapshot: CliHealthSnapshot):
 
 
 def collect_live_cli_health_snapshot():
-    from definers.cli.application.runtime import resolve_cli_runtime_state
+    from definers.cli.runtime import resolve_cli_runtime_state
     from definers.ui.launchers import get_gui_project_names
 
     runtime_state = resolve_cli_runtime_state()

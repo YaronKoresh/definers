@@ -1,130 +1,143 @@
-name: Autobot Manager
+name: Autobot Smart Link
+
 on:
   issues:
-    types: [opened, closed, reopened]
+    types: [opened, edited, reopened, labeled, unlabeled, milestoned, demilestoned, closed]
   pull_request:
-    types: [opened, closed, synchronize]
-    branches: [main]
+    types: [opened, edited, synchronize, reopened, labeled, unlabeled, milestoned, demilestoned, closed]
+  repository_dispatch:
+    types: [smart-link-alert]
+  workflow_dispatch:
+    inputs:
+      payload:
+        description: Normalized Smart Link source payload JSON
+        required: false
+        type: string
+      threshold:
+        description: Deterministic emission threshold
+        default: "80"
+        required: false
+        type: string
+
 permissions:
   contents: write
   issues: write
   pull-requests: write
+  checks: write
+
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.issue.number || github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.issue.number || github.run_id }}
+  cancel-in-progress: >-
+    ${{
+      !(
+        github.event_name == 'repository_dispatch' &&
+        (github.event.client_payload.source.kind || github.event.client_payload.kind || '') != 'security_alert'
+      ) &&
+      !(
+        (github.event_name == 'issues' || github.event_name == 'pull_request') &&
+        github.event.action == 'edited' &&
+        github.event.sender.type != 'Bot' &&
+        github.event.changes != null &&
+        github.event.changes.title == null &&
+        github.event.changes.body == null &&
+        github.event.changes.base == null &&
+        github.event.changes.labels == null &&
+        github.event.changes.milestone == null
+      )
+    }}
+
 jobs:
-  project-manager:
+  autobot-smart-link:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
         with:
-          fetch-depth: 0
-      - name: Collect PR File Snapshot
-        if: >-
-          github.event_name == 'pull_request' &&
-          github.event.action != 'closed'
-        id: collect-pr-snapshot
+          fetch-depth: 1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+      - name: Preflight trigger gate
+        id: preflight
         uses: actions/github-script@v9
         with:
           script: |
-            const helperPath = `${process.env.GITHUB_WORKSPACE || process.cwd()}/.github/scripts/autobot_pr_analysis.js`;
-            const { collectPullRequestSnapshot } = require(helperPath);
+            const eventName = context.eventName;
+            const payload = context.payload || {};
+            const action = String(payload.action || "").toLowerCase();
+            let shouldRun = true;
+            let reason = "accepted";
+
+            if (eventName === "repository_dispatch") {
+              const dispatchSource = payload.client_payload && (payload.client_payload.source || payload.client_payload);
+              const dispatchKind = String(dispatchSource && (dispatchSource.kind || dispatchSource.sourceKind || "")).toLowerCase();
+              if (dispatchKind !== "security_alert") {
+                shouldRun = false;
+                reason = `dispatch-kind:${dispatchKind || "unknown"}`;
+              }
+            }
+
+            if ((eventName === "issues" || eventName === "pull_request") && action === "edited") {
+              const changes = payload.changes && typeof payload.changes === "object" ? payload.changes : {};
+              const changedKeys = Object.keys(changes);
+              const meaningfulIssueKeys = new Set(["title", "body", "labels", "milestone"]);
+              const meaningfulPullRequestKeys = new Set(["title", "body", "base", "labels", "milestone"]);
+              const meaningfulKeys = eventName === "issues" ? meaningfulIssueKeys : meaningfulPullRequestKeys;
+              const hasMeaningfulChange = changedKeys.some((key) => meaningfulKeys.has(key));
+              const senderType = String(payload.sender && payload.sender.type || "").toLowerCase();
+              if (!hasMeaningfulChange && senderType !== "bot") {
+                shouldRun = false;
+                reason = "non-material-edit";
+              }
+            }
+
+            core.setOutput("should_run", shouldRun ? "true" : "false");
+            core.setOutput("reason", reason);
+      - name: Run fixed Autobot scenario coverage
+        if: steps.preflight.outputs.should_run == 'true'
+        run: node --test tests/autobot_smart_link_unified.test.cjs tests/autobot_scripts.test.cjs tests/smart_link_scripts.test.cjs tests/deterministic_scenario_lanes.test.cjs
+      - name: Run adversarial CEM scenario coverage
+        if: steps.preflight.outputs.should_run == 'true'
+        run: node --test tests/autobot_adversarial.test.cjs
+      - name: Analyze Unified Automation State
+        id: analyze
+        if: steps.preflight.outputs.should_run == 'true'
+        env:
+          UNIFIED_AUTOMATION_STATE_FILE: /tmp/autobot_smart_link_state.json
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const helperPath = `${process.env.GITHUB_WORKSPACE || process.cwd()}/.github/scripts/autobot/unified.cjs`;
+            const { analyzeUnifiedAutomationState } = require(helperPath);
             const { owner, repo } = context.repo;
-            await collectPullRequestSnapshot({
+            const thresholdInput = (context.payload.inputs && context.payload.inputs.threshold)
+              || (context.payload.client_payload && context.payload.client_payload.threshold)
+              || "";
+            const outputs = await analyzeUnifiedAutomationState({
+              context,
+              core,
               github,
               owner,
               repo,
-              pullRequest: context.payload.pull_request
+              stateFile: process.env.UNIFIED_AUTOMATION_STATE_FILE,
+              thresholdInput
             });
-      - name: Analyze PR Changes
-        if: >-
-          github.event_name == 'pull_request' &&
-          github.event.action != 'closed'
-        id: collect
-        uses: actions/github-script@v9
-        with:
-          script: |
-            const helperPath = `${process.env.GITHUB_WORKSPACE || process.cwd()}/.github/scripts/autobot_pr_analysis.js`;
-            const { analyzePullRequestSnapshot } = require(helperPath);
-            const outputs = analyzePullRequestSnapshot();
             for (const [name, value] of Object.entries(outputs)) {
               core.setOutput(name, value);
             }
-      - name: Build Issue Summary Prompt
-        if: >-
-          github.event_name == 'issues' &&
-          github.event.action != 'closed'
-        id: issue-summary-prompt
-        uses: actions/github-script@v9
-        with:
-          script: |
-            const helperPath = `${process.env.GITHUB_WORKSPACE || process.cwd()}/.github/scripts/autobot_prompts.js`;
-            const { buildIssueSummaryArtifacts } = require(helperPath);
-            const outputs = buildIssueSummaryArtifacts({ issue: context.payload.issue });
-            core.setOutput("fallback_summary", outputs.fallbackSummary);
-            core.setOutput("ready", outputs.ready);
-      - name: Prepare Project State
-        if: github.event.action != 'closed'
+      - name: Apply Unified Automation State
+        if: steps.preflight.outputs.should_run == 'true' && steps.analyze.outputs.ready == 'true'
         env:
-          PROJECT_STATE_FILE: /tmp/autobot_project_state.json
-          AUTOBOT_SUMMARY_TEXT: ${{ steps.collect.outputs.deterministic_summary || steps.issue-summary-prompt.outputs.fallback_summary }}
-          AUTOBOT_LABELS_JSON: ${{ steps.collect.outputs.deterministic_labels_json }}
-          PR_DETERMINISTIC_SEMVER: ${{ steps.collect.outputs.deterministic_semver_json }}
+          UNIFIED_AUTOMATION_STATE_FILE: /tmp/autobot_smart_link_state.json
         uses: actions/github-script@v9
         with:
           script: |
-            const helperPath = `${process.env.GITHUB_WORKSPACE || process.cwd()}/.github/scripts/autobot_project_manager.js`;
-            const { prepareProjectState } = require(helperPath);
+            const helperPath = `${process.env.GITHUB_WORKSPACE || process.cwd()}/.github/scripts/autobot/unified.cjs`;
+            const { applyUnifiedAutomationState } = require(helperPath);
             const { owner, repo } = context.repo;
-            await prepareProjectState({
-              github,
-              owner,
-              repo,
+            await applyUnifiedAutomationState({
               context,
-              issueNumber: context.issue.number,
-              summaryText: process.env.AUTOBOT_SUMMARY_TEXT,
-              autobotLabelsRaw: process.env.AUTOBOT_LABELS_JSON,
-              deterministicSemverRaw: process.env.PR_DETERMINISTIC_SEMVER,
-              stateFile: process.env.PROJECT_STATE_FILE
-            });
-      - name: Sync Prepared Project State
-        if: github.event.action != 'closed'
-        env:
-          PROJECT_STATE_FILE: /tmp/autobot_project_state.json
-        uses: actions/github-script@v9
-        with:
-          script: |
-            const helperPath = `${process.env.GITHUB_WORKSPACE || process.cwd()}/.github/scripts/autobot_project_manager.js`;
-            const { syncPreparedProjectState } = require(helperPath);
-            const { owner, repo } = context.repo;
-            await syncPreparedProjectState({
               github,
               owner,
               repo,
-              issueNumber: context.issue.number,
-              stateFile: process.env.PROJECT_STATE_FILE
+              stateFile: process.env.UNIFIED_AUTOMATION_STATE_FILE
             });
-      - name: Sync Project Milestone
-        if: github.event.action != 'closed'
-        uses: actions/github-script@v9
-        with:
-          script: |
-            const helperPath = `${process.env.GITHUB_WORKSPACE || process.cwd()}/.github/scripts/autobot_project_manager.js`;
-            const { syncProjectMilestone } = require(helperPath);
-            const { owner, repo } = context.repo;
-            await syncProjectMilestone({
-              github,
-              owner,
-              repo,
-              context,
-              issueNumber: context.issue.number
-            });
-      - name: Finalize Closed Pull Request Release
-        if: github.event_name == 'pull_request' && github.event.action == 'closed'
-        uses: actions/github-script@v9
-        with:
-          script: |
-            const helperPath = `${process.env.GITHUB_WORKSPACE || process.cwd()}/.github/scripts/autobot_project_manager.js`;
-            const { finalizeClosedPullRequestRelease } = require(helperPath);
-            const { owner, repo } = context.repo;
-            await finalizeClosedPullRequestRelease({ github, owner, repo, context });

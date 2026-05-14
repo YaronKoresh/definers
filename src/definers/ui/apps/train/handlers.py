@@ -450,8 +450,16 @@ def handle_training(
     return model_output, plan_markdown, status_markdown
 
 
-def handle_prediction(model_predict, prediction_data, prediction_payload):
+def handle_prediction(
+    model_predict: str,
+    model_type: str,
+    prediction_data: str,
+    prediction_payload: str,
+):
     from definers.ml import AutoTrainer
+
+    if model_type is None or model_type.strip().lower() == "auto":
+        model_type = model_predict.split(".")[-1]
 
     report = _create_train_activity_reporter(4)
     report(
@@ -464,7 +472,9 @@ def handle_prediction(model_predict, prediction_data, prediction_payload):
         "Load saved model",
         detail="Loading the saved model artifact.",
     )
-    trainer = AutoTrainer(model_path=_coerce_uploaded_value(model_predict))
+    trainer = AutoTrainer(
+        model_path=_coerce_uploaded_value(model_predict), model_type=model_type
+    )
     prediction_source = prediction_data
     if prediction_source is None:
         prediction_source = _parse_json_payload(prediction_payload)

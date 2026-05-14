@@ -721,9 +721,9 @@ def _safe_local_path(value) -> str | None:
     if hasattr(value, "name") and not isinstance(value, (str, bytes)):
         value = getattr(value, "name")
     try:
-        from definers.data.loader_runtime import LoaderRuntimeSupport
+        from definers.data.loaders import safe_path
 
-        return LoaderRuntimeSupport._safe_path(str(value).strip())
+        return safe_path(str(value).strip())
     except Exception:
         return None
 

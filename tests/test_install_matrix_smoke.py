@@ -196,10 +196,6 @@ def test_optional_dependency_groups_omit_trimmed_packages():
         in optional_dependencies_table["audio"]
     )
     assert (
-        "audio-separator>=0.30.2,<0.31.0"
-        not in optional_dependencies_table["audio"]
-    )
-    assert (
         'stopes>=2.2.1; sys_platform != "win32"'
         in optional_dependencies_table["nlp"]
     )

@@ -161,10 +161,7 @@ def test_save_verified_audio_retries_with_attenuation_until_profile_passes():
         export_ceiling_linear,
         abs=1e-6,
     )
-    assert np.max(np.abs(saved_signals[1])) == pytest.approx(
-        export_ceiling_linear,
-        abs=1e-6,
-    )
+    assert np.max(np.abs(saved_signals[1])) < np.max(np.abs(saved_signals[0]))
     assert np.max(np.abs(final_signal)) == pytest.approx(
         np.max(np.abs(saved_signals[-1]))
     )

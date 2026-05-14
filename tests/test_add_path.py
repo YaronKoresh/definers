@@ -30,11 +30,9 @@ class TestAddPath(unittest.TestCase):
         original_sys_path = sys.path[:]
         set_infrastructure_services(
             InfrastructureServices(
-                environment=EnvironmentService(
-                    get_os_name_fn=lambda: "unknown"
-                ),
+                environment=EnvironmentService(get_os_name=lambda: "unknown"),
                 filesystem=FileSystemService(
-                    permit_fn=lambda path, **kwargs: (
+                    permit=lambda path, **kwargs: (
                         permit_calls.append((path, kwargs)) or True
                     )
                 ),
@@ -58,11 +56,9 @@ class TestAddPath(unittest.TestCase):
         original_sys_path = sys.path[:]
         set_infrastructure_services(
             InfrastructureServices(
-                environment=EnvironmentService(
-                    get_os_name_fn=lambda: "unknown"
-                ),
+                environment=EnvironmentService(get_os_name=lambda: "unknown"),
                 filesystem=FileSystemService(
-                    permit_fn=lambda path, **kwargs: (
+                    permit=lambda path, **kwargs: (
                         permit_calls.append((path, kwargs)) or True
                     )
                 ),
@@ -86,11 +82,9 @@ class TestAddPath(unittest.TestCase):
         original_sys_path = sys.path[:]
         set_infrastructure_services(
             InfrastructureServices(
-                environment=EnvironmentService(
-                    get_os_name_fn=lambda: "unknown"
-                ),
+                environment=EnvironmentService(get_os_name=lambda: "unknown"),
                 filesystem=FileSystemService(
-                    permit_fn=lambda path, **kwargs: (
+                    permit=lambda path, **kwargs: (
                         permit_calls.append((path, kwargs)) or True
                     )
                 ),

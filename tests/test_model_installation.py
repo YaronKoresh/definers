@@ -219,7 +219,7 @@ def test_download_rvc_assets_uses_only_enhanced_fork_folders(
 
 
 def test_enhanced_rvc_fork_folder_paths_default_to_package_root():
-    package_root = Path(model_installation.__file__).resolve().parent
+    package_root = Path(model_installation.__file__).resolve().parents[1]
 
     paths = model_installation.enhanced_rvc_fork_folder_paths()
 
@@ -887,7 +887,7 @@ def test_hf_file_download_prefers_fast_direct_download(monkeypatch, tmp_path):
     monkeypatch.setenv("DEFINERS_FAST_HF_DOWNLOADS", "1")
     monkeypatch.setenv("DEFINERS_HF_MODEL_DIR", str(tmp_path))
     monkeypatch.setattr(
-        "definers.media.transfer.download_file",
+        "definers.media.web_transfer.download_file",
         fake_download_file,
     )
 
@@ -930,7 +930,7 @@ def test_hf_snapshot_download_prefers_fast_direct_snapshot_download(
         ),
     )
     monkeypatch.setattr(
-        "definers.media.transfer.download_file",
+        "definers.media.web_transfer.download_file",
         fake_download_file,
     )
 
@@ -1067,7 +1067,7 @@ def test_install_fast_huggingface_download_hooks_patches_imported_aliases(
         lambda repo_id, revision=None: ("config.json",),
     )
     monkeypatch.setattr(
-        "definers.media.transfer.download_file",
+        "definers.media.web_transfer.download_file",
         lambda source_url, destination_path: (
             download_calls.append((source_url, destination_path))
             or destination_path
@@ -1208,6 +1208,38 @@ def test_patched_audio_separator_write_audio_soundfile_uses_output_dir(
         )
     ]
     assert (tmp_path / "stage").is_dir()
+
+
+def test_patched_audio_separator_write_audio_soundfile_preserves_model_suffix(
+    monkeypatch, tmp_path
+):
+    written_paths = []
+
+    monkeypatch.setattr(
+        model_installation,
+        "_AUDIO_SEPARATOR_ORIGINAL_WRITE_AUDIO_SOUNDFILE",
+        lambda separator, stem_path, stem_source: (
+            written_paths.append((stem_path, stem_source)) or stem_path
+        ),
+    )
+
+    separator = ModuleType("separator_instance")
+    separator.output_dir = str(tmp_path / "stage")
+    stem_source = object()
+
+    written_path = (
+        model_installation._patched_audio_separator_write_audio_soundfile(
+            separator,
+            "prepared_input_(other)_MelBandRoformerSYHFT.wav",
+            stem_source,
+        )
+    )
+
+    expected_path = str(
+        tmp_path / "stage" / "prepared_input_(other)_MelBandRoformerSYHFT.wav"
+    )
+    assert written_path == expected_path
+    assert written_paths == [(expected_path, stem_source)]
 
 
 def test_patched_audio_separator_write_audio_pydub_falls_back_to_managed_root(

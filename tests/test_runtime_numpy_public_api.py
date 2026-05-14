@@ -34,9 +34,10 @@ def test_runtime_backend_info_matches_helpers():
 def test_runtime_backend_selection_stays_centralized():
     src_root = Path(__file__).resolve().parents[1] / "src" / "definers"
     offenders: list[str] = []
+    runtime_numpy_path = "runtime_numpy/__init__.py"
 
     for path in src_root.rglob("*.py"):
-        if path.name == "runtime_numpy.py":
+        if path.relative_to(src_root).as_posix() == runtime_numpy_path:
             continue
         text = path.read_text(encoding="utf-8")
         if 'import_module("cupy")' in text or 'import_module("numpy")' in text:
@@ -48,12 +49,10 @@ def test_runtime_backend_selection_stays_centralized():
 def test_direct_numpy_imports_stay_inside_runtime_module_only():
     src_root = Path(__file__).resolve().parents[1] / "src" / "definers"
     offenders: list[str] = []
-    allowed_files = {
-        "runtime_numpy.py",
-    }
+    allowed_paths = {"runtime_numpy/__init__.py"}
 
     for path in src_root.rglob("*.py"):
-        if path.name in allowed_files:
+        if path.relative_to(src_root).as_posix() in allowed_paths:
             continue
         for line in path.read_text(encoding="utf-8").splitlines():
             stripped = line.strip()

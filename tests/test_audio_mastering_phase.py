@@ -147,10 +147,14 @@ def _load_mastering_module(package_name: str):
         freq_cut=lambda y, *_, **__: y,
     )
     _install_scipy_stub()
-    sys.modules[f"{package_name}.utils"] = types.SimpleNamespace(
+    sys.modules[f"{package_name}.normalization"] = types.SimpleNamespace(
         apply_lufs=lambda y, *_, **__: y,
-        generate_bands=lambda *_, **__: [],
         get_lufs=lambda y, *_: -14.0,
+    )
+    sys.modules[f"{package_name}.music_theory"] = types.SimpleNamespace(
+        generate_bands=lambda *_, **__: [],
+    )
+    sys.modules[f"{package_name}.signal_effects"] = types.SimpleNamespace(
         stereo_widen=lambda y, *_, **__: y,
     )
     sys.modules[f"{root_package_name}.file_ops"] = types.SimpleNamespace(
@@ -165,7 +169,10 @@ def _load_mastering_module(package_name: str):
 CONFIG_MODULE, MASTERING_MODULE = _load_mastering_module(
     "_test_audio_mastering_phase_pkg.audio"
 )
-EQ_MODULE = sys.modules["_test_audio_mastering_phase_pkg.audio.mastering.eq"]
+EQ_MODULE = _load_module(
+    "_test_audio_mastering_phase_pkg.audio.mastering.eq",
+    MASTERING_ROOT / "eq.py",
+)
 
 
 def _make_mastering_instance():
@@ -769,6 +776,91 @@ def test_apply_stem_cleanup_noise_gate_cleans_low_level_tail():
     assert tail_after < tail_before * 0.205
     assert phrase_after > phrase_before * 0.5
     assert tail_after < phrase_after * 0.08
+
+
+def test_apply_stem_cleanup_preserves_sparse_vocal_tail_when_phrase_is_delicate():
+    mastering = _make_mastering_instance()
+    source = np.full(720, 0.0025, dtype=np.float32)
+    source[120:252] += 0.11
+    source[252:480] += np.linspace(
+        0.035,
+        0.008,
+        228,
+        dtype=np.float32,
+    )
+
+    cleaned = mastering.apply_stem_cleanup(source, stem_role="vocals")
+
+    tail_before = float(np.mean(np.abs(source[280:440])))
+    tail_after = float(np.mean(np.abs(cleaned[280:440])))
+    phrase_before = float(np.mean(np.abs(source[144:228])))
+    phrase_after = float(np.mean(np.abs(cleaned[144:228])))
+    float(np.mean(np.abs(source[0:96])))
+    floor_after = float(np.mean(np.abs(cleaned[0:96])))
+
+    assert tail_after > tail_before * 0.45
+    assert phrase_after > phrase_before * 0.72
+    assert floor_after < phrase_after * 0.12
+
+
+def test_apply_stem_cleanup_relaxes_after_ai_repair_provenance():
+    source = np.full(720, 0.0025, dtype=np.float32)
+    source[120:252] += 0.11
+    source[252:480] += np.linspace(
+        0.035,
+        0.008,
+        228,
+        dtype=np.float32,
+    )
+
+    baseline_mastering = _make_mastering_instance()
+    repaired_mastering = _make_mastering_instance()
+    for mastering in (baseline_mastering, repaired_mastering):
+        mastering.spectral_balance_profile = (
+            MASTERING_MODULE.SpectralBalanceProfile(
+                rescue_factor=1.0,
+                correction_strength=1.0,
+                max_boost_db=12.0,
+                max_cut_db=6.0,
+                band_intensity=1.0,
+                restoration_factor=1.0,
+                air_restoration_factor=1.0,
+                body_restoration_factor=0.9,
+                closure_repair_factor=1.0,
+            )
+        )
+    repaired_mastering.stem_cleanup_provenance = {
+        "source_dereverb_applied": True,
+        "source_denoise_applied": True,
+        "vocal_restoration_applied": True,
+        "repair_intensity": 0.92,
+        "quality_flags": ("Low-Quality", "Old-Recording"),
+    }
+    repaired_mastering.separator_quality_flags = (
+        "Low-Quality",
+        "Old-Recording",
+    )
+
+    baseline_cleaned = baseline_mastering.apply_stem_cleanup(
+        source,
+        stem_role="vocals",
+    )
+    repaired_cleaned = repaired_mastering.apply_stem_cleanup(
+        source,
+        stem_role="vocals",
+    )
+
+    baseline_tail = float(np.mean(np.abs(baseline_cleaned[280:440])))
+    repaired_tail = float(np.mean(np.abs(repaired_cleaned[280:440])))
+    repaired_phrase = float(np.mean(np.abs(repaired_cleaned[144:228])))
+    repaired_floor = float(np.mean(np.abs(repaired_cleaned[0:96])))
+    source_tail = float(np.mean(np.abs(source[280:440])))
+    baseline_tail_loss = max(source_tail - baseline_tail, 0.0)
+    repaired_tail_loss = max(source_tail - repaired_tail, 0.0)
+
+    assert repaired_tail > baseline_tail
+    assert repaired_tail_loss < baseline_tail_loss * 0.9
+    assert repaired_floor < repaired_phrase * 0.18
 
 
 def test_apply_stem_cleanup_preserves_drum_body_under_high_repair_pressure():

@@ -7,7 +7,7 @@ import sys
 from types import ModuleType
 from typing import Any
 
-from .optional_dependencies import install_import_hook
+from . import optional_dependencies
 from .runtime_numpy import (
     bootstrap_runtime_numpy,
     get_array_module,
@@ -18,6 +18,7 @@ from .runtime_numpy import (
     runtime_backend_name,
 )
 
+install_import_hook = optional_dependencies.install_import_hook
 install_import_hook()
 try:
     bootstrap_runtime_numpy()
@@ -46,9 +47,17 @@ class MissingSoxModule:
         raise ImportError("sox module is not available")
 
 
+def _is_trusted_sox_cache_entry(cached_module: object) -> bool:
+    if getattr(cached_module, "__definers_missing_sox__", False) is True:
+        return True
+    if not isinstance(cached_module, ModuleType):
+        return True
+    return getattr(cached_module, "__spec__", None) is None
+
+
 def load_sox_module() -> ModuleType | MissingSoxModule:
     cached_module = sys.modules.get("sox")
-    if cached_module is not None:
+    if cached_module is not None and _is_trusted_sox_cache_entry(cached_module):
         return cached_module
     buffer = io.StringIO()
     original_run = subprocess.run
@@ -81,85 +90,86 @@ def load_sox_module() -> ModuleType | MissingSoxModule:
 
 
 def has_sox() -> bool:
-    return not getattr(sox, "__definers_missing_sox__", False)
+    return getattr(sox, "__definers_missing_sox__", False) is not True
 
 
 __version__ = _resolve_version()
 sox = load_sox_module()
 
-_LAZY_SUBMODULES = {
-    "audio",
-    "chat",
-    "cuda",
-    "data",
-    "file_ops",
-    "image",
-    "logger",
-    "media",
-    "ml",
-    "model_installation",
-    "optional_dependencies",
-    "runtime_numpy",
-    "system",
-    "text",
-    "ui",
-    "video",
-}
+from . import data, image, model_installation
+
+__all__ = [glb for glb in globals() if not glb.startswith("_")]
+
+_LAZY_SUBMODULES = frozenset(
+    {
+        "audio",
+        "capabilities",
+        "catalogs",
+        "chat",
+        "cli",
+        "constants",
+        "core",
+        "cuda",
+        "data",
+        "database",
+        "file_ops",
+        "image",
+        "logger",
+        "media",
+        "ml",
+        "model_installation",
+        "observability",
+        "optional_dependencies",
+        "os_utils",
+        "path_utils",
+        "regex_utils",
+        "resilience",
+        "runtime_numpy",
+        "state",
+        "system",
+        "text",
+        "ui",
+        "video",
+    }
+)
 
 
-def _load_lazy_submodule(name: str) -> Any:
-    module_name = f"{__name__}.{name}"
-    module = importlib.import_module(module_name)
-    sys.modules.setdefault(module_name, module)
+def _load_public_submodule(name: str) -> Any:
+    qualified_name = f"{__name__}.{name}"
+    module = sys.modules.get(qualified_name)
+    if module is None:
+        module = importlib.import_module(qualified_name)
     globals()[name] = module
     return module
 
 
-class _DefinersModule(ModuleType):
-    def __getattribute__(self, name: str) -> Any:
-        if name in _LAZY_SUBMODULES:
-            namespace = ModuleType.__getattribute__(self, "__dict__")
-            package_name = ModuleType.__getattribute__(self, "__name__")
-            module_name = f"{package_name}.{name}"
-            loaded_module = sys.modules.get(module_name)
-            cached_module = namespace.get(name)
-            if loaded_module is not None:
-                if cached_module is not loaded_module:
-                    namespace[name] = loaded_module
-                return loaded_module
-            if isinstance(cached_module, ModuleType):
-                if (
-                    ModuleType.__getattribute__(cached_module, "__name__")
-                    == module_name
-                ):
-                    sys.modules[module_name] = cached_module
-                    return cached_module
-        return ModuleType.__getattribute__(self, name)
-
-
 def __getattr__(name: str) -> Any:
     if name in _LAZY_SUBMODULES:
-        return _load_lazy_submodule(name)
-    raise AttributeError(name)
+        return _load_public_submodule(name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def __dir__() -> list[str]:
     return sorted(set(globals()).union(_LAZY_SUBMODULES))
 
 
-__all__ = (
-    "__version__",
-    "bootstrap_runtime_numpy",
-    "get_array_module",
-    "has_sox",
-    "get_numpy_module",
-    "is_cupy_backend",
-    "load_sox_module",
-    "patch_numpy_runtime",
-    "runtime_backend_info",
-    "runtime_backend_name",
-    "sox",
-)
+class _DefinersModule(ModuleType):
+    def __getattribute__(self, name: str) -> Any:
+        namespace = ModuleType.__getattribute__(self, "__dict__")
+        lazy_submodules = namespace.get("_LAZY_SUBMODULES", ())
+        if name in lazy_submodules:
+            qualified_name = (
+                f"{ModuleType.__getattribute__(self, '__name__')}.{name}"
+            )
+            bound_module = namespace.get(name)
+            module = sys.modules.get(qualified_name)
+            if module is None:
+                if isinstance(bound_module, ModuleType):
+                    return bound_module
+                module = importlib.import_module(qualified_name)
+            namespace[name] = module
+            return module
+        return ModuleType.__getattribute__(self, name)
 
 
 sys.modules[__name__].__class__ = _DefinersModule

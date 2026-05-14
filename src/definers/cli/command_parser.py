@@ -1,9 +1,5 @@
 from collections.abc import Callable, Mapping
 
-from definers.cli.application.catalog import (
-    normalize_cli_name,
-    resolve_cli_command_definition,
-)
 from definers.cli.cli_command_definition import (
     DEFAULT_START_PROJECT,
     CliCommandDefinition,
@@ -11,6 +7,10 @@ from definers.cli.cli_command_definition import (
 from definers.cli.cli_request import CliRequest
 from definers.cli.command_execution_metadata import (
     CommandExecutionMetadata,
+)
+from definers.cli.command_registry import (
+    normalize_cli_name,
+    resolve_cli_command_definition,
 )
 from definers.cli.install_command import InstallCommand
 from definers.cli.lyric_video_command import LyricVideoCommand

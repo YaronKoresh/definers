@@ -1,6 +1,6 @@
 from types import ModuleType, SimpleNamespace
 
-from definers.data.datasets.value import DatasetValueLoader
+from definers.data.loaders import load_table_values
 from definers.ui.apps.train import coach as train_coach
 
 
@@ -21,7 +21,7 @@ def test_load_table_values_ensures_openpyxl_runtime(monkeypatch):
         ),
     )
 
-    result = DatasetValueLoader.load_table_values("demo.xlsx", "xlsx")
+    result = load_table_values("demo.xlsx", "xlsx")
 
     assert captured["module_name"] == "openpyxl"
     assert captured["path"] == "demo.xlsx"

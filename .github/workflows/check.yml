@@ -28,7 +28,7 @@ jobs:
         run: python -m pip install -e ".[dev]"
 
       - name: Execute Checks And Fixes
-        run: poe check
+        run: python -m poethepoet check
 
       - name: Check For Changes
         id: check_changes

@@ -7,7 +7,12 @@ from definers.runtime_numpy import get_numpy_module
 np = get_numpy_module()
 
 from .contract import MasteringContract
-from .finalization import CharacterStageDecision, PeakCatchEvent
+from .finalization import (
+    CharacterStageDecision,
+    PeakCatchEvent,
+    _measure_signal_crest_factor_db,
+)
+from .reference import measure_transient_density
 
 
 def _prepare_processing_signal(
@@ -384,6 +389,13 @@ def process(
 
     log_fn("Mastering", "Applying low-end mono tightening...")
     y = self.apply_low_end_mono_tightening(y)
+
+    self.last_processing_crest_factor_db = float(
+        _measure_signal_crest_factor_db(y)
+    )
+    self.last_processing_transient_density = float(
+        measure_transient_density(y, self.resampling_target)
+    )
 
     log_fn("Mastering", "Applying premaster true-peak trim...")
     y = self.apply_pre_limiter_true_peak_trim(y)

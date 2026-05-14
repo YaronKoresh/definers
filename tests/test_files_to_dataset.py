@@ -56,7 +56,7 @@ class TestFilesToDataset(unittest.TestCase):
         mock_load.assert_called_once_with("f1.npy", training=True)
 
     @patch("definers.data.loaders.load_as_numpy", return_value=None)
-    @patch("definers.data.loader_runtime.logger.exception")
+    @patch("definers.data.loaders.logger.exception")
     def test_loading_feature_fails(self, mock_logger_exc, mock_load):
         features_paths = ["bad_feature.npy"]
         labels_paths = ["label.npy"]
@@ -64,7 +64,7 @@ class TestFilesToDataset(unittest.TestCase):
         self.assertIsNone(result)
         mock_logger_exc.assert_called_once()
 
-    @patch("definers.data.loader_runtime.logger.warning")
+    @patch("definers.data.loaders.logger.warning")
     def test_empty_input_lists(self, mock_logger_warn):
         result = files_to_dataset([], [])
         self.assertIsNone(result)

@@ -22,159 +22,51 @@ from definers.system.contracts import (
 
 @dataclass(slots=True)
 class EnvironmentService:
-    get_os_name_fn: Callable[[], str] = _runtime.get_os_name
-    is_admin_windows_fn: Callable[[], bool] = _runtime.is_admin_windows
-    cores_fn: Callable[[], int | None] = _runtime.cores
-    get_python_version_fn: Callable[[], str | None] = (
-        _runtime.get_python_version
-    )
-    importable_fn: Callable[[str], bool] = _runtime.importable
-    runnable_fn: Callable[[str], bool] = _runtime.runnable
-    check_version_wildcard_fn: Callable[[Any, Any], bool] = (
+    get_os_name: Callable[[], str] = _runtime.get_os_name
+    is_admin_windows: Callable[[], bool] = _runtime.is_admin_windows
+    cores: Callable[[], int | None] = _runtime.cores
+    get_python_version: Callable[[], str | None] = _runtime.get_python_version
+    importable: Callable[[str], bool] = _runtime.importable
+    runnable: Callable[[str], bool] = _runtime.runnable
+    check_version_wildcard: Callable[[Any, Any], bool] = (
         _runtime.check_version_wildcard
     )
-    installed_fn: Callable[[str, str | None], bool] = _runtime.installed
-
-    def get_os_name(self) -> str:
-        return self.get_os_name_fn()
-
-    def is_admin_windows(self) -> bool:
-        return self.is_admin_windows_fn()
-
-    def cores(self) -> int | None:
-        return self.cores_fn()
-
-    def get_python_version(self) -> str | None:
-        return self.get_python_version_fn()
-
-    def importable(self, name: str) -> bool:
-        return self.importable_fn(name)
-
-    def runnable(self, command: str) -> bool:
-        return self.runnable_fn(command)
-
-    def check_version_wildcard(
-        self, version_spec: Any, version_actual: Any
-    ) -> bool:
-        return self.check_version_wildcard_fn(version_spec, version_actual)
-
-    def installed(self, package_name: str, version: str | None = None) -> bool:
-        return self.installed_fn(package_name, version)
+    installed: Callable[[str, str | None], bool] = _runtime.installed
 
 
 @dataclass(slots=True)
 class FileSystemService:
-    exist_fn: Callable[..., bool] = _filesystem.exist
-    load_fn: Callable[[str], Any] = _filesystem.load
-    read_fn: Callable[[str], Any] = _filesystem.read
-    save_fn: Callable[[str, Any], Any] = _filesystem.save
-    write_fn: Callable[[str, Any], Any] = _filesystem.write
-    directory_fn: Callable[[str, bool], Any] = _filesystem.directory
-    copy_fn: Callable[[str, str], Any] = _filesystem.copy
-    move_fn: Callable[[str, str], Any] = _filesystem.move
-    delete_fn: Callable[[PathInput], Any] = _filesystem.delete
-    remove_fn: Callable[[PathInput], Any] = _filesystem.remove
-    permit_fn: Callable[..., bool] = _filesystem.permit
-
-    def exist(self, *path_parts: str) -> bool:
-        return self.exist_fn(*path_parts)
-
-    def load(self, path: str) -> Any:
-        return self.load_fn(path)
-
-    def read(self, path: str) -> Any:
-        return self.read_fn(path)
-
-    def save(self, path: str, text: Any = "") -> Any:
-        return self.save_fn(path, text)
-
-    def write(self, path: str, text: Any = "") -> Any:
-        return self.write_fn(path, text)
-
-    def directory(self, path: str, exist_ok: bool = True) -> Any:
-        return self.directory_fn(path, exist_ok)
-
-    def copy(self, source: str, target: str) -> Any:
-        return self.copy_fn(source, target)
-
-    def move(self, source: str, target: str) -> Any:
-        return self.move_fn(source, target)
-
-    def delete(self, path: PathInput) -> Any:
-        return self.delete_fn(path)
-
-    def remove(self, path: PathInput) -> Any:
-        return self.remove_fn(path)
-
-    def permit(
-        self,
-        path: str,
-        *,
-        exists_func: Callable[..., bool] | None = None,
-        get_os_name_func: Callable[[], str] | None = None,
-        subprocess_module: Any | None = None,
-    ) -> bool:
-        kwargs: dict[str, Any] = {}
-        if exists_func is not None:
-            kwargs["exists_func"] = exists_func
-        if get_os_name_func is not None:
-            kwargs["get_os_name_func"] = get_os_name_func
-        if subprocess_module is not None:
-            kwargs["subprocess_module"] = subprocess_module
-        return self.permit_fn(path, **kwargs)
+    exist: Callable[..., bool] = _filesystem.exist
+    load: Callable[[str], Any] = _filesystem.load
+    read: Callable[[str], Any] = _filesystem.read
+    save: Callable[[str, Any], Any] = _filesystem.save
+    write: Callable[[str, Any], Any] = _filesystem.write
+    directory: Callable[[str, bool], Any] = _filesystem.directory
+    copy: Callable[[str, str], Any] = _filesystem.copy
+    move: Callable[[str, str], Any] = _filesystem.move
+    delete: Callable[[PathInput], Any] = _filesystem.delete
+    remove: Callable[[PathInput], Any] = _filesystem.remove
+    permit: Callable[..., bool] = _filesystem.permit
 
 
 @dataclass(slots=True)
 class ProcessService:
-    secure_command_fn: Callable[[CommandInput], list[str]] = (
+    secure_command: Callable[[CommandInput], list[str]] = (
         _processes.secure_command
     )
-    run_linux_fn: Callable[[CommandInput, bool, ProcessEnvironment], Any] = (
+    run_linux: Callable[[CommandInput, bool, ProcessEnvironment], Any] = (
         _processes.run_linux
     )
-    run_windows_fn: Callable[[CommandInput, bool, ProcessEnvironment], Any] = (
+    run_windows: Callable[[CommandInput, bool, ProcessEnvironment], Any] = (
         _processes.run_windows
     )
-    run_fn: Callable[[CommandInput, bool, ProcessEnvironment], Any] = (
+    run: Callable[[CommandInput, bool, ProcessEnvironment], Any] = (
         _processes.run
     )
-    get_process_pid_fn: Callable[[str], int | None] = _processes.get_process_pid
-    send_signal_to_process_fn: Callable[[int, int], bool] = (
+    get_process_pid: Callable[[str], int | None] = _processes.get_process_pid
+    send_signal_to_process: Callable[[int, int], bool] = (
         _processes.send_signal_to_process
     )
-
-    def secure_command(self, command: CommandInput) -> list[str]:
-        return self.secure_command_fn(command)
-
-    def run_linux(
-        self,
-        command: CommandInput,
-        silent: bool = False,
-        env: ProcessEnvironment = None,
-    ) -> Any:
-        return self.run_linux_fn(command, silent, env)
-
-    def run_windows(
-        self,
-        command: CommandInput,
-        silent: bool = False,
-        env: ProcessEnvironment = None,
-    ) -> Any:
-        return self.run_windows_fn(command, silent, env)
-
-    def run(
-        self,
-        command: CommandInput,
-        silent: bool = False,
-        env: ProcessEnvironment = None,
-    ) -> Any:
-        return self.run_fn(command, silent, env)
-
-    def get_process_pid(self, process_name: str) -> int | None:
-        return self.get_process_pid_fn(process_name)
-
-    def send_signal_to_process(self, pid: int, signal_number: int) -> bool:
-        return self.send_signal_to_process_fn(pid, signal_number)
 
 
 @dataclass(slots=True)
@@ -192,14 +84,14 @@ def _coerce_environment_service(
     if isinstance(environment, EnvironmentService):
         return environment
     return EnvironmentService(
-        get_os_name_fn=environment.get_os_name,
-        is_admin_windows_fn=environment.is_admin_windows,
-        cores_fn=environment.cores,
-        get_python_version_fn=environment.get_python_version,
-        importable_fn=environment.importable,
-        runnable_fn=environment.runnable,
-        check_version_wildcard_fn=environment.check_version_wildcard,
-        installed_fn=environment.installed,
+        get_os_name=environment.get_os_name,
+        is_admin_windows=environment.is_admin_windows,
+        cores=environment.cores,
+        get_python_version=environment.get_python_version,
+        importable=environment.importable,
+        runnable=environment.runnable,
+        check_version_wildcard=environment.check_version_wildcard,
+        installed=environment.installed,
     )
 
 
@@ -211,17 +103,17 @@ def _coerce_filesystem_service(
     if isinstance(filesystem, FileSystemService):
         return filesystem
     return FileSystemService(
-        exist_fn=filesystem.exist,
-        load_fn=filesystem.load,
-        read_fn=filesystem.read,
-        save_fn=filesystem.save,
-        write_fn=filesystem.write,
-        directory_fn=filesystem.directory,
-        copy_fn=filesystem.copy,
-        move_fn=filesystem.move,
-        delete_fn=filesystem.delete,
-        remove_fn=filesystem.remove,
-        permit_fn=filesystem.permit,
+        exist=filesystem.exist,
+        load=filesystem.load,
+        read=filesystem.read,
+        save=filesystem.save,
+        write=filesystem.write,
+        directory=filesystem.directory,
+        copy=filesystem.copy,
+        move=filesystem.move,
+        delete=filesystem.delete,
+        remove=filesystem.remove,
+        permit=filesystem.permit,
     )
 
 
@@ -231,12 +123,12 @@ def _coerce_process_service(processes: ProcessPort | None) -> ProcessService:
     if isinstance(processes, ProcessService):
         return processes
     return ProcessService(
-        secure_command_fn=processes.secure_command,
-        run_linux_fn=processes.run_linux,
-        run_windows_fn=processes.run_windows,
-        run_fn=processes.run,
-        get_process_pid_fn=processes.get_process_pid,
-        send_signal_to_process_fn=processes.send_signal_to_process,
+        secure_command=processes.secure_command,
+        run_linux=processes.run_linux,
+        run_windows=processes.run_windows,
+        run=processes.run,
+        get_process_pid=processes.get_process_pid,
+        send_signal_to_process=processes.send_signal_to_process,
     )
 
 

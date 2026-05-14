@@ -94,11 +94,31 @@ def _mastering_stub(**overrides):
         "drive_db": 1.0,
         "spectral_drive_bias_db": 1.5,
         "limiter_soft_clip_ratio": 0.2,
+        "anti_distortion_soft_clip_ceiling_ratio": 0.28,
+        "anti_distortion_saturation_ceiling_ratio": 0.16,
+        "adaptive_pre_limiter_true_peak_trim_enabled": True,
+        "adaptive_pre_limiter_true_peak_max_target_dbfs": -1.6,
         "spectral_balance_profile": SimpleNamespace(rescue_factor=0.5),
         "pre_limiter_saturation_ratio": 0.0,
         "ceil_db": -0.1,
         "delivery_decoded_true_peak_dbfs": None,
         "true_peak_oversample_factor": 4,
+        "last_processing_transient_density": 0.0,
+        "last_processing_crest_factor_db": 0.0,
+    }
+    data.update(overrides)
+    return SimpleNamespace(**data)
+
+
+def _input_metrics_stub(**overrides):
+    data = {
+        "bass_share": 0.08,
+        "low_mid_share": 0.17,
+        "presence_share": 0.28,
+        "air_share": 0.16,
+        "crest_factor_db": 13.0,
+        "transient_density": 0.02,
+        "stereo_width_ratio": 0.34,
     }
     data.update(overrides)
     return SimpleNamespace(**data)
@@ -158,6 +178,106 @@ def test_compute_primary_soft_clip_ratio_grows_with_restoration_pressure():
     ratio = FINALIZATION_MODULE.compute_primary_soft_clip_ratio(mastering, 0.0)
 
     assert ratio == pytest.approx(0.25)
+
+
+def test_compute_primary_soft_clip_ratio_respects_anti_distortion_ceiling():
+    mastering = _mastering_stub(
+        limiter_soft_clip_ratio=0.26,
+        anti_distortion_soft_clip_ceiling_ratio=0.23,
+        spectral_balance_profile=SimpleNamespace(
+            rescue_factor=1.0,
+            restoration_factor=1.0,
+            body_restoration_factor=1.0,
+        ),
+    )
+
+    ratio = FINALIZATION_MODULE.compute_primary_soft_clip_ratio(mastering, 18.0)
+
+    assert ratio == pytest.approx(0.23)
+
+
+def test_compute_dynamic_drive_backs_off_for_melody_led_sparse_material():
+    neutral_mastering = _mastering_stub(
+        target_lufs=-5.0,
+        drive_db=1.0,
+        spectral_drive_bias_db=0.0,
+        spectral_balance_profile=SimpleNamespace(
+            rescue_factor=0.0,
+            restoration_factor=0.0,
+            body_restoration_factor=0.0,
+        ),
+    )
+    adaptive_mastering = _mastering_stub(
+        target_lufs=-5.0,
+        drive_db=1.0,
+        spectral_drive_bias_db=0.0,
+        spectral_balance_profile=SimpleNamespace(
+            rescue_factor=0.0,
+            restoration_factor=0.0,
+            body_restoration_factor=0.0,
+        ),
+        input_analysis_metrics=_input_metrics_stub(),
+        separator_quality_flags=("Low-Quality",),
+    )
+
+    neutral_drive = FINALIZATION_MODULE.compute_dynamic_drive(
+        neutral_mastering,
+        -10.0,
+    )
+    adaptive_drive = FINALIZATION_MODULE.compute_dynamic_drive(
+        adaptive_mastering,
+        -10.0,
+    )
+
+    assert adaptive_drive < neutral_drive
+
+
+def test_plan_follow_up_action_reduces_gain_push_for_melody_led_sparse_material():
+    neutral_mastering = _mastering_stub(
+        limiter_soft_clip_ratio=0.22,
+        final_lufs_tolerance=0.2,
+        max_final_boost_db=2.0,
+        compute_primary_soft_clip_ratio=lambda drive_db: 0.22 + drive_db * 0.01,
+    )
+    adaptive_mastering = _mastering_stub(
+        limiter_soft_clip_ratio=0.22,
+        final_lufs_tolerance=0.2,
+        max_final_boost_db=2.0,
+        compute_primary_soft_clip_ratio=lambda drive_db: 0.22 + drive_db * 0.01,
+        input_analysis_metrics=_input_metrics_stub(),
+        separator_quality_flags=("Low-Quality",),
+    )
+    metrics = SimpleNamespace(
+        integrated_lufs=-8.0,
+        max_short_term_lufs=-5.2,
+        max_momentary_lufs=-4.7,
+        crest_factor_db=7.4,
+        stereo_width_ratio=0.42,
+        low_end_mono_ratio=0.82,
+    )
+    contract = SimpleNamespace(
+        target_lufs=-6.0,
+        max_short_term_lufs=-4.9,
+        max_momentary_lufs=-4.2,
+        min_crest_factor_db=4.0,
+        max_crest_factor_db=10.0,
+        max_stereo_width_ratio=0.55,
+        min_low_end_mono_ratio=0.78,
+    )
+
+    neutral_action = FINALIZATION_MODULE.plan_follow_up_action(
+        neutral_mastering,
+        metrics,
+        contract,
+    )
+    adaptive_action = FINALIZATION_MODULE.plan_follow_up_action(
+        adaptive_mastering,
+        metrics,
+        contract,
+    )
+
+    assert adaptive_action.gain_db < neutral_action.gain_db
+    assert adaptive_action.soft_clip_ratio <= neutral_action.soft_clip_ratio
 
 
 def test_apply_pre_limiter_saturation_is_noop_when_disabled():
@@ -224,6 +344,35 @@ def test_apply_pre_limiter_true_peak_trim_reduces_signal_to_minus_three_dbfs():
         -3.0,
         abs=1e-4,
     )
+
+
+def test_apply_pre_limiter_true_peak_trim_relaxes_for_punchy_material():
+    mastering = _mastering_stub(
+        true_peak_oversample_factor=8,
+        adaptive_pre_limiter_true_peak_trim_enabled=True,
+        adaptive_pre_limiter_true_peak_max_target_dbfs=-1.6,
+        last_processing_transient_density=0.26,
+        last_processing_crest_factor_db=10.5,
+    )
+    source = np.array([0.2, -0.4, 0.98], dtype=np.float32)
+
+    trimmed = FINALIZATION_MODULE.apply_pre_limiter_true_peak_trim(
+        mastering,
+        source,
+        sample_rate=44100,
+        measure_true_peak_fn=lambda y, sr, oversample_factor=4: float(
+            20.0 * np.log10(max(np.max(np.abs(y)), 1e-12))
+        ),
+    )
+
+    expected_peak = float(10.0 ** (-1.6 / 20.0))
+
+    assert np.max(np.abs(trimmed)) == pytest.approx(expected_peak, abs=1e-4)
+    assert mastering.last_pre_limiter_true_peak_target_dbfs == pytest.approx(
+        -1.6,
+        abs=1e-4,
+    )
+    assert mastering.last_pre_limiter_true_peak_attenuation_db < 1.5
 
 
 def test_apply_delivery_trim_reduces_signal_when_true_peak_exceeds_target():

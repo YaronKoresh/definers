@@ -159,6 +159,52 @@ def _signal_rms(values: np.ndarray) -> float:
     return float(np.sqrt(np.mean(np.square(array), dtype=np.float32)))
 
 
+def _measure_stem_energy_profile(signal_values: np.ndarray) -> dict[str, float]:
+    source = np.asarray(signal_values, dtype=np.float32).reshape(-1)
+    finite = source[np.isfinite(source) & (source > 0.0)]
+    if finite.size == 0:
+        return {
+            "activity_ratio": 0.0,
+            "sparse_guard": 0.0,
+            "dynamic_span_guard": 0.0,
+            "delicate_guard": 0.0,
+        }
+
+    peak_level = float(max(np.percentile(finite, 99.5), 1e-6))
+    median_level = float(max(np.percentile(finite, 38.0), 1e-6))
+    activity_threshold = float(
+        max(
+            np.percentile(finite, 72.0),
+            np.mean(finite, dtype=np.float32) * 1.08,
+            peak_level * 0.2,
+            1e-6,
+        )
+    )
+    activity_ratio = float(
+        np.mean(np.asarray(source >= activity_threshold), dtype=np.float32)
+    )
+    dynamic_span_db = float(
+        20.0 * np.log10(max(peak_level / max(median_level, 1e-6), 1.0))
+    )
+    sparse_guard = float(np.clip((0.3 - activity_ratio) / 0.3, 0.0, 1.0))
+    dynamic_span_guard = float(
+        np.clip((dynamic_span_db - 8.0) / 14.0, 0.0, 1.0)
+    )
+    delicate_guard = float(
+        np.clip(
+            sparse_guard * (0.65 + dynamic_span_guard * 0.6),
+            0.0,
+            1.0,
+        )
+    )
+    return {
+        "activity_ratio": activity_ratio,
+        "sparse_guard": sparse_guard,
+        "dynamic_span_guard": dynamic_span_guard,
+        "delicate_guard": delicate_guard,
+    }
+
+
 def _as_audio_channels(signal: np.ndarray) -> np.ndarray:
     array = np.asarray(signal, dtype=np.float32)
     if array.ndim == 1:
@@ -230,17 +276,17 @@ def _resolve_stem_cleanup_preservation_profile(
         }
     if normalized_role == "vocals":
         return {
-            "min_full_rms_ratio": 0.48,
-            "min_active_rms_ratio": 0.7,
-            "min_preserved_coverage_ratio": 0.78,
-            "restore_mix": 0.54,
+            "min_full_rms_ratio": 0.52,
+            "min_active_rms_ratio": 0.76,
+            "min_preserved_coverage_ratio": 0.82,
+            "restore_mix": 0.64,
         }
     if normalized_role == "other":
         return {
-            "min_full_rms_ratio": 0.42,
-            "min_active_rms_ratio": 0.66,
-            "min_preserved_coverage_ratio": 0.72,
-            "restore_mix": 0.56,
+            "min_full_rms_ratio": 0.46,
+            "min_active_rms_ratio": 0.7,
+            "min_preserved_coverage_ratio": 0.76,
+            "restore_mix": 0.6,
         }
     return {
         "min_full_rms_ratio": 0.44,
@@ -279,25 +325,31 @@ def _measure_stem_cleanup_preservation(
         }
 
     source_peak = float(np.max(source_energy)) if source_energy.size else 0.0
+    energy_profile = _measure_stem_energy_profile(source_energy)
+    delicate_guard = float(energy_profile["delicate_guard"])
     activity_threshold = float(
         max(
-            np.percentile(source_energy, 66.0),
-            np.mean(source_energy, dtype=np.float32) * 1.02,
-            source_peak * 0.14,
+            np.percentile(source_energy, 66.0 - delicate_guard * 14.0),
+            np.mean(source_energy, dtype=np.float32)
+            * (1.02 - delicate_guard * 0.2),
+            source_peak * (0.14 - delicate_guard * 0.07),
             1e-6,
         )
     )
     active_mask = source_energy >= activity_threshold
     if not np.any(active_mask):
-        active_mask = source_energy >= max(source_peak * 0.3, 1e-6)
+        active_mask = source_energy >= max(
+            source_peak * (0.3 - delicate_guard * 0.12),
+            1e-6,
+        )
 
     source_active = source_energy[active_mask]
     processed_active = processed_energy[active_mask]
     source_active_rms = _signal_rms(source_active)
     processed_active_rms = _signal_rms(processed_active)
     preserved_mask = processed_active >= np.maximum(
-        source_active * 0.26,
-        activity_threshold * 0.24,
+        source_active * (0.26 - delicate_guard * 0.08),
+        activity_threshold * (0.24 - delicate_guard * 0.1),
     )
     return {
         "full_rms_ratio": float(processed_rms / max(source_rms, 1e-6)),
@@ -332,17 +384,23 @@ def _build_stem_cleanup_restore_mask(source_signal: np.ndarray) -> np.ndarray:
         return np.zeros((1, 0), dtype=np.float32)
 
     source_peak = float(np.max(source_energy)) if source_energy.size else 0.0
+    energy_profile = _measure_stem_energy_profile(source_energy)
+    delicate_guard = float(energy_profile["delicate_guard"])
     activity_threshold = float(
         max(
-            np.percentile(source_energy, 66.0),
-            np.mean(source_energy, dtype=np.float32) * 1.02,
-            source_peak * 0.14,
+            np.percentile(source_energy, 66.0 - delicate_guard * 14.0),
+            np.mean(source_energy, dtype=np.float32)
+            * (1.02 - delicate_guard * 0.2),
+            source_peak * (0.14 - delicate_guard * 0.07),
             1e-6,
         )
     )
     active_mask = source_energy >= activity_threshold
     if not np.any(active_mask):
-        active_mask = source_energy >= max(source_peak * 0.3, 1e-6)
+        active_mask = source_energy >= max(
+            source_peak * (0.3 - delicate_guard * 0.12),
+            1e-6,
+        )
 
     hold_samples = max(
         1,
@@ -356,6 +414,15 @@ def _build_stem_cleanup_restore_mask(source_signal: np.ndarray) -> np.ndarray:
         restore_curve,
         max(1, hold_samples // 2),
     )
+    if delicate_guard > 0.0:
+        restore_curve = np.maximum(
+            restore_curve,
+            np.clip(
+                source_energy / max(activity_threshold * 1.8, 1e-6), 0.0, 1.0
+            )
+            * delicate_guard
+            * 0.78,
+        )
     restore_curve = np.clip(restore_curve, 0.0, 1.0)
     return restore_curve.reshape(1, -1)
 
@@ -406,6 +473,47 @@ def _resolve_stem_cleanup_pressure(
     if normalized_role == "bass":
         return float(np.clip(pressure * 0.74, 0.0, 1.0))
     return float(np.clip(pressure * 0.7, 0.0, 1.0))
+
+
+def _resolve_stem_cleanup_provenance_profile(
+    self,
+    stem_role: str | None,
+) -> dict[str, float]:
+    raw_provenance = getattr(self, "stem_cleanup_provenance", None)
+    provenance = raw_provenance if hasattr(raw_provenance, "get") else {}
+    normalized_role = _normalize_stem_role(stem_role)
+    quality_flags = {
+        str(flag).strip().lower()
+        for flag in (
+            tuple(getattr(self, "separator_quality_flags", ()))
+            + tuple(provenance.get("quality_flags", ()))
+        )
+        if str(flag).strip()
+    }
+    repair_intensity = float(
+        np.clip(provenance.get("repair_intensity", 0.0), 0.0, 1.0)
+    )
+    cleanup_relaxation = repair_intensity * 0.28
+    if provenance.get("source_dereverb_applied", False):
+        cleanup_relaxation += (
+            0.08 if normalized_role in {"vocals", "other"} else 0.05
+        )
+    if provenance.get("source_denoise_applied", False):
+        cleanup_relaxation += (
+            0.1 if normalized_role in {"vocals", "other"} else 0.06
+        )
+    if provenance.get("vocal_restoration_applied", False):
+        cleanup_relaxation += 0.2
+    if provenance.get("instrumental_cleanup_applied", False):
+        cleanup_relaxation += 0.18
+    if "low-quality" in quality_flags:
+        cleanup_relaxation += 0.12
+    if "old-recording" in quality_flags:
+        cleanup_relaxation += 0.18
+    return {
+        "repair_intensity": repair_intensity,
+        "cleanup_relaxation": float(np.clip(cleanup_relaxation, 0.0, 0.72)),
+    }
 
 
 def _resolve_stem_residual_profile(
@@ -1215,8 +1323,15 @@ def _build_stem_activity_mask(
     fast_env = _moving_average(mono_energy, fast_samples)
     slow_env = _moving_average(mono_energy, slow_samples)
 
+    energy_profile = _measure_stem_energy_profile(mono_energy)
+    delicate_guard = float(energy_profile["delicate_guard"])
     noise_floor = float(
-        np.percentile(slow_env, cleanup_profile["noise_percentile"])
+        np.percentile(
+            slow_env,
+            max(
+                cleanup_profile["noise_percentile"] - delicate_guard * 8.0, 5.0
+            ),
+        )
     )
     peak_env = float(np.percentile(slow_env, 99.6))
     if peak_env <= noise_floor + 1e-6:
@@ -1244,9 +1359,13 @@ def _build_stem_activity_mask(
     smoothed_activity = _moving_average(held_activity, release_samples)
     smoothed_activity = np.maximum(
         smoothed_activity,
-        held_activity * cleanup_profile["activity_floor_scale"],
+        held_activity
+        * (cleanup_profile["activity_floor_scale"] + delicate_guard * 0.24),
     )
-    suppression_floor = cleanup_profile["suppression_floor"]
+    suppression_floor = min(
+        cleanup_profile["suppression_floor"] + delicate_guard * 0.16,
+        0.94,
+    )
     return suppression_floor + (1.0 - suppression_floor) * np.clip(
         smoothed_activity,
         0.0,
@@ -1322,6 +1441,10 @@ def _apply_stem_residual_suppression(
     if not np.any(mono_energy > 0.0):
         return y
 
+    normalized_role = _normalize_stem_role(stem_role)
+    delicate_guard = float(
+        _measure_stem_energy_profile(mono_energy)["delicate_guard"]
+    )
     activity_mask = _build_stem_activity_mask(
         mono_energy,
         sample_rate=self.resampling_target,
@@ -1329,6 +1452,13 @@ def _apply_stem_residual_suppression(
     )
     expansion_drive = float(cleanup_profile["expansion_drive"])
     expansion_mix = float(cleanup_profile["expansion_mix"])
+    if normalized_role in {"vocals", "other"} and delicate_guard > 0.0:
+        activity_mask = np.maximum(
+            activity_mask,
+            np.clip(0.44 + delicate_guard * 0.18, 0.0, 0.78),
+        )
+        expansion_drive *= float(np.clip(1.0 - delicate_guard * 0.42, 0.5, 1.0))
+        expansion_mix *= float(np.clip(1.0 - delicate_guard * 0.58, 0.32, 1.0))
     cleaned_channels: list[np.ndarray] = []
 
     for channel in working_channels:
@@ -1382,6 +1512,10 @@ def _apply_stem_noise_gate(
     if not np.any(mono_energy > 0.0):
         return y
 
+    normalized_role = _normalize_stem_role(stem_role)
+    delicate_guard = float(
+        _measure_stem_energy_profile(mono_energy)["delicate_guard"]
+    )
     gate_profile = _resolve_stem_noise_gate_profile(
         stem_role,
         cleanup_pressure,
@@ -1489,6 +1623,64 @@ def _apply_stem_noise_gate(
             -0.1,
         )
     )
+    if (
+        normalized_role in {"vocals", "other"}
+        and delicate_guard > 0.0
+        and gate_profile["threshold_db"] is None
+    ):
+        gate_profile["threshold_ratio"] = float(
+            np.clip(
+                float(gate_profile["threshold_ratio"])
+                * (1.0 - delicate_guard * 0.3),
+                0.03,
+                0.22,
+            )
+        )
+        gate_profile["reduction_range_db"] = float(
+            np.clip(
+                float(gate_profile["reduction_range_db"])
+                * (1.0 - delicate_guard * 0.44),
+                6.0,
+                96.0,
+            )
+        )
+        gate_profile["hysteresis_db"] = float(
+            np.clip(
+                float(gate_profile["hysteresis_db"])
+                * (1.0 - delicate_guard * 0.16),
+                1.0,
+                24.0,
+            )
+        )
+        gate_profile["attack_ms"] = float(
+            np.clip(
+                float(gate_profile["attack_ms"]) + delicate_guard * 1.1,
+                0.1,
+                80.0,
+            )
+        )
+        gate_profile["hold_ms"] = float(
+            np.clip(
+                float(gate_profile["hold_ms"]) * (1.0 + delicate_guard * 0.7),
+                0.0,
+                500.0,
+            )
+        )
+        gate_profile["release_ms"] = float(
+            np.clip(
+                float(gate_profile["release_ms"])
+                * (1.0 + delicate_guard * 1.0),
+                1.0,
+                500.0,
+            )
+        )
+        gate_profile["soft_knee_db"] = float(
+            np.clip(
+                float(gate_profile["soft_knee_db"]) + delicate_guard * 2.4,
+                0.0,
+                24.0,
+            )
+        )
     self.last_stem_noise_gate_profile = dict(gate_profile)
 
     normalized_analysis = _normalize_gate_analysis_channels(
@@ -1712,6 +1904,7 @@ def apply_stem_cleanup(
     stem_role: str | None,
     audio_eq_fn: Callable[..., np.ndarray],
 ) -> np.ndarray:
+    normalized_role = _normalize_stem_role(stem_role)
     profile = getattr(self, "spectral_balance_profile", None)
     restoration_factor = float(
         np.clip(getattr(profile, "restoration_factor", 0.0), 0.0, 1.0)
@@ -1766,6 +1959,27 @@ def apply_stem_cleanup(
         stem_role,
         cleanup_pressure,
     )
+    provenance_profile = _resolve_stem_cleanup_provenance_profile(
+        self,
+        stem_role,
+    )
+    cleanup_pressure = float(
+        np.clip(
+            cleanup_pressure * (1.0 - provenance_profile["cleanup_relaxation"]),
+            0.0,
+            1.0,
+        )
+    )
+    if (
+        normalized_role in {"vocals", "other"}
+        and provenance_profile["repair_intensity"] > 0.0
+    ):
+        cleanup_pressure = float(
+            min(
+                cleanup_pressure,
+                0.22 + (1.0 - provenance_profile["repair_intensity"]) * 0.12,
+            )
+        )
     cleaned = y
     if cleanup_pressure > 0.04:
         cleanup_anchors = _resolve_stem_cleanup_anchors(
@@ -1808,6 +2022,32 @@ def apply_stem_cleanup(
         cleaned,
         stem_role=stem_role,
     )
+    if (
+        normalized_role in {"vocals", "other"}
+        and provenance_profile["repair_intensity"] > 0.0
+    ):
+        source_channels = _as_audio_channels(y)
+        cleaned_channels = _align_audio_channels(
+            cleaned,
+            int(source_channels.shape[-1]),
+        )
+        repair_restore_mix = float(
+            np.clip(
+                0.12
+                + provenance_profile["repair_intensity"] * 0.12
+                + provenance_profile["cleanup_relaxation"] * 0.18,
+                0.0,
+                0.34,
+            )
+        )
+        repair_restore_mask = _build_stem_cleanup_restore_mask(y)
+        repaired_channels = cleaned_channels * (
+            1.0 - repair_restore_mix * repair_restore_mask
+        )
+        repaired_channels += source_channels * (
+            repair_restore_mix * repair_restore_mask
+        )
+        cleaned = _restore_audio_layout(repaired_channels, y)
     return _restore_audio_dtype(cleaned, y.dtype)
 
 
