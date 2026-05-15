@@ -124,7 +124,7 @@ class AutobotIssueClassifier {
         AutobotIssueClassifier.pushUnique(labels, "matrix job");
       }
     }
-    if (/unit tests/.test(text)) {
+    if (/unit test/.test(text)) {
       AutobotIssueClassifier.pushUnique(labels, "unit test");
     }
     if (/integration test|scenario|regression/.test(text)) {
