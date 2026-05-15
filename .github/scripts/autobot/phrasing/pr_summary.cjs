@@ -256,20 +256,23 @@ function buildLabelRationaleLines(labels, context) {
 function buildPrDeterministicSummary(context) {
   const confidenceByLabel = buildLabelConfidenceMap(context.labelRationaleLines);
   const rationaleByLabel = buildLabelRationaleLineMap(context.labelRationaleLines);
-  let summaryLabels = (context.deterministicLabels || []).filter((label) => {
+  const allDeterministicLabels = Array.isArray(context.deterministicLabels) ? context.deterministicLabels : [];
+
+  let summaryLabels = allDeterministicLabels.filter((label) => {
     if (isGenericTechnicalLabel(label)) {
       return false;
     }
     return confidenceByLabel[label] !== "low";
   });
   if (summaryLabels.length === 0) {
-    summaryLabels = (context.deterministicLabels || [])
-      .filter((label) => !isGenericTechnicalLabel(label));
+    summaryLabels = allDeterministicLabels.filter((label) => !isGenericTechnicalLabel(label));
   }
   if (summaryLabels.length === 0) {
-    summaryLabels = (context.deterministicLabels || []).slice(0, 3);
+    summaryLabels = allDeterministicLabels.slice(0, 3);
   }
-  const labelRationaleLines = summaryLabels
+
+  const rationaleLabels = allDeterministicLabels.length > 0 ? allDeterministicLabels : summaryLabels;
+  const labelRationaleLines = rationaleLabels
     .map((label) => rationaleByLabel[label])
     .filter(Boolean);
   const highestSignalFiles = context.topFiles
@@ -290,8 +293,8 @@ function buildPrDeterministicSummary(context) {
           : null
       ].filter(Boolean);
   const decisionBullets = [
-    `Semver: ${context.releaseRelevant ? context.scoring.semver.decision : "none"}.`,
-    `Final emitted technical labels: ${summaryLabels.join(", ") || "(none)"}.`,
+    `Semver: ${context.releaseRelevant ? context.scoring.semver.decision : "n/a"}.`,
+    `Final emitted technical labels: ${allDeterministicLabels.join(", ") || "(none)"}.`,
     context.scoring.semver.hardSignals.length > 0
       ? `Hard release signals: ${context.scoring.semver.hardSignals.join(", ")}.`
       : null,
@@ -299,7 +302,7 @@ function buildPrDeterministicSummary(context) {
       ? "Structural public package moves indicate a likely breaking import or integration surface."
       : null
   ].filter(Boolean);
-  const labelEvidenceBullets = (summaryLabels || []).flatMap((label) => {
+  const labelEvidenceBullets = (rationaleLabels || []).flatMap((label) => {
     const supportFiles = collectSupportFilesForLabel(label, context.filesWithContext);
     if (supportFiles.length > 0) {
       return [`${label}: support in ${supportFiles.join(", ")}`];

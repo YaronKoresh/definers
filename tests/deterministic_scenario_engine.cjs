@@ -729,6 +729,17 @@ function buildPythonPatch(functionName, returnValue) {
   ].join("\n");
 }
 
+function deriveExpectedPipelineSemverDecision(scenario) {
+  if (scenario.pipelineSemverDecision !== undefined) {
+    return normalizeSemverDecision(scenario.pipelineSemverDecision);
+  }
+  if (!scenario.pipelineReleaseRelevant) {
+    return "none";
+  }
+  const expected = getScenarioOptimalResult(scenario);
+  return normalizeSemverDecision(expected.semverDecision);
+}
+
 function deriveExpectedPipelineMilestoneTitle(scenario) {
   if (scenario.pipelineMilestoneTitle !== undefined) {
     return scenario.pipelineMilestoneTitle;
@@ -1992,12 +2003,29 @@ function buildAutobotPipelineRawResult(result) {
 }
 
 function validateAutobotPipelineScenarioContract(scenario, result) {
-  const validation = validateAutobotScenarioContract(scenario, buildAutobotPipelineRawResult(result));
+  const expectedPipelineSemverDecision = deriveExpectedPipelineSemverDecision(scenario);
+  const pipelineSemverScenario = {
+    ...scenario,
+    expected: {
+      ...(scenario.expected || {}),
+      semverDecision: expectedPipelineSemverDecision
+    },
+    optimalResult: {
+      ...getScenarioOptimalResult(scenario),
+      semverDecision: expectedPipelineSemverDecision
+    }
+  };
+  const validation = validateAutobotScenarioContract(
+    pipelineSemverScenario,
+    buildAutobotPipelineRawResult(result)
+  );
   const expectedMilestoneTitle = deriveExpectedPipelineMilestoneTitle(scenario);
   const expected = getScenarioOptimalResult(scenario);
 
   if (expectedMilestoneTitle !== result.milestoneTitle) {
-    validation.deviations.push(`expected milestone ${expectedMilestoneTitle || "(none)"} but got ${result.milestoneTitle || "(none)"}`);
+    validation.deviations.push(
+      "expected milestone " + (expectedMilestoneTitle || "(none)") + " but got " + (result.milestoneTitle || "(none)")
+    );
   }
   if (!result.commentPresent) {
     validation.deviations.push("expected managed bot comment to be created");
@@ -2009,7 +2037,10 @@ function validateAutobotPipelineScenarioContract(scenario, result) {
     requiredFragments: ["## Autobot Summary", ...(expected.autobotCommentIncludes || [])]
   });
   if (Array.isArray(expected.failureOperations) && JSON.stringify(expected.failureOperations) !== JSON.stringify(result.failureOperations)) {
-    validation.deviations.push(`expected failure operations ${expected.failureOperations.join(", ") || "(none)"} but got ${result.failureOperations.join(", ") || "(none)"}`);
+    validation.deviations.push(
+      "expected failure operations " + (expected.failureOperations.join(", ") || "(none)")
+      + " but got " + (result.failureOperations.join(", ") || "(none)")
+    );
   }
   return validation;
 }
@@ -2100,7 +2131,8 @@ async function evaluateAutobotPipelineScenarioSuite({ config } = {}) {
       name: scenario.name,
       optimalResult: {
         ...getScenarioOptimalResult(scenario),
-        milestoneTitle: deriveExpectedPipelineMilestoneTitle(scenario)
+        milestoneTitle: deriveExpectedPipelineMilestoneTitle(scenario),
+        semverDecision: deriveExpectedPipelineSemverDecision(scenario)
       },
       passed: validation.deviations.length === 0,
       rawResult,

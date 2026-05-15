@@ -265,7 +265,7 @@ test("local diff preview analyzes the current git diff and renders a human-reada
   assert.ok(hasExpectedLabel(deterministicLabels, "security"));
   assert.ok(!deterministicLabels.includes("security"));
   assert.ok(hasExpectedLabel(candidateLabels, "api") || hasExpectedLabel(deterministicLabels, "api"));
-  assert.ok(report.includes("## Local Autobot Preview"));
+  assert.ok(/# Autobot .* Changes Analysis/.test(report));
   assert.ok(report.includes("Final emitted technical labels:"));
   assert.ok(!report.includes("Held back context labels:"));
   assert.ok(report.includes("### Decision"));
@@ -273,6 +273,210 @@ test("local diff preview analyzes the current git diff and renders a human-reada
   assert.ok(report.includes("Confidence"));
   assert.ok(report.includes("### Key Evidence"));
   assert.ok(report.includes("## Autobot Summary"));
+  assert.ok(report.includes("<!-- autobot-local-preview -->"));
+  assert.ok(report.includes("mode: working-tree"));
+  assert.ok(report.includes("diff: HEAD"));
+});
+
+test("local diff preview uses full pull-request commit range when base ref is available", () => {
+  const diffText = [
+    "diff --git a/src/repo/api/router.py b/src/repo/api/router.py",
+    "index 1111111..2222222 100644",
+    "--- a/src/repo/api/router.py",
+    "+++ b/src/repo/api/router.py",
+    "@@ -1 +1,2 @@",
+    "-def route():",
+    "+def route():",
+    "+    return \"ok\""
+  ].join("\n");
+
+  const preview = analyzeCurrentGitDiff({
+    cwd: "C:/repo",
+    env: {
+      GITHUB_BASE_REF: "main"
+    },
+    execFileSync: (_command, args) => {
+      const key = args.join(" ");
+      if (key === "rev-parse --show-toplevel") {
+        return "C:/repo\n";
+      }
+      if (key === "rev-parse --verify --quiet origin/main^{commit}") {
+        return "9f1a3b2\n";
+      }
+      if (key === "merge-base origin/main HEAD") {
+        return "abc123\n";
+      }
+      if (key === "diff --find-renames --no-ext-diff --no-color --unified=3 abc123..HEAD") {
+        return diffText;
+      }
+      if (key === "rev-parse --abbrev-ref HEAD") {
+        return "feature/pr-preview\n";
+      }
+      throw new Error("Unexpected git command: " + key);
+    },
+    readFileSync: () => {
+      throw new Error("Unexpected file read");
+    }
+  });
+
+  assert.equal(preview.previewMode, "pull-request");
+  assert.equal(preview.baseRef, "origin/main");
+  assert.equal(preview.diffSpec, "abc123..HEAD");
+  assert.equal(preview.snapshot.totals.filesChanged, 1);
+  assert.equal(preview.snapshot.totals.totalChanges, 3);
+});
+
+test("local diff preview uses gh pull request metadata offline when available", () => {
+  const diffText = [
+    "diff --git a/src/repo/api/router.py b/src/repo/api/router.py",
+    "index 1111111..2222222 100644",
+    "--- a/src/repo/api/router.py",
+    "+++ b/src/repo/api/router.py",
+    "@@ -1 +1,2 @@",
+    "-def route():",
+    "+def route():",
+    "+    return \"ok\""
+  ].join("\n");
+
+  const preview = analyzeCurrentGitDiff({
+    cwd: "C:/repo",
+    execFileSync: (command, args) => {
+      const key = command + " " + args.join(" ");
+      if (key === "git rev-parse --show-toplevel") {
+        return "C:/repo\n";
+      }
+      if (key === "gh pr view --json number,title,body,baseRefName,headRefName") {
+        return JSON.stringify({
+          number: 482,
+          title: "Improve deterministic analysis",
+          body: "Uses PR metadata offline.",
+          baseRefName: "release/next",
+          headRefName: "improve-autobot-deterministic-analysis"
+        }) + "\n";
+      }
+      if (key === "git rev-parse --verify --quiet origin/release/next^{commit}") {
+        return "9f1a3b2\n";
+      }
+      if (key === "git merge-base origin/release/next HEAD") {
+        return "abc123\n";
+      }
+      if (key === "git diff --find-renames --no-ext-diff --no-color --unified=3 abc123..HEAD") {
+        return diffText;
+      }
+      throw new Error("Unexpected command: " + key);
+    },
+    readFileSync: () => {
+      throw new Error("Unexpected file read");
+    }
+  });
+
+  const report = formatLocalDiffAnalysis(preview);
+
+  assert.equal(preview.previewMode, "pull-request");
+  assert.equal(preview.baseRef, "origin/release/next");
+  assert.equal(preview.diffSpec, "abc123..HEAD");
+  assert.equal(preview.snapshot.pullRequest.number, 482);
+  assert.equal(preview.snapshot.pullRequest.headRef, "improve-autobot-deterministic-analysis");
+  assert.ok(report.includes("PR #482"));
+});
+
+test("local diff preview falls back to git pull refs when gh lookups are unavailable", () => {
+  const diffText = [
+    "diff --git a/src/repo/api/router.py b/src/repo/api/router.py",
+    "index 1111111..2222222 100644",
+    "--- a/src/repo/api/router.py",
+    "+++ b/src/repo/api/router.py",
+    "@@ -1 +1,2 @@",
+    "-def route():",
+    "+def route():",
+    "+    return \"ok\""
+  ].join("\n");
+
+  const preview = analyzeCurrentGitDiff({
+    cwd: "C:/repo",
+    env: {
+      GITHUB_BASE_REF: "main"
+    },
+    execFileSync: (command, args) => {
+      const key = command + " " + args.join(" ");
+      if (key === "git rev-parse --show-toplevel") return "C:/repo\n";
+      if (key === "gh pr view --json number,title,body,baseRefName,headRefName") throw new Error("gh view unavailable");
+      if (key === "git rev-parse --abbrev-ref HEAD") return "improve-autobot-deterministic-analysis\n";
+      if (key === "gh pr list --state open --head improve-autobot-deterministic-analysis --json number,title,body,baseRefName,headRefName --limit 1") return "[]\n";
+      if (key === "git rev-parse HEAD") return "abcdef1234567890\n";
+      if (key === "git ls-remote --heads origin refs/heads/improve-autobot-deterministic-analysis") {
+        return "abcdef1234567890\trefs/heads/improve-autobot-deterministic-analysis\n";
+      }
+      if (key === "git ls-remote --refs origin refs/pull/*/head") {
+        return [
+          "1234567890abcdef\trefs/pull/12/head",
+          "abcdef1234567890\trefs/pull/915/head"
+        ].join("\n") + "\n";
+      }
+      if (key === "git rev-parse --verify --quiet origin/main^{commit}") return "9f1a3b2\n";
+      if (key === "git merge-base origin/main HEAD") return "abc123\n";
+      if (key === "git diff --find-renames --no-ext-diff --no-color --unified=3 abc123..HEAD") return diffText;
+      throw new Error("Unexpected command: " + key);
+    },
+    readFileSync: () => {
+      throw new Error("Unexpected file read");
+    }
+  });
+
+  const report = formatLocalDiffAnalysis(preview);
+
+  assert.equal(preview.snapshot.pullRequest.number, 915);
+  assert.equal(preview.pullRequestContextSource, "git-refs");
+  assert.ok(report.includes("PR #915"));
+  assert.ok(report.includes("pr-context: git-refs"));
+});
+
+test("local diff preview falls back to gh pr list by head when gh pr view is unavailable", () => {
+  const diffText = [
+    "diff --git a/src/repo/api/router.py b/src/repo/api/router.py",
+    "index 1111111..2222222 100644",
+    "--- a/src/repo/api/router.py",
+    "+++ b/src/repo/api/router.py",
+    "@@ -1 +1,2 @@",
+    "-def route():",
+    "+def route():",
+    "+    return \"ok\""
+  ].join("\n");
+
+  const preview = analyzeCurrentGitDiff({
+    cwd: "C:/repo",
+    execFileSync: (command, args) => {
+      const key = command + " " + args.join(" ");
+      if (key === "git rev-parse --show-toplevel") return "C:/repo\n";
+      if (key === "git rev-parse --abbrev-ref HEAD") return "improve-autobot-deterministic-analysis\n";
+      if (key === "gh pr view --json number,title,body,baseRefName,headRefName") {
+        throw new Error("no PR from gh pr view");
+      }
+      if (key === "gh pr list --state open --head improve-autobot-deterministic-analysis --json number,title,body,baseRefName,headRefName --limit 1") {
+        return JSON.stringify([{
+          number: 777,
+          title: "Fallback head lookup",
+          body: "Using gh pr list fallback.",
+          baseRefName: "main",
+          headRefName: "improve-autobot-deterministic-analysis"
+        }]) + "\n";
+      }
+      if (key === "git rev-parse --verify --quiet origin/main^{commit}") return "9f1a3b2\n";
+      if (key === "git merge-base origin/main HEAD") return "abc123\n";
+      if (key === "git diff --find-renames --no-ext-diff --no-color --unified=3 abc123..HEAD") return diffText;
+      throw new Error("Unexpected command: " + key);
+    },
+    readFileSync: () => {
+      throw new Error("Unexpected file read");
+    }
+  });
+
+  const report = formatLocalDiffAnalysis(preview);
+
+  assert.equal(preview.snapshot.pullRequest.number, 777);
+  assert.equal(preview.pullRequestContextSource, "gh-list");
+  assert.ok(report.includes("PR #777"));
+  assert.ok(report.includes("pr-context: gh-list"));
 });
 
 test("local preview script preserves legacy capture bundle formatting", () => {
@@ -346,7 +550,7 @@ test("local preview renders semver none for maintenance-only labels", () => {
   });
 
   assert.equal(outputs.release_relevant, "false");
-  assert.ok(report.includes("Semver: none."));
+  assert.ok(report.includes("Semver: n/a."));
   assert.ok(!report.includes("Semver: patch."));
 });
 
@@ -1846,6 +2050,17 @@ test("PR summary limits release relevance to version-impact signals", () => {
 test("project manager recreates the next patch milestone after demilestoning when a draft release already reserves the current version", async () => {
   const github = createAutobotPipelineGithubMock({
     issueLabels: ["security"],
+    comments: [
+      {
+        id: 901,
+        user: { login: "github-actions[bot]", type: "Bot" },
+        body: [
+          "<!-- autobot-summary -->",
+          "<!-- autobot-metadata:{\"autobotLabels\":[\"security\"],\"semverDecision\":\"patch\"} -->",
+          "## Autobot Summary"
+        ].join("\n")
+      }
+    ],
     releases: [
       { draft: true, id: 2, prerelease: false, tag_name: "v0.0.2" },
       { draft: false, id: 1, prerelease: false, tag_name: "v0.0.1" }

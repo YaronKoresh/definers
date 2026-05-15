@@ -7,6 +7,9 @@ const {
   normalizePatch
 } = require("../.github/scripts/autobot/pr_analysis.cjs");
 const {
+  buildPrCommentBody
+} = require("../.github/scripts/autobot/project_manager.cjs");
+const {
   formatRegressionFixtureEntry,
   normalizeScenarioRegressionFixture
 } = require("../tests/deterministic_scenario_regression_fixtures.cjs");
@@ -232,12 +235,13 @@ function buildLocalGitDiffSnapshot(input = {}) {
     additions: 0,
     deletions: 0
   });
+  const parsedNumber = Number.parseInt(String(input.number || 0), 10);
   return {
     files,
     pullRequest: {
       body: String(input.body || ""),
       headRef: String(input.headRef || ""),
-      number: 0,
+      number: Number.isFinite(parsedNumber) ? parsedNumber : 0,
       title: String(input.title || "")
     },
     totals: {
@@ -272,50 +276,410 @@ function parseNullSeparatedList(text) {
     .filter(Boolean);
 }
 
-function collectLocalGitDiffSnapshot(input = {}) {
+function safeParseJson(value, fallback) {
+  try {
+    return JSON.parse(String(value || ""));
+  } catch {
+    return fallback;
+  }
+}
+
+function runGitCommandOptional(args, input = {}) {
+  try {
+    return runGitCommand(args, input);
+  } catch {
+    return "";
+  }
+}
+
+function runCommandOptional(command, args, input = {}) {
+  const execFile = input.execFileSync || execFileSync;
   const cwd = input.cwd || process.cwd();
-  const baseRef = String(input.baseRef || process.env.AUTOBOT_LOCAL_BASE_REF || "HEAD").trim() || "HEAD";
+  try {
+    return String(execFile(command, args, {
+      cwd,
+      encoding: "utf8",
+      maxBuffer: 16 * 1024 * 1024
+    }) || "").trimEnd();
+  } catch {
+    return "";
+  }
+}
+
+function resolveVerifiedRef(refName, input = {}) {
+  const normalized = String(refName || "").trim();
+  if (!normalized) return "";
+  const verification = runGitCommandOptional(
+    ["rev-parse", "--verify", "--quiet", normalized + "^{commit}"],
+    input
+  ).trim();
+  return verification ? normalized : "";
+}
+
+function readPullRequestFromEnvironment(input = {}) {
+  const env = input.env || process.env;
+  const parsedNumber = Number.parseInt(String(env.AUTOBOT_PR_NUMBER || "").trim(), 10);
+  const baseRefName = String(env.AUTOBOT_PR_BASE_REF || "").trim();
+  const headRef = String(env.AUTOBOT_PR_HEAD_REF || "").trim();
+  const title = String(env.AUTOBOT_PR_TITLE || "").trim();
+  const body = String(env.AUTOBOT_PR_BODY || "");
+  if (!Number.isFinite(parsedNumber) && !baseRefName && !headRef && !title && !body) {
+    return null;
+  }
+  return {
+    baseRefName,
+    body,
+    headRef,
+    number: Number.isFinite(parsedNumber) ? parsedNumber : 0,
+    source: "env",
+    title
+  };
+}
+
+function readPullRequestFromEventPayload(input = {}) {
+  const env = input.env || process.env;
+  const readFileSync = input.readFileSync || fs.readFileSync;
+  const eventName = String(env.GITHUB_EVENT_NAME || "").toLowerCase();
+  const eventPath = String(env.GITHUB_EVENT_PATH || "").trim();
+  if (!eventPath || (eventName !== "pull_request" && eventName !== "pull_request_target")) {
+    return null;
+  }
+  try {
+    const payload = JSON.parse(readFileSync(eventPath, "utf8"));
+    const pullRequest = payload && payload.pull_request ? payload.pull_request : null;
+    if (!pullRequest) return null;
+    const parsedNumber = Number.parseInt(String(pullRequest.number || 0), 10);
+    return {
+      baseRefName: String((pullRequest.base && pullRequest.base.ref) || ""),
+      body: String(pullRequest.body || ""),
+      headRef: String((pullRequest.head && pullRequest.head.ref) || ""),
+      number: Number.isFinite(parsedNumber) ? parsedNumber : 0,
+      source: "event",
+      title: String(pullRequest.title || "")
+    };
+  } catch {
+    return null;
+  }
+}
+
+function readPullRequestFromGh(input = {}) {
+  const raw = runCommandOptional(
+    "gh",
+    ["pr", "view", "--json", "number,title,body,baseRefName,headRefName"],
+    input
+  ).trim();
+  if (!raw) return null;
+  try {
+    const pullRequest = JSON.parse(raw);
+    if (!pullRequest || !pullRequest.baseRefName) return null;
+    const parsedNumber = Number.parseInt(String(pullRequest.number || 0), 10);
+    return {
+      baseRefName: String(pullRequest.baseRefName || ""),
+      body: String(pullRequest.body || ""),
+      headRef: String(pullRequest.headRefName || ""),
+      number: Number.isFinite(parsedNumber) ? parsedNumber : 0,
+      source: "gh-view",
+      title: String(pullRequest.title || "")
+    };
+  } catch {
+    return null;
+  }
+}
+
+function readPullRequestFromGhByHead(input = {}) {
+  const headRef = runGitCommandOptional(["rev-parse", "--abbrev-ref", "HEAD"], input).trim();
+  if (!headRef || headRef === "HEAD") {
+    return null;
+  }
+
+  const headSelectors = [headRef];
+  const repoOwner = runCommandOptional("gh", ["repo", "view", "--json", "owner", "--jq", ".owner.login"], input).trim();
+  if (repoOwner) {
+    headSelectors.push(`${repoOwner}:${headRef}`);
+  }
+
+  for (const selector of headSelectors) {
+    const raw = runCommandOptional(
+      "gh",
+      ["pr", "list", "--state", "open", "--head", selector, "--json", "number,title,body,baseRefName,headRefName", "--limit", "1"],
+      input
+    ).trim();
+    if (!raw) {
+      continue;
+    }
+    try {
+      const items = JSON.parse(raw);
+      const pullRequest = Array.isArray(items) ? items[0] : null;
+      if (!pullRequest || !pullRequest.baseRefName) {
+        continue;
+      }
+      const parsedNumber = Number.parseInt(String(pullRequest.number || 0), 10);
+      return {
+        baseRefName: String(pullRequest.baseRefName || ""),
+        body: String(pullRequest.body || ""),
+        headRef: String(pullRequest.headRefName || headRef),
+        number: Number.isFinite(parsedNumber) ? parsedNumber : 0,
+        source: "gh-list",
+        title: String(pullRequest.title || "")
+      };
+    } catch { }
+  }
+
+  return null;
+}
+
+function readPullRequestFromRemoteRefs(input = {}) {
+  const env = input.env || process.env;
+  const remote = String(input.remote || env.AUTOBOT_PR_REMOTE || "origin").trim() || "origin";
+  const headRef = runGitCommandOptional(["rev-parse", "--abbrev-ref", "HEAD"], input).trim();
+  const localHeadSha = runGitCommandOptional(["rev-parse", "HEAD"], input).trim();
+
+  let remoteHeadSha = "";
+  if (headRef && headRef !== "HEAD") {
+    const remoteHeadLine = runGitCommandOptional(["ls-remote", "--heads", remote, `refs/heads/${headRef}`], input).trim();
+    if (remoteHeadLine) {
+      remoteHeadSha = String(remoteHeadLine.split(/\s+/)[0] || "").trim();
+    }
+  }
+
+  const candidateShas = new Set([localHeadSha, remoteHeadSha].filter(Boolean));
+  if (candidateShas.size === 0) {
+    return null;
+  }
+
+  const pullRefsText = runGitCommandOptional(["ls-remote", "--refs", remote, "refs/pull/*/head"], input).trim();
+  if (!pullRefsText) {
+    return null;
+  }
+
+  const matchingPrNumbers = [];
+  for (const line of pullRefsText.split(/\r?\n/)) {
+    const trimmed = String(line || "").trim();
+    if (!trimmed) {
+      continue;
+    }
+    const parts = trimmed.split(/\s+/);
+    if (parts.length < 2) {
+      continue;
+    }
+    const sha = String(parts[0] || "").trim();
+    const ref = String(parts[1] || "").trim();
+    const match = ref.match(/^refs\/pull\/(\d+)\/head$/);
+    if (!match || !candidateShas.has(sha)) {
+      continue;
+    }
+    const parsedNumber = Number.parseInt(String(match[1]), 10);
+    if (Number.isFinite(parsedNumber)) {
+      matchingPrNumbers.push(parsedNumber);
+    }
+  }
+
+  if (matchingPrNumbers.length === 0) {
+    return null;
+  }
+
+  matchingPrNumbers.sort((left, right) => left - right);
+
+  return {
+    baseRefName: "",
+    body: "",
+    headRef: headRef && headRef !== "HEAD" ? headRef : "",
+    number: matchingPrNumbers[0],
+    source: "git-refs",
+    title: ""
+  };
+}
+
+function resolvePreviewBase(input = {}) {
+  const env = input.env || process.env;
+  const explicitBaseRef = String(input.baseRef || env.AUTOBOT_LOCAL_BASE_REF || "").trim();
+  if (explicitBaseRef) {
+    return {
+      baseRef: explicitBaseRef,
+      previewMode: "working-tree"
+    };
+  }
+
+  const prBaseRef = String(input.pullRequestBaseRef || "").trim();
+  if (prBaseRef) {
+    const preferredRef = resolveVerifiedRef("origin/" + prBaseRef, input)
+      || resolveVerifiedRef(prBaseRef, input)
+      || prBaseRef;
+    return {
+      baseRef: preferredRef,
+      previewMode: "pull-request"
+    };
+  }
+
+  const ciBaseRef = String(env.GITHUB_BASE_REF || env.AUTOBOT_PR_BASE_REF || "").trim();
+  if (ciBaseRef) {
+    const preferredRef = resolveVerifiedRef("origin/" + ciBaseRef, input)
+      || resolveVerifiedRef(ciBaseRef, input)
+      || ciBaseRef;
+    return {
+      baseRef: preferredRef,
+      previewMode: "pull-request"
+    };
+  }
+
+  const currentBranch = runGitCommandOptional(["rev-parse", "--abbrev-ref", "HEAD"], input).trim();
+  const originHead = runGitCommandOptional(["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], input).trim();
+  const defaultBranch = originHead.replace(/^origin\//, "");
+  if (currentBranch && originHead && defaultBranch && currentBranch !== "HEAD" && currentBranch !== defaultBranch) {
+    return {
+      baseRef: originHead,
+      previewMode: "pull-request"
+    };
+  }
+
+  return {
+    baseRef: "HEAD",
+    previewMode: "working-tree"
+  };
+}
+
+function collectLocalGitDiffSnapshot(input = {}) {
+  const env = input.env || process.env;
+  const cwd = input.cwd || process.cwd();
+  const readFileSync = input.readFileSync || fs.readFileSync;
+
   const repoRoot = String(input.repoRoot || runGitCommand(["rev-parse", "--show-toplevel"], {
     cwd,
     execFileSync: input.execFileSync
   })).trim();
-  const diffText = String(input.diffText !== undefined ? input.diffText : runGitCommand([
-    "diff",
-    "--find-renames",
-    "--no-ext-diff",
-    "--no-color",
-    "--unified=3",
-    baseRef
-  ], {
+
+  const repoExecInput = {
     cwd: repoRoot,
     execFileSync: input.execFileSync
-  }));
-  const untrackedFiles = input.untrackedFiles || parseNullSeparatedList(runGitCommand([
-    "ls-files",
-    "--others",
-    "--exclude-standard",
-    "-z"
-  ], {
+  };
+
+  const envPullRequest = readPullRequestFromEnvironment({ env });
+  const eventPullRequest = envPullRequest ? null : readPullRequestFromEventPayload({
+    env,
+    readFileSync
+  });
+  const ghPullRequest = envPullRequest || eventPullRequest
+    ? null
+    : readPullRequestFromGh(repoExecInput);
+  const ghHeadPullRequest = envPullRequest || eventPullRequest || ghPullRequest
+    ? null
+    : readPullRequestFromGhByHead(repoExecInput);
+  const gitRefsPullRequest = envPullRequest || eventPullRequest || ghPullRequest || ghHeadPullRequest
+    ? null
+    : readPullRequestFromRemoteRefs({
+        ...repoExecInput,
+        env
+      });
+
+  const pullRequestContext = envPullRequest || eventPullRequest || ghPullRequest || ghHeadPullRequest || gitRefsPullRequest;
+  const pullRequestContextSource = pullRequestContext ? pullRequestContext.source : "none";
+
+  const baseResolution = resolvePreviewBase({
+    baseRef: input.baseRef,
     cwd: repoRoot,
-    execFileSync: input.execFileSync
-  }));
-  const readFileSync = input.readFileSync || fs.readFileSync;
+    env,
+    execFileSync: input.execFileSync,
+    pullRequestBaseRef: pullRequestContext ? pullRequestContext.baseRefName : ""
+  });
+
+  let baseRef = String(baseResolution.baseRef || "HEAD").trim() || "HEAD";
+  let previewMode = String(baseResolution.previewMode || "working-tree");
+  let diffSpec = baseRef;
+
+  if (previewMode === "pull-request") {
+    const mergeBase = String(
+      input.mergeBase || runGitCommandOptional(["merge-base", baseRef, "HEAD"], repoExecInput)
+    ).trim();
+    if (mergeBase) {
+      diffSpec = mergeBase + "..HEAD";
+    }
+  }
+
+  let diffText;
+  if (input.diffText !== undefined) {
+    diffText = String(input.diffText);
+  } else {
+    try {
+      diffText = runGitCommand([
+        "diff",
+        "--find-renames",
+        "--no-ext-diff",
+        "--no-color",
+        "--unified=3",
+        diffSpec
+      ], repoExecInput);
+    } catch (error) {
+      if (previewMode === "pull-request") {
+        previewMode = "working-tree";
+        baseRef = "HEAD";
+        diffSpec = "HEAD";
+        diffText = runGitCommand([
+          "diff",
+          "--find-renames",
+          "--no-ext-diff",
+          "--no-color",
+          "--unified=3",
+          "HEAD"
+        ], repoExecInput);
+      } else {
+        throw error;
+      }
+    }
+  }
+
+  const includeUntracked = input.includeUntracked !== undefined
+    ? Boolean(input.includeUntracked)
+    : previewMode !== "pull-request";
+
+  const untrackedFiles = includeUntracked
+    ? (input.untrackedFiles || parseNullSeparatedList(runGitCommand([
+        "ls-files",
+        "--others",
+        "--exclude-standard",
+        "-z"
+      ], repoExecInput)))
+    : [];
+
+const resolvedTitle = input.title !== undefined
+  ? input.title
+  : (env.AUTOBOT_LOCAL_TITLE !== undefined
+    ? env.AUTOBOT_LOCAL_TITLE
+    : (pullRequestContext ? pullRequestContext.title : ""));
+
+const resolvedBody = input.body !== undefined
+  ? input.body
+  : (env.AUTOBOT_LOCAL_BODY !== undefined
+    ? env.AUTOBOT_LOCAL_BODY
+    : (pullRequestContext ? pullRequestContext.body : ""));
+
+const resolvedNumber = input.number !== undefined
+  ? Number.parseInt(String(input.number), 10)
+  : (pullRequestContext ? pullRequestContext.number : 0);
+
+const resolvedHeadRef = input.headRef
+  || (pullRequestContext ? pullRequestContext.headRef : "")
+  || runGitCommand(["rev-parse", "--abbrev-ref", "HEAD"], repoExecInput);
+
   const snapshot = buildLocalGitDiffSnapshot({
     baseRef,
-    body: input.body !== undefined ? input.body : process.env.AUTOBOT_LOCAL_BODY,
+    body: resolvedBody,
     diffText,
-    headRef: input.headRef || runGitCommand(["rev-parse", "--abbrev-ref", "HEAD"], {
-      cwd: repoRoot,
-      execFileSync: input.execFileSync
-    }),
-    readFileText: (filename) => readFileSync(path.join(repoRoot, filename), "utf8"),
-    title: input.title !== undefined ? input.title : process.env.AUTOBOT_LOCAL_TITLE,
+    headRef: resolvedHeadRef,
+    number: Number.isFinite(resolvedNumber) ? resolvedNumber : 0,
+    readFileText: function (filename) {
+      return readFileSync(path.join(repoRoot, filename), "utf8");
+    },
+    title: resolvedTitle,
     untrackedFiles
   });
+
   return {
     baseRef,
+    diffSpec,
+    previewMode,
     repoRoot,
-    snapshot
+    snapshot,
+    pullRequestContextSource,
   };
 }
 
@@ -328,21 +692,35 @@ function analyzeCurrentGitDiff(input = {}) {
 }
 
 function formatLocalDiffAnalysis(input) {
-  const lines = [
-    "## Local Autobot Preview",
-    "",
-    `Repository: ${input.repoRoot}`,
-    `Base ref: ${input.baseRef}`,
-    `Branch: ${input.snapshot.pullRequest.headRef || "(detached)"}`,
-    `Files changed: ${input.snapshot.totals.filesChanged} (+${input.snapshot.totals.additions} -${input.snapshot.totals.deletions})`,
+  const deterministicLabels = safeParseJson(input.outputs.deterministic_labels_json, []);
+  const deterministicSemver = safeParseJson(input.outputs.deterministic_semver_json, {});
+  const releaseRelevant = String(input.outputs.release_relevant || "").toLowerCase() === "true";
+  const rawPrNumber = Number.parseInt(String(input.snapshot.pullRequest.number || 0), 10);
+  const displayPrNumber = Number.isFinite(rawPrNumber) && rawPrNumber > 0
+    ? rawPrNumber
+    : "local-preview";
+
+  const onlineBody = buildPrCommentBody({
+    summaryForComment: input.outputs.deterministic_summary,
+    pullRequest: {
+      base: { ref: String(input.baseRef || "HEAD") },
+      head: { ref: String(input.snapshot.pullRequest.headRef || "(detached)") },
+      number: displayPrNumber
+    },
+    nextAutobotLabels: Array.isArray(deterministicLabels) ? deterministicLabels : [],
+    semverDecision: releaseRelevant ? String(deterministicSemver.decision || "none") : "none"
+  });
+
+  const metadataLines = [
+    "<!-- autobot-local-preview -->",
+    "<!-- mode: " + String(input.previewMode || "working-tree") + " -->",
+    "<!-- base: " + String(input.baseRef || "HEAD") + " -->",
+    "<!-- diff: " + String(input.diffSpec || input.baseRef || "HEAD") + " -->",
+    "<!-- pr-context: " + String(input.pullRequestContextSource || "none") + " -->",
     ""
   ];
-  if (input.snapshot.files.length === 0) {
-    lines.push("No local git diff changes were detected for this preview.");
-    lines.push("");
-  }
-  lines.push(input.outputs.deterministic_summary);
-  return lines.join("\n");
+
+  return metadataLines.join("\n") + onlineBody;
 }
 
 function main() {

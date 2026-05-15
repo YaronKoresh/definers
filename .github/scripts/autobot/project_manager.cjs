@@ -454,8 +454,15 @@ async function resolveRequiredBump({ github, owner, repo, releaseItems, currentL
   return releaseBump === "none" ? "patch" : releaseBump;
 }
 
-function buildPrCommentBody({ summaryForComment, pullRequest, nextAutobotLabels }) {
+function normalizeSummarySemverForComment(summaryForComment, semverDecision) {
+  const normalizedDecision = normalizeBumpType(semverDecision);
+  const semverText = normalizedDecision === "none" ? "n/a" : normalizedDecision;
+  return String(summaryForComment || "").replace(/- Semver:\s*[^\n]*/i, `- Semver: ${semverText}.`);
+}
+
+function buildPrCommentBody({ summaryForComment, pullRequest, nextAutobotLabels, semverDecision }) {
   const appliedLabels = nextAutobotLabels.map((label) => `\`${label}\``).join(" ") || "_none_";
+  const normalizedSummaryForComment = normalizeSummarySemverForComment(summaryForComment, semverDecision);
   return [
     "# Autobot — Changes Analysis",
     "",
@@ -463,7 +470,7 @@ function buildPrCommentBody({ summaryForComment, pullRequest, nextAutobotLabels 
     "",
     "---",
     "",
-    summaryForComment,
+    normalizedSummaryForComment,
     "",
     "---",
     "",
@@ -578,6 +585,7 @@ async function prepareProjectState(input) {
   const rawAutobotLabels = String(autobotLabelsRaw ?? input.aiLabelsRaw ?? "").trim();
   const parsedAutobotLabels = trimLowSignalLabels(parseAutobotLabels(rawAutobotLabels));
   const deterministicSemver = isPR ? parseDeterministicSemver(deterministicSemverRaw) : null;
+  let resolvedSemverDecision = "none";
 
   let issueLabelsToAdd = [];
   let previousBotLabels = [];
@@ -609,11 +617,17 @@ async function prepareProjectState(input) {
     labelsToAdd = prLabelDelta.labelsToAdd;
   }
 
+  const prIsReleaseRelevant = isPR && hasReleaseRelevantLabel(nextAutobotLabels);
+  resolvedSemverDecision = prIsReleaseRelevant
+    ? normalizeBumpType(deterministicSemver?.decision || bumpForLabels(nextAutobotLabels))
+    : "none";
+
   if (isPR && summaryForComment) {
     commentBody = buildPrCommentBody({
       summaryForComment,
       pullRequest: payload.pull_request,
-      nextAutobotLabels
+      nextAutobotLabels,
+      semverDecision: resolvedSemverDecision
     });
   }
 
@@ -627,7 +641,7 @@ async function prepareProjectState(input) {
     labelsToAdd,
     nextAutobotLabels,
     deterministicSemver,
-    semverDecision: deterministicSemver?.decision || bumpForLabels(nextAutobotLabels),
+    semverDecision: resolvedSemverDecision,
     commentBody
   };
   writeState(stateFile, state);
@@ -685,11 +699,12 @@ async function syncProjectMilestone({ github, owner, repo, context, issueNumber 
   const currentLabelNames = freshIssue.data.labels.map((label) => normalizeLabelName(label.name));
   const currentBotComment = isPR ? await getExistingBotComment({ github, owner, repo, issueNumber }) : null;
   const currentBotMetadata = currentBotComment ? extractBotMetadata(currentBotComment.body) : {};
-  const currentSemverDecision = semverDecisionFromMetadata(currentBotMetadata);
+  const currentSemverDecision = normalizeBumpType(semverDecisionFromMetadata(currentBotMetadata));
   const metadataCache = new Map();
   if (isPR && currentBotComment) {
     metadataCache.set(issueNumber, currentBotMetadata);
   }
+
   const releaseRelevant = hasReleaseRelevantLabel(currentLabelNames);
   if (!isPR) {
     if (freshIssue.data.milestone && !releaseRelevant) {
@@ -697,12 +712,20 @@ async function syncProjectMilestone({ github, owner, repo, context, issueNumber 
     }
     return;
   }
-  if (!releaseRelevant) {
+
+  const existingMajorAlertComment = await getExistingMajorAlertComment({ github, owner, repo, issueNumber });
+  const currentPrIsReleasable = releaseRelevant && currentSemverDecision !== "none";
+
+  if (!currentPrIsReleasable) {
+    if (existingMajorAlertComment) {
+      await github.rest.issues.deleteComment({ owner, repo, comment_id: existingMajorAlertComment.id });
+    }
     if (freshIssue.data.milestone) {
       await github.rest.issues.update({ owner, repo, issue_number: issueNumber, milestone: null });
     }
     return;
   }
+
   const issueHadMilestoneBeforeAutobot = Boolean(freshIssue.data.milestone);
   const existingMilestone = freshIssue.data.milestone
     ? (await github.rest.issues.getMilestone({ owner, repo, milestone_number: freshIssue.data.milestone.number })).data
@@ -716,18 +739,7 @@ async function syncProjectMilestone({ github, owner, repo, context, issueNumber 
     milestone = highestOpenVersionMilestone;
   }
   const previewMilestoneWithBase = await ensureMilestoneBaseVersion({ github, owner, repo, milestone });
-  const previewManagedMilestones = await listManagedSemverMilestones({ github, owner, repo, targetMilestone: previewMilestoneWithBase.milestone });
-  const previewReleaseItems = await listReleaseItemsForMilestones({ github, owner, repo, milestones: previewManagedMilestones });
-  const previewRequiredBump = await resolveRequiredBump({
-    github,
-    owner,
-    repo,
-    releaseItems: previewReleaseItems,
-    currentLabelNames,
-    currentIssueNumber: issueNumber,
-    currentSemverDecision,
-    metadataCache
-  });
+  const previewRequiredBump = currentSemverDecision;
   const targetVersion = computeTargetVersion(previewMilestoneWithBase.baseVersion, previewRequiredBump);
   if (isVersionTag(targetVersion) && compareVersions(targetVersion, milestone.title) > 0) {
     milestone = await getOrCreateMilestoneByTitle({ github, owner, repo, title: targetVersion });
@@ -739,10 +751,7 @@ async function syncProjectMilestone({ github, owner, repo, context, issueNumber 
   if (milestoneChanged) {
     await github.rest.issues.update({ owner, repo, issue_number: issueNumber, milestone: milestone.number });
   }
-  const items = await github.paginate(github.rest.issues.listForRepo, { owner, repo, milestone: milestone.number, state: "all" });
-  const releaseItems = items.filter((item) => item.pull_request && hasReleaseRelevantLabel(item.labels));
-  const currentPrRequiresMajorRelease = currentSemverDecision === "major" || currentLabelNames.includes("breaking-change");
-  const existingMajorAlertComment = await getExistingMajorAlertComment({ github, owner, repo, issueNumber });
+  const currentPrRequiresMajorRelease = currentSemverDecision === "major";
   if (currentPrRequiresMajorRelease && isPR) {
     if (!existingMajorAlertComment) {
       await github.rest.issues.createComment({ owner, repo, issue_number: issueNumber, body: `🚨 **MAJOR RELEASE ALERT** 🚨\n\n@${owner} This PR triggers a **major** version bump based on deterministic release-impact analysis.` });
@@ -750,19 +759,12 @@ async function syncProjectMilestone({ github, owner, repo, context, issueNumber 
   } else if (existingMajorAlertComment) {
     await github.rest.issues.deleteComment({ owner, repo, comment_id: existingMajorAlertComment.id });
   }
+
   const milestoneWithBase = await ensureMilestoneBaseVersion({ github, owner, repo, milestone });
   const shouldRespectManualMilestone = milestoneWithBase.manualTitleLocked || (issueHadMilestoneBeforeAutobot && !milestoneWithBase.hadManagedMarker && !isVersionTag(milestoneWithBase.milestone.title));
   if (shouldRespectManualMilestone) return;
-  const requiredBump = await resolveRequiredBump({
-    github,
-    owner,
-    repo,
-    releaseItems,
-    currentLabelNames,
-    currentIssueNumber: issueNumber,
-    currentSemverDecision,
-    metadataCache
-  });
+
+  const requiredBump = currentSemverDecision;
   const computedTitle = computeTargetVersion(milestoneWithBase.baseVersion, requiredBump);
   const newTitle = compareVersions(computedTitle, milestoneWithBase.milestone.title) > 0 ? computedTitle : milestoneWithBase.milestone.title;
   if (newTitle !== milestoneWithBase.milestone.title) {
