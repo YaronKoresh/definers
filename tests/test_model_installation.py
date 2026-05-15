@@ -229,18 +229,20 @@ def test_enhanced_rvc_fork_folder_paths_default_to_package_root():
     )
 
 
-def test_download_stem_models_targets_only_requested_files(
+def test_download_stem_models_allows_legacy_alias_when_supported_files_are_partial(
     monkeypatch, tmp_path
 ):
-    created_kwargs = []
     downloaded_models = []
 
     class FakeSeparator:
         def __init__(self, **kwargs):
-            created_kwargs.append(dict(kwargs))
+            self.model_file_dir = kwargs["model_file_dir"]
 
         def download_model_files(self, model_name):
             downloaded_models.append(model_name)
+
+    def fake_download_audio_separator_model_direct(separator, model_name):
+        raise RuntimeError("direct download unavailable")
 
     fake_audio_separator = ModuleType("audio_separator")
     fake_separator_module = ModuleType("audio_separator.separator")
@@ -261,14 +263,131 @@ def test_download_stem_models_targets_only_requested_files(
         "install_audio_separator_runtime_hooks",
         lambda: True,
     )
+    monkeypatch.setattr(
+        model_installation,
+        "supported_audio_separator_model_files",
+        lambda: frozenset({"catalog-only.ckpt"}),
+    )
+    monkeypatch.setattr(
+        model_installation,
+        "_download_audio_separator_model_direct",
+        fake_download_audio_separator_model_direct,
+    )
     monkeypatch.setenv("AUDIO_SEPARATOR_MODEL_DIR", str(tmp_path))
 
     downloaded = model_installation.download_stem_models(
-        ["deverb.ckpt", "deverb.ckpt", "denoise.ckpt"]
+        ["deverb_bs_roformer_8_256dim_8depth.ckpt"]
     )
 
-    assert downloaded == ("deverb.ckpt", "denoise.ckpt")
-    assert downloaded_models == ["deverb.ckpt", "denoise.ckpt"]
+    assert downloaded == ("deverb_bs_roformer_8_256dim_8depth.ckpt",)
+    assert downloaded_models == ["deverb_bs_roformer_8_256dim_8depth.ckpt"]
+
+
+def test_download_stem_models_rejects_unknown_model_when_catalog_is_present(
+    monkeypatch, tmp_path
+):
+    attempted_fallback_downloads = []
+
+    class FakeSeparator:
+        def __init__(self, **kwargs):
+            self.model_file_dir = kwargs["model_file_dir"]
+
+        def download_model_files(self, model_name):
+            attempted_fallback_downloads.append(model_name)
+
+    fake_audio_separator = ModuleType("audio_separator")
+    fake_separator_module = ModuleType("audio_separator.separator")
+    fake_separator_module.Separator = FakeSeparator
+
+    monkeypatch.setitem(sys.modules, "audio_separator", fake_audio_separator)
+    monkeypatch.setitem(
+        sys.modules,
+        "audio_separator.separator",
+        fake_separator_module,
+    )
+    monkeypatch.setattr(
+        "definers.model_installation.ensure_module_runtime",
+        lambda name: name == "audio_separator",
+    )
+    monkeypatch.setattr(
+        model_installation,
+        "install_audio_separator_runtime_hooks",
+        lambda: True,
+    )
+    monkeypatch.setattr(
+        model_installation,
+        "supported_audio_separator_model_files",
+        lambda: frozenset({"catalog-only.ckpt"}),
+    )
+    monkeypatch.setenv("AUDIO_SEPARATOR_MODEL_DIR", str(tmp_path))
+
+    try:
+        model_installation.download_stem_models(
+            ["totally_unknown_model_name.onnx"]
+        )
+    except ValueError as error:
+        assert str(error) == (
+            "Unsupported audio-separator model: totally_unknown_model_name.onnx"
+        )
+    else:
+        assert False
+
+    assert attempted_fallback_downloads == []
+
+
+def test_download_stem_models_targets_only_requested_files(
+    monkeypatch, tmp_path
+):
+    created_kwargs = []
+    downloaded_models = []
+
+    class FakeSeparator:
+        def __init__(self, **kwargs):
+            created_kwargs.append(dict(kwargs))
+
+        def download_model_files(self, model_name):
+            downloaded_models.append(model_name)
+
+    def fake_download_audio_separator_model_direct(separator, model_name):
+        raise RuntimeError("direct download unavailable")
+
+    fake_audio_separator = ModuleType("audio_separator")
+    fake_separator_module = ModuleType("audio_separator.separator")
+    fake_separator_module.Separator = FakeSeparator
+
+    monkeypatch.setitem(sys.modules, "audio_separator", fake_audio_separator)
+    monkeypatch.setitem(
+        sys.modules,
+        "audio_separator.separator",
+        fake_separator_module,
+    )
+    monkeypatch.setattr(
+        "definers.model_installation.ensure_module_runtime",
+        lambda name: name == "audio_separator",
+    )
+    monkeypatch.setattr(
+        model_installation,
+        "install_audio_separator_runtime_hooks",
+        lambda: True,
+    )
+    monkeypatch.setattr(
+        model_installation,
+        "supported_audio_separator_model_files",
+        lambda: frozenset({"catalog-only.ckpt"}),
+    )
+    monkeypatch.setattr(
+        model_installation,
+        "_download_audio_separator_model_direct",
+        fake_download_audio_separator_model_direct,
+    )
+    monkeypatch.setenv("AUDIO_SEPARATOR_MODEL_DIR", str(tmp_path))
+
+    downloaded = model_installation.download_stem_models(
+        ["htdemucs_ft.yaml", "htdemucs_ft.yaml", "hdemucs_mmi.yaml"]
+    )
+
+    assert downloaded == ("htdemucs_ft.yaml", "hdemucs_mmi.yaml")
+    assert downloaded_models == ["htdemucs_ft.yaml", "hdemucs_mmi.yaml"]
     assert created_kwargs == [
         {
             "output_dir": str(tmp_path.resolve()),
@@ -433,6 +552,57 @@ def test_patched_audio_separator_download_prefers_nomadkaraoke_mirror(
     ]
 
 
+def test_patched_audio_separator_list_supported_model_files_merges_catalogs(
+    monkeypatch, tmp_path
+):
+    class FakeSeparator:
+        model_file_dir = str(tmp_path)
+
+    monkeypatch.setattr(
+        model_installation,
+        "_audio_separator_supported_model_catalog",
+        lambda model_root: {
+            "Demucs": {
+                "Demucs v4: htdemucs_ft": {
+                    "filename": "htdemucs_ft.yaml",
+                    "download_files": ("htdemucs_ft.yaml",),
+                }
+            }
+        },
+    )
+    monkeypatch.setattr(
+        model_installation,
+        "_AUDIO_SEPARATOR_ORIGINAL_LIST_SUPPORTED_MODEL_FILES",
+        lambda separator: {
+            "Demucs": {
+                "Demucs v4: htdemucs_ft": {
+                    "filename": "old.yaml",
+                    "download_files": ("old.yaml",),
+                }
+            },
+            "MDXC": {
+                "Direct model": {
+                    "filename": "deverb.ckpt",
+                    "download_files": ("deverb.ckpt", "config.yaml"),
+                }
+            },
+        },
+    )
+
+    merged_catalog = (
+        model_installation._patched_audio_separator_list_supported_model_files(
+            FakeSeparator()
+        )
+    )
+
+    assert (
+        merged_catalog["Demucs"]["Demucs v4: htdemucs_ft"]["filename"]
+        == "htdemucs_ft.yaml"
+    )
+    assert "MDXC" in merged_catalog
+    assert "Direct model" in merged_catalog["MDXC"]
+
+
 def test_patched_audio_separator_download_prefers_nomadkaraoke_demucs_mirror(
     monkeypatch, tmp_path
 ):
@@ -546,16 +716,11 @@ def test_download_audio_separator_model_direct_tries_secondary_url(
 
 
 def test_supported_audio_separator_model_files_includes_remote_demucs_models(
-    monkeypatch, tmp_path
+    monkeypatch,
 ):
     monkeypatch.setattr(
         "definers.model_installation.ensure_module_runtime",
         lambda name: name == "audio_separator",
-    )
-    monkeypatch.setattr(
-        model_installation,
-        "_audio_separator_packaged_models_payload",
-        lambda: {},
     )
     monkeypatch.setattr(
         model_installation,
@@ -564,13 +729,30 @@ def test_supported_audio_separator_model_files_includes_remote_demucs_models(
     )
     monkeypatch.setattr(
         model_installation,
-        "_audio_separator_download_checks_payload",
-        lambda model_root: {
+        "_audio_separator_packaged_models_payload",
+        lambda: {
             "demucs_download_list": {
                 "Demucs v4: htdemucs_ft": {
                     "f7e0c4bc-ba3fe64a.th": "https://example.com/f7e0c4bc-ba3fe64a.th",
-                    "d12395a8-e57c48e6.th": "https://example.com/d12395a8-e57c48e6.th",
                     "htdemucs_ft.yaml": "https://example.com/htdemucs_ft.yaml",
+                }
+            },
+            "demucs_download_vip_list": {
+                "Demucs v4: htdemucs": {
+                    "955717e8-8726e21a.th": "https://example.com/955717e8-8726e21a.th",
+                    "htdemucs.yaml": "https://example.com/htdemucs.yaml",
+                }
+            },
+        },
+    )
+    monkeypatch.setattr(
+        model_installation,
+        "_audio_separator_download_checks_payload",
+        lambda model_root: {
+            "demucs_download_vip_list": {
+                "Demucs v4: hdemucs_mmi": {
+                    "75fc33f5-1941ce65.th": "https://example.com/75fc33f5-1941ce65.th",
+                    "hdemucs_mmi.yaml": "https://example.com/hdemucs_mmi.yaml",
                 }
             }
         },
@@ -580,6 +762,8 @@ def test_supported_audio_separator_model_files_includes_remote_demucs_models(
     supported_files = model_installation.supported_audio_separator_model_files()
 
     assert "htdemucs_ft.yaml" in supported_files
+    assert "htdemucs.yaml" in supported_files
+    assert "hdemucs_mmi.yaml" in supported_files
 
 
 def test_stem_model_artifacts_ready_requires_all_companion_files(

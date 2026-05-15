@@ -880,11 +880,26 @@ def _audio_separator_supported_model_catalog(
         ),
     }
 
+    demucs_model_sources = {
+        **_audio_separator_payload_section(
+            download_checks,
+            "demucs_download_list",
+        ),
+        **_audio_separator_payload_section(
+            download_checks,
+            "demucs_download_vip_list",
+        ),
+        **_audio_separator_payload_section(
+            packaged_models,
+            "demucs_download_list",
+        ),
+        **_audio_separator_payload_section(
+            packaged_models,
+            "demucs_download_vip_list",
+        ),
+    }
     demucs_models: dict[str, dict[str, object]] = {}
-    for model_name, model_files in _audio_separator_payload_section(
-        download_checks,
-        "demucs_download_list",
-    ).items():
+    for model_name, model_files in demucs_model_sources.items():
         if not str(model_name).startswith("Demucs v4"):
             continue
         if not isinstance(model_files, dict):
@@ -1656,9 +1671,32 @@ def _patched_audio_separator_download_file_if_not_exists(
 def _patched_audio_separator_list_supported_model_files(separator):
     model_root = Path(str(separator.model_file_dir)).resolve()
     catalog = _audio_separator_supported_model_catalog(str(model_root))
+
+    original_loader = _AUDIO_SEPARATOR_ORIGINAL_LIST_SUPPORTED_MODEL_FILES
+    fallback_catalog: dict[str, object] = {}
+    if callable(original_loader):
+        with contextlib.suppress(Exception):
+            loaded_catalog = original_loader(separator)
+            if isinstance(loaded_catalog, dict):
+                fallback_catalog = loaded_catalog
+
+    if fallback_catalog:
+        merged_catalog: dict[str, dict[str, dict[str, object]]] = {}
+        for source_catalog in (fallback_catalog, catalog):
+            if not isinstance(source_catalog, dict):
+                continue
+            for model_type, models in source_catalog.items():
+                if not isinstance(models, dict):
+                    continue
+                target_group = merged_catalog.setdefault(str(model_type), {})
+                for model_name, model_info in models.items():
+                    if isinstance(model_info, dict):
+                        target_group[str(model_name)] = dict(model_info)
+        if merged_catalog:
+            return merged_catalog
+
     if catalog:
         return catalog
-    original_loader = _AUDIO_SEPARATOR_ORIGINAL_LIST_SUPPORTED_MODEL_FILES
     if original_loader is None:
         raise RuntimeError("audio-separator model catalog is unavailable")
     return original_loader(separator)
@@ -2099,8 +2137,14 @@ def download_stem_models(
             "overlap": 4,
         },
     )
+
     for index, model_name in enumerate(requested_to_download, start=1):
-        if supported_files and model_name not in supported_files:
+        if (
+            supported_files
+            and model_name not in supported_files
+            and model_name not in STEM_MODEL_FILES
+            and model_name not in _LEGACY_STEM_MODEL_ALIASES
+        ):
             raise ValueError(f"Unsupported audio-separator model: {model_name}")
         _report_download_activity(
             model_name,
