@@ -1,4 +1,4 @@
-const { AutobotLabelRegistry, LABEL_DEFINITIONS } = require("../labels.cjs");
+const { AutobotLabelRegistry, LABEL_DEFINITIONS } = require("../labels/registry.cjs");
 
 const MAX_EMITTED_LABELS = Number.POSITIVE_INFINITY;
 
@@ -12,7 +12,7 @@ const SCOPE_MULTIPLIERS = Object.freeze({
 const CONFIDENCE_MULTIPLIERS = Object.freeze({
   structural: 1.0,
   corroborated: 0.8,
-  lexical: 0.45,
+  lexical: 0.6,
   title: 0.25
 });
 
@@ -25,16 +25,16 @@ const LABEL_THRESHOLDS = Object.freeze({
 const PRODUCTION_SCORING_DEFAULTS = Object.freeze({
   fallbackLabelFloor: 0.2,
   minFallbackEmittedLabels: 2,
-  supportCountEmitBonus: 0.03,
+  supportCountEmitBonus: 0.05,
   supportCountPrimaryBonus: 0.02,
   supportCountRetainBonus: 0.025,
   supportCountCap: 4,
-  supportGateForLowScore: 2,
+  supportGateForLowScore: 1,
   diversityWeight: 0.2,
   diversityCap: 0.2,
   categoryCoverageWeight: 0.1,
   categoryCoverageCap: 0.1,
-  broadLabelDescendantThreshold: 6,
+  broadLabelDescendantThreshold: 10,
   broadLabelMinSupport: 2,
   broadLabelMinDirectRawScore: 0.2,
   specificityDepthWeight: 0.04,
@@ -352,7 +352,8 @@ const EVIDENCE_RULES = Object.freeze({
     labelBoosts: Object.freeze({
       migration: 0.95,
       compatibility: 0.35,
-      "breaking-change": 0.45
+      "breaking-change": 0.45,
+      deprecation: 0.4
     })
   }),
   "runtime-support-added": Object.freeze({
@@ -429,7 +430,8 @@ const EVIDENCE_RULES = Object.freeze({
     }),
     labelBoosts: Object.freeze({
       compatibility: 0.85,
-      improvement: 0.2
+      improvement: 0.2,
+      deprecation: 0.2
     })
   }),
   "compatibility-drop": Object.freeze({
@@ -446,7 +448,8 @@ const EVIDENCE_RULES = Object.freeze({
     }),
     labelBoosts: Object.freeze({
       compatibility: 0.95,
-      "breaking-change": 0.7
+      "breaking-change": 0.7,
+      deprecation: 0.45
     }),
     hardSemver: "major"
   }),
@@ -688,7 +691,8 @@ const EVIDENCE_RULES = Object.freeze({
       "patch-maintenance": 0.4
     }),
     labelBoosts: Object.freeze({
-      validation: 0.95
+      validation: 0.95,
+      lint: 0.35
     })
   }),
   "performance-optimization": Object.freeze({
@@ -992,7 +996,8 @@ const EVIDENCE_RULES = Object.freeze({
       "minor-operational-capability": 0.2
     }),
     labelBoosts: Object.freeze({
-      config: 0.95
+      config: 0.95,
+      chore: 0.25
     })
   }),
   "dependency-capability-expansion": Object.freeze({
@@ -1109,7 +1114,9 @@ const EVIDENCE_RULES = Object.freeze({
     }),
     labelBoosts: Object.freeze({
       tooling: 0.95,
-      dx: 0.45
+      dx: 0.45,
+      improvement: 0.2,
+      lint: 0.4
     })
   }),
   "devcontainer-surface-change": Object.freeze({
@@ -1167,7 +1174,10 @@ const EVIDENCE_RULES = Object.freeze({
     }),
     labelBoosts: Object.freeze({
       cleanup: 0.95,
-      refactor: 0.2
+      refactor: 0.2,
+      quality: 0.15,
+      lint: 0.15,
+      chore: 0.4
     })
   }),
   "refactor-net-line-change": Object.freeze({
@@ -1186,7 +1196,9 @@ const EVIDENCE_RULES = Object.freeze({
     labelBoosts: Object.freeze({
       refactor: 0.95,
       quality: 0.6,
-      cleanup: 0.2
+      cleanup: 0.2,
+      improvement: 0.2,
+      lint: 0.25
     })
   }),
   "refactor-maintainability": Object.freeze({
@@ -1203,7 +1215,9 @@ const EVIDENCE_RULES = Object.freeze({
     }),
     labelBoosts: Object.freeze({
       refactor: 0.95,
-      quality: 0.55
+      quality: 0.55,
+      improvement: 0.2,
+      lint: 0.4
     })
   }),
   "build-release-change": Object.freeze({
@@ -1257,7 +1271,8 @@ const EVIDENCE_RULES = Object.freeze({
     }),
     labelBoosts: Object.freeze({
       versioning: 0.95,
-      release: 0.2
+      release: 0.2,
+      chore: 0.25
     })
   }),
   "logging-behavior-change": Object.freeze({
@@ -1274,7 +1289,8 @@ const EVIDENCE_RULES = Object.freeze({
     }),
     labelBoosts: Object.freeze({
       logging: 0.95,
-      "logging-verbosity": 0.45
+      "logging-verbosity": 0.45,
+      observability: 0.3
     })
   }),
   "observability-telemetry-change": Object.freeze({
@@ -1293,7 +1309,8 @@ const EVIDENCE_RULES = Object.freeze({
     labelBoosts: Object.freeze({
       observability: 0.95,
       monitoring: 0.45,
-      telemetry: 0.65
+      telemetry: 0.65,
+      logging: 0.2
     })
   }),
   "codegen-surface-change": Object.freeze({
@@ -1710,9 +1727,15 @@ const LABEL_SCORE_RECIPES = Object.freeze({
   lint: Object.freeze([
     Object.freeze({ type: "category", key: "refactor-quality", weight: 0.45 }),
     Object.freeze({ type: "category", key: "validation-guards", weight: 0.25 }),
-    Object.freeze({ type: "category", key: "tooling-dx", weight: 0.2 })
+    Object.freeze({ type: "category", key: "tooling-dx", weight: 0.40 }),
+    Object.freeze({ type: "impact", key: "patch-maintenance", weight: 0.15 })
   ]),
-  chore: Object.freeze([])
+  chore: Object.freeze([
+    Object.freeze({ type: "impact", key: "patch-maintenance", weight: 1.0 }),
+    Object.freeze({ type: "category", key: "cleanup-removal", weight: 0.30 }),
+    Object.freeze({ type: "category", key: "config-environment", weight: 0.25 }),
+    Object.freeze({ type: "category", key: "dependencies-packaging", weight: 0.20 })
+  ]),
 });
 
 class AutobotDeterministicScorer {
@@ -1820,7 +1843,7 @@ class AutobotDeterministicScorer {
 
   static readRecipeSourceValue(source, categoryScores, impactScores) {
     if (source.type === "impact") {
-      return impactScores[source.key]?.score || 0;
+      return impactScores[source.key]?.raw || 0;
     }
     if (source.type === "category") {
       const category = categoryScores[source.key];
@@ -1828,12 +1851,12 @@ class AutobotDeterministicScorer {
         return 0;
       }
       if (source.channel === "additive") {
-        return category.additiveScore;
+        return category.additiveRaw;
       }
       if (source.channel === "destructive") {
-        return category.destructiveScore;
+        return category.destructiveRaw;
       }
-      return category.score;
+      return category.raw;
     }
     return 0;
   }

@@ -24,50 +24,18 @@ const {
   normalizePatch: normalizePatchFromGatherInfo,
   resolveSnapshotFile: resolveSnapshotFileFromGatherInfo
 } = require("./gather_info.cjs");
-const { AutobotLabelRegistry, sortLabels } = require("./labels.cjs");
-const { LABEL_SUPPORT_PATTERNS } = require("./constants.cjs");
+const { AutobotLabelRegistry, sortLabels } = require("./labels/registry.cjs");
+const { PR_SUPPRESSED_BY_TECHNICAL_LABELS, LABEL_SUPPORT_PATTERNS } = require("./constants.cjs");
 
 const SNAPSHOT_FILE = "/tmp/autobot_pr_snapshot.json";
 const MAX_TOP_DIRECTORIES = 8;
 const MAX_TOP_FILES = 10;
 const MIN_BEHAVIORAL_ADDITION_LINES = 80;
 const MIN_PUBLIC_CONTRACT_MOVES = 3;
-const MAINTENANCE_ONLY_CATEGORIES = new Set(["documentation", "test", "workflow", "github", "config", "dependencies"]);
+const MAINTENANCE_ONLY_CATEGORIES = new Set(["documentation", "test", "workflow", "github", "config", "dependencies", "tooling"]);
 const PR_ABSTRACT_TYPE_LABELS = new Set(["bug", "enhancement", "improvement", "proposal"]);
 const PR_GENERIC_MAINTENANCE_LABELS = Object.freeze(["cleanup", "config", "dependencies", "documentation", "test", "tooling"]);
 const PR_INFRASTRUCTURE_LABELS = Object.freeze(["automation", "github", "workflow"]);
-const PR_SUPPRESSED_BY_TECHNICAL_LABELS = new Set([
-  "automation",
-  "build",
-  "ci",
-  "config",
-  "dependencies",
-  "devcontainer",
-  "docker",
-  "docs-api",
-  "docs-site",
-  "documentation",
-  "dx",
-  "error-handling",
-  "examples",
-  "formatting",
-  "github",
-  "license",
-  "lint",
-  "packaging",
-  "policy",
-  "quality",
-  "refactor",
-  "release",
-  "release-notes",
-  "stability",
-  "style",
-  "test",
-  "tooling",
-  "validation",
-  "versioning",
-  "workflow"
-]);
 const PR_PIPELINE_CLUTTER_LABELS = new Set([
   "action pin",
   "artifact upload",
@@ -125,12 +93,12 @@ const LOW_SPECIFICITY_TECHNICAL_LABELS = new Set([
   "runtime",
   "windows"
 ]);
-const TECHNICAL_BROAD_LABEL_DESCENDANT_THRESHOLD = 6;
+const TECHNICAL_BROAD_LABEL_DESCENDANT_THRESHOLD = 4;
 const PATH_NORMALIZATION_TEXT_PATTERN = /\b(path normalization|normalize(?:d|r|s)? path|normpath|realpath|resolve\(|abspath|joinpath|ntpath|posixpath|path separator|filepath|pathlib)\b/;
 const TEMP_DIRECTORY_TEXT_PATTERN = /\b(temp(?:orary)?(?:\s+directory|\s+dir)?|tempfile|mkdtemp|temp dir|tmp dir|temp path)\b/;
 const ATOMIC_WRITE_TEXT_PATTERN = /\b(atomic(?:\s+write)?|os\.replace|fsync|write\s+tmp|rename\()\b/;
 const SYMLINK_SAFETY_TEXT_PATTERN = /\b(symlink|readlink|lstat|realpath)\b/;
-const SUBPROCESS_IO_TEXT_PATTERN = /(subprocess\.(?:popen|run|call|check_call|check_output)\s*\(|child_process\.(?:spawn|fork|exec|execfile|execsync|spawnsync)\s*\(|\bpopen\s*\(|\bcommunicate\s*\(|\bstdin\b|\bstdout\b|\bstderr\b|\bpipe(?:line)?\b)/;
+const SUBPROCESS_IO_TEXT_PATTERN = /(subprocess\.(?:popen|run|call|check_call|check_output)\s*\(|child_process\.(?:spawn|fork|exec|execfile|execsync|spawnsync)\s*\(|\bpopen\s*\()/;
 const WORKER_POOL_TEXT_PATTERN = /\b(worker pool|thread ?pool|process ?pool|executor)\b/;
 const RETRY_BUDGET_TEXT_PATTERN = /\b(retry budget|retry(?:ing)?|backoff|max[_\s-]?attempts?)\b/;
 const DAEMON_MODE_TEXT_PATTERN = /\b(daemon(?:ize|ized)?|detached process|daemon mode)\b/;
@@ -447,20 +415,35 @@ function hasVulnerabilityKeywordEvidence(text) {
   return /\b(vulnerab\w*|advisory|cve-\d{4}-\d+|ghsa-[a-z0-9-]+|exploit(?:able)?|security advisory|security notification)\b/.test(text);
 }
 
-function hasDependencyVulnerabilityRemediationEvidence({ normalizedPath, patch, securityContextText }) {
-  if (!hasDependencySurfaceChange(normalizedPath, patch)) {
+function hasDependencyVulnerabilityRemediationEvidence({ normalizedPath, patch, rawPatch, securityContextText }) {
+  const patchWithDiffMarkers = String(rawPatch || patch || "").toLowerCase();
+  const changedPatch = String(patch || changedPatchBodyText(patchWithDiffMarkers)).toLowerCase();
+  if (!hasDependencySurfaceChange(normalizedPath, patchWithDiffMarkers)) {
     return false;
   }
-  const patchContext = `${normalizedPath}\n${patch}`.toLowerCase();
+
+  const patchContext = `${normalizedPath}\n${changedPatch}`.toLowerCase();
   const normalizedSecurityContext = String(securityContextText || "").toLowerCase();
   const hasPatchVulnerabilityEvidence = hasVulnerabilityKeywordEvidence(patchContext);
   const hasSecurityContextVulnerabilityEvidence = hasVulnerabilityKeywordEvidence(normalizedSecurityContext);
+
   if (!hasPatchVulnerabilityEvidence && !hasSecurityContextVulnerabilityEvidence) {
     return false;
   }
-  if (hasDependencyVersionMutation(patch)) {
+
+  if (hasDependencyVersionMutation(patchWithDiffMarkers)) {
     return true;
   }
+
+  const hasAnyChangedVersionSignal = splitPatchLines(patchWithDiffMarkers)
+    .filter((line) => isChangedPatchLine(line))
+    .map((line) => stripDiffLinePrefix(line).trim())
+    .some((line) => DEPENDENCY_VERSION_MUTATION_PATTERN.test(line));
+
+  if (hasSecurityContextVulnerabilityEvidence && hasAnyChangedVersionSignal) {
+    return true;
+  }
+
   return hasPatchVulnerabilityEvidence
     && (
       DEPENDENCY_REMEDIATION_ACTION_PATTERN.test(patchContext)
@@ -494,31 +477,48 @@ function hasInlineSecurityAlertReduction(text) {
   return false;
 }
 
+function collectCodeqlChangedCounts(rawPatch, prefix) {
+  return splitPatchLines(rawPatch)
+    .filter((line) => line.startsWith(prefix) && !line.startsWith(prefix.repeat(3) + " "))
+    .map((line) => stripDiffLinePrefix(line))
+    .filter((line) => /\b(codeql|code scanning)\b/.test(line) && /\b(alerts?|notifications?)\b/.test(line))
+    .flatMap((line) => [...line.matchAll(/\b\d+\b/g)].map((match) => Number(match[0])));
+}
+
 function hasCodeqlSecurityAlertReductionEvidence(normalizedPath, patch) {
   const normalizedPathText = String(normalizedPath || "").toLowerCase();
-  const normalizedPatch = String(patch || "").toLowerCase();
-  const combinedText = `${normalizedPathText}\n${normalizedPatch}`;
+  const rawPatch = String(patch || "").toLowerCase();
+  const changedPatch = changedPatchBodyText(rawPatch);
+  const combinedText = `${normalizedPathText}\n${changedPatch}`;
+
   const codeqlSurface = /(^|\/)codeql(\.[^/]+)?$/.test(normalizedPathText)
     || /\bcode[-_ ]scanning\b/.test(normalizedPathText)
     || CODEQL_SECURITY_NOTIFICATION_PATTERN.test(combinedText);
   if (!codeqlSurface) {
     return false;
   }
+
   if (hasInlineSecurityAlertReduction(combinedText)) {
     return true;
   }
-  const removedCounts = splitPatchLines(patch)
+
+  const removedCounts = splitPatchLines(rawPatch)
     .filter((line) => line.startsWith("-") && !line.startsWith("--- "))
     .map((line) => extractSecurityNotificationCount(stripDiffLinePrefix(line)))
     .filter((value) => value !== null);
-  const addedCounts = splitPatchLines(patch)
+  const addedCounts = splitPatchLines(rawPatch)
     .filter((line) => line.startsWith("+") && !line.startsWith("+++ "))
     .map((line) => extractSecurityNotificationCount(stripDiffLinePrefix(line)))
     .filter((value) => value !== null);
-  if (removedCounts.length === 0 || addedCounts.length === 0) {
+
+  const fallbackRemovedCounts = removedCounts.length > 0 ? removedCounts : collectCodeqlChangedCounts(rawPatch, "-");
+  const fallbackAddedCounts = addedCounts.length > 0 ? addedCounts : collectCodeqlChangedCounts(rawPatch, "+");
+
+  if (fallbackRemovedCounts.length === 0 || fallbackAddedCounts.length === 0) {
     return false;
   }
-  return Math.min(...addedCounts) < Math.max(...removedCounts);
+
+  return Math.min(...fallbackAddedCounts) < Math.max(...fallbackRemovedCounts);
 }
 
 function matchesWorkflowFilePath(normalizedPath) {
@@ -560,12 +560,17 @@ function matchesUiPath(normalizedPath) {
   return /(^|\/)(components?|ui|views?|templates|static|styles?|themes?|frontend)(\/|$)/.test(normalizedPath)
     || /(^|\/)presentation\/apps\//.test(normalizedPath)
     || /(^|\/)(gui_[^/]+|[^/]+_gui)\.py$/.test(normalizedPath)
+    || /(^|\/)(ui|application)\/(audio|train|image|video|chat|translate)\/app\.py$/.test(normalizedPath)
     || /\.(css|scss|sass|less|tsx|jsx|vue|svelte|html)$/.test(normalizedPath);
 }
 
+const GRADIO_UI_COMPONENT_PATTERN = /\bgr\.(blocks|interface|chatinterface|chatbot|state|row|column|tabs?|tab|accordion|html|markdown|button|textbox|dropdown|slider|checkbox|radio|number|file|audio|video|image|gallery|dataframe|plot)\b/;
+const GRADIO_IMPORT_PATTERN = /\bimport\s+gradio\b|\bfrom\s+gradio\b/;
+
 function countUiEvidenceHits(text) {
   const uiPatterns = [
-    /\bgr\.(blocks|button|textbox|dropdown|accordion|slider|checkbox|row|column|tabs?|html|markdown)\b/,
+    GRADIO_UI_COMPONENT_PATTERN,
+    GRADIO_IMPORT_PATTERN,
     /<(button|form|input|select|dialog|label)\b/,
     /\bclass(name)?=|styles?\.|theme|tokens?\b/
   ];
@@ -578,6 +583,9 @@ function hasUiTextEvidence(normalizedPath, text) {
     return false;
   }
   if (matchesUiPath(normalizedPath)) {
+    return true;
+  }
+  if (GRADIO_UI_COMPONENT_PATTERN.test(text) || GRADIO_IMPORT_PATTERN.test(text)) {
     return true;
   }
   return hitCount >= 2;
@@ -907,7 +915,11 @@ function isExplicitPublicCapabilityFile(file) {
     return false;
   }
   const normalizedPath = String(file.filename || "").toLowerCase();
-  const patch = String(file.patch || "").toLowerCase();
+  const rawPatch = String(file.patch || "").toLowerCase();
+  const patch = changedPatchBodyText(rawPatch);
+  const addedPatch = patchLinesWithPrefix(rawPatch, "+")
+    .map((line) => stripDiffLinePrefix(line).toLowerCase())
+    .join("\n");
   return /(^|\/)__init__\.py$/.test(normalizedPath)
     || matchesUiPath(normalizedPath)
     || hasUiTextEvidence(normalizedPath, patch)
@@ -938,8 +950,11 @@ function hasStructuralPublicBreakingSignal({ behavioralSurfaceAdditions, publicC
 
 function deriveSignals(file) {
   const normalizedPath = String(file.filename || "").toLowerCase();
-  const patch = String(file.patch || "").toLowerCase();
-  const text = `${normalizedPath}\n${patch}`;
+  const rawPatch = String(file.patch || "").toLowerCase();
+  const patch = changedPatchBodyText(rawPatch);
+  const addedPatch = patchLinesWithPrefix(rawPatch, "+")
+    .map((line) => stripDiffLinePrefix(line).toLowerCase())
+    .join("\n");  const text = `${normalizedPath}\n${patch}`;
   const categories = new Set(file.categories || classifyFile(file));
   const allowsVersionCriticalTextSignals = !categories.has("documentation") && !categories.has("test");
   const sourceTextSurface = allowsVersionCriticalTextSignals && isSourceCodePath(normalizedPath);
@@ -992,7 +1007,7 @@ function deriveSignals(file) {
       ["removed", "renamed"].includes(file.status)
       || hasPatchLineMatch(file, "-", /\b(remove|drop|delete|deprecat|disable|rename|migrate)\b/)
     );
-  if (hasBreakingChangeEvidence(normalizedPath, patch) || structuralBreakingSignal) {
+  if (allowsVersionCriticalTextSignals && (hasBreakingChangeEvidence(normalizedPath, patch) || structuralBreakingSignal)) {
     signals.add("breaking-change");
   }
   const compatibilityPathSurface = isCompatibilityPath(normalizedPath);
@@ -1118,8 +1133,14 @@ function addSpecificProcessLabels(technicalLabels, text) {
 function getLabelPrecisionMetrics(label, context = {}) {
   const normalizedLabel = AutobotLabelRegistry.normalizeLabelName(label);
   const scoreEntry = context.technicalLabelScores?.[normalizedLabel] || {};
-  const directEvidence = collectDirectEvidenceForLabel(normalizedLabel, context.evidenceItems || []);
-  const supportFiles = collectSupportFilesForLabel(normalizedLabel, context.filesWithContext || []);
+  const resolveDirectEvidenceForLabel = typeof context.getDirectEvidenceForLabel === "function"
+    ? context.getDirectEvidenceForLabel
+    : (candidateLabel) => collectDirectEvidenceForLabel(candidateLabel, context.evidenceItems || []);
+  const resolveSupportFilesForLabel = typeof context.getSupportFilesForLabel === "function"
+    ? context.getSupportFilesForLabel
+    : (candidateLabel) => collectSupportFilesForLabel(candidateLabel, context.filesWithContext || []);
+  const directEvidence = resolveDirectEvidenceForLabel(normalizedLabel) || [];
+  const supportFiles = resolveSupportFilesForLabel(normalizedLabel) || [];
   const metadata = AutobotLabelRegistry.getLabelMetadata(normalizedLabel);
   const depth = AutobotLabelRegistry.getLabelDepth(normalizedLabel);
   const descendantCount = collectTechnicalDescendantsWithDistance(normalizedLabel).length;
@@ -1150,7 +1171,7 @@ function getLabelPrecisionMetrics(label, context = {}) {
     ),
     0
   );
-  const minimumPrecision = broadLabel ? 0.5 : 0.4;
+  const minimumPrecision = broadLabel ? 0.065 : 0.04;
   return {
     broadLabel,
     descendantCount,
@@ -1169,14 +1190,14 @@ function deriveSpecificReplacementLabels(labelMetrics, context = {}, options = {
       candidate,
       metrics: getLabelPrecisionMetrics(candidate.label, context)
     }))
-    .filter((entry) => entry.metrics.precisionScore >= 0.45)
+    .filter((entry) => entry.metrics.precisionScore >= 0.08)
     .sort((left, right) => {
       if (right.metrics.precisionScore !== left.metrics.precisionScore) {
         return right.metrics.precisionScore - left.metrics.precisionScore;
       }
       return right.candidate.distance - left.candidate.distance || left.candidate.label.localeCompare(right.candidate.label);
     });
-  return descendants.slice(0, 2).map((entry) => entry.metrics.normalizedLabel);
+  return descendants.map((entry) => entry.metrics.normalizedLabel);
 }
 
 function resolveOutputLabelLimit(rawLimit) {
@@ -1213,7 +1234,7 @@ function enforcePrecisionEmissionParameters(labels, context = {}, options = {}) 
       selectedLabels.push(...replacements);
       continue;
     }
-    if (labelMetrics.precisionScore >= 0.35) {
+    if (labelMetrics.precisionScore >= 0.05) {
       selectedLabels.push(labelMetrics.normalizedLabel);
     }
   }
@@ -1240,7 +1261,11 @@ function deriveTechnicalLabels(filesWithContext) {
 
   for (const file of filesWithContext) {
     const normalizedPath = String(file.filename || "").toLowerCase();
-    const patch = String(file.patch || "").toLowerCase();
+    const rawPatch = String(file.patch || "").toLowerCase();
+    const patch = changedPatchBodyText(rawPatch);
+    const addedPatch = patchLinesWithPrefix(rawPatch, "+")
+      .map((line) => stripDiffLinePrefix(line).toLowerCase())
+      .join("\n");
     const text = `${normalizedPath}\n${patch}`;
     const categories = new Set(file.categories || classifyFile(file));
     const signals = new Set(file.signals || deriveSignals(file));
@@ -1259,7 +1284,7 @@ function deriveTechnicalLabels(filesWithContext) {
       || (!cemExcludedFromApiText && /\b(fastapi|flask|router|route|endpoint|webhook|graphql)\b/.test(text));
 
     if (matchesWorkflowFilePath(normalizedPath)) {
-      const workflowPatchText = changedPatchBodyText(patch);
+      const workflowPatchText = patch;
       addTechnicalLabel(technicalLabels, "github actions");
       if (hasWorkflowMatrixSignal(workflowPatchText)) addTechnicalLabel(technicalLabels, "matrix job");
       if (hasPythonMatrixSignal(workflowPatchText)) addTechnicalLabel(technicalLabels, "python matrix");
@@ -1268,6 +1293,13 @@ function deriveTechnicalLabels(filesWithContext) {
       if (/upload-artifact|download-artifact/.test(workflowPatchText)) addTechnicalLabel(technicalLabels, "artifact upload");
       if (/actions\/cache|cache-hit|restore-keys|cache:/.test(workflowPatchText)) addTechnicalLabel(technicalLabels, "cache restore");
       if (/uses:\s*actions\//.test(workflowPatchText)) addTechnicalLabel(technicalLabels, "action pin");
+    }
+
+    if (autobotClassificationInfrastructure) {
+      if (/dependabot/.test(normalizedPath) && /\bdependabot\b/.test(patch)) {
+        addTechnicalLabel(technicalLabels, "dependabot");
+      }
+      continue;
     }
 
     if (matchesUiPath(normalizedPath) || hasUiTextEvidence(normalizedPath, text)) {
@@ -1372,7 +1404,7 @@ function deriveTechnicalLabels(filesWithContext) {
 
     if (normalizedPath === "pyproject.toml") {
       addTechnicalLabel(technicalLabels, "pyproject");
-      if (hasPyprojectDependencyChange(patch)) addTechnicalLabel(technicalLabels, "dependency group");
+      if (hasPyprojectDependencyChange(rawPatch)) addTechnicalLabel(technicalLabels, "dependency group");
       if (/scripts|task|tool\.poetry\.scripts|project\.scripts/.test(text)) addTechnicalLabel(technicalLabels, "task runner");
       if (/requires-python|python 3\./.test(text)) {
         addTechnicalLabel(technicalLabels, "python version");
@@ -1382,7 +1414,7 @@ function deriveTechnicalLabels(filesWithContext) {
     }
     if (normalizedPath === "package.json") {
       addTechnicalLabel(technicalLabels, "package manifest");
-      if (hasPackageJsonDependencyChange(patch)) addTechnicalLabel(technicalLabels, "dependency group");
+      if (hasPackageJsonDependencyChange(rawPatch)) addTechnicalLabel(technicalLabels, "dependency group");
       if (/"scripts"\s*:/.test(text)) addTechnicalLabel(technicalLabels, "task runner");
     }
     if (/poetry\.lock$/.test(normalizedPath)) {
@@ -1400,7 +1432,7 @@ function deriveTechnicalLabels(filesWithContext) {
     if (/dockerfile$/.test(normalizedPath)) {
       addTechnicalLabel(technicalLabels, "dockerfile");
       addTechnicalLabel(technicalLabels, "image");
-      if (/^\+.*from .*:/m.test(patch) || /image:/.test(patch)) addTechnicalLabel(technicalLabels, "image tag");
+      if (/^from .*:/m.test(addedPatch) || /image:/.test(patch)) addTechnicalLabel(technicalLabels, "image tag");
       if (/cache-from|cache-to|buildx/.test(patch)) addTechnicalLabel(technicalLabels, "layer cache");
     }
     if (/compose\.ya?ml$/.test(normalizedPath)) addTechnicalLabel(technicalLabels, "compose");
@@ -1587,7 +1619,14 @@ function deriveTechnicalLabels(filesWithContext) {
       addTechnicalLabel(technicalLabels, "filesystem");
       addSpecificFilesystemLabels(technicalLabels, text);
     }
-    if (SUBPROCESS_IO_TEXT_PATTERN.test(text) || /\bsubprocess\b|\bspawn\b|\bfork\b|exec\(|child_process/.test(text)) {
+    if (sourceCodeSurface && /\brubber[\s_-]?band\b/.test(text)) {
+      addTechnicalLabel(technicalLabels, "process");
+      addTechnicalLabel(technicalLabels, "subprocess io");
+    }
+    if (
+      sourceCodeSurface
+      && (SUBPROCESS_IO_TEXT_PATTERN.test(text) || /\bsubprocess\b|\bspawn\b|\bfork\b|exec\(|child_process/.test(text))
+    ) {
       addTechnicalLabel(technicalLabels, "process");
       addSpecificProcessLabels(technicalLabels, text);
     }
@@ -1654,11 +1693,40 @@ function hasPatchLineMatch(file, prefix, pattern) {
 
 function isDestructiveFileChange(file) {
   const normalizedPath = String(file.filename || "").toLowerCase();
-  const patch = String(file.patch || "").toLowerCase();
+  const rawPatch = String(file.patch || "").toLowerCase();
+  const patch = changedPatchBodyText(rawPatch);
   return ["removed", "renamed"].includes(file.status)
     || hasBreakingChangeEvidence(normalizedPath, patch)
     || hasPatchLineMatch(file, "-", /\b(remove|drop|delete|deprecat|disable|rename|migrate)\b/)
     || isPublicPackageContractPath(normalizedPath) && Number(file.deletions || 0) > Number(file.additions || 0);
+}
+
+function scoreEvidenceSampleFileForSummary(sampleFile) {
+  const normalizedPath = String(sampleFile || "").toLowerCase();
+  if (!normalizedPath) {
+    return -100;
+  }
+  let score = 0;
+  if (isSourceCodePath(normalizedPath)) score += 6;
+  if (matchesUiPath(normalizedPath)) score += 5;
+  if (matchesWorkflowFilePath(normalizedPath) || matchesWorkflowScriptPath(normalizedPath)) score -= 1;
+  if (isDocumentationPath(normalizedPath)) score -= 2;
+  if (isTestPath(normalizedPath)) score -= 2;
+  if (isAutobotClassificationInfrastructure(normalizedPath)) score -= 4;
+  return score;
+}
+
+function selectEvidenceSampleFiles(sampleFiles, limit = 5) {
+  const uniqueFiles = [...new Set((sampleFiles || []).filter(Boolean))];
+  return uniqueFiles
+    .sort((left, right) => {
+      const scoreDelta = scoreEvidenceSampleFileForSummary(right) - scoreEvidenceSampleFileForSummary(left);
+      if (scoreDelta !== 0) {
+        return scoreDelta;
+      }
+      return String(left).localeCompare(String(right));
+    })
+    .slice(0, limit);
 }
 
 function addEvidenceItem(evidenceMap, ruleId, options = {}) {
@@ -1692,16 +1760,10 @@ function addEvidenceItem(evidenceMap, ruleId, options = {}) {
   }
 
   entry.occurrenceCount += occurrenceCount;
-
-  for (const sampleFile of options.sampleFiles || []) {
-    if (!sampleFile || entry.metadata.sampleFiles.includes(sampleFile)) {
-      continue;
-    }
-    if (entry.metadata.sampleFiles.length >= 5) {
-      break;
-    }
-    entry.metadata.sampleFiles.push(sampleFile);
-  }
+  entry.metadata.sampleFiles = selectEvidenceSampleFiles(
+    [...entry.metadata.sampleFiles, ...(options.sampleFiles || [])],
+    5
+  );
 }
 
 function finalizeEvidenceItems(evidenceMap) {
@@ -1950,30 +2012,9 @@ function buildGeneralLabelReplacementPlan(label, context = {}) {
     }
     candidateMap.set(candidate.label, candidate);
   }
-  let candidates = [...candidateMap.values()];
+  const candidates = [...candidateMap.values()];
   if (candidates.length < GENERAL_LABEL_MIN_DESCENDANTS) {
-    const globalTechnicalFallback = Object.keys(AutobotLabelRegistry.LABEL_DEFINITIONS || {})
-      .map((candidateLabel) => AutobotLabelRegistry.normalizeLabelName(candidateLabel))
-      .filter((candidateLabel) => candidateLabel && candidateLabel !== normalizedLabel)
-      .map((candidateLabel) => {
-        if (candidateMap.has(candidateLabel)) {
-          return null;
-        }
-        const candidateMetadata = AutobotLabelRegistry.getLabelMetadata(candidateLabel);
-        if (!candidateMetadata) {
-          return null;
-        }
-        const absoluteDepth = AutobotLabelRegistry.getLabelDepth(candidateLabel);
-        return {
-          absoluteDepth,
-          distance: Math.max(absoluteDepth - labelDepth, 1),
-          label: candidateLabel,
-          leaf: (TECHNICAL_CHILDREN_INDEX.get(candidateLabel) || []).length === 0,
-          metadata: candidateMetadata
-        };
-      })
-      .filter(Boolean);
-    candidates = [...candidates, ...globalTechnicalFallback];
+    return null;
   }
   const moderatePool = candidates.filter((candidate) => (candidate.absoluteDepth || 0) <= labelDepth + 2 || candidate.distance <= 2);
   const verySpecificPool = candidates.filter((candidate) => (candidate.absoluteDepth || 0) >= labelDepth + 3 || candidate.leaf);
@@ -2150,7 +2191,11 @@ function buildDeterministicEvidence(filesWithContext, context) {
 
   for (const file of filesWithContext) {
     const normalizedPath = String(file.filename || "").toLowerCase();
-    const patch = String(file.patch || "").toLowerCase();
+    const rawPatch = String(file.patch || "").toLowerCase();
+    const patch = changedPatchBodyText(rawPatch);
+    const addedPatch = patchLinesWithPrefix(rawPatch, "+")
+      .map((line) => stripDiffLinePrefix(line).toLowerCase())
+      .join("\n");
     const text = `${normalizedPath}\n${patch}`;
     const categories = new Set(file.categories);
     const signals = new Set(file.signals);
@@ -2203,16 +2248,18 @@ function buildDeterministicEvidence(filesWithContext, context) {
       } else {
         dependencyExpansionFiles.push(file.filename);
       }
-      if (hasDependencyVulnerabilityRemediationEvidence({
-        normalizedPath,
-        patch,
-        securityContextText
-      })) {
-        dependencyVulnerabilityRemediationFiles.push(file.filename);
-      }
     }
 
-    if (hasCodeqlSecurityAlertReductionEvidence(normalizedPath, patch)) {
+    if (hasDependencyVulnerabilityRemediationEvidence({
+      normalizedPath,
+      patch,
+      rawPatch,
+      securityContextText
+    }) && !dependencyVulnerabilityRemediationFiles.includes(file.filename)) {
+      dependencyVulnerabilityRemediationFiles.push(file.filename);
+    }
+
+    if (hasCodeqlSecurityAlertReductionEvidence(normalizedPath, rawPatch)) {
       codeqlSecurityReductionFiles.push(file.filename);
     }
 
@@ -2555,14 +2602,16 @@ function analyzePullRequestSnapshotData(snapshot) {
     ) {
       return false;
     }
-    const patch = String(file.patch || "").toLowerCase();
+    const rawPatch = String(file.patch || "").toLowerCase();
+    const patch = changedPatchBodyText(rawPatch);
     return hasSecurityEvidence(normalizedPath, patch)
-      || hasCodeqlSecurityAlertReductionEvidence(normalizedPath, patch)
-      || hasDependencyVulnerabilityRemediationEvidence({
+      || hasCodeqlSecurityAlertReductionEvidence(normalizedPath, rawPatch)
+      || (!isDependencyLockfilePath(normalizedPath) && hasDependencyVulnerabilityRemediationEvidence({
         normalizedPath,
         patch,
+        rawPatch,
         securityContextText
-      });
+      }));
   });
   if (titleSignals.security && hasDirectSecurityEvidence) {
     signalSet.add("security");
@@ -2609,7 +2658,9 @@ function analyzePullRequestSnapshotData(snapshot) {
     if (!hasSecurityPathEvidence(normalizedPath) || isAutobotClassificationInfrastructure(normalizedPath)) {
       return false;
     }
-    const text = `${normalizedPath}\n${String(file.patch || "").toLowerCase()}`;
+    const rawPatch = String(file.patch || "").toLowerCase();
+    const patch = changedPatchBodyText(rawPatch);
+    const text = `${normalizedPath}\n${patch}`;
     return /(?:^|[^a-z0-9])token(?:[^a-z0-9]|$)|authorization:\s*bearer|\bjwt\b/.test(text);
   });
   const smallPullRequest = isSmallPullRequest(filesWithContext.length, totalChanges);
@@ -2722,30 +2773,90 @@ function analyzePullRequestSnapshotData(snapshot) {
   const cemFilteredTechnicalSignalSet = new Set(cemFilteredTechnicalSignals);
   const rawDeterministicLabels = selectDeterministicLabels(cemFilteredOrderedSignals, deterministicLabelSet, prLabelPolicy);
   const maintenanceLabelHasDirectSurfaceSupport = (label) => {
-    switch (label) {
-      case "dependencies":
-        return Boolean(categoryCounts.get("dependencies"));
-      case "documentation":
-        return Boolean(categoryCounts.get("documentation"));
-      case "test":
-        return Boolean(categoryCounts.get("test"));
-      case "workflow":
-        return Boolean(categoryCounts.get("workflow")) || signalSet.has("workflow");
-      case "github":
-        return Boolean(categoryCounts.get("github")) || signalSet.has("github");
-      case "config":
-        return Boolean(categoryCounts.get("config"));
-      case "tooling":
-        return Boolean(categoryCounts.get("tooling"));
-      case "docker":
-        return Boolean(categoryCounts.get("docker"));
-      case "cleanup":
-        return filesWithContext.some((file) => file.status === "removed");
-      default:
-        return false;
+    const normalizedLabel = AutobotLabelRegistry.normalizeLabelName(label);
+
+    if (AutobotLabelRegistry.matchesExpectedLabel(normalizedLabel, "config")) {
+      return Boolean(categoryCounts.get("config"));
     }
+    if (AutobotLabelRegistry.matchesExpectedLabel(normalizedLabel, "dependencies")) {
+      return Boolean(categoryCounts.get("dependencies"));
+    }
+    if (AutobotLabelRegistry.matchesExpectedLabel(normalizedLabel, "documentation")) {
+      return Boolean(categoryCounts.get("documentation"));
+    }
+    if (AutobotLabelRegistry.matchesExpectedLabel(normalizedLabel, "test")) {
+      return Boolean(categoryCounts.get("test")) || Boolean(categoryCounts.get("workflow")) || signalSet.has("workflow");
+    }
+    if (
+      AutobotLabelRegistry.matchesExpectedLabel(normalizedLabel, "workflow")
+      && !AutobotLabelRegistry.matchesExpectedLabel(normalizedLabel, "security")
+    ) {
+      return Boolean(categoryCounts.get("workflow")) || signalSet.has("workflow");
+    }
+    if (AutobotLabelRegistry.matchesExpectedLabel(normalizedLabel, "github")) {
+      return Boolean(categoryCounts.get("github")) || signalSet.has("github");
+    }
+    if (AutobotLabelRegistry.matchesExpectedLabel(normalizedLabel, "tooling")) {
+      return Boolean(categoryCounts.get("tooling"));
+    }
+    if (AutobotLabelRegistry.matchesExpectedLabel(normalizedLabel, "docker")) {
+      return Boolean(categoryCounts.get("docker"));
+    }
+    if (AutobotLabelRegistry.matchesExpectedLabel(normalizedLabel, "cleanup")) {
+      return filesWithContext.some((file) => file.status === "removed");
+    }
+    return false;
   };
   const labelSupportCache = new Map();
+  const directEvidenceCache = new Map();
+  const supportFilesCache = new Map();
+  const filenameOnlySupportCountCache = new Map();
+
+  const getDirectEvidenceForLabel = (label) => {
+    const normalizedLabel = AutobotLabelRegistry.normalizeLabelName(label);
+    if (!normalizedLabel) {
+      return [];
+    }
+    if (directEvidenceCache.has(normalizedLabel)) {
+      return directEvidenceCache.get(normalizedLabel);
+    }
+    const resolved = collectDirectEvidenceForLabel(normalizedLabel, evidenceItems);
+    directEvidenceCache.set(normalizedLabel, resolved);
+    return resolved;
+  };
+
+  const getSupportFilesForLabel = (label) => {
+    const normalizedLabel = AutobotLabelRegistry.normalizeLabelName(label);
+    if (!normalizedLabel) {
+      return [];
+    }
+    if (supportFilesCache.has(normalizedLabel)) {
+      return supportFilesCache.get(normalizedLabel);
+    }
+    const resolved = collectSupportFilesForLabel(normalizedLabel, filesWithContext);
+    supportFilesCache.set(normalizedLabel, resolved);
+    return resolved;
+  };
+
+  const getFilenameOnlySupportCountForLabel = (label) => {
+    const normalizedLabel = AutobotLabelRegistry.normalizeLabelName(label);
+    if (!normalizedLabel) {
+      return 0;
+    }
+    if (filenameOnlySupportCountCache.has(normalizedLabel)) {
+      return filenameOnlySupportCountCache.get(normalizedLabel);
+    }
+    const supportPatterns = LABEL_SUPPORT_PATTERNS[normalizedLabel] || [];
+    const resolved = supportPatterns.length > 0
+      ? filesWithContext.filter((file) => {
+          const fn = String(file.filename || "").toLowerCase();
+          return supportPatterns.some((pattern) => pattern.test(fn));
+        }).length
+      : 0;
+    filenameOnlySupportCountCache.set(normalizedLabel, resolved);
+    return resolved;
+  };
+
   const labelHasStrongOutputSupport = (label) => {
     const normalizedLabel = AutobotLabelRegistry.normalizeLabelName(label);
     if (labelSupportCache.has(normalizedLabel)) {
@@ -2759,8 +2870,8 @@ function analyzePullRequestSnapshotData(snapshot) {
       return true;
     }
     const scoreEntry = technicalLabelScores[normalizedLabel];
-    const directEvidence = collectDirectEvidenceForLabel(normalizedLabel, evidenceItems);
-    const supportFiles = collectSupportFilesForLabel(normalizedLabel, filesWithContext);
+    const directEvidence = getDirectEvidenceForLabel(normalizedLabel);
+    const supportFiles = getSupportFilesForLabel(normalizedLabel);
     const supported = Boolean(
       cemFilteredTechnicalSignalSet.has(normalizedLabel)
       || scoreEntry?.primary
@@ -2786,9 +2897,6 @@ function analyzePullRequestSnapshotData(snapshot) {
         limit: prCollectionLimit
       }
     );
-  }
-  if (deterministicLabels.length === 0) {
-    deterministicLabels = rawDeterministicLabels.filter((label) => !isGeneralTechnicalLabel(label)).slice(0, prLabelLimit);
   }
   const generalLabelReplacementPlans = {};
   const expandedReplacementLabels = [];
@@ -2828,18 +2936,12 @@ function analyzePullRequestSnapshotData(snapshot) {
   const computeEvidenceStrength = (label) => {
     const normalizedLabel = AutobotLabelRegistry.normalizeLabelName(label);
     const scoreEntry = technicalLabelScores[normalizedLabel];
-    const directEvidence = collectDirectEvidenceForLabel(normalizedLabel, evidenceItems);
-    const supportFiles = collectSupportFilesForLabel(normalizedLabel, filesWithContext);
+    const directEvidence = getDirectEvidenceForLabel(normalizedLabel);
+    const supportFiles = getSupportFilesForLabel(normalizedLabel);
     const scorerStrength = Math.max(Number(scoreEntry?.score || 0), 0);
     const evidenceOccurrences = directEvidence.reduce((total, item) => total + Math.max(Number(item?.occurrenceCount || 0), 0), 0);
     const evidenceStrength = Math.min(evidenceOccurrences, 6) / 6;
-    const supportPatterns = LABEL_SUPPORT_PATTERNS[normalizedLabel] || [];
-    const filenameOnlySupportCount = supportPatterns.length > 0
-      ? filesWithContext.filter((file) => {
-          const fn = String(file.filename || "").toLowerCase();
-          return supportPatterns.some((pattern) => pattern.test(fn));
-        }).length
-      : 0;
+    const filenameOnlySupportCount = getFilenameOnlySupportCountForLabel(normalizedLabel);
     const effectiveSupportCount = Math.max(supportFiles.length, filenameOnlySupportCount);
     const supportStrength = Math.min(effectiveSupportCount, 3) / 3;
     const maintenanceStrength = maintenanceLabelHasDirectSurfaceSupport(normalizedLabel) ? 0.4 : 0;
@@ -2864,10 +2966,10 @@ function analyzePullRequestSnapshotData(snapshot) {
     if (scoreEntry?.primary || scoreEntry?.emitted) {
       return true;
     }
-    if (collectDirectEvidenceForLabel(normalizedLabel, evidenceItems).length > 0) {
+    if (getDirectEvidenceForLabel(normalizedLabel).length > 0) {
       return true;
     }
-    if (collectSupportFilesForLabel(normalizedLabel, filesWithContext).length > 0) {
+    if (getSupportFilesForLabel(normalizedLabel).length > 0) {
       return true;
     }
     return scoring.semver.hardSignals.length > 0 && AutobotLabelRegistry.isReleaseRelevantLabel(normalizedLabel);
@@ -2911,6 +3013,8 @@ function analyzePullRequestSnapshotData(snapshot) {
     {
       evidenceItems,
       filesWithContext,
+      getDirectEvidenceForLabel,
+      getSupportFilesForLabel,
       technicalLabelScores
     },
     prLabelPolicy
@@ -2925,6 +3029,8 @@ function analyzePullRequestSnapshotData(snapshot) {
       {
         evidenceItems,
         filesWithContext,
+        getDirectEvidenceForLabel,
+        getSupportFilesForLabel,
         technicalLabelScores
       },
       prLabelPolicy
@@ -2948,7 +3054,7 @@ function analyzePullRequestSnapshotData(snapshot) {
     deterministicLabels = ensureRequiredLabelFamily(
       deterministicLabels,
       "test",
-      ["unit test", "test job"],
+      ["test", "test job"],
       prLabelPolicy
     );
   }
@@ -2956,7 +3062,7 @@ function analyzePullRequestSnapshotData(snapshot) {
     deterministicLabels = ensureRequiredLabelFamily(
       deterministicLabels,
       "workflow",
-      ["github actions", "workflow file"],
+      ["workflow", "workflow file"],
       prLabelPolicy
     );
   }
@@ -2988,16 +3094,93 @@ function analyzePullRequestSnapshotData(snapshot) {
       );
     }
   }
-  if (signalSet.has("migration")
-    || scoring.semver.hardSignals.includes("destructive-database-change")
-    || scoring.semver.hardSignals.includes("additive-database-change")) {
-    deterministicLabels = ensureRequiredLabelFamily(
-      deterministicLabels,
-      "migration file",
-      ["destructive migration", "additive migration", "column drop", "column add"],
-      prLabelPolicy
-    );
-  }
+  const hardSemverSignalSet = new Set(scoring.semver.hardSignals || []);
+  const hasStrongObservabilityEvidence = filesWithContext.some((file) => {
+    const normalizedPath = String(file.filename || "").toLowerCase();
+    if (!isSourceCodePath(normalizedPath) || isDocumentationPath(normalizedPath) || isTestPath(normalizedPath)) {
+      return false;
+    }
+    const patch = changedPatchBodyText(String(file.patch || "").toLowerCase());
+    const text = `${normalizedPath}\n${patch}`;
+    return hasObservabilityPathEvidence(normalizedPath)
+      || /\b(telemetry|prometheus|opentelemetry|otel|metrics?|histogram|counter|gauge|monitoring)\b/.test(text);
+  });
+  const hasTracingEvidence = filesWithContext.some((file) => {
+    const normalizedPath = String(file.filename || "").toLowerCase();
+    if (!isSourceCodePath(normalizedPath) || isDocumentationPath(normalizedPath) || isTestPath(normalizedPath)) {
+      return false;
+    }
+    const patch = changedPatchBodyText(String(file.patch || "").toLowerCase());
+    const text = `${normalizedPath}\n${patch}`;
+    return /\b(tracing?|trace id|span(?: id)?|opentelemetry|otel)\b/.test(text);
+  });
+
+  const enforceCriticalReleaseLabelFamilies = (labels) => {
+    let nextLabels = [...labels];
+
+    if (signalSet.has("breaking-change")) {
+      nextLabels = ensureRequiredLabelFamily(
+        nextLabels,
+        "breaking-change",
+        ["breaking-change", "import path", "column drop", "table drop", "wire format", "field number"],
+        prLabelPolicy
+      );
+    }
+
+    if (
+      signalSet.has("schema")
+      || hardSemverSignalSet.has("destructive-schema-contract")
+      || hardSemverSignalSet.has("additive-schema-contract")
+    ) {
+      nextLabels = ensureRequiredLabelFamily(
+        nextLabels,
+        "schema",
+        ["schema", "json schema", "proto schema", "field rule", "field number", "type alias"],
+        prLabelPolicy
+      );
+    }
+
+    if (
+      signalSet.has("compatibility")
+      || hardSemverSignalSet.has("compatibility-shim")
+      || hardSemverSignalSet.has("compatibility-drop")
+    ) {
+      nextLabels = ensureRequiredLabelFamily(
+        nextLabels,
+        "compatibility",
+        ["shim module", "import path", "type alias", "compatibility"],
+        prLabelPolicy
+      );
+    }
+
+    if (
+      signalSet.has("migration")
+      || signalSet.has("database")
+      || hardSemverSignalSet.has("destructive-database-change")
+      || hardSemverSignalSet.has("additive-database-change")
+      || hardSemverSignalSet.has("explicit-migration-marker")
+    ) {
+      nextLabels = ensureRequiredLabelFamily(
+        nextLabels,
+        "database",
+        ["migration file", "destructive migration", "additive migration", "column drop", "column add", "write query", "read query", "database"],
+        prLabelPolicy
+      );
+    }
+
+    if (signalSet.has("observability") && hasStrongObservabilityEvidence && hasTracingEvidence) {
+      nextLabels = ensureRequiredLabelFamily(
+        nextLabels,
+        "request tracing",
+        ["request tracing", "telemetry", "monitoring", "observability"],
+        prLabelPolicy
+      );
+    }
+
+    return nextLabels;
+  };
+
+  deterministicLabels = enforceCriticalReleaseLabelFamilies(deterministicLabels);
 
   for (const label of deterministicLabels) {
     const normalizedLabel = AutobotLabelRegistry.normalizeLabelName(label);
@@ -3012,25 +3195,11 @@ function analyzePullRequestSnapshotData(snapshot) {
       generalLabelReplacementPlans[normalizedLabel] = replacementPlan;
     }
   }
-  const allGeneralLabelReplacementPlans = {};
-  for (const label of Object.keys(AutobotLabelRegistry.LABEL_DEFINITIONS || {})) {
-    const normalizedLabel = AutobotLabelRegistry.normalizeLabelName(label);
-    if (!isGeneralTechnicalLabel(normalizedLabel) || allGeneralLabelReplacementPlans[normalizedLabel]) {
-      continue;
-    }
-    const replacementPlan = buildGeneralLabelReplacementPlan(normalizedLabel, {
-      labelSupportCheck: labelHasStrongOutputSupport,
-      technicalLabelScores
-    });
-    if (replacementPlan) {
-      allGeneralLabelReplacementPlans[normalizedLabel] = replacementPlan;
-    }
-  }
   const replacementPlanOutput = {
-    ...allGeneralLabelReplacementPlans,
     ...generalLabelReplacementPlans
   };
-  const releaseRelevant = AutobotLabelRegistry.hasReleaseRelevantLabel(deterministicLabels);
+  const autobotInfrastructureOnly = filesWithContext.length > 0
+    && filesWithContext.every((file) => isAutobotClassificationInfrastructure(String(file.filename || "").toLowerCase()));
   const candidateLabels = applyPrLabelPolicy(
     mergeRankedLabels(
       scorerRetainedLabels,
@@ -3041,17 +3210,36 @@ function analyzePullRequestSnapshotData(snapshot) {
   );
   const consideredButNotEmittedLabels = [...new Set([...rawDeterministicLabels, ...primaryScorerLabels, ...candidateLabels])]
     .filter((label) => !deterministicLabels.includes(label));
-  const topEvidenceItems = evidenceItems.slice(0, 4);
+  const topEvidenceItems = [...evidenceItems]
+    .sort((left, right) => {
+      const sampleQuality = (item) => {
+        const sampleFiles = Array.isArray(item?.metadata?.sampleFiles) ? item.metadata.sampleFiles : [];
+        return sampleFiles.some((file) => {
+          const normalizedPath = String(file || "").toLowerCase();
+          return normalizedPath
+            && !isAutobotClassificationInfrastructure(normalizedPath)
+            && !isTestPath(normalizedPath)
+            && !/^docs\//.test(normalizedPath);
+        }) ? 1 : 0;
+      };
+      const qualityDelta = sampleQuality(right) - sampleQuality(left);
+      if (qualityDelta !== 0) {
+        return qualityDelta;
+      }
+      return Number(right?.occurrenceCount || 0) - Number(left?.occurrenceCount || 0)
+        || String(left?.ruleId || "").localeCompare(String(right?.ruleId || ""));
+    })
+    .slice(0, 2);
 
   if (deterministicLabels.length > 1) {
     const evidenceStrengths = deterministicLabels.map((label) => ({
       label,
       strength: computeEvidenceStrength(label)
     }));
-    const hasStrongLabels = evidenceStrengths.some((entry) => entry.strength >= 0.15);
+    const hasStrongLabels = evidenceStrengths.some((entry) => entry.strength >= 0.03);
     if (hasStrongLabels) {
       const filteredLabels = evidenceStrengths
-        .filter((entry) => entry.strength >= 0.05)
+        .filter((entry) => entry.strength >= 0.03)
         .sort((left, right) => right.strength - left.strength)
         .map((entry) => entry.label);
       if (filteredLabels.length > 0) {
@@ -3061,6 +3249,107 @@ function analyzePullRequestSnapshotData(snapshot) {
   }
 
   deterministicLabels = applyCemGate(deterministicLabels, contentEvidenceMap);
+
+  const hasConcreteSupport = (label) => {
+    const normalizedLabel = AutobotLabelRegistry.normalizeLabelName(label);
+    return Boolean(
+      maintenanceLabelHasDirectSurfaceSupport(normalizedLabel)
+      || cemFilteredTechnicalSignalSet.has(normalizedLabel)
+      || getDirectEvidenceForLabel(normalizedLabel).length > 0
+      || getSupportFilesForLabel(normalizedLabel).length > 0
+      || technicalLabelScores[normalizedLabel]?.primary
+      || technicalLabelScores[normalizedLabel]?.emitted
+    );
+  };
+  deterministicLabels = deterministicLabels.filter((label) => hasConcreteSupport(label));
+
+  if (!maintenanceLikeOperationalSurface && hasBehavioralSurfaceChange) {
+    const lowSignalPipelineLeaves = new Set(["scenario lane", "replay seed", "test fixture", "mock setup"]);
+    deterministicLabels = deterministicLabels.filter((label) => {
+      const normalizedLabel = AutobotLabelRegistry.normalizeLabelName(label);
+      if (!lowSignalPipelineLeaves.has(normalizedLabel)) {
+        return true;
+      }
+      return getSupportFilesForLabel(normalizedLabel).length > 0
+        || getDirectEvidenceForLabel(normalizedLabel).length > 0
+        || technicalLabelScores[normalizedLabel]?.primary
+        || technicalLabelScores[normalizedLabel]?.emitted;
+    });
+  }
+
+  if (!maintenanceLikeOperationalSurface && (categoryCounts.get("ui") || signalSet.has("ui"))) {
+    deterministicLabels = ensureRequiredLabelFamily(
+      deterministicLabels,
+      "view",
+      ["view", "template", "form control", "theme token"],
+      prLabelPolicy
+    );
+  }
+
+  if (maintenanceLikeOperationalSurface) {
+    const maintenanceNoiseLabels = new Set(["unit test", "smoke test", "task runner"]);
+    deterministicLabels = deterministicLabels.filter((label) => {
+      const normalizedLabel = AutobotLabelRegistry.normalizeLabelName(label);
+      if (PR_PIPELINE_CLUTTER_LABELS.has(normalizedLabel) || maintenanceNoiseLabels.has(normalizedLabel)) {
+        return false;
+      }
+      if (!hasDirectSecurityEvidence && AutobotLabelRegistry.isReleaseRelevantLabel(normalizedLabel)) {
+        if (cemFilteredTechnicalSignalSet.has(normalizedLabel)) {
+          return true;
+        }
+        return false;
+      }
+      return true;
+    });
+  }
+
+  if (autobotInfrastructureOnly) {
+    deterministicLabels = deterministicLabels.filter((label) => !AutobotLabelRegistry.isReleaseRelevantLabel(label));
+  }
+
+  if (maintenanceLikeOperationalSurface && categoryCounts.get("test")) {
+    deterministicLabels = ensureRequiredLabelFamily(
+      deterministicLabels,
+      "test",
+      ["test", "test job", "unit test", "integration test"],
+      prLabelPolicy
+    );
+  }
+
+  if (maintenanceLikeOperationalSurface && (categoryCounts.get("workflow") || signalSet.has("workflow"))) {
+    deterministicLabels = ensureRequiredLabelFamily(
+      deterministicLabels,
+      "workflow",
+      ["workflow", "workflow file", "github actions"],
+      prLabelPolicy
+    );
+  }
+
+  if (deterministicLabels.length === 0 && maintenanceLikeOperationalSurface) {
+    const maintenanceFallbackCandidates = mergeRankedLabels(
+      scorerEmittedLabels,
+      mergeRankedLabels(scorerRetainedLabels, rawDeterministicLabels, prCollectionLimit),
+      prCollectionLimit
+    ).filter((label) => maintenanceLabelHasDirectSurfaceSupport(label));
+    deterministicLabels = applyPrLabelPolicy(maintenanceFallbackCandidates, prLabelPolicy);
+  }
+
+  deterministicLabels = enforceCriticalReleaseLabelFamilies(deterministicLabels);
+
+  const parentSet = new Set(deterministicLabels);
+  for (const label of deterministicLabels) {
+    for (const ancestor of AutobotLabelRegistry.getLabelAncestors(label)) {
+      if (AutobotLabelRegistry.isTechnicalLabel(ancestor)) {
+        parentSet.add(ancestor);
+      }
+    }
+  }
+  if (parentSet.size > deterministicLabels.length) {
+    deterministicLabels = sortLabels([...parentSet]);
+  }
+
+  const releaseRelevant = !autobotInfrastructureOnly
+    && AutobotLabelRegistry.hasReleaseRelevantLabel(deterministicLabels);
 
   labelRationaleLines = buildLabelRationaleLines(deterministicLabels, rationaleContext);
 

@@ -127,7 +127,7 @@ test("deterministic lane replays committed regression fixtures cleanly", async (
   const result = await evaluateScenarioLane({
     includeBaselineSuites: false,
     lane: "deterministic",
-    suiteKeys: ["AUTOBOT_PIPELINE", "UNIFIED_AUTOMATION"]
+    suiteKeys: ["AUTOBOT", "AUTOBOT_PIPELINE", "UNIFIED_AUTOMATION"]
   });
 
   assert.equal(result.failed, false, result.reportText);

@@ -8,7 +8,7 @@ const {
   technicalLabelsOnly,
   trimLowSignalLabels,
   uniqueValidLabels
-} = require("./labels.cjs");
+} = require("./labels/registry.cjs");
 const { buildIssueSummaryArtifacts } = require("./prompts.cjs");
 const { analyzePullRequestSnapshot, collectPullRequestSnapshot } = require("./pr_analysis.cjs");
 const {
@@ -45,6 +45,7 @@ const CONNECT_PROPAGATABLE_LABELS = new Set([
   "workflow"
 ]);
 const PROPAGATABLE_LINK_LABELS = new Set([...AutobotLabelRegistry.VALID_LABELS]);
+const { DEFAULT_THRESHOLD } = require("./constants.cjs");
 
 function isConnectPropagatableLabel(label) {
   const normalizedLabel = AutobotLabelRegistry.normalizeLabelName(label);
@@ -114,7 +115,7 @@ function shouldFinalizeAutobotRelease(context) {
 
 function shouldAnalyzeSmartLinks(context) {
   if (!context) return false;
-  if (!["issues", "pull_request", "repository_dispatch", "workflow_dispatch"].includes(context.eventName)) return false;
+  if (!["issues", "pull_request", "repository_dispatch"].includes(context.eventName)) return false;
   if (["issues", "pull_request"].includes(context.eventName)) {
     return asString(context.payload && context.payload.action).toLowerCase() !== "closed";
   }
@@ -196,11 +197,11 @@ async function analyzeUnifiedAutomationState({
   owner,
   repo,
   stateFile,
-  thresholdInput,
   autobotSnapshotFile,
   projectStateFile,
   smartLinkAnalysisFile,
-  smartLinkSourceFile
+  smartLinkSourceFile,
+  thresholdInput = DEFAULT_THRESHOLD
 }) {
   const files = resolveUnifiedAutomationFiles({
     autobotSnapshotFile,

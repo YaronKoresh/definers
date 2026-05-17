@@ -1,6 +1,6 @@
 const { scoreDeterministicEvidence } = require("./measurement/scorer.cjs");
 const { applyLabelWordBudget } = require("./measurement/label_selection.cjs");
-const { AutobotLabelRegistry } = require("./labels.cjs");
+const { AutobotLabelRegistry } = require("./labels/registry.cjs");
 
 const MAX_LABEL_WORDS = 2;
 

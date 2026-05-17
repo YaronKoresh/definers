@@ -1,6 +1,6 @@
 const { LABEL_SUPPORT_PATTERNS } = require("../constants.cjs");
-const { AutobotLabelRegistry } = require("../labels.cjs");
-const { EVIDENCE_RULES } = require("../measurement/evidence_rules.cjs");
+const { AutobotLabelRegistry } = require("../labels/registry.cjs");
+const { EVIDENCE_RULES } = require("../measurement/scorer.cjs");
 const { escapeRegExp, formatBulletLines, humanizeIdentifier } = require("../utils.cjs");
 
 function isAutobotClassificationInfrastructure(normalizedPath) {
@@ -26,9 +26,17 @@ function describeEvidenceItem(evidence) {
   if (evidence?.polarity === "additive" || evidence?.polarity === "destructive") {
     parts.push(evidence.polarity);
   }
-  const sampleFiles = Array.isArray(evidence?.metadata?.sampleFiles)
-    ? evidence.metadata.sampleFiles.filter(Boolean).slice(0, 3)
+  const rawSampleFiles = Array.isArray(evidence?.metadata?.sampleFiles)
+    ? evidence.metadata.sampleFiles.filter(Boolean)
     : [];
+  const preferredSampleFiles = rawSampleFiles.filter((file) => {
+    const normalizedPath = String(file || "").toLowerCase();
+    return normalizedPath
+      && !isAutobotClassificationInfrastructure(normalizedPath)
+      && !isTestPath(normalizedPath)
+      && !/^docs\//.test(normalizedPath);
+  });
+  const sampleFiles = (preferredSampleFiles.length > 0 ? preferredSampleFiles : rawSampleFiles).slice(0, 3);
   if (sampleFiles.length > 0) {
     parts.push(`files: ${sampleFiles.join(", ")}`);
   }
@@ -71,13 +79,36 @@ function collectDirectEvidenceForLabel(label, evidenceItems) {
     .sort((left, right) => right.boost - left.boost || right.occurrenceCount - left.occurrenceCount || left.ruleId.localeCompare(right.ruleId));
 }
 
+function splitPatchLinesForSupport(patch) {
+  return String(patch || "").split("\n");
+}
+
+function stripDiffLinePrefixForSupport(line) {
+  if (/^[ +-]/.test(line)) {
+    return line.slice(1);
+  }
+  return line;
+}
+
+function isChangedPatchLineForSupport(line) {
+  return /^[+-]/.test(line) && !/^(\+\+\+|---) /.test(line);
+}
+
+function changedPatchSupportText(patch) {
+  return splitPatchLinesForSupport(patch)
+    .filter((line) => isChangedPatchLineForSupport(line))
+    .map((line) => stripDiffLinePrefixForSupport(line))
+    .join("\n")
+    .toLowerCase();
+}
+
 function collectSupportFilesForLabel(label, filesWithContext) {
   const normalizedLabel = AutobotLabelRegistry.normalizeLabelName(label);
   const patterns = getLabelSupportKeys(label)
     .flatMap((supportKey) => LABEL_SUPPORT_PATTERNS[supportKey] || buildDefaultLabelSupportPatterns(supportKey));
   const matchingFiles = (filesWithContext || [])
     .filter((file) => {
-      const text = `${String(file.filename || "").toLowerCase()}\n${String(file.patch || "").toLowerCase()}`;
+      const text = `${String(file.filename || "").toLowerCase()}\n${changedPatchSupportText(file.patch)}`;
       return patterns.some((pattern) => pattern.test(text));
     })
     .sort((left, right) => {
@@ -94,14 +125,10 @@ function collectSupportFilesForLabel(label, filesWithContext) {
       && !/^docs\//.test(normalizedPath);
   });
 
-  const securityRelatedLabels = new Set(["security", "vulnerability", "hardening", "pen-test", "compliance"]);
   const supportFiles = preferredFiles.length > 0
     ? preferredFiles
-    : securityRelatedLabels.has(normalizedLabel)
-      ? []
-      : matchingFiles;
-
-  return supportFiles.slice(0, 3).map((file) => file.filename);
+    : matchingFiles.filter((file) => !isAutobotClassificationInfrastructure(String(file.filename || "").toLowerCase()));
+  return supportFiles.map((file) => file.filename);
 }
 
 function deriveLabelConfidence(scoreEntry, directEvidence, supportFiles) {
@@ -180,7 +207,6 @@ function collectHardSignalEvidenceFiles(hardSignals, evidenceItems) {
     for (const file of (item.metadata?.sampleFiles || []).slice(0, 2)) {
       if (file && !files.includes(file)) files.push(file);
     }
-    if (files.length >= 3) break;
   }
   return files;
 }
@@ -235,15 +261,26 @@ function buildLabelRationale(label, context) {
   if (reasonParts.length === 0) {
     const nearestEvidence = (context.evidenceItems || [])
       .filter((item) => Number(item.occurrenceCount || 0) > 0)
-      .slice(0, 2)
       .map((item) => {
-        const sampleFiles = (item.metadata?.sampleFiles || []).slice(0, 1);
-        return sampleFiles.length > 0 ? `${humanizeIdentifier(item.ruleId)} in ${sampleFiles.join(", ")}` : humanizeIdentifier(item.ruleId);
-      });
+        const sampleFiles = (item.metadata?.sampleFiles || [])
+          .filter((file) => {
+            const normalizedPath = String(file || "").toLowerCase();
+            return normalizedPath
+              && !isAutobotClassificationInfrastructure(normalizedPath)
+              && !isTestPath(normalizedPath)
+              && !/^docs\//.test(normalizedPath);
+          })
+          .slice(0, 1);
+        return sampleFiles.length > 0
+          ? `${humanizeIdentifier(item.ruleId)} in ${sampleFiles.join(", ")}`
+          : null;
+      })
+      .filter(Boolean)
+      .slice(0, 2);
     if (nearestEvidence.length > 0) {
-      reasonParts.push(`inferred from overall evidence: ${nearestEvidence.join(", ")}`);
+      reasonParts.push(`inferred from nearby product-surface evidence: ${nearestEvidence.join(", ")}`);
     } else {
-      reasonParts.push("no direct evidence found for this label");
+      reasonParts.push("insufficient direct evidence for this label in non-infrastructure files");
     }
   }
   return `${label}: ${metadata.description || "Technical label."} Confidence ${confidence}. ${reasonParts.join("; ")}.`;
@@ -266,9 +303,6 @@ function buildPrDeterministicSummary(context) {
   });
   if (summaryLabels.length === 0) {
     summaryLabels = allDeterministicLabels.filter((label) => !isGenericTechnicalLabel(label));
-  }
-  if (summaryLabels.length === 0) {
-    summaryLabels = allDeterministicLabels.slice(0, 3);
   }
 
   const rationaleLabels = allDeterministicLabels.length > 0 ? allDeterministicLabels : summaryLabels;

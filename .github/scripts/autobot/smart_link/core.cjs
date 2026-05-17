@@ -2,7 +2,7 @@ const crypto = require("crypto");
 
 const { normalizeAccumulatedScore } = require("../measurement/scorer.cjs");
 
-const DEFAULT_EMISSION_THRESHOLD = 80;
+const { DEFAULT_THRESHOLD } = require("../constants.cjs");
 const MAX_TOTAL_CANDIDATES = 80;
 const MAX_EMITTED_RESULTS = 20;
 const MANAGED_BODY_START = "<!-- smart-autolinker:start -->";
@@ -507,7 +507,7 @@ function summarizeSuppressionReasons(result) {
   return uniqueStrings(result.suppressionReasons);
 }
 
-function analyzeCandidatePair({ candidate, source, threshold = DEFAULT_EMISSION_THRESHOLD }) {
+function analyzeCandidatePair({ candidate, source, threshold = DEFAULT_THRESHOLD }) {
   const evidenceItems = [];
   const suppressionReasons = [];
   const closeIds = new Set(source.explicitReferences.closeIds);
@@ -712,7 +712,7 @@ function compareCandidateResults(left, right) {
   return (left.candidate.number || 0) - (right.candidate.number || 0);
 }
 
-function selectSmartLinkResults({ candidateResults, threshold = DEFAULT_EMISSION_THRESHOLD }) {
+function selectSmartLinkResults({ candidateResults, threshold = DEFAULT_THRESHOLD }) {
   const emitted = [];
   const relationCounts = {
     advisory_fix: 0,
@@ -852,7 +852,7 @@ function buildResultTableRows(emittedResults) {
 
 module.exports = {
   CHECK_NAME,
-  DEFAULT_EMISSION_THRESHOLD,
+  DEFAULT_THRESHOLD,
   DEFAULT_MAX_EMITTED_RESULTS: MAX_EMITTED_RESULTS,
   GRAPH_COMMENT_MARKER_PREFIX,
   MANAGED_BODY_END,

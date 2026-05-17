@@ -5,7 +5,7 @@ const { chance, createSeededRandom, pick, pickWeighted, randomInt, randomWords, 
 const { analyzePullRequestSnapshot, collectPullRequestSnapshot } = require("../.github/scripts/autobot/pr_analysis.cjs");
 const { prepareProjectState, syncPreparedProjectState, syncProjectMilestone } = require("../.github/scripts/autobot/project_manager.cjs");
 const { analyzeUnifiedAutomationState, applyUnifiedAutomationState } = require("../.github/scripts/autobot/unified.cjs");
-const { AutobotLabelRegistry } = require("../.github/scripts/autobot/labels.cjs");
+const { AutobotLabelRegistry } = require("../.github/scripts/autobot/labels/registry.cjs");
 const {
   buildDirectiveSummary,
   buildMermaidGraphLines,
@@ -33,13 +33,11 @@ const CRITICAL_LABEL_SET = new Set(CRITICAL_LABELS);
 const SCENARIO_TIME_ANCHOR = Date.parse("2026-04-13T00:00:00Z");
 const PULL_REQUEST_ACTION_WEIGHTS = [
   { value: "opened", weight: 4 },
-  { value: "edited", weight: 2 },
   { value: "synchronize", weight: 3 },
   { value: "reopened", weight: 1 }
 ];
 const ISSUE_ACTION_WEIGHTS = [
   { value: "opened", weight: 5 },
-  { value: "edited", weight: 2 },
   { value: "reopened", weight: 1 }
 ];
 const TRUSTED_AUTHOR_ASSOCIATION_WEIGHTS = [
@@ -2861,23 +2859,14 @@ function createUnifiedAlertScenario(random, index, seed) {
     title: `Patch ${token} advisory`,
     updatedAt: "2026-04-13T00:00:00Z"
   });
-  const dispatchMode = index % 2 === 0 ? "repository_dispatch" : "workflow_dispatch";
-  const context = dispatchMode === "repository_dispatch"
-    ? {
-        eventName: "repository_dispatch",
-        payload: {
-          action: "triggered",
-          client_payload: alertPayload
-        }
-      }
-    : {
-        eventName: "workflow_dispatch",
-        payload: {
-          inputs: {
-            payload: JSON.stringify(alertPayload)
-          }
-        }
-      };
+  const dispatchMode = "repository_dispatch";
+  const context = {
+    eventName: "repository_dispatch",
+    payload: {
+      action: "triggered",
+      client_payload: alertPayload
+    }
+  };
 
   return {
     context,
@@ -3666,12 +3655,6 @@ function formatScenarioEvaluationBlock(evaluation) {
   ];
   if (evaluation.scenario?.realismProfile) {
     lines.push(`Realism: ${stableStringify(evaluation.scenario.realismProfile)}`);
-  }
-  lines.push(`Scenario Detail: ${stableStringify(evaluation.scenario)}`);
-  lines.push(`Optimal: ${stableStringify(evaluation.optimalResult)}`);
-  lines.push(`Actual: ${stableStringify(evaluation.actualResult)}`);
-  if (evaluation.rawResult !== undefined) {
-    lines.push(`Raw Result: ${stableStringify(evaluation.rawResult)}`);
   }
   if ((evaluation.acceptedReasons || []).length > 0) {
     lines.push("Accepted Reasons:");

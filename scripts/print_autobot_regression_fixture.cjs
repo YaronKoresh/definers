@@ -7,7 +7,9 @@ const {
   normalizePatch
 } = require("../.github/scripts/autobot/pr_analysis.cjs");
 const {
-  buildPrCommentBody
+  buildPrCommentBody,
+  hasReleaseRelevantLabel,
+  parseDeterministicSemver
 } = require("../.github/scripts/autobot/project_manager.cjs");
 const {
   formatRegressionFixtureEntry,
@@ -72,6 +74,42 @@ function shouldFormatCaptureFixture(input = {}) {
   const argv = input.argv || process.argv;
   const fsModule = input.fsModule || fs;
   return Boolean(String(env.SCENARIO_CAPTURE_FILE || argv[2] || "").trim()) || hasRedirectedStdin(fsModule);
+}
+
+function parseBooleanFlag(value, fallback) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (!normalized) {
+    return fallback;
+  }
+  if (["1", "true", "yes", "on"].includes(normalized)) {
+    return true;
+  }
+  if (["0", "false", "no", "off"].includes(normalized)) {
+    return false;
+  }
+  return fallback;
+}
+
+function parseIntegerFlag(value, fallback, minimum, maximum) {
+  const parsed = Number.parseInt(String(value ?? "").trim(), 10);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  return Math.max(minimum, Math.min(maximum, parsed));
+}
+
+function resolveIncludeUntracked(input = {}, previewMode = "working-tree", env = process.env) {
+  if (input.includeUntracked !== undefined) {
+    return Boolean(input.includeUntracked);
+  }
+  return parseBooleanFlag(env.AUTOBOT_LOCAL_INCLUDE_UNTRACKED, false);
+}
+
+function resolveMaxUntrackedFiles(input = {}, env = process.env) {
+  if (input.maxUntrackedFiles !== undefined) {
+    return parseIntegerFlag(input.maxUntrackedFiles, 200, 0, 20000);
+  }
+  return parseIntegerFlag(env.AUTOBOT_LOCAL_MAX_UNTRACKED_FILES, 200, 0, 20000);
 }
 
 function splitTrackedDiffSections(diffText) {
@@ -627,9 +665,8 @@ function collectLocalGitDiffSnapshot(input = {}) {
     }
   }
 
-  const includeUntracked = input.includeUntracked !== undefined
-    ? Boolean(input.includeUntracked)
-    : previewMode !== "pull-request";
+  const includeUntracked = resolveIncludeUntracked(input, previewMode, env);
+  const maxUntrackedFiles = resolveMaxUntrackedFiles(input, env);
 
   const untrackedFiles = includeUntracked
     ? (input.untrackedFiles || parseNullSeparatedList(runGitCommand([
@@ -637,7 +674,7 @@ function collectLocalGitDiffSnapshot(input = {}) {
         "--others",
         "--exclude-standard",
         "-z"
-      ], repoExecInput)))
+      ], repoExecInput))).slice(0, maxUntrackedFiles)
     : [];
 
 const resolvedTitle = input.title !== undefined
@@ -693,8 +730,13 @@ function analyzeCurrentGitDiff(input = {}) {
 
 function formatLocalDiffAnalysis(input) {
   const deterministicLabels = safeParseJson(input.outputs.deterministic_labels_json, []);
-  const deterministicSemver = safeParseJson(input.outputs.deterministic_semver_json, {});
-  const releaseRelevant = String(input.outputs.release_relevant || "").toLowerCase() === "true";
+  const linkedLabels = safeParseJson(input.outputs.linked_labels_json, []);
+  const nextAutobotLabels = [...new Set([
+    ...(Array.isArray(deterministicLabels) ? deterministicLabels : []),
+    ...(Array.isArray(linkedLabels) ? linkedLabels : [])
+  ])];
+  const deterministicSemver = parseDeterministicSemver(input.outputs.deterministic_semver_json);
+  const releaseRelevant = hasReleaseRelevantLabel(nextAutobotLabels);
   const rawPrNumber = Number.parseInt(String(input.snapshot.pullRequest.number || 0), 10);
   const displayPrNumber = Number.isFinite(rawPrNumber) && rawPrNumber > 0
     ? rawPrNumber
@@ -707,8 +749,10 @@ function formatLocalDiffAnalysis(input) {
       head: { ref: String(input.snapshot.pullRequest.headRef || "(detached)") },
       number: displayPrNumber
     },
-    nextAutobotLabels: Array.isArray(deterministicLabels) ? deterministicLabels : [],
-    semverDecision: releaseRelevant ? String(deterministicSemver.decision || "none") : "none"
+    nextAutobotLabels,
+    semverDecision: releaseRelevant
+      ? String((deterministicSemver && deterministicSemver.decision) || "none")
+      : "none"
   });
 
   const metadataLines = [

@@ -2,22 +2,11 @@ name: Autobot Smart Link
 
 on:
   issues:
-    types: [opened, edited, reopened, labeled, unlabeled, milestoned, demilestoned, closed]
+    types: [opened, reopened, closed]
   pull_request:
-    types: [opened, edited, synchronize, reopened, labeled, unlabeled, milestoned, demilestoned, closed]
+    types: [opened, synchronize, reopened, closed]
   repository_dispatch:
     types: [smart-link-alert]
-  workflow_dispatch:
-    inputs:
-      payload:
-        description: Normalized Smart Link source payload JSON
-        required: false
-        type: string
-      threshold:
-        description: Deterministic emission threshold
-        default: "80"
-        required: false
-        type: string
 
 permissions:
   contents: write
@@ -27,24 +16,7 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.issue.number || github.run_id }}
-  cancel-in-progress: >-
-    ${{
-      !(
-        github.event_name == 'repository_dispatch' &&
-        (github.event.client_payload.source.kind || github.event.client_payload.kind || '') != 'security_alert'
-      ) &&
-      !(
-        (github.event_name == 'issues' || github.event_name == 'pull_request') &&
-        github.event.action == 'edited' &&
-        github.event.sender.type != 'Bot' &&
-        github.event.changes != null &&
-        github.event.changes.title == null &&
-        github.event.changes.body == null &&
-        github.event.changes.base == null &&
-        github.event.changes.labels == null &&
-        github.event.changes.milestone == null
-      )
-    }}
+  cancel-in-progress: true
 
 jobs:
   autobot-smart-link:
@@ -76,20 +48,6 @@ jobs:
               }
             }
 
-            if ((eventName === "issues" || eventName === "pull_request") && action === "edited") {
-              const changes = payload.changes && typeof payload.changes === "object" ? payload.changes : {};
-              const changedKeys = Object.keys(changes);
-              const meaningfulIssueKeys = new Set(["title", "body", "labels", "milestone"]);
-              const meaningfulPullRequestKeys = new Set(["title", "body", "base", "labels", "milestone"]);
-              const meaningfulKeys = eventName === "issues" ? meaningfulIssueKeys : meaningfulPullRequestKeys;
-              const hasMeaningfulChange = changedKeys.some((key) => meaningfulKeys.has(key));
-              const senderType = String(payload.sender && payload.sender.type || "").toLowerCase();
-              if (!hasMeaningfulChange && senderType !== "bot") {
-                shouldRun = false;
-                reason = "non-material-edit";
-              }
-            }
-
             core.setOutput("should_run", shouldRun ? "true" : "false");
             core.setOutput("reason", reason);
       - name: Run fixed Autobot scenario coverage
@@ -109,17 +67,13 @@ jobs:
             const helperPath = `${process.env.GITHUB_WORKSPACE || process.cwd()}/.github/scripts/autobot/unified.cjs`;
             const { analyzeUnifiedAutomationState } = require(helperPath);
             const { owner, repo } = context.repo;
-            const thresholdInput = (context.payload.inputs && context.payload.inputs.threshold)
-              || (context.payload.client_payload && context.payload.client_payload.threshold)
-              || "";
             const outputs = await analyzeUnifiedAutomationState({
               context,
               core,
               github,
               owner,
               repo,
-              stateFile: process.env.UNIFIED_AUTOMATION_STATE_FILE,
-              thresholdInput
+              stateFile: process.env.UNIFIED_AUTOMATION_STATE_FILE
             });
             for (const [name, value] of Object.entries(outputs)) {
               core.setOutput(name, value);
