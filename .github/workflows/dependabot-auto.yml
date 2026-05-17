@@ -7,16 +7,38 @@ on:
 permissions:
   pull-requests: write
   contents: write
+  repository-projects: read
 
 jobs:
   auto-merge:
     runs-on: ubuntu-latest
     if: github.actor == 'dependabot[bot]'
     steps:
-      - name: Auto-Approve and Merge
+      - name: Check Dependabot Compatibility Score
+        id: check-score
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_URL: ${{ github.event.pull_request.html_url }}
         run: |
-          gh pr review "$PR_URL" --approve --body "✅ Automated approval for security update."
+          echo "Fetching PR body to parse compatibility score..."
+          PR_BODY=$(gh pr view "$PR_URL" --json body --template '{{.body}}')
+
+          SCORE=$(echo "$PR_BODY" | grep -ioE 'compatibility[^0-9]*[0-9]+%' | grep -oE '[0-9]+' || echo "0")
+
+          echo "Detected Dependabot Compatibility Score: $SCORE%"
+          echo "score=$SCORE" >> $GITHUB_OUTPUT
+
+      - name: Auto-Approve and Merge
+        if: steps.check-score.outputs.score >= 70
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          echo "Score is 70 or higher. Proceeding with auto-merge..."
+          gh pr review "$PR_URL" --approve --body "✅ Automated approval: Compatibility score is ${{ steps.check-score.outputs.score }}% (>= 70%)."
           gh pr merge "$PR_URL" --auto --merge
+
+      - name: Skip Auto-Merge
+        if: steps.check-score.outputs.score < 70
+        run: |
+          echo "❌ Skipped auto-merge: Compatibility score (${{ steps.check-score.outputs.score }}%) is below 70%."

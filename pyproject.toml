@@ -189,11 +189,18 @@ cmd = "node --test tests/autobot_smart_link_unified.test.cjs tests/autobot_scrip
 [tool.poe.tasks.autobot-preview]
 cmd = "node scripts/print_autobot_regression_fixture.cjs"
 
+[tool.poe.tasks.autobot-preview.env]
+AUTOBOT_LOCAL_INCLUDE_UNTRACKED = "false"
+AUTOBOT_LOCAL_MAX_UNTRACKED_FILES = "120"
+
 [tool.poe.tasks.autobot-random]
 cmd = "node scripts/run_autobot_scenario_lanes.cjs"
 
 [tool.poe.tasks.autobot-random.env]
 SCENARIO_SUITES = "SMART_LINK,UNIFIED_AUTOMATION"
+SCENARIO_INCLUDE_REGRESSION_FIXTURES = "false"
+SMART_LINK_SCENARIO_COUNT = "8"
+UNIFIED_AUTOMATION_SCENARIO_COUNT = "8"
 
 [tool.poe.tasks._test-py]
 cmd = "python -m pytest tests/"

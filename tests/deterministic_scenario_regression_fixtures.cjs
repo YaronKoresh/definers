@@ -27,6 +27,13 @@ const COMMITTED_REGRESSION_FIXTURES = Object.freeze([
     suiteKey: "AUTOBOT"
   },
   {
+    fixtureId: "autobot-adversarial-empty-payload",
+    kind: "adversarial-empty-payload",
+    materialization: { count: 17, seed: 20260413 },
+    reason: "Guards mandatory maintenance-label fallback when GitHub omits patch payloads.",
+    suiteKey: "AUTOBOT"
+  },
+  {
     fixtureId: "autobot-pipeline-label-race-recovery",
     kind: "label-race-recovery",
     materialization: { count: 13, seed: 20260413 },

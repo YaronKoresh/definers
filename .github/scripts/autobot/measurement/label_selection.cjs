@@ -3,7 +3,7 @@ const {
   SMALL_PR_FILE_LIMIT,
   SMALL_PR_TOTAL_CHANGE_LIMIT
 } = require("../constants.cjs");
-const { AutobotLabelRegistry, LABEL_PRIORITY, sortLabels, technicalLabelsOnly } = require("../labels.cjs");
+const { AutobotLabelRegistry, LABEL_PRIORITY, sortLabels, technicalLabelsOnly } = require("../labels/registry.cjs");
 
 const DEFAULT_MAX_LABEL_WORDS = 2;
 
@@ -92,13 +92,11 @@ function isSmallPullRequest(filesChanged, totalChanges) {
 }
 
 function derivePrLabelBudget(smallPullRequest) {
-  void smallPullRequest;
-  return Number.POSITIVE_INFINITY;
+  return smallPullRequest ? 12 : 15;
 }
 
 function deriveGenericMaintenanceLabelLimit(smallPullRequest) {
-  void smallPullRequest;
-  return Number.POSITIVE_INFINITY;
+  return smallPullRequest ? 10 : 12;
 }
 
 function normalizePrOutputLabel(label) {

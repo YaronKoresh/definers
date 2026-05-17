@@ -12,7 +12,7 @@ const {
 const {
   AutobotLabelRegistry,
   normalizeLabelName
-} = require("../.github/scripts/autobot/labels.cjs");
+} = require("../.github/scripts/autobot/labels/registry.cjs");
 
 function hasExpectedLabel(labels, expectedLabel) {
   return (labels || []).some((label) => AutobotLabelRegistry.matchesExpectedLabel(label, expectedLabel));

@@ -16,7 +16,7 @@ const {
   AutobotLabelRegistry,
   normalizeLabelName,
   trimLowSignalLabels
-} = require("../.github/scripts/autobot/labels.cjs");
+} = require("../.github/scripts/autobot/labels/registry.cjs");
 const {
   AutobotDeterministicScorer,
   scoreDeterministicEvidence
@@ -230,6 +230,7 @@ test("local diff preview analyzes the current git diff and renders a human-reada
   ].join("\n");
   const preview = analyzeCurrentGitDiff({
     cwd: "C:/repo",
+    includeUntracked: true,
     execFileSync: (_command, args) => {
       const key = args.join(" ");
       if (key === "rev-parse --show-toplevel") {
@@ -550,6 +551,37 @@ test("local preview renders semver none for maintenance-only labels", () => {
   });
 
   assert.equal(outputs.release_relevant, "false");
+  assert.ok(report.includes("Semver: n/a."));
+  assert.ok(!report.includes("Semver: patch."));
+});
+
+test("local preview semver rendering follows online label-driven release relevance", () => {
+  const report = formatLocalDiffAnalysis({
+    baseRef: "HEAD",
+    diffSpec: "HEAD",
+    outputs: {
+      deterministic_labels_json: JSON.stringify(["workflow file"]),
+      linked_labels_json: JSON.stringify([]),
+      deterministic_semver_json: JSON.stringify({ decision: "patch" }),
+      deterministic_summary: [
+        "## Autobot Summary",
+        "",
+        "### Decision",
+        "- Release-relevant: true.",
+        "- Semver: patch."
+      ].join("\n"),
+      release_relevant: "true"
+    },
+    previewMode: "working-tree",
+    pullRequestContextSource: "none",
+    snapshot: {
+      pullRequest: {
+        headRef: "feature/local-preview",
+        number: 0
+      }
+    }
+  });
+
   assert.ok(report.includes("Semver: n/a."));
   assert.ok(!report.includes("Semver: patch."));
 });
@@ -1865,6 +1897,91 @@ test("PR analyzer ignores version-critical vocabulary inside autobot maintenance
   assert.ok(lineIncludesAny(result.deterministic_summary, ["lockfile", "package lock"]));
 });
 
+test("PR analyzer ignores unchanged diff context lines in autobot maintenance files", () => {
+  const snapshot = {
+    pullRequest: {
+      number: 21,
+      title: "Remove unused autobot constants",
+      body: "",
+      headRef: "autobot/constants-cleanup"
+    },
+    totals: {
+      filesChanged: 1,
+      additions: 1,
+      deletions: 3,
+      totalChanges: 4
+    },
+    files: [
+      {
+        filename: ".github/scripts/autobot/constants.cjs",
+        status: "modified",
+        additions: 1,
+        deletions: 3,
+        patch: [
+          "@@ -40,9 +40,7 @@",
+          "-const MAX_REPO_LABELS = 24;",
+          "-const MAX_UI_LABELS = 12;",
+          "-const MAX_PIPELINE_LABELS = 12;",
+          " const ACCESSIBILITY_TEXT_PATTERN = /\\baria-|accessib|a11y|screen reader|keyboard nav/;",
+          "+const MAX_LABEL_WORDS = 2;"
+        ].join("\n"),
+        rawPatchAvailable: true
+      }
+    ]
+  };
+
+  const result = analyzePullRequestSnapshotData(snapshot);
+  const deterministicLabels = JSON.parse(result.deterministic_labels_json);
+
+  assert.equal(result.release_relevant, "false");
+  assert.ok(!hasExpectedLabel(deterministicLabels, "view"));
+  assert.ok(!hasExpectedLabel(deterministicLabels, "keyboard nav"));
+  assert.ok(!hasExpectedLabel(deterministicLabels, "screen reader"));
+  assert.ok(!hasExpectedLabel(deterministicLabels, "facade module"));
+});
+
+test("PR analyzer ignores unchanged security context lines in source hunks", () => {
+  const snapshot = {
+    pullRequest: {
+      number: 22,
+      title: "Refine access control return path",
+      body: "",
+      headRef: "security/context-line"
+    },
+    totals: {
+      filesChanged: 1,
+      additions: 1,
+      deletions: 1,
+      totalChanges: 2
+    },
+    files: [
+      {
+        filename: "src/repo/security/access_control.py",
+        status: "modified",
+        additions: 1,
+        deletions: 1,
+        patch: [
+          "@@ -8,5 +8,5 @@",
+          " def enforce_access(user):",
+          "-    return user",
+          "+    return user  # normalized",
+          "     # bearer token validation happens in middleware"
+        ].join("\n"),
+        rawPatchAvailable: true
+      }
+    ]
+  };
+
+  const result = analyzePullRequestSnapshotData(snapshot);
+  const deterministicLabels = JSON.parse(result.deterministic_labels_json);
+
+  assert.equal(result.release_relevant, "false");
+  assert.ok(!hasExpectedLabel(deterministicLabels, "security"));
+  assert.ok(!hasExpectedLabel(deterministicLabels, "auth"));
+  assert.ok(!hasExpectedLabel(deterministicLabels, "token"));
+  assert.ok(!deterministicLabels.includes("auth header"));
+});
+
 test("PR analyzer preserves additive API classification when raw patches are unavailable", () => {
   const snapshot = {
     pullRequest: {
@@ -2045,44 +2162,6 @@ test("PR summary limits release relevance to version-impact signals", () => {
   assert.ok(!releaseSignalLine.includes("ci"));
   assert.ok(!releaseSignalLine.includes("automation"));
   assert.ok(!releaseSignalLine.includes("github"));
-});
-
-test("project manager recreates the next patch milestone after demilestoning when a draft release already reserves the current version", async () => {
-  const github = createAutobotPipelineGithubMock({
-    issueLabels: ["security"],
-    comments: [
-      {
-        id: 901,
-        user: { login: "github-actions[bot]", type: "Bot" },
-        body: [
-          "<!-- autobot-summary -->",
-          "<!-- autobot-metadata:{\"autobotLabels\":[\"security\"],\"semverDecision\":\"patch\"} -->",
-          "## Autobot Summary"
-        ].join("\n")
-      }
-    ],
-    releases: [
-      { draft: true, id: 2, prerelease: false, tag_name: "v0.0.2" },
-      { draft: false, id: 1, prerelease: false, tag_name: "v0.0.1" }
-    ]
-  });
-
-  await AutobotProjectManager.syncProjectMilestone({
-    context: {
-      eventName: "pull_request",
-      payload: {
-        action: "demilestoned"
-      }
-    },
-    github,
-    issueNumber: 12,
-    owner: "octo",
-    repo: "repo"
-  });
-
-  assert.ok(github.state.createdMilestones.includes("v0.0.3"));
-  assert.deepEqual(github.state.createdMilestones, ["v0.0.3"]);
-  assert.equal(github.state.issueUpdates.at(-1).milestone, "v0.0.3");
 });
 
 test("github mock failure injection replays a transient label failure once", async () => {

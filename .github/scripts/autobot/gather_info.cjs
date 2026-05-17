@@ -4,7 +4,7 @@ const {
 } = require("./constants.cjs");
 const { readJson, writeJson } = require("./utils.cjs");
 const {
-  DEFAULT_EMISSION_THRESHOLD,
+  DEFAULT_THRESHOLD,
   MAX_TOTAL_CANDIDATES,
   TRUSTED_ASSOCIATIONS,
   normalizeSmartLinkEntity
@@ -20,7 +20,7 @@ function mergeLabels(primaryLabels, additionalLabels) {
 
 function clampThreshold(value) {
   const parsed = Number.parseInt(String(value || ""), 10);
-  if (!Number.isFinite(parsed)) return DEFAULT_EMISSION_THRESHOLD;
+  if (!Number.isFinite(parsed)) return DEFAULT_THRESHOLD;
   return Math.max(1, Math.min(100, parsed));
 }
 
@@ -345,33 +345,12 @@ async function collectSmartLinkSource({ additionalLabels, context, core, github,
   if (eventName === "repository_dispatch") {
     source = collectAlertSource({ owner, payload: context.payload.client_payload, repo });
   }
-  if (eventName === "workflow_dispatch") {
-    const payloadText = String(context.payload.inputs && context.payload.inputs.payload || "").trim();
-    if (!payloadText) {
-      core.setOutput("ready", "false");
-      core.setOutput("reason", "missing-payload");
-      return { ready: "false", reason: "missing-payload", threshold: String(threshold) };
-    }
-    let payload = null;
-    try {
-      payload = JSON.parse(payloadText);
-    } catch (error) {
-      core.setFailed(`Invalid workflow_dispatch payload JSON: ${error.message}`);
-      return { ready: "false", reason: "invalid-payload", threshold: String(threshold) };
-    }
-    source = collectAlertSource({ owner, payload, repo });
-    if (!source) {
-      core.setOutput("ready", "false");
-      core.setOutput("reason", "invalid-payload");
-      return { ready: "false", reason: "invalid-payload", threshold: String(threshold) };
-    }
-  }
   if (!source) {
     core.setOutput("ready", "false");
     core.setOutput("reason", "unsupported-event");
     return { ready: "false", reason: "unsupported-event", threshold: String(threshold) };
   }
-  if (eventName === "repository_dispatch" || eventName === "workflow_dispatch") {
+  if (eventName === "repository_dispatch") {
     const normalizedKind = String(source.kind || "").trim().toLowerCase();
     if (!SMART_LINK_ALLOWED_DISPATCH_SOURCE_KINDS.has(normalizedKind)) {
       core.setOutput("ready", "false");

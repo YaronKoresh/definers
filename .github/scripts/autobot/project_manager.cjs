@@ -13,12 +13,11 @@ const {
   parseAutobotLabels,
   trimLowSignalLabels,
   uniqueValidLabels
-} = require("./labels.cjs");
+} = require("./labels/registry.cjs");
 
 const MIN_RELEASE_SIZE = 3;
 const BUMP_ORDER = { none: 0, patch: 1, minor: 2, major: 3 };
 const BOT_COMMENT_SIGNATURE = "<!-- autobot-summary -->";
-const LEGACY_BOT_COMMENT_SIGNATURE = "<!-- autobot-ai-summary -->";
 const MILESTONE_COMMENT_SIGNATURE = "<!-- autobot-milestone-update -->";
 
 function readState(stateFile) {
@@ -53,7 +52,7 @@ function normalizeBumpType(value) {
 }
 
 function isSyncableProjectAction(action) {
-  return new Set(["demilestoned", "edited", "labeled", "milestoned", "opened", "reopened", "synchronize", "unlabeled"]).has(
+  return new Set(["opened", "reopened", "synchronize"]).has(
     String(action || "").trim().toLowerCase()
   );
 }
@@ -198,7 +197,7 @@ function getManagedLabelsFromMetadata(metadata) {
 
 function isManagedBotCommentBody(body) {
   const text = String(body || "");
-  return text.includes(BOT_COMMENT_SIGNATURE) || text.includes(LEGACY_BOT_COMMENT_SIGNATURE);
+  return text.includes(BOT_COMMENT_SIGNATURE);
 }
 
 function semverDecisionFromMetadata(metadata) {
@@ -466,7 +465,7 @@ function buildPrCommentBody({ summaryForComment, pullRequest, nextAutobotLabels,
   return [
     "# Autobot — Changes Analysis",
     "",
-    `> **PR #${pullRequest.number}** · ${pullRequest.head.ref} → ${pullRequest.base.ref} · ${new Date().toISOString().split("T")[0]}`,
+    `> **${pullRequest.number === "local-preview" ? "local-preview" : "PR #" + pullRequest.number}** · ${pullRequest.head.ref} → ${pullRequest.base.ref} · ${new Date().toISOString().split("T")[0]}`,
     "",
     "---",
     "",

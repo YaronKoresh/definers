@@ -16,8 +16,6 @@ const {
 } = require("./index.cjs");
 
 class AutobotLabelRegistry {
-  static MAX_AUTOBOT_LABELS = 12;
-
   static LABEL_GUIDANCE = Object.freeze({
     "breaking-change": "Use when consumers must adapt because of an incompatible API, contract, config, or behavior change.",
     "security": "Use when auth, permissions, secrets, sanitization, or exploit mitigation clearly changed.",
@@ -219,7 +217,7 @@ class AutobotLabelRegistry {
 
   static VERSION_LABEL_ALIASES = Object.freeze({});
 
-  static FORCE_RELEASE_TYPES = Object.freeze(["enhancement", "breaking-change", "security"]);
+  static FORCE_RELEASE_TYPES = Object.freeze(["breaking-change", "security"]);
 
   static RELEASE_RELEVANT_LABELS = Object.freeze([
     "api",
@@ -276,13 +274,21 @@ class AutobotLabelRegistry {
         if (AutobotLabelRegistry.MINOR_VERSION_LABELS.includes(label)) {
           return [label, "minor"];
         }
-        return [label, "patch"];
+        if (AutobotLabelRegistry.isReleaseRelevantLabel(label)) {
+          return [label, "patch"];
+        }
+        return [label, "none"];
       })
     )
   );
 
   static normalizeLabelName(label) {
     const normalized = String(label || "").trim().toLowerCase();
+    const LABEL_NORMALIZATION_ALIASES = Object.freeze(
+      Object.fromEntries(
+        Object.keys(AutobotLabelRegistry.LABEL_DEFINITIONS).flatMap((label) => getNormalizationEntries(label, label))
+      )
+    );
     return LABEL_NORMALIZATION_ALIASES[normalized] || AutobotLabelRegistry.VERSION_LABEL_ALIASES[normalized] || normalized;
   }
 
@@ -292,6 +298,10 @@ class AutobotLabelRegistry {
 
   static getLabelDepth(label) {
     return getTechnicalLabelAncestors(AutobotLabelRegistry.normalizeLabelName(label)).length;
+  }
+
+  static getLabelAncestors(label) {
+    return getTechnicalLabelAncestors(AutobotLabelRegistry.normalizeLabelName(label));
   }
 
   static isTechnicalLabel(label) {
@@ -461,7 +471,6 @@ class AutobotLabelRegistry {
   }
 }
 
-const MAX_AUTOBOT_LABELS = AutobotLabelRegistry.MAX_AUTOBOT_LABELS;
 const DEFAULT_ISSUE_LABELS = AutobotLabelRegistry.DEFAULT_ISSUE_LABELS;
 const FORCE_RELEASE_TYPES = AutobotLabelRegistry.FORCE_RELEASE_TYPES;
 const LABEL_DEFINITIONS = AutobotLabelRegistry.LABEL_DEFINITIONS;
@@ -553,12 +562,6 @@ function getNormalizationEntries(sourceLabel, targetLabel) {
   ];
 }
 
-const LABEL_NORMALIZATION_ALIASES = Object.freeze(
-  Object.fromEntries(
-    Object.keys(AutobotLabelRegistry.LABEL_DEFINITIONS).flatMap((label) => getNormalizationEntries(label, label))
-  )
-);
-
 module.exports = {
   AutobotLabelRegistry,
   collapseHierarchicalLabels,
@@ -567,7 +570,6 @@ module.exports = {
   LABEL_DEFINITIONS,
   LABEL_GUIDANCE,
   LABEL_PRIORITY,
-  MAX_AUTOBOT_LABELS,
   RELEASE_CRITICAL_LABELS,
   RELEASE_RELEVANT_LABELS,
   SECONDARY_LABELS,

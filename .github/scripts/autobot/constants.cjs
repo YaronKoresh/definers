@@ -4,7 +4,7 @@ const MAX_TOP_DIRECTORIES = 8;
 const MAX_TOP_FILES = 10;
 const MIN_BEHAVIORAL_ADDITION_LINES = 80;
 const MIN_PUBLIC_CONTRACT_MOVES = 3;
-const MAINTENANCE_ONLY_CATEGORIES = new Set(["documentation", "test", "workflow", "github", "config", "dependencies"]);
+const MAINTENANCE_ONLY_CATEGORIES = new Set(["documentation", "test", "workflow", "github", "config", "dependencies", "tooling"]);
 const PR_CANONICAL_LABEL_REPLACEMENTS = Object.freeze({
   accessibility: "navigation",
   ci: "workflow",
@@ -68,12 +68,10 @@ const PR_PIPELINE_CLUTTER_LABELS = new Set([
   "os matrix",
   "python matrix"
 ]);
+const DEFAULT_THRESHOLD = 80;
 const SMALL_PR_FILE_LIMIT = 4;
 const SMALL_PR_GENERIC_LABEL_LIMIT = 2;
-const SMALL_PR_LABEL_LIMIT = 3;
 const SMALL_PR_TOTAL_CHANGE_LIMIT = 120;
-const LARGE_PR_GENERIC_LABEL_LIMIT = 3;
-const LARGE_PR_LABEL_LIMIT = 4;
 const ACCESSIBILITY_TEXT_PATTERN = /\baria-|accessib|a11y|screen reader|keyboard nav/;
 const AUTOMATION_TEXT_PATTERN = /\b(autobot|release[-_ ]script|automation[-_ ]bot|repo automation)\b/;
 const FEATURE_FLAG_TEXT_PATTERN = /\b(feature[\s_-]?(?:flag|toggle)|kill[\s_-]?switch|rollout(?:\s+gate|\s+policy)?|cohort(?:\s+rule)?|segment(?:ation)?|bucket(?:ing)?)\b/;
@@ -99,13 +97,13 @@ const LABEL_SUPPORT_PATTERNS = Object.freeze({
   container: Object.freeze([/^docker\//, /dockerfile|compose\.ya?ml|\bcontainer\b|\bimage\b/]),
   cuda: Object.freeze([/\b(cuda|nvidia|gpu)\b/]),
   "destructive migration": Object.freeze([/\b(migration|migrate|drop column|drop table|table drop|column drop|rename table)\b/, /migrations?\//]),
-  "facade module": Object.freeze([/__init__\.py$/, /^src\/[^/]+\/[^/]+\/__init__\.py$/, /^src\/[^/]+\/[^/]+\.py$/]),
+  "facade module": Object.freeze([/__init__\.py$/m, /^src\/[^/]+\/[^/]+\/__init__\.py$/m]),
   filesystem: Object.freeze([/\b(filesystem|file system|path separator|filepath|ntpath|posixpath|normpath|realpath|abspath)\b/, /\\\\/]),
   "heap usage": Object.freeze([/\b(heap|peak memory|memory usage|memory footprint|memory pressure|buffer copy|buffer copies)\b/]),
   "import time": Object.freeze([/\bimport[-\s]+time\b.*\b(duration|latency|measure(?:d|ment)?|benchmark|startup|cold start|ms)\b/, /\b(duration|latency|measure(?:d|ment)?|benchmark|startup|cold start|ms)\b.*\bimport[-\s]+time\b/]),
   "image tag": Object.freeze([/from\s+[^\n]+:[^\s]+/, /image:\s*[^\s]+:[^\s]+/]),
   lockfile: Object.freeze([/package-lock\.json|pnpm-lock\.yaml|yarn\.lock|poetry\.lock|uv\.lock|pdm\.lock|requirements.*\.txt/]),
-  process: Object.freeze([/(subprocess\.(?:popen|run|call|check_call|check_output)\s*\(|child_process\.(?:spawn|fork|exec|execfile|execsync|spawnsync)\s*\(|\bpopen\s*\(|\bcommunicate\s*\(|\bstdin\b|\bstdout\b|\bstderr\b|\bpipe(?:line)?\b)/]),
+  process: Object.freeze([/(subprocess\.(?:popen|run|call|check_call|check_output)\s*\(|child_process\.(?:spawn|fork|exec|execfile|execsync|spawnsync)\s*\(|\bpopen\s*\()/]),
   "query param": Object.freeze([/\bquery param\b/, /\b(searchparams?|urlsearchparams)\b/, /\?[a-z_][a-z0-9_]*=/]),
   route: Object.freeze([/\broute\b/, /\brouter\b/, /@\w*router\.(get|post|put|delete|patch|options|head)\b/, /\.route\(/]),
   "route param": Object.freeze([/\b(route param|path param)\b/, /\/:[a-z_][a-z0-9_]*/, /\/\{[a-z_][a-z0-9_]*\}/, /\/<[a-z0-9_:.-]+>/]),
@@ -135,8 +133,34 @@ const LABEL_SUPPORT_PATTERNS = Object.freeze({
   observability: Object.freeze([/\b(observability|telemetry|prometheus|opentelemetry|otel|metrics?|histogram|counter|gauge|tracing?|trace id|span(?: id)?|monitoring|datadog|newrelic)\b/, /(^|\/)(observability|telemetry|monitoring|metrics?|prometheus|tracing)(\/|$)/]),
   monitoring: Object.freeze([/\b(monitoring|prometheus|metrics?|histogram|counter|gauge|alert|sli|slo)\b/]),
   telemetry: Object.freeze([/\b(telemetry|opentelemetry|otel|trace(?:s|d|ing)?|span(?: id)?)\b/]),
+  view: Object.freeze([
+    /(^|\/)(components?|ui|views?|templates|static|styles?|themes?|frontend)(\/|$)/,
+    /(^|\/)(gui_[^/]+|[^/]+_gui|app)\.py$/,
+    /\bgr\.(blocks|interface|chatinterface|chatbot|state|row|column|tabs?|tab|accordion|html|markdown|button|textbox|dropdown|slider|checkbox|radio|number|file|audio|video|image|gallery|dataframe|plot)\b/,
+    /\bimport\s+gradio\b|\bfrom\s+gradio\b/
+  ]),
+  template: Object.freeze([
+    /\.(html|tsx|jsx|vue|svelte)$/,
+    /\bgr\.(blocks|interface|chatinterface|html|markdown|tabs?|tab|row|column|accordion)\b/,
+    /<(button|form|input|select|dialog|label)\b/
+  ]),
+  "form control": Object.freeze([
+    /\b(button|form|input|select|dialog|label|textbox|dropdown|accordion|slider|checkbox|radio|switch|toggle|date|file)\b/,
+    /\bgr\.(button|textbox|dropdown|accordion|slider|checkbox|radio|number|file|audio|video|image|dataframe|gallery|chatbot)\b/
+  ]),
+  "theme token": Object.freeze([
+    /\b(class(name)?=|style=|styles?\.|theme|tokens?|tailwind|var\(--|color|font|spacing|margin|padding|border(?:-radius)?|box-shadow|background)\b/,
+    /\.(css|scss|sass|less)$/
+  ]),
+  "test fixture": Object.freeze([/\btest[\s_-]*fixtures?\b|\bfixtures?\b/, /(^|\/)fixtures?(\/|_)/]),
+  "scenario lane": Object.freeze([/\bscenario[\s_-]*lanes?\b/, /(^|\/)deterministic_scenario_lanes?(\.test)?\./]),
+  "replay seed": Object.freeze([/\breplay[\s_-]*seeds?\b/, /\bdeterministic[\s_-]*seed(?:s|ed|ing)?\b/]),
+  "subprocess io": Object.freeze([/(subprocess\.(?:popen|run|call|check_call|check_output)\s*\(|child_process\.(?:spawn|fork|exec|execfile|execsync|spawnsync)\s*\(|\bpopen\s*\()/]),
   style: Object.freeze([/\b(class(name)?=|style=|styles?\.|theme|color|font|spacing|margin|padding|border(?:-radius)?|box-shadow|background|tailwind|var\(--|display\s*:\s*(flex|grid))\b/]),
   formatting: Object.freeze([/\b(prettier|format\(|formatted|whitespace|indent(?:ation)?)\b/, /\.(css|scss|sass|less)$/]),
+  "github actions": Object.freeze([/\.github\/workflows\//, /\bgithub[-\s]actions\b/i]),
+  "smoke test": Object.freeze([/\bsmoke[-\s]?test\b/, /\bsmoke\b/]),
+  "task runner": Object.freeze([/\b(?:scripts|task[\s_-]+runner|poe|poethepoet|tool\.poetry\.scripts|project\.scripts)\b/, /"scripts"\s*:/]),
 });
 
 module.exports = {
@@ -144,8 +168,6 @@ module.exports = {
   AUTOMATION_TEXT_PATTERN,
   FEATURE_FLAG_TEXT_PATTERN,
   LABEL_SUPPORT_PATTERNS,
-  LARGE_PR_GENERIC_LABEL_LIMIT,
-  LARGE_PR_LABEL_LIMIT,
   LOCALIZATION_TEXT_PATTERN,
   MAINTENANCE_ONLY_CATEGORIES,
   MAX_PATCH_CHARS_PER_FILE,
@@ -169,7 +191,6 @@ module.exports = {
   SECURITY_SECRET_TEXT_PATTERN,
   SMALL_PR_FILE_LIMIT,
   SMALL_PR_GENERIC_LABEL_LIMIT,
-  SMALL_PR_LABEL_LIMIT,
   SMALL_PR_TOTAL_CHANGE_LIMIT,
   SNAPSHOT_FILE
 };
