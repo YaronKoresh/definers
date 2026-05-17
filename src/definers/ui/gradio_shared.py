@@ -598,13 +598,12 @@ class GradioShared:
             secondary_hue=gr.themes.colors.amber,
             neutral_hue=gr.themes.colors.slate,
             font=(
-                gr.themes.GoogleFont("Oxanium"),
-                gr.themes.GoogleFont("IBM Plex Sans"),
+                "Segoe UI",
                 "ui-sans-serif",
                 "sans-serif",
             ),
             font_mono=(
-                gr.themes.GoogleFont("IBM Plex Mono"),
+                "Consolas",
                 "ui-monospace",
                 "monospace",
             ),
@@ -652,7 +651,7 @@ class GradioShared:
     --definers-border-strong: rgba(84, 226, 255, 0.28);
     --definers-shadow: 0 18px 42px rgba(0, 0, 0, 0.46), inset 0 1px 0 rgba(255, 255, 255, 0.08);
     --definers-shadow-soft: 0 10px 24px rgba(0, 0, 0, 0.34);
-    --definers-glow: 0 0 0 1px rgba(84, 226, 255, 0.1), 0 0 28px rgba(84, 226, 255, 0.08);
+    --definers-glow: 0 0 0 1px rgba(84, 226, 255, 0.06);
     --definers-grid: rgba(122, 140, 165, 0.08);
 }
 
@@ -773,7 +772,7 @@ html > body::after {
     inset: 0;
     pointer-events: none;
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0));
-    mix-blend-mode: screen;
+    mix-blend-mode: normal;
 }
 
 html > body .gradio-container {
@@ -819,19 +818,19 @@ html > body > gradio-app > .gradio-container > .main .contain button {
 }
 
 html > body > gradio-app > .gradio-container > .main .contain button.primary {
-    filter: brightness(1.5) sepia(1);
+    filter: none;
     text-shadow: none !important;
     box-shadow: 0 0 0 1px rgba(84, 226, 255, 0.22), 0 14px 28px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.32) !important;
 }
 
 button:hover {
     transform: translateY(-1px);
-    filter: brightness(1.05);
+    filter: none;
 }
 
 button:active {
     transform: translateY(0);
-    filter: brightness(0.98);
+    filter: none;
 }
 
 html > body footer {
@@ -922,7 +921,7 @@ html > body footer {
 .tool-container {
     padding: 10px 12px !important;
     border-radius: 24px !important;
-    backdrop-filter: blur(18px);
+    backdrop-filter: none;
     box-shadow: var(--definers-shadow), var(--definers-glow);
 }
 
@@ -1100,7 +1099,7 @@ html > body footer {
 }
 
 .definers-progress-shell--running .definers-progress-shell__bar {
-    animation: definers-panel-sheen 1.2s linear infinite;
+    animation: none;
 }
 
 .definers-progress-shell--success .definers-progress-shell__bar {
@@ -1201,6 +1200,11 @@ html > body footer {
 
     .definers-progress-shell__summary {
         grid-template-columns: 1fr;
+    }
+
+    .studio-hero {
+        grid-template-columns: 1fr;
+        padding: 20px;
     }
 }
 
@@ -1315,7 +1319,7 @@ tr.file > td.download {
     border: 1px solid var(--definers-border) !important;
     border-radius: 22px !important;
     box-shadow: 0 12px 26px rgba(0, 0, 0, 0.34);
-    backdrop-filter: blur(18px);
+    backdrop-filter: none;
     transition:
         transform 180ms ease,
         box-shadow 180ms ease,
@@ -1383,7 +1387,7 @@ div.form {
 label + .tab-like-container {
     border: none !important;
     padding-inline: 2px;
-    filter: drop-shadow(2px 4px 6px black);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.35);
 }
 
 .tool-container:hover,
@@ -1398,7 +1402,7 @@ label + .tab-like-container {
 .definers-chat-shell:hover::before,
 #header:hover::before,
 .audio-hero:hover::before {
-    animation: definers-panel-sheen 900ms ease;
+    animation: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1423,6 +1427,206 @@ label + .tab-like-container {
         padding: 22px 18px !important;
         border-radius: 22px !important;
     }
+}
+
+.studio-hero {
+    display: grid;
+    gap: 20px;
+    grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+    align-items: stretch;
+    margin: 18px 0 28px 0;
+    padding: 28px;
+    border-radius: 28px;
+    background:
+        radial-gradient(circle at top left, rgba(15, 118, 110, 0.18), transparent 42%),
+        radial-gradient(circle at bottom right, rgba(234, 88, 12, 0.2), transparent 38%),
+        linear-gradient(135deg, #fff7ed 0%, #fffbf5 45%, #ecfeff 100%);
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    box-shadow: 0 24px 80px rgba(28, 25, 23, 0.1);
+}
+
+.studio-hero__copy {
+    text-align: left !important;
+}
+
+.studio-hero__label {
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 12px;
+    border-radius: 999px;
+    background: rgba(15, 118, 110, 0.12);
+    color: #115e59;
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+}
+
+.studio-hero h1 {
+    margin: 14px 0 12px 0;
+    color: #111827 !important;
+    font-size: clamp(2rem, 3vw, 3.35rem);
+    line-height: 1.02;
+    text-align: left !important;
+}
+
+.studio-hero p {
+    margin: 0;
+    max-width: 58ch;
+    color: #334155;
+    font-size: 1rem;
+    line-height: 1.6;
+    text-align: left !important;
+}
+
+.studio-hero__signal {
+    display: grid;
+    gap: 12px;
+    align-content: center;
+}
+
+.studio-hero__signal > div {
+    padding: 16px 18px;
+    border-radius: 20px;
+    background: rgba(255, 250, 241, 0.92);
+    border: 1px solid rgba(214, 199, 180, 0.85);
+    text-align: left !important;
+}
+
+.studio-hero__signal span {
+    display: block;
+    color: #78716c;
+    font-size: 0.82rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+}
+
+.studio-hero__signal strong {
+    display: block;
+    margin-top: 6px;
+    color: #111827;
+    font-size: 1.25rem;
+}
+
+.capability-grid {
+    display: grid;
+    gap: 18px;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    margin: 6px 0 22px 0;
+}
+
+.capability-card {
+    position: relative;
+    overflow: hidden;
+    padding: 20px;
+    border-radius: 24px;
+    background: linear-gradient(180deg, rgba(255, 253, 248, 0.98), rgba(252, 245, 235, 0.94));
+    border: 1px solid rgba(214, 199, 180, 0.95);
+    box-shadow: 0 18px 42px rgba(28, 25, 23, 0.06);
+}
+
+.capability-card h3,
+.capability-card p,
+.capability-card li {
+    text-align: left !important;
+}
+
+.capability-card h3 {
+    margin: 14px 0 10px 0;
+    color: #111827 !important;
+}
+
+.capability-card p {
+    margin: 0 0 12px 0;
+    color: #475569;
+    line-height: 1.55;
+}
+
+.capability-card ul {
+    margin: 0;
+    padding-left: 18px;
+
+}
+
+.capability-card ul li {
+    color: var(--neutral-950);
+}
+
+.capability-chip {
+    display: inline-flex;
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: linear-gradient(135deg, rgba(15, 118, 110, 0.12), rgba(234, 88, 12, 0.14));
+    color: #115e59;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.studio-panel h2,
+.studio-panel h3,
+.studio-panel p,
+.studio-panel li,
+.studio-panel label,
+.studio-panel textarea,
+.studio-panel input {
+    text-align: left !important;
+}
+
+.studio-panel .block {
+    border-radius: 22px !important;
+    box-shadow: 0 14px 32px rgba(28, 25, 23, 0.05) !important;
+}
+
+.studio-panel textarea,
+.studio-panel input,
+.studio-panel .wrap {
+    font-family: "IBM Plex Mono", ui-monospace, monospace !important;
+}
+
+.studio-panel .tab-nav {
+    gap: 8px;
+}
+
+.studio-panel button {
+    min-height: 46px;
+    font-weight: 700 !important;
+    letter-spacing: 0.02em;
+}
+
+.train-guided-steps ol {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    list-style: none;
+    margin: 0 0 22px 0;
+    padding: 0;
+}
+
+.train-guided-steps li {
+    display: grid;
+    gap: 8px;
+    padding: 18px;
+    border-radius: 20px;
+    background: linear-gradient(180deg, rgba(255, 253, 248, 0.98), rgba(252, 245, 235, 0.94));
+    border: 1px solid rgba(214, 199, 180, 0.95);
+    box-shadow: 0 18px 42px rgba(28, 25, 23, 0.06);
+}
+
+.train-guided-steps li span {
+    display: inline-flex;
+    width: 32px;
+    height: 32px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: rgba(15, 118, 110, 0.12);
+    color: #115e59;
+    font-weight: 700;
+}
+
+.train-guided-steps li strong {
+    color: #111827;
 }
 """
 

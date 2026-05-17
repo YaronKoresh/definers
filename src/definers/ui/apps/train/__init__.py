@@ -7,8 +7,8 @@ from . import (
     launcher,
     ui,
 )
-from .coach_ui import build_train_guided_mode, train_coach_css
+from .coach_ui import build_train_guided_mode
 from .launcher import launch_train_app
-from .ui import build_train_app, train_css, train_theme
+from .ui import build_train_app
 
 __all__ = [glb for glb in globals() if not glb.startswith("_")]

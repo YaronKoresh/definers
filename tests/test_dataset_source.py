@@ -27,7 +27,7 @@ def test_load_remote_dataset_uses_sampled_train_split(monkeypatch):
     assert result == "dataset"
     assert captured == {
         "args": ("owner/dataset",),
-        "kwargs": {"revision": "main", "split": "train[:25]"},
+        "kwargs": {"name": "main", "split": "train[:25]"},
     }
 
 

@@ -1,10 +1,8 @@
 from definers.ui.gradio_shared import css as shared_css, launch_blocks
 
-from .coach_ui import train_coach_css
+from ...gradio_shared import css, theme
 from .ui import (
     build_train_app,
-    train_css,
-    train_theme,
 )
 
 
@@ -27,6 +25,6 @@ def launch_train_app(
             hero_heading=hero_heading,
             hero_description=hero_description,
         ),
-        custom_css=shared_css() + "\n" + train_css() + "\n" + train_coach_css(),
-        custom_theme=train_theme(),
+        custom_css=css(),
+        custom_theme=theme(),
     )

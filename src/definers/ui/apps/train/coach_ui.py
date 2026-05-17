@@ -15,54 +15,17 @@ def _render_train_coach_steps_html() -> str:
     return f'<section class="train-guided-steps"><ol>{items}</ol></section>'
 
 
-def train_coach_css() -> str:
-    return """
-.train-guided-steps ol {
-    display: grid;
-    gap: 12px;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    list-style: none;
-    margin: 0 0 22px 0;
-    padding: 0;
-}
-
-.train-guided-steps li {
-    display: grid;
-    gap: 8px;
-    padding: 18px;
-    border-radius: 20px;
-    background: linear-gradient(180deg, rgba(255, 253, 248, 0.98), rgba(252, 245, 235, 0.94));
-    border: 1px solid rgba(214, 199, 180, 0.95);
-    box-shadow: 0 18px 42px rgba(28, 25, 23, 0.06);
-}
-
-.train-guided-steps li span {
-    display: inline-flex;
-    width: 32px;
-    height: 32px;
-    align-items: center;
-    justify-content: center;
-    border-radius: 999px;
-    background: rgba(15, 118, 110, 0.12);
-    color: #115e59;
-    font-weight: 700;
-}
-
-.train-guided-steps li strong {
-    color: #111827;
-}
-"""
-
-
 def build_train_guided_mode(*, bind_action):
     import gradio as gr
 
     from .coach_handlers import (
+        _read_last_model_path,
         inspect_train_coach_request,
         preview_train_coach_plan,
         reset_train_coach_state,
         run_train_coach_auto_workflow,
         run_train_coach_workflow,
+        strip_saved_model,
     )
 
     gr.HTML(_render_train_coach_steps_html())
@@ -85,10 +48,6 @@ def build_train_guided_mode(*, bind_action):
                 file_count="multiple",
                 type="filepath",
             )
-            local_collection_path = gr.Textbox(
-                label="Folder Or Collection Path",
-                placeholder="Optional local folder path for image, audio, or video collections",
-            )
             remote_src = gr.Textbox(
                 label="Remote Dataset",
                 placeholder="owner/dataset or https://...",
@@ -100,10 +59,11 @@ def build_train_guided_mode(*, bind_action):
             resume_artifact = gr.File(
                 label="Previous Model Artifact",
                 type="filepath",
+                value=_read_last_model_path(),
             )
             save_as = gr.Textbox(
                 label="Save Artifact As",
-                value="guided-model.joblib",
+                placeholder="guided-model.joblib",
             )
             inspect_button = gr.Button(
                 "Inspect My Inputs",
@@ -140,6 +100,10 @@ def build_train_guided_mode(*, bind_action):
         with gr.Column(scale=1):
             training_status = gr.Markdown("## Training\n- Status: idle")
             train_output = gr.File(label="Training Output")
+            strip_button = gr.Button(
+                "Strip Training Data",
+                elem_classes="btn",
+            )
             use_result_markdown = gr.Markdown(
                 "## Use Result\n- Status: train a model to unlock the saved session, manifest, and next actions."
             )
@@ -163,7 +127,6 @@ def build_train_guided_mode(*, bind_action):
         revision,
         resume_artifact,
         save_as,
-        local_collection_path,
         resolving_choice,
     ]
     reset_outputs = [
@@ -180,7 +143,6 @@ def build_train_guided_mode(*, bind_action):
     for component in (
         entry_intent,
         uploaded_files,
-        local_collection_path,
         remote_src,
         revision,
         resume_artifact,
@@ -223,6 +185,7 @@ def build_train_guided_mode(*, bind_action):
             train_output,
             training_plan,
             training_status,
+            resume_artifact,
         ],
         action_label="Train Automatically",
         steps=(
@@ -259,6 +222,7 @@ def build_train_guided_mode(*, bind_action):
             training_plan,
             training_status,
             use_result_markdown,
+            resume_artifact,
         ],
         action_label="Train With Guided Defaults",
         steps=(
@@ -271,6 +235,12 @@ def build_train_guided_mode(*, bind_action):
         ),
         running_detail="Running the guided training workflow.",
         success_detail="Guided training is complete.",
+    )
+    strip_button.click(
+        fn=strip_saved_model,
+        inputs=[train_output],
+        outputs=[train_output],
+        show_progress="hidden",
     )
     return {
         "state_payload": state_payload,
@@ -289,7 +259,6 @@ def build_train_guided_mode(*, bind_action):
 __all__ = [
     "build_train_coach_contract_markdown",
     "build_train_guided_mode",
-    "train_coach_css",
     "train_coach_entry_intents",
     "train_coach_step_names",
 ]

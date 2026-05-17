@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from .coach import (
     build_train_coach_state,
@@ -10,6 +11,50 @@ from .coach import (
     render_train_coach_validation_markdown,
     train_coach_state_json,
 )
+
+
+def _last_model_state_path() -> Path:
+    state_dir = Path.home() / ".definers"
+    state_dir.mkdir(parents=True, exist_ok=True)
+    return state_dir / "last_trained_model.json"
+
+
+def _write_last_model_path(model_path: str) -> None:
+    try:
+        with open(_last_model_state_path(), "w", encoding="utf-8") as f:
+            json.dump({"last_model_path": str(model_path)}, f)
+    except Exception:
+        pass
+
+
+def _read_last_model_path() -> str | None:
+    try:
+        state_file = _last_model_state_path()
+        if not state_file.exists():
+            return None
+        with open(state_file, encoding="utf-8") as f:
+            data = json.load(f)
+        path = data.get("last_model_path")
+        if path and Path(path).exists():
+            return path
+        return None
+    except Exception:
+        return None
+
+
+def strip_saved_model(model_path: str | None) -> str | None:
+    if not model_path:
+        return None
+    try:
+        import joblib
+
+        model = joblib.load(model_path)
+        if hasattr(model, "strip"):
+            model.strip()
+        joblib.dump(model, model_path)
+    except Exception:
+        pass
+    return model_path
 
 
 def _interactive_update(interactive: bool):
@@ -50,13 +95,16 @@ def _resolving_choice_update(question):
 
 
 def _resolving_question_markdown(state) -> str:
-    if getattr(state, "resolving_question", None) is None:
+    question = getattr(state, "resolving_question", None)
+    if question is None:
+        if getattr(state, "unresolved_questions", None):
+            return "## Quick Decision\n- Status: clarification is pending."
         return "## Quick Decision\n- Status: no clarification is needed."
     lines = [
         "## Quick Decision",
-        f"- Question: {state.resolving_question.prompt}",
+        f"- Question: {question.prompt}",
     ]
-    for option_label in state.resolving_question.option_labels:
+    for option_label in question.option_labels:
         lines.append(f"- Option: {option_label}")
     lines.append("- Next Step: choose one option and inspect again.")
     return "\n".join(lines)
@@ -96,7 +144,6 @@ def inspect_train_coach_request(
     revision,
     resume_artifact,
     save_as,
-    local_collection_path=None,
     resolving_choice=None,
 ):
     from definers.system.download_activity import create_activity_reporter
@@ -107,7 +154,6 @@ def inspect_train_coach_request(
     state = build_train_coach_state(
         requested_intent=requested_intent,
         uploaded_files=uploaded_files,
-        local_collection_path=local_collection_path,
         remote_src=remote_src,
         resume_artifact=resume_artifact,
         revision=revision,
@@ -191,6 +237,7 @@ def run_train_coach_workflow(state_payload):
             "## Training Plan\n- No guided state is available yet.",
             "## Training\n- Status: blocked\n- Inspect your inputs before training.",
             _use_result_placeholder(),
+            None,
         )
     if not state.ready:
         return (
@@ -198,6 +245,7 @@ def run_train_coach_workflow(state_payload):
             "## Training Plan\n- Guided mode is blocked. Inspect the validation panel or finish the quick decision before training.",
             "## Training\n- Status: blocked\n- Guided validation did not pass.",
             _use_result_placeholder(),
+            None,
         )
     resume_for_training = _resume_artifact_for_training(state)
     normalized_request = _build_training_request(
@@ -241,6 +289,7 @@ def run_train_coach_workflow(state_payload):
             plan_markdown,
             status_markdown,
             _use_result_placeholder(),
+            None,
         )
     report_download_activity(
         "Suggest next actions",
@@ -289,11 +338,14 @@ def run_train_coach_workflow(state_payload):
         status_markdown
         + f"\n- Session Manifest: {manifest['session_manifest_path']}"
     )
+    if model_output:
+        _write_last_model_path(model_output)
     return (
         model_output,
         plan_markdown,
         status_markdown,
         render_train_result_markdown(manifest),
+        model_output,
     )
 
 
@@ -304,7 +356,6 @@ def run_train_coach_auto_workflow(
     revision,
     resume_artifact,
     save_as,
-    local_collection_path=None,
     resolving_choice=None,
 ):
     inspected = inspect_train_coach_request(
@@ -314,17 +365,17 @@ def run_train_coach_auto_workflow(
         revision,
         resume_artifact,
         save_as,
-        local_collection_path=local_collection_path,
         resolving_choice=resolving_choice,
     )
     state_payload = inspected[0]
     state = parse_train_coach_state(state_payload)
     if state is not None and state.ready:
-        train_output, training_plan, training_status, use_result = (
+        train_output, training_plan, training_status, use_result, last_model = (
             run_train_coach_workflow(state_payload)
         )
     else:
         train_output = None
+        last_model = None
         training_plan = preview_train_coach_plan(state_payload)
         training_status = (
             "## Training\n"
@@ -345,6 +396,7 @@ def run_train_coach_auto_workflow(
         train_output,
         training_plan,
         training_status,
+        last_model,
     )
 
 
@@ -354,4 +406,6 @@ __all__ = [
     "reset_train_coach_state",
     "run_train_coach_auto_workflow",
     "run_train_coach_workflow",
+    "strip_saved_model",
+    "_read_last_model_path",
 ]

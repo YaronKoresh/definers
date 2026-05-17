@@ -1988,7 +1988,7 @@ def launch_audio_app(
                             enhancer_format = gr.Radio(
                                 format_choices,
                                 label="Output Format",
-                                value="WAV",
+                                value="MP3",
                             )
                             enhancer_preset = gr.Dropdown(
                                 MASTERING_PROFILE_CHOICES,
@@ -2001,7 +2001,7 @@ def launch_audio_app(
                                 )
                             )
                             enhancer_stem_mastering = gr.Checkbox(
-                                label="Use stem-aware mastering",
+                                label="Use stem-aware mastering (experimental)",
                                 value=False,
                             )
                             with gr.Accordion("Macro Controls", open=False):
@@ -2256,7 +2256,7 @@ def launch_audio_app(
                                     autotune_format = gr.Radio(
                                         format_choices,
                                         label="Output Format",
-                                        value="WAV",
+                                        value="MP3",
                                     )
                                     autotune_strength = gr.Slider(
                                         0.0,
@@ -2319,7 +2319,7 @@ def launch_audio_app(
                                     humanize_format = gr.Radio(
                                         format_choices,
                                         label="Output Format",
-                                        value="WAV",
+                                        value="MP3",
                                     )
                                     humanize_amount = gr.Slider(
                                         0.0,
@@ -2361,7 +2361,7 @@ def launch_audio_app(
                                     silence_format = gr.Radio(
                                         format_choices,
                                         label="Output Format",
-                                        value="WAV",
+                                        value="MP3",
                                     )
                                     with gr.Row():
                                         silence_btn = gr.Button(
@@ -2429,7 +2429,7 @@ def launch_audio_app(
                                     preview_format = gr.Radio(
                                         format_choices,
                                         label="Output Format",
-                                        value="WAV",
+                                        value="MP3",
                                     )
                                     preview_duration = gr.Slider(
                                         5,
@@ -2767,7 +2767,7 @@ def launch_audio_app(
                             stem_format = gr.Radio(
                                 format_choices,
                                 label="Output Format",
-                                value="WAV",
+                                value="MP3",
                             )
                             stem_mode_note = gr.Markdown(
                                 value="**Layer Controls:** Layer strategy settings appear only in Mastering Layers mode. Use Vocals + Karaoke when you only need the vocal and instrumental pair."
