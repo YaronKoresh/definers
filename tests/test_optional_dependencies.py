@@ -25,7 +25,7 @@ def test_package_specs_for_ml_group_cover_runtime_gap_packages():
 def test_runtime_specs_for_pypi_optional_modules_omit_vcs_links():
     expected_specs = {
         "aioquic": "aioquic>=1.2.0",
-        "audio_separator": "audio-separator>=0.30.2,<0.32.0",
+        "audio_separator": "audio-separator>=0.30.2,<0.45.0",
         "basic_pitch": "basic-pitch>=0.4.0",
         "httpx": "httpx[http2]>=0.28.0",
         "madmom": "madmom>=0.16.1",
@@ -156,14 +156,14 @@ def test_ensure_module_runtime_installs_when_module_is_missing(monkeypatch):
     )
 
     assert result is True
-    assert installed == [("audio-separator>=0.30.2,<0.32.0",)]
+    assert installed == [("audio-separator>=0.30.2,<0.45.0",)]
 
 
 def test_audio_group_install_includes_runtime_github_modules():
     audio_package_specs = optional_dependencies.package_specs_for_group("audio")
     audio_install_specs = optional_dependencies.install_specs_for_group("audio")
 
-    assert "audio-separator>=0.30.2,<0.32.0" in audio_package_specs
+    assert "audio-separator>=0.30.2,<0.45.0" in audio_package_specs
     assert "basic-pitch>=0.4.0" not in audio_package_specs
     assert "madmom>=0.16.1" not in audio_package_specs
     assert "numba>=0.57.0" not in audio_package_specs
