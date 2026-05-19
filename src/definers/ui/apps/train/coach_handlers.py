@@ -42,8 +42,21 @@ def _read_last_model_path() -> str | None:
         return None
 
 
+def _validate_model_path(model_path: str) -> bool:
+    try:
+        from definers.system.paths import secure_path
+
+        resolved = secure_path(model_path)
+        p = Path(resolved)
+        return p.is_file() and p.suffix.lower() == ".joblib"
+    except Exception:
+        return False
+
+
 def strip_saved_model(model_path: str | None) -> str | None:
     if not model_path:
+        return None
+    if not _validate_model_path(model_path):
         return None
     try:
         import joblib
