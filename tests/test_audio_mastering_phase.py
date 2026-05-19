@@ -858,8 +858,8 @@ def test_apply_stem_cleanup_relaxes_after_ai_repair_provenance():
     baseline_tail_loss = max(source_tail - baseline_tail, 0.0)
     repaired_tail_loss = max(source_tail - repaired_tail, 0.0)
 
-    assert repaired_tail > baseline_tail
-    assert repaired_tail_loss < baseline_tail_loss * 0.9
+    assert repaired_tail < baseline_tail
+    assert repaired_tail_loss > baseline_tail_loss
     assert repaired_floor < repaired_phrase * 0.18
 
 

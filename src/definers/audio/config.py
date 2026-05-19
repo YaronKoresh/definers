@@ -485,9 +485,9 @@ _DERIVED_FIELD_SPECS: dict[str, dict[str, Any]] = {
     },
     "stem_noise_gate_enabled": {"base": True, "kind": "bool"},
     "stem_noise_gate_strength": {
-        "base": 1.0,
+        "base": 0.3,
         "coeffs": {"volume": 0.05, "effects": -0.02},
-        "clip": (0.0, 1.5),
+        "clip": (0.0, 1.0),
     },
     "stem_noise_gate_normalization_mode": {
         "base": "none",
@@ -589,8 +589,8 @@ _DERIVED_FIELD_SPECS: dict[str, dict[str, Any]] = {
         "clip": (-12.0, -0.1),
     },
     "stem_cleanup_strength": {
-        "base": 1.0,
-        "clip": (0.0, 1.5),
+        "base": 0.3,
+        "clip": (0.0, 1.0),
     },
     "stem_tone_enrichment_enabled": {"base": True, "kind": "bool"},
     "stem_tone_enrichment_mix": {
@@ -599,8 +599,8 @@ _DERIVED_FIELD_SPECS: dict[str, dict[str, Any]] = {
         "clip": (0.0, 0.3),
     },
     "stem_glue_reverb_amount": {
-        "base": 1.0,
-        "clip": (0.0, 1.5),
+        "base": 5.0,
+        "clip": (0.0, 10.0),
     },
     "stem_vocal_glue_tail_scale": {
         "base": 0.72,
@@ -608,8 +608,8 @@ _DERIVED_FIELD_SPECS: dict[str, dict[str, Any]] = {
         "clip": (0.4, 1.0),
     },
     "stem_drum_edge_amount": {
-        "base": 1.0,
-        "clip": (0.0, 1.5),
+        "base": 5.0,
+        "clip": (0.0, 10.0),
     },
     "stem_vocal_pullback_db": {
         "base": 0.0,

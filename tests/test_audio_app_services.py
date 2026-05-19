@@ -323,7 +323,7 @@ def test_run_stem_separation_tool_passes_managed_output_dir(
             "mastering_layers",
             "WAV",
             "htdemucs_ft.yaml",
-            4,
+            1,
         )
     )
 
@@ -435,7 +435,7 @@ def test_run_mastering_tool_custom_profile_sends_manual_macros(monkeypatch):
 def test_run_stem_separation_tool_supports_mastering_layers(monkeypatch):
     captured = {}
 
-    def fake_separate_stem_layers(audio_path, model_name="mastering", shifts=2):
+    def fake_separate_stem_layers(audio_path, model_name="mastering", shifts=1):
         captured.update(
             {
                 "audio_path": audio_path,
@@ -466,7 +466,7 @@ def test_run_stem_separation_tool_supports_mastering_layers(monkeypatch):
             "mastering_layers",
             "WAV",
             "htdemucs_6s",
-            4,
+            1,
         )
     )
 
@@ -481,7 +481,7 @@ def test_run_stem_separation_tool_supports_mastering_layers(monkeypatch):
     assert captured == {
         "audio_path": "song.wav",
         "model_name": "htdemucs_6s",
-        "shifts": 4,
+        "shifts": 1,
     }
 
 

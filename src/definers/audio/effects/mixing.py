@@ -10,7 +10,7 @@ from definers.logger import init_logger
 from definers.system.filesystem import delete
 from definers.system.paths import tmp
 
-from ..io import save_audio
+from ..io import remove_silence, save_audio
 
 _logger = init_logger()
 
@@ -147,6 +147,9 @@ def dj_mix(
         )
         return None
 
+    for index, file in enumerate(files):
+        files[index] = remove_silence(file)
+
     transition_ms = int(transition_sec * 1000)
     processed_tracks = []
 
@@ -217,9 +220,8 @@ def dj_mix(
 
     final_mix = processed_tracks[0]
     for i in range(1, len(processed_tracks)):
-        final_mix = final_mix.append(
-            processed_tracks[i], crossfade=transition_ms
-        )
+        crossfade = min(transition_ms, len(final_mix), len(processed_tracks[i]))
+        final_mix = final_mix.append(processed_tracks[i], crossfade=crossfade)
 
     output_stem = managed_output_path(
         format_choice,

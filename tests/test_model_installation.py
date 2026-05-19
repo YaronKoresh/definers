@@ -397,7 +397,7 @@ def test_download_stem_models_targets_only_requested_files(
             "log_level": 40,
             "model_file_dir": str(tmp_path.resolve()),
             "demucs_params": {
-                "shifts": 2,
+                "shifts": 1,
                 "overlap": 0.25,
                 "segments_enabled": True,
             },

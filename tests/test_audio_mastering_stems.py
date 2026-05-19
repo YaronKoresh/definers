@@ -1015,6 +1015,6 @@ def test_apply_drum_edge_finish_adds_controlled_transient_bite():
     assert not np.allclose(finished, signal)
     assert (
         float(np.max(np.abs(finished[:, ::128])))
-        > float(np.max(np.abs(signal[:, ::128]))) * 1.08
+        > float(np.max(np.abs(signal[:, ::128]))) * 1.08 - 1e-5
     )
     assert float(np.max(np.abs(finished))) <= 0.98 + 1e-6

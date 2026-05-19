@@ -758,9 +758,9 @@ def _apply_stem_glue_reverb(
     glue_reverb_amount = _resolve_stem_override_float(
         stem_overrides,
         "stem_glue_reverb_amount",
-        getattr(base_config, "stem_glue_reverb_amount", 1.0),
+        getattr(base_config, "stem_glue_reverb_amount", 5.0),
         minimum=0.0,
-        maximum=1.6,
+        maximum=10.0,
     )
     if glue_reverb_amount <= 1e-4:
         return stereo_signal
@@ -1077,9 +1077,9 @@ def _apply_drum_edge_finish(
     drum_edge_amount = _resolve_stem_override_float(
         stem_overrides,
         "stem_drum_edge_amount",
-        getattr(base_config, "stem_drum_edge_amount", 1.0),
+        getattr(base_config, "stem_drum_edge_amount", 5.0),
         minimum=0.0,
-        maximum=1.8,
+        maximum=10.0,
     )
     if drum_edge_amount <= 1e-4:
         return stereo_signal
@@ -1171,7 +1171,7 @@ def _apply_stem_stereo_width_finish(
         np.clip(getattr(base_config, "effects", 0.5), 0.0, 1.0)
     )
     glue_amount = float(
-        np.clip(getattr(base_config, "stem_glue_reverb_amount", 1.0), 0.0, 1.5)
+        np.clip(getattr(base_config, "stem_glue_reverb_amount", 5.0), 0.0, 10.0)
     )
 
     role_boost = 0.0
@@ -1639,10 +1639,10 @@ def resolve_stem_mastering_plan(
         )
     )
     base_cleanup_strength = float(
-        np.clip(getattr(base_config, "stem_cleanup_strength", 1.0), 0.0, 1.5)
+        np.clip(getattr(base_config, "stem_cleanup_strength", 0.3), 0.0, 1.0)
     )
     base_noise_gate_strength = float(
-        np.clip(getattr(base_config, "stem_noise_gate_strength", 1.0), 0.0, 1.5)
+        np.clip(getattr(base_config, "stem_noise_gate_strength", 0.3), 0.0, 1.0)
     )
     shared_target_lufs = float(base_config.target_lufs - 2.8)
     shared_ceil_db = float(min(base_config.ceil_db, -1.2))
@@ -1710,10 +1710,10 @@ def resolve_stem_mastering_plan(
                 "low_end_mono_tightening": "firm",
                 "low_end_mono_tightening_amount": 0.95,
                 "stem_cleanup_strength": float(
-                    np.clip(base_cleanup_strength * 0.18, 0.0, 1.5)
+                    np.clip(base_cleanup_strength * 0.18, 0.0, 1.0)
                 ),
                 "stem_noise_gate_strength": float(
-                    np.clip(base_noise_gate_strength * 0.12, 0.0, 1.5)
+                    np.clip(base_noise_gate_strength * 0.12, 0.0, 1.0)
                 ),
                 "micro_dynamics_strength": float(
                     np.clip(

@@ -2128,7 +2128,7 @@ def download_stem_models(
         log_level=40,
         model_file_dir=resolved_model_dir,
         demucs_params={
-            "shifts": 2,
+            "shifts": 1,
             "overlap": 0.25,
             "segments_enabled": True,
         },

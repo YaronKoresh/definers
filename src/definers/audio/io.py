@@ -261,7 +261,10 @@ def split_audio(
     return res_paths
 
 
-def remove_silence(input_file: str, output_file: str):
+def remove_silence(input_file: str, output_file: str | None = None):
+    if output_file is None:
+        ext = get_ext(input_file)
+        output_file = tmp(ext, keep=False)
     return run_ffmpeg(
         [
             "ffmpeg",
@@ -271,13 +274,16 @@ def remove_silence(input_file: str, output_file: str):
             "-ac",
             "2",
             "-af",
-            "silenceremove=stop_duration=0.1:stop_threshold=-32dB",
+            "silenceremove=start_periods=1:start_threshold=-32dB:start_duration=0.1,areverse,silenceremove=start_periods=1:start_threshold=-32dB:start_duration=0.1,areverse",
             output_file,
         ]
     )
 
 
-def compact_audio(input_file: str, output_file: str):
+def compact_audio(input_file: str, output_file: str | None = None):
+    if output_file is None:
+        ext = get_ext(input_file)
+        output_file = tmp(ext, keep=False)
     return run_ffmpeg(
         [
             "ffmpeg",

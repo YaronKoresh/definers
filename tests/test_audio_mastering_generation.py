@@ -172,6 +172,7 @@ CONFIG_MODULE, MASTERING_MODULE = _load_mastering_module(
 )
 MASTERING_AUDIO_PACKAGE = MASTERING_MODULE.__package__.rpartition(".")[0]
 MASTERING_PACKAGE = MASTERING_MODULE.__package__
+MASTERING_ENGINE_MODULE = sys.modules[f"{MASTERING_PACKAGE}.engine"]
 
 
 def test_default_intensity_remains_neutral_one():
@@ -2974,6 +2975,14 @@ def test_master_with_report_writes_report_file(
                 tmp=lambda suffix, keep=False: str(output_path)
             ),
         )
+        monkeypatch.setattr(
+            MASTERING_ENGINE_MODULE,
+            "tmp",
+            lambda suffix, keep=False: str(output_path),
+        )
+        monkeypatch.setattr(
+            MASTERING_ENGINE_MODULE, "copy", lambda src, dst: None
+        )
         monkeypatch.setattr(MASTERING_MODULE, "SmartMastering", FakeMastering)
         monkeypatch.setattr(
             MASTERING_MODULE,
@@ -3006,13 +3015,13 @@ def test_master_with_report_writes_report_file(
 
 
 def test_master_stems_forces_stem_mastering(monkeypatch: pytest.MonkeyPatch):
-    captured: dict[str, object] = {}
+    calls: list[dict[str, object]] = []
 
     monkeypatch.setattr(
         MASTERING_MODULE,
         "_master_internal",
         lambda input_path, *, output_path, stem_mastering, **kwargs: (
-            captured.update(
+            calls.append(
                 {
                     "input_path": input_path,
                     "output_path": output_path,
@@ -3023,6 +3032,7 @@ def test_master_stems_forces_stem_mastering(monkeypatch: pytest.MonkeyPatch):
             or ("out.wav", None)
         ),
     )
+    monkeypatch.setattr(MASTERING_ENGINE_MODULE, "copy", lambda src, dst: None)
 
     mastered_path, report = MASTERING_MODULE.master(
         "input.wav",
@@ -3032,12 +3042,16 @@ def test_master_stems_forces_stem_mastering(monkeypatch: pytest.MonkeyPatch):
 
     assert mastered_path == "out.wav"
     assert report is None
-    assert captured == {
-        "input_path": "input.wav",
-        "output_path": "out.wav",
-        "stem_mastering": True,
-        "kwargs": {"preset": "vocal"},
-    }
+    assert len(calls) == 3
+    assert calls[0]["input_path"] == "input.wav"
+    assert calls[0]["stem_mastering"] is False
+    assert calls[0]["kwargs"] == {"preset": "vocal"}
+    assert calls[1]["input_path"] == "out.wav"
+    assert calls[1]["stem_mastering"] is True
+    assert calls[1]["kwargs"] == {"preset": "vocal"}
+    assert calls[2]["input_path"] == "out.wav"
+    assert calls[2]["stem_mastering"] is False
+    assert calls[2]["kwargs"] == {"preset": "vocal"}
 
 
 def test_master_routes_stem_mastering_through_audio_separator_pipeline(
@@ -3162,6 +3176,14 @@ def test_master_routes_stem_mastering_through_audio_separator_pipeline(
                 delete=lambda path: None,
             ),
         )
+        monkeypatch.setattr(
+            MASTERING_ENGINE_MODULE,
+            "tmp",
+            lambda suffix, keep=False: str(output_path),
+        )
+        monkeypatch.setattr(
+            MASTERING_ENGINE_MODULE, "copy", lambda src, dst: None
+        )
         monkeypatch.setattr(MASTERING_MODULE, "SmartMastering", FakeMastering)
         monkeypatch.setattr(
             MASTERING_MODULE,
@@ -3188,7 +3210,7 @@ def test_master_routes_stem_mastering_through_audio_separator_pipeline(
             output_path=str(output_path),
             stem_mastering=True,
             stem_model_name="htdemucs_6s",
-            stem_shifts=4,
+            stem_shifts=1,
             stem_mix_headroom_db=7.0,
             preset="balanced",
             report_path=str(report_path),
@@ -3211,22 +3233,23 @@ def test_master_routes_stem_mastering_through_audio_separator_pipeline(
 
     assert mastered_path == str(output_path)
     assert report is fake_report
-    assert helper_calls == [
-        (
-            "input.wav",
-            "htdemucs_6s",
-            4,
-            ("Low-Quality",),
-            7.0,
-            {"preset": "balanced", "resampling_target": 48000},
-            True,
-            str(output_path.with_suffix("")) + "_stems",
-            "wav",
-        )
-    ]
-    assert len(processed_inputs) == 1
-    assert processed_stem_flags == [True]
-    assert np.allclose(processed_inputs[0], mixed_signal)
+    assert len(helper_calls) == 1
+    _stem_audio_path, _stems_dir = helper_calls[0][0], helper_calls[0][7]
+    assert _stem_audio_path.lower().endswith(".wav")
+    assert helper_calls[0][1] == "htdemucs_6s"
+    assert helper_calls[0][2] == 1
+    assert helper_calls[0][3] == ("Low-Quality",)
+    assert helper_calls[0][4] == 7.0
+    assert helper_calls[0][5] == {
+        "preset": "balanced",
+        "resampling_target": 48000,
+    }
+    assert helper_calls[0][6] is True
+    assert _stems_dir is not None and _stems_dir.endswith("_stems")
+    assert helper_calls[0][8] == "wav"
+    assert len(processed_inputs) == 3
+    assert processed_stem_flags == [False, True, False]
+    assert np.allclose(processed_inputs[1], mixed_signal)
 
 
 def test_master_auto_selects_preset_before_stem_mastering_helper(
@@ -3319,6 +3342,14 @@ def test_master_auto_selects_preset_before_stem_mastering_helper(
                 tmp=lambda suffix, keep=False: str(output_path),
                 delete=lambda path: None,
             ),
+        )
+        monkeypatch.setattr(
+            MASTERING_ENGINE_MODULE,
+            "tmp",
+            lambda suffix, keep=False: str(output_path),
+        )
+        monkeypatch.setattr(
+            MASTERING_ENGINE_MODULE, "copy", lambda src, dst: None
         )
         monkeypatch.setattr(MASTERING_MODULE, "SmartMastering", FakeMastering)
         monkeypatch.setattr(

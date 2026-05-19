@@ -1502,7 +1502,7 @@ def _apply_stem_noise_gate(
         return y
 
     gate_strength = float(
-        np.clip(getattr(config, "stem_noise_gate_strength", 1.0), 0.0, 1.5)
+        np.clip(getattr(config, "stem_noise_gate_strength", 0.3), 0.0, 1.0)
     )
     if gate_strength <= 0.0:
         return y
@@ -1946,7 +1946,7 @@ def apply_stem_cleanup(
             getattr(
                 self,
                 "stem_cleanup_strength",
-                getattr(self.config, "stem_cleanup_strength", 1.0),
+                getattr(self.config, "stem_cleanup_strength", 0.3),
             ),
             0.0,
             1.5,

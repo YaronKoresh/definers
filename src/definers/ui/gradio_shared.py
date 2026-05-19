@@ -687,10 +687,6 @@ tbody > tr:nth-child(odd) {
     color: var(--definers-muted);
 }
 
-html > body > gradio-app > .gradio-container > .main .contain .block {
-    margin-bottom: 18px !important;
-}
-
 html > body span.toast-title.error {
     border: none !important;
     background: transparent !important;
@@ -847,7 +843,6 @@ html > body footer {
 .audio-hero,
 .tool-container,
 .definers-chat-shell,
-.block,
 .accordion {
     position: relative;
     overflow: hidden;
@@ -860,11 +855,17 @@ html > body footer {
     animation: definers-cockpit-rise 420ms ease-out both;
 }
 
+div.block:has(>div.empty),
+div:is(.row, .column)>div.block:has(>div.empty),
+button.label-wrap+div:not(:has(div.block:not(.hide-container))),
+.gr-group:has(>.styler):not(:has(>.styler>div:not(.hide, .hidden))) {
+    display: none;
+}
+
 #header::before,
 .audio-hero::before,
 .tool-container::before,
 .definers-chat-shell::before,
-.block::before,
 .accordion::before {
     content: "";
     position: absolute;
@@ -1272,11 +1273,16 @@ select:focus {
 }
 
 .form,
-.block,
 fieldset,
+.block,
 .panel,
 .accordion {
     border-radius: 24px !important;
+}
+
+div > *:not(.absolute) {
+    border-width: 0px !important;
+    box-shadow: none !important;
 }
 
 .accordion {
@@ -1345,7 +1351,6 @@ tr.file > td.download {
 
 .definers-chat-input {
     border: 1px solid var(--definers-border) !important;
-    border-radius: 24px !important;
     background: var(--definers-surface-raised) !important;
     box-shadow: var(--definers-shadow-soft), inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
@@ -1359,10 +1364,8 @@ tr.file > td.download {
 }
 
 .block {
-    border: 1px solid var(--definers-border) !important;
     background: var(--definers-surface) !important;
     box-shadow: var(--definers-shadow), var(--definers-glow);
-    margin-bottom: 18px !important;
     overflow-x: hidden !important;
 }
 
