@@ -43,16 +43,6 @@ def test_load_audio_values_falls_back_when_sox_pipeline_fails():
             ),
             create=True,
         ),
-        patch.object(
-            definers,
-            "data",
-            SimpleNamespace(
-                arrays=SimpleNamespace(
-                    numpy_to_cupy=MagicMock(side_effect=lambda value: value)
-                )
-            ),
-            create=True,
-        ),
         patch(
             "definers.data.loaders.tmp",
             side_effect=[
@@ -68,6 +58,16 @@ def test_load_audio_values_falls_back_when_sox_pipeline_fails():
         ),
         patch("definers.data.loaders.catch") as mock_catch,
         patch("definers.data.loaders.delete") as mock_delete,
+        patch.object(
+            definers,
+            "data",
+            SimpleNamespace(
+                arrays=SimpleNamespace(
+                    numpy_to_cupy=MagicMock(side_effect=lambda value: value)
+                )
+            ),
+            create=True,
+        ),
     ):
         result = load_audio_values("input.wav", training=True)
 
@@ -102,6 +102,8 @@ def test_load_audio_values_uses_ffmpeg_path_when_sox_unavailable():
             ),
             create=True,
         ),
+        patch("definers.data.loaders.tmp", return_value="temp_ffmpeg.mp3"),
+        patch("definers.data.loaders.delete"),
         patch.object(
             definers,
             "data",
@@ -112,8 +114,6 @@ def test_load_audio_values_uses_ffmpeg_path_when_sox_unavailable():
             ),
             create=True,
         ),
-        patch("definers.data.loaders.tmp", return_value="temp_ffmpeg.mp3"),
-        patch("definers.data.loaders.delete"),
     ):
         result = load_audio_values("input.wav", training=False)
 

@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from definers.system.paths import secure_path
+
 from .coach import (
     build_train_coach_state,
     parse_train_coach_state,
@@ -42,32 +44,30 @@ def _read_last_model_path() -> str | None:
         return None
 
 
-def _validate_model_path(model_path: str) -> bool:
-    try:
-        from definers.system.paths import secure_path
-
-        resolved = secure_path(model_path)
-        p = Path(resolved)
-        return p.is_file() and p.suffix.lower() == ".joblib"
-    except Exception:
-        return False
-
-
 def strip_saved_model(model_path: str | None) -> str | None:
     if not model_path:
         return None
-    if not _validate_model_path(model_path):
+    secure_model_path = secure_path(model_path)
+    if (
+        not secure_model_path
+        or secure_model_path.split(".")[-1].lower() != "joblib"
+    ):
+        return None
+    p_sec = Path(secure_model_path)
+    if not p_sec.is_file():
+        return None
+    if p_sec.is_symlink():
         return None
     try:
         import joblib
 
-        model = joblib.load(model_path)
+        model = joblib.load(secure_model_path)
         if hasattr(model, "strip"):
             model.strip()
-        joblib.dump(model, model_path)
+        joblib.dump(model, secure_model_path)
     except Exception:
         pass
-    return model_path
+    return secure_model_path
 
 
 def _interactive_update(interactive: bool):
