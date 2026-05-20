@@ -235,36 +235,88 @@ def ensure_xlsx_runtime() -> None:
 
 
 def load_audio_values(path: str, training: bool):
+    import tempfile
+
     import definers
 
-    transformer = definers.sox.Transformer()
-    transformer.rate(32000)
-    temp_wav_path = None
-    temp_mp3_path = None
-    directory_path = None
+    cleanup_paths: list[str] = []
+
+    def track(temp_path: str | None):
+        if temp_path:
+            cleanup_paths.append(temp_path)
+        return temp_path
+
+    def to_tensor(audio_path: str):
+        features = definers.audio.extract_audio_features(audio_path)
+        if features is None:
+            return None
+        return definers.data.arrays.numpy_to_cupy(features)
+
     try:
+        sox_ready = False
+        try:
+            sox_ready = bool(definers.system.install_sox())
+        except Exception:
+            sox_ready = False
+
+        if sox_ready:
+            try:
+                transformer = definers.sox.Transformer()
+                transformer.rate(32000)
+                if training:
+                    temp_wav_path = track(tmp("wav"))
+                    transformer.build_file(path, temp_wav_path)
+                    temp_mp3_path = track(tmp("mp3"))
+                    definers.audio.remove_silence(temp_wav_path, temp_mp3_path)
+                    chunk_dir = track(
+                        tempfile.mkdtemp(prefix="definers_chunks_")
+                    )
+                    files = definers.audio.split_audio(
+                        temp_mp3_path,
+                        chunk_duration=5.0,
+                        audio_format="mp3",
+                        output_folder=chunk_dir,
+                    ) or [temp_mp3_path]
+                    output = []
+                    for file_path in files:
+                        tensor = to_tensor(file_path)
+                        if tensor is not None:
+                            output.append(tensor)
+                    return output
+
+                temp_mp3_path = track(tmp("mp3"))
+                transformer.build_file(path, temp_mp3_path)
+                return to_tensor(temp_mp3_path)
+            except Exception as sox_error:
+                catch(sox_error)
+
+        normalized_mp3_path = track(tmp("mp3"))
+        definers.audio.compact_audio(path, normalized_mp3_path)
+
         if training:
-            temp_wav_path = tmp("wav")
-            transformer.build_file(path, temp_wav_path)
-            temp_mp3_path = tmp("mp3")
-            definers.remove_silence(temp_wav_path, temp_mp3_path)
-            directory_path, _ = definers.split_mp3(temp_mp3_path, 5)
-            files = read(directory_path) or [temp_mp3_path]
-            return [
-                definers.numpy_to_cupy(
-                    definers.extract_audio_features(file_path)
-                )
-                for file_path in files
-            ]
-        temp_mp3_path = tmp("mp3")
-        transformer.build_file(path, temp_mp3_path)
-        return definers.numpy_to_cupy(
-            definers.extract_audio_features(temp_mp3_path)
-        )
+            cleaned_mp3_path = track(tmp("mp3"))
+            definers.audio.remove_silence(
+                normalized_mp3_path,
+                cleaned_mp3_path,
+            )
+            chunk_dir = track(tempfile.mkdtemp(prefix="definers_chunks_"))
+            files = definers.audio.split_audio(
+                cleaned_mp3_path,
+                chunk_duration=5.0,
+                audio_format="mp3",
+                output_folder=chunk_dir,
+            ) or [cleaned_mp3_path]
+            output = []
+            for file_path in files:
+                tensor = to_tensor(file_path)
+                if tensor is not None:
+                    output.append(tensor)
+            return output
+
+        return to_tensor(normalized_mp3_path)
     finally:
-        delete(temp_wav_path)
-        delete(temp_mp3_path)
-        delete(directory_path)
+        for cleanup_path in cleanup_paths:
+            delete(cleanup_path)
 
 
 def load_table_values(path: str, extension: str):
@@ -346,7 +398,7 @@ def load_remote_dataset(
     if sample_rows is not None and sample_rows > 0:
         split_name = f"train[:{int(sample_rows)}]"
     if revision:
-        return load_dataset(src, revision=revision, split=split_name)
+        return load_dataset(src, name=revision, split=split_name)
     return load_dataset(src, split=split_name)
 
 
@@ -361,13 +413,6 @@ def load_remote_dataset_fallback(
     split_name = "train"
     if sample_rows is not None and sample_rows > 0:
         split_name = f"train[:{int(sample_rows)}]"
-    if revision:
-        return load_dataset(
-            url_type,
-            data_files={"train": src},
-            revision=revision,
-            split=split_name,
-        )
     return load_dataset(
         url_type,
         data_files={"train": src},

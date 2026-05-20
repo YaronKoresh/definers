@@ -148,8 +148,8 @@ MASTERING_STEM_PREVIEW_ORDER = (
     "piano",
 )
 
-STEM_GLUE_REVERB_DEFAULT = 1.0
-STEM_DRUM_EDGE_DEFAULT = 1.0
+STEM_GLUE_REVERB_DEFAULT = 5.0
+STEM_DRUM_EDGE_DEFAULT = 5.0
 STEM_VOCAL_PULLBACK_DB_DEFAULT = 0.0
 
 _AUDIO_JOB_SUFFIXES = (
@@ -1133,6 +1133,7 @@ def run_full_mastering_job(
 
 
 def separate_mastering_job_stems(job_dir: str) -> dict[str, object]:
+    from definers.audio.mastering.engine import _master_internal
     from definers.audio.stems import separate_stem_layers
 
     manifest = _read_mastering_job(job_dir)
@@ -1143,16 +1144,37 @@ def separate_mastering_job_stems(job_dir: str) -> dict[str, object]:
     input_path = str(_job_input(manifest).get("path", ""))
     raw_stems_dir = Path(str(job_dir)) / "raw_stems"
     raw_stems_dir.mkdir(parents=True, exist_ok=True)
+    mastering_kwargs = dict(
+        _job_dict(manifest.get("resolved_mastering_kwargs"))
+    )
+    pre_mastered_path = str(Path(str(job_dir)) / "pre_mastered.wav")
+    _report_audio_activity(
+        "Initial mastering pass",
+        detail="Applying initial mix processing before stem separation.",
+        completed=1,
+        total=3,
+    )
+    _master_internal(
+        input_path=input_path,
+        output_path=pre_mastered_path,
+        stem_mastering=False,
+        raise_on_error=True,
+        **mastering_kwargs,
+    )
+    manifest["artifacts"] = {
+        **_job_artifacts(manifest),
+        "pre_mastered_path": pre_mastered_path,
+    }
     _report_audio_activity(
         "Separate stems",
         detail="Running the heavy stem-separation stage and saving raw layers.",
-        completed=1,
-        total=2,
+        completed=2,
+        total=3,
     )
     stem_paths, resolved_output_dir = separate_stem_layers(
-        input_path,
+        pre_mastered_path,
         model_name=str(settings.get("stem_model_name", "mastering")),
-        shifts=max(int(settings.get("stem_shifts", 2)), 1),
+        shifts=max(int(settings.get("stem_shifts", 1)), 1),
         quality_flags=tuple(
             str(flag).strip()
             for flag in _job_analysis(manifest).get("quality_flags", ())
@@ -1162,6 +1184,7 @@ def separate_mastering_job_stems(job_dir: str) -> dict[str, object]:
     )
     manifest["artifacts"] = {
         **_job_artifacts(manifest),
+        "pre_mastered_path": pre_mastered_path,
         "raw_stems_dir": str(resolved_output_dir),
         "raw_stems": {
             str(stem_name): str(stem_path)
@@ -1171,8 +1194,8 @@ def separate_mastering_job_stems(job_dir: str) -> dict[str, object]:
     _report_audio_activity(
         "Publish raw stems",
         detail="Raw stems are ready for inspection and the mix-building step.",
-        completed=2,
-        total=2,
+        completed=3,
+        total=3,
     )
     return write_manifest(job_dir, manifest)
 
@@ -1212,7 +1235,10 @@ def build_mastering_job_mix(job_dir: str) -> dict[str, object]:
         total=3,
     )
     mixed_sample_rate, mixed_signal = process_stem_layers(
-        str(_job_input(manifest).get("path", "")),
+        str(
+            existing_path(artifacts.get("pre_mastered_path"))
+            or _job_input(manifest).get("path", "")
+        ),
         base_config=base_mastering.config,
         base_mastering_kwargs=base_kwargs,
         process_stem_fn=_process_stem_signal,
@@ -1220,7 +1246,7 @@ def build_mastering_job_mix(job_dir: str) -> dict[str, object]:
         read_audio_fn=read_audio,
         delete_fn=lambda _path: None,
         model_name=str(settings.get("stem_model_name", "mastering")),
-        shifts=max(int(settings.get("stem_shifts", 2)), 1),
+        shifts=max(int(settings.get("stem_shifts", 1)), 1),
         quality_flags=tuple(
             str(flag).strip()
             for flag in _job_analysis(manifest).get("quality_flags", ())
@@ -1988,7 +2014,7 @@ def launch_audio_app(
                             enhancer_format = gr.Radio(
                                 format_choices,
                                 label="Output Format",
-                                value="WAV",
+                                value="MP3",
                             )
                             enhancer_preset = gr.Dropdown(
                                 MASTERING_PROFILE_CHOICES,
@@ -2001,7 +2027,7 @@ def launch_audio_app(
                                 )
                             )
                             enhancer_stem_mastering = gr.Checkbox(
-                                label="Use stem-aware mastering",
+                                label="Use stem-aware mastering (experimental)",
                                 value=False,
                             )
                             with gr.Accordion("Macro Controls", open=False):
@@ -2066,7 +2092,7 @@ def launch_audio_app(
                                     enhancer_stem_shifts = gr.Slider(
                                         1,
                                         8,
-                                        2,
+                                        1,
                                         step=1,
                                         label="Stem Separation Shifts",
                                     )
@@ -2084,7 +2110,7 @@ def launch_audio_app(
                                     enhancer_stem_glue_reverb_amount = (
                                         gr.Slider(
                                             0.0,
-                                            1.5,
+                                            10.0,
                                             STEM_GLUE_REVERB_DEFAULT,
                                             step=0.05,
                                             label="Vocal/Other Glue Reverb",
@@ -2092,7 +2118,7 @@ def launch_audio_app(
                                     )
                                     enhancer_stem_drum_edge_amount = gr.Slider(
                                         0.0,
-                                        1.5,
+                                        10.0,
                                         STEM_DRUM_EDGE_DEFAULT,
                                         step=0.05,
                                         label="Drum Edge / Expand-Compress",
@@ -2256,7 +2282,7 @@ def launch_audio_app(
                                     autotune_format = gr.Radio(
                                         format_choices,
                                         label="Output Format",
-                                        value="WAV",
+                                        value="MP3",
                                     )
                                     autotune_strength = gr.Slider(
                                         0.0,
@@ -2319,7 +2345,7 @@ def launch_audio_app(
                                     humanize_format = gr.Radio(
                                         format_choices,
                                         label="Output Format",
-                                        value="WAV",
+                                        value="MP3",
                                     )
                                     humanize_amount = gr.Slider(
                                         0.0,
@@ -2361,7 +2387,7 @@ def launch_audio_app(
                                     silence_format = gr.Radio(
                                         format_choices,
                                         label="Output Format",
-                                        value="WAV",
+                                        value="MP3",
                                     )
                                     with gr.Row():
                                         silence_btn = gr.Button(
@@ -2429,7 +2455,7 @@ def launch_audio_app(
                                     preview_format = gr.Radio(
                                         format_choices,
                                         label="Output Format",
-                                        value="WAV",
+                                        value="MP3",
                                     )
                                     preview_duration = gr.Slider(
                                         5,
@@ -2767,7 +2793,7 @@ def launch_audio_app(
                             stem_format = gr.Radio(
                                 format_choices,
                                 label="Output Format",
-                                value="WAV",
+                                value="MP3",
                             )
                             stem_mode_note = gr.Markdown(
                                 value="**Layer Controls:** Layer strategy settings appear only in Mastering Layers mode. Use Vocals + Karaoke when you only need the vocal and instrumental pair."
@@ -2792,7 +2818,7 @@ def launch_audio_app(
                                     stem_shifts = gr.Slider(
                                         1,
                                         8,
-                                        2,
+                                        4,
                                         step=1,
                                         label="Layer Separation Shifts",
                                     )
@@ -2912,7 +2938,10 @@ def launch_audio_app(
                                 value="Beatmatched Crossfade",
                             )
                             dj_target_bpm = gr.Number(
-                                label="Target BPM (Optional)"
+                                label="Target BPM (Optional)",
+                                step=0.01,
+                                minimum=30,
+                                maximum=300,
                             )
                             dj_transition = gr.Slider(
                                 1,
@@ -3673,13 +3702,24 @@ def launch_audio_app(
             stem_drum_edge_amount_value,
             stem_vocal_pullback_db_value,
         ):
-            mastering_steps = (
-                "Validate source",
-                "Configure mastering",
-                "Run mastering engine",
-                "Load reports and stems",
-                "Publish output",
-            )
+            if stem_mastering:
+                mastering_steps = (
+                    "Validate source",
+                    "Configure mastering",
+                    "Initial mastering pass",
+                    "Stem mastering",
+                    "Final mastering pass",
+                    "Load reports and stems",
+                    "Publish output",
+                )
+            else:
+                mastering_steps = (
+                    "Validate source",
+                    "Configure mastering",
+                    "Run mastering engine",
+                    "Load reports",
+                    "Publish output",
+                )
             yield {
                 enhancer_btn: gr.update(
                     value="Mastering...", interactive=False
@@ -3817,7 +3857,7 @@ def launch_audio_app(
                         "running",
                         "Loading diagnostics and stem previews.",
                         steps=mastering_steps,
-                        active_step=4,
+                        active_step=len(mastering_steps) - 1,
                     ),
                 }
                 yield {

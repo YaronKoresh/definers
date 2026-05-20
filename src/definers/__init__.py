@@ -162,6 +162,10 @@ class _DefinersModule(ModuleType):
                 f"{ModuleType.__getattribute__(self, '__name__')}.{name}"
             )
             bound_module = namespace.get(name)
+            if bound_module is not None and not isinstance(
+                bound_module, ModuleType
+            ):
+                return bound_module
             module = sys.modules.get(qualified_name)
             if module is None:
                 if isinstance(bound_module, ModuleType):

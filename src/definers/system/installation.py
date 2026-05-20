@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -10,6 +11,8 @@ import tempfile
 import zipfile
 
 from definers.constants import FFMPEG_URL
+
+_SOX_INSTALL_ATTEMPTED = False
 
 
 def _first_existing_path(*candidates):
@@ -254,7 +257,186 @@ def install_ffmpeg():
     sys.exit(1)
 
 
-def install_audio_effects():
+def _sox_supports_mp3() -> bool:
+    if not shutil.which("sox"):
+        return False
+    try:
+        result = subprocess.run(
+            ["sox", "-h"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except Exception:
+        return False
+    output = f"{result.stdout}\n{result.stderr}"
+    return bool(re.search(r"\bmp3\b", output, flags=re.IGNORECASE))
+
+
+def install_sox_windows():
+    from definers import system as system_module
+
+    print("[INFO] Running SoX installer for Windows...")
+    winget_commands = [
+        [
+            "winget",
+            "install",
+            "--id=ChrisBagwell.SoX",
+            "-e",
+            "--accept-source-agreements",
+            "--accept-package-agreements",
+        ],
+        [
+            "winget",
+            "install",
+            "--id=SoX.SoX",
+            "-e",
+            "--accept-source-agreements",
+            "--accept-package-agreements",
+        ],
+        [
+            "winget",
+            "install",
+            "sox",
+            "--accept-source-agreements",
+            "--accept-package-agreements",
+        ],
+    ]
+    if shutil.which("winget"):
+        for command in winget_commands:
+            try:
+                subprocess.run(
+                    command,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                if system_module.runnable("sox") and _sox_supports_mp3():
+                    print("[SUCCESS] SoX installed successfully.")
+                    return True
+            except subprocess.CalledProcessError as error:
+                print(
+                    "[WARN] Winget SoX install failed with exit code "
+                    f"{error.returncode}."
+                )
+            except FileNotFoundError:
+                break
+    else:
+        print("[WARN] Winget command not found.")
+
+    if shutil.which("choco"):
+        for package_name in ("sox.portable", "sox"):
+            try:
+                subprocess.run(
+                    ["choco", "install", package_name, "-y"],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                if system_module.runnable("sox") and _sox_supports_mp3():
+                    print(
+                        "[SUCCESS] SoX installed successfully via Chocolatey."
+                    )
+                    return True
+            except subprocess.CalledProcessError as error:
+                print(
+                    "[WARN] Chocolatey SoX install failed with exit code "
+                    f"{error.returncode}."
+                )
+    else:
+        print("[WARN] Chocolatey command not found.")
+
+    print("[ERROR] Failed to install SoX automatically on Windows.")
+    print(
+        "[INFO] Install SoX manually and ensure it is on PATH with MP3 support."
+    )
+    return False
+
+
+def install_sox_linux():
+    print("[INFO] Running SoX installer for Linux...")
+    package_managers = {
+        "apt": {
+            "update_cmd": ["apt-get", "update"],
+            "install_cmd": [
+                "apt-get",
+                "install",
+                "sox",
+                "libsox-fmt-all",
+                "-y",
+            ],
+        },
+        "dnf": {"install_cmd": ["dnf", "install", "sox", "-y"]},
+        "pacman": {"install_cmd": ["pacman", "-S", "sox", "--noconfirm"]},
+    }
+    selected_pm = None
+    for package_manager in package_managers:
+        if shutil.which(package_manager):
+            selected_pm = package_manager
+            break
+    if not selected_pm:
+        print(
+            "[ERROR] Could not detect a supported package manager "
+            "(apt, dnf, pacman)."
+        )
+        print("[INFO] Please install SoX manually.")
+        return False
+
+    print(f"[INFO] Detected package manager: {selected_pm}")
+    try:
+        pm_cmds = package_managers[selected_pm]
+        if "update_cmd" in pm_cmds:
+            print(f"[INFO] Running package list update ({selected_pm})...")
+            subprocess.run(pm_cmds["update_cmd"], check=True)
+        print(f"[INFO] Installing SoX using {selected_pm}...")
+        subprocess.run(pm_cmds["install_cmd"], check=True)
+        print("\n[SUCCESS] SoX installed successfully.")
+    except subprocess.CalledProcessError as error:
+        print(
+            f"\n[ERROR] SoX installation failed with exit code "
+            f"{error.returncode}."
+        )
+        return False
+    except Exception as error:
+        print(f"[ERROR] Unexpected SoX installation error: {error}")
+        return False
+
+    return _sox_supports_mp3()
+
+
+def install_sox():
+    from definers import optional_dependencies, system as system_module
+
+    global _SOX_INSTALL_ATTEMPTED
+
+    if system_module.runnable("sox") and _sox_supports_mp3():
+        return True
+
+    try:
+        optional_dependencies.ensure_module_runtime("sox")
+    except Exception:
+        pass
+
+    if system_module.runnable("sox") and _sox_supports_mp3():
+        return True
+
+    if _SOX_INSTALL_ATTEMPTED:
+        return False
+    _SOX_INSTALL_ATTEMPTED = True
+
+    system_name = system_module.get_os_name()
+    if system_name == "windows":
+        return install_sox_windows()
+    if system_name == "linux":
+        return install_sox_linux()
+
+    print(
+        f"[ERROR] Unsupported operating system for SoX install: {system_name}."
+    )
+    return False
+
+
+def install_audio_effects(*, fluidsynth=True, rubberband=True):
     from definers import system as system_module
     from definers.media.web_transfer import (
         add_to_path_windows,
@@ -265,12 +447,12 @@ def install_audio_effects():
     os_name = system_module.get_os_name()
     if os_name == "linux":
         print("Detected Linux. Installing system dependencies with apt-get...")
-        dependencies_apt = [
-            "rubberband-cli",
-            "fluidsynth",
-            "fluid-soundfont-gm",
-            "build-essential",
-        ]
+        dependencies_apt = []
+        if rubberband:
+            dependencies_apt.append("rubberband-cli")
+        if fluidsynth:
+            dependencies_apt.extend(["fluidsynth", "fluid-soundfont-gm"])
+        dependencies_apt.append("build-essential")
         system_module.run(["apt-get", "update", "-y"])
         system_module.run(["apt-get", "install", "-y"] + dependencies_apt)
     elif os_name == "windows":
@@ -278,40 +460,46 @@ def install_audio_effects():
         os.makedirs(install_dir, exist_ok=True)
         print("Detected Windows. Automating dependency installation...")
         print(f"Dependencies will be installed in: {install_dir}")
-        rubberband_url = "https://breakfastquay.com/files/releases/rubberband-4.0.0-gpl-executable-windows.zip"
-        fluidsynth_url = "https://github.com/FluidSynth/fluidsynth/releases/download/v2.5.2/fluidsynth-v2.5.2-win10-x64-glib.zip"
-        soundfont_url = "https://raw.githubusercontent.com/FluidSynth/fluidsynth/master/sf2/VintageDreamsWaves-v2.sf3"
-        soundfont_path = os.path.join(
-            install_dir,
-            "soundfonts",
-            "VintageDreamsWaves-v2.sf3",
-        )
-        rubberband_extract_path = os.path.join(install_dir, "rubberband")
-        if "rubberband" not in os.environ.get(
-            "PATH", ""
-        ) or not system_module.exist(rubberband_extract_path):
-            if download_and_unzip(rubberband_url, rubberband_extract_path):
-                extracted_dirs = os.listdir(rubberband_extract_path)
-                if extracted_dirs:
-                    rubberband_bin_path = os.path.join(
-                        rubberband_extract_path,
-                        extracted_dirs[0],
+
+        if not system_module.runnable("rubberband") and rubberband:
+            rubberband_url = "https://breakfastquay.com/files/releases/rubberband-4.0.0-gpl-executable-windows.zip"
+            rubberband_extract_path = os.path.join(install_dir, "rubberband")
+            if "rubberband" not in os.environ.get(
+                "PATH", ""
+            ) or not system_module.exist(rubberband_extract_path):
+                if download_and_unzip(rubberband_url, rubberband_extract_path):
+                    extracted_dirs = os.listdir(rubberband_extract_path)
+                    if extracted_dirs:
+                        rubberband_bin_path = os.path.join(
+                            rubberband_extract_path,
+                            extracted_dirs[0],
+                        )
+                        add_to_path_windows(rubberband_bin_path)
+
+        if not system_module.runnable("fluidsynth") and fluidsynth:
+            fluidsynth_url = "https://github.com/FluidSynth/fluidsynth/releases/download/v2.5.2/fluidsynth-v2.5.2-win10-x64-glib.zip"
+            soundfont_url = "https://raw.githubusercontent.com/FluidSynth/fluidsynth/master/sf2/VintageDreamsWaves-v2.sf3"
+
+            fluidsynth_extract_path = os.path.join(install_dir, "fluidsynth")
+            if "fluidsynth" not in os.environ.get(
+                "PATH", ""
+            ) or not system_module.exist(fluidsynth_extract_path):
+                if download_and_unzip(fluidsynth_url, fluidsynth_extract_path):
+                    fluidsynth_bin_path = os.path.join(
+                        fluidsynth_extract_path,
+                        "bin",
                     )
-                    add_to_path_windows(rubberband_bin_path)
-        fluidsynth_extract_path = os.path.join(install_dir, "fluidsynth")
-        if "fluidsynth" not in os.environ.get(
-            "PATH", ""
-        ) or not system_module.exist(fluidsynth_extract_path):
-            if download_and_unzip(fluidsynth_url, fluidsynth_extract_path):
-                fluidsynth_bin_path = os.path.join(
-                    fluidsynth_extract_path,
-                    "bin",
-                )
-                add_to_path_windows(fluidsynth_bin_path)
-        if not system_module.exist(soundfont_path):
-            os.makedirs(os.path.dirname(soundfont_path), exist_ok=True)
-            print("Downloading SoundFont for MIDI playback...")
-            download_file(soundfont_url, soundfont_path)
+                    add_to_path_windows(fluidsynth_bin_path)
+
+            soundfont_path = os.path.join(
+                install_dir,
+                "soundfonts",
+                "VintageDreamsWaves-v2.sf3",
+            )
+            if not system_module.exist(soundfont_path):
+                os.makedirs(os.path.dirname(soundfont_path), exist_ok=True)
+                print("Downloading SoundFont for MIDI playback...")
+                download_file(soundfont_url, soundfont_path)
     else:
         print(
             f"Unsupported OS: {os_name}. Manual installation of system dependencies may be required."

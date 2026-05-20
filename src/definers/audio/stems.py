@@ -429,7 +429,7 @@ def _build_separator_kwargs(
     output_dir: str,
     target_sample_rate: int,
     *,
-    shifts: int = 2,
+    shifts: int = 1,
 ) -> dict[str, object]:
     resolved_shifts = max(int(shifts), 1)
     kwargs: dict[str, object] = {
@@ -675,7 +675,7 @@ def _run_separator_stage(
     output_dir: str,
     target_sample_rate: int,
     *,
-    shifts: int = 2,
+    shifts: int = 1,
 ) -> tuple[str, tuple[str, ...]]:
     Separator = _load_audio_separator_class()
     last_error: Exception | None = None
@@ -730,7 +730,7 @@ def _run_separator_stage_batch(
     output_dir: str,
     target_sample_rate: int,
     *,
-    shifts: int = 2,
+    shifts: int = 1,
 ) -> dict[str, str]:
     if not input_paths:
         return {}
@@ -1010,7 +1010,7 @@ def _apply_stage_to_single_output(
     output_root: str,
     target_sample_rate: int,
     *,
-    shifts: int = 2,
+    shifts: int = 1,
 ) -> str:
     if stage is None:
         return source_path
@@ -1074,7 +1074,7 @@ def _run_mastering_separator_pipeline(
     output_root: str,
     plan: MasteringSeparatorPlan,
     *,
-    shifts: int = 2,
+    shifts: int = 1,
 ) -> dict[str, str]:
     primary_stage_shifts = max(int(shifts), 1)
     repair_stage_shifts = 1
@@ -1289,7 +1289,7 @@ def _run_vocal_pair_separator_pipeline(
     output_root: str,
     *,
     model_name: str,
-    shifts: int = 2,
+    shifts: int = 1,
 ) -> dict[str, str]:
     input_sample_rate, _input_signal = read_audio(audio_path)
     target_sample_rate = _resolve_mastering_sample_rate(input_sample_rate)
@@ -1327,7 +1327,7 @@ def separate_stem_layers(
     audio_path: str,
     *,
     model_name: str = "mastering",
-    shifts: int = 2,
+    shifts: int = 1,
     two_stems: str | None = None,
     output_dir: str | None = None,
     quality_flags: Sequence[str] = (),
@@ -1397,7 +1397,7 @@ def separate_stems(
         stem_paths, _resolved_output_dir = separate_stem_layers(
             audio_path,
             model_name="mastering",
-            shifts=2,
+            shifts=1,
             two_stems="vocals",
             output_dir=output_dir,
         )

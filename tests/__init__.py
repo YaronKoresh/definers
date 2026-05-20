@@ -71,6 +71,12 @@ def _test_import(name, globals=None, locals=None, fromlist=(), level=0):
     return _original_import(name, globals, locals, fromlist, level)
 
 
+for _preload in ("pandas", "urllib3"):
+    try:
+        _original_import_module(_preload)
+    except Exception:
+        pass
+
 _install_optional_shims()
 importlib.import_module = _test_import_module
 builtins.__import__ = _test_import

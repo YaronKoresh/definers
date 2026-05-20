@@ -562,6 +562,7 @@ def test_run_train_coach_auto_workflow_trains_ready_state(monkeypatch):
             "plan-after-training",
             "status-after-training",
             "use-after-training",
+            "auto.joblib",
         ),
     )
 

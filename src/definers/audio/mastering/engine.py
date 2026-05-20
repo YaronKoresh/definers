@@ -9,7 +9,7 @@ np = get_numpy_module()
 from scipy import signal
 from scipy.ndimage import maximum_filter1d, uniform_filter1d
 
-from definers.system import get_ext, tmp
+from definers.system import copy, get_ext, tmp
 
 from ...file_ops import log
 from ..config import SmartMasteringConfig
@@ -93,7 +93,12 @@ def _resolve_package_symbol(name: str, fallback):
     return getattr(module, name, fallback)
 
 
-def _log_with_activity(title: str, message: object) -> None:
+def _log_with_activity(
+    title: str,
+    message: object,
+    completed: int | None = None,
+    total: int | None = None,
+) -> None:
     log(title, message)
     normalized_message = str(message).strip().rstrip(".")
     if not normalized_message:
@@ -102,7 +107,12 @@ def _log_with_activity(title: str, message: object) -> None:
         from definers.system.download_activity import report_download_activity
     except Exception:
         return
-    report_download_activity(normalized_message, phase="step")
+    report_download_activity(
+        normalized_message,
+        phase="step",
+        completed=completed,
+        total=total,
+    )
 
 
 def _resolve_mastered_stems_output_dir(output_path: str) -> str:
@@ -444,12 +454,54 @@ def master(
         "_master_internal",
         _master_internal,
     )
-    return master_internal(
-        input_path,
-        output_path=output_path,
-        stem_mastering=stem_mastering,
+    tmp_ext = (
+        get_ext(output_path) if output_path else get_ext(input_path) or "wav"
+    )
+    path = input_path
+    report = None
+    total_passes = 3 if stem_mastering else 1
+
+    _log_with_activity(
+        "Initial mastering pass",
+        "Applying initial mix processing",
+        completed=1,
+        total=total_passes,
+    )
+    path, report = master_internal(
+        input_path=path,
+        output_path=tmp(tmp_ext, keep=False),
+        stem_mastering=False,
         **internal_kwargs,
     )
+
+    if stem_mastering:
+        _log_with_activity(
+            "Stem mastering pass",
+            "Separating and processing individual stems",
+            completed=2,
+            total=total_passes,
+        )
+        path, report = master_internal(
+            input_path=path,
+            output_path=tmp(tmp_ext, keep=False),
+            stem_mastering=True,
+            **internal_kwargs,
+        )
+        _log_with_activity(
+            "Final mastering pass",
+            "Applying final mix polish",
+            completed=3,
+            total=total_passes,
+        )
+        path, report = master_internal(
+            input_path=path,
+            output_path=tmp(tmp_ext, keep=False),
+            stem_mastering=False,
+            **internal_kwargs,
+        )
+
+    copy(path, output_path)
+    return output_path, report
 
 
 def _master_internal(
@@ -680,7 +732,7 @@ def _render_master_output(
         else:
             resolved_true_peak_target_dbfs = float(mastering.ceil_db)
 
-    resolved_output_path = output_path or tmp(get_ext(input_path), keep=False)
+    resolved_output_path = output_path or tmp(get_ext(output_path), keep=False)
 
     final_output_path, _final_signal, verification = save_verified_audio_fn(
         destination_path=resolved_output_path,

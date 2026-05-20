@@ -38,7 +38,7 @@ class TestRemoveSilence(unittest.TestCase):
             "-ac",
             "2",
             "-af",
-            "silenceremove=stop_duration=0.1:stop_threshold=-32dB",
+            "silenceremove=start_periods=1:start_threshold=-32dB:start_duration=0.1,areverse,silenceremove=start_periods=1:start_threshold=-32dB:start_duration=0.1,areverse",
             output_file,
         ]
         mock_install_ffmpeg.assert_called_once_with()

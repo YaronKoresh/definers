@@ -6,6 +6,7 @@ from pathlib import Path
 
 from definers.logger import init_logger
 from definers.system import catch, log, run, tmp
+from definers.system.installation import install_audio_effects
 
 _logger = init_logger()
 
@@ -61,6 +62,8 @@ def stretch_audio(
     normalize_audio_to_peak_func: Callable[[str], str | None] | None = None,
     run_command: Callable[[list[str]], object] | None = None,
 ) -> str | None:
+    install_audio_effects(rubberband=True, fluidsynth=False)
+
     if output_path is None:
         output_path = tmp("wav")
 

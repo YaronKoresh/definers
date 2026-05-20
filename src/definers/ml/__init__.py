@@ -2790,9 +2790,8 @@ def _looks_like_guided_auto_training_input(
     data,
     *,
     remote_src=None,
-    local_collection_path=None,
 ) -> bool:
-    if remote_src is not None or local_collection_path is not None:
+    if remote_src is not None:
         return True
     if data is None:
         return False
@@ -2892,7 +2891,6 @@ def _auto_train_result(
     source_type: str = "parquet",
     revision: str | None = None,
     remote_src=None,
-    local_collection_path=None,
     intent: str | None = None,
     resolving_choice: str | None = None,
     **kwargs,
@@ -2901,7 +2899,6 @@ def _auto_train_result(
     use_guided = target is None and _looks_like_guided_auto_training_input(
         data,
         remote_src=remote_src,
-        local_collection_path=local_collection_path,
     )
     if not use_guided:
         result = _direct_auto_train_result(
@@ -2942,7 +2939,6 @@ def _auto_train_result(
         revision,
         resume_from,
         save_as,
-        local_collection_path=local_collection_path,
         resolving_choice=resolving_choice,
     )
     state_payload = inspected[0]
@@ -3000,7 +2996,6 @@ def auto_train(
         use_guided = target is None and _looks_like_guided_auto_training_input(
             data,
             remote_src=kwargs.get("remote_src"),
-            local_collection_path=kwargs.get("local_collection_path"),
         )
     if use_guided:
         result = _auto_train_result(

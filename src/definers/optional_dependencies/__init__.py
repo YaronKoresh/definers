@@ -43,7 +43,7 @@ MODULE_PACKAGE_SPECS: dict[str, tuple[str, ...]] = {
     "aioquic": ("aioquic>=1.2.0",),
     "aiofiles": ("aiofiles",),
     "aiohttp": ("aiohttp",),
-    "audio_separator": ("audio-separator>=0.30.2,<0.32.0",),
+    "audio_separator": ("audio-separator>=0.30.2,<0.45.0",),
     "basic_pitch": (BASIC_PITCH_PACKAGE_SPEC,),
     "cssselect": ("cssselect>=1.2.0",),
     "cv2": ("opencv-contrib-python-headless>=4.8.0",),
@@ -516,6 +516,60 @@ def import_optional_module(
                 raise
 
 
+def _purge_broken_spec_modules() -> None:
+    for mod_name in list(sys.modules):
+        mod = sys.modules.get(mod_name)
+        if mod is not None and getattr(mod, "__spec__", 1) is None:
+            del sys.modules[mod_name]
+
+
+_STUBBED_MODULES: set[str] = set()
+
+
+def _resolve_c_extension_attr_path(name: str) -> None:
+    import types as _types
+
+    parts = name.split(".")
+    for i in range(len(parts)):
+        sub = ".".join(parts[: i + 1])
+        if sub in sys.modules:
+            continue
+        parent_name = ".".join(parts[:i])
+        parent = sys.modules.get(parent_name) if parent_name else None
+        child = getattr(parent, parts[i], None) if parent is not None else None
+        if child is not None:
+            sys.modules[sub] = child
+        else:
+            stub = _types.ModuleType(sub)
+            stub.__path__ = []
+            sys.modules[sub] = stub
+            _STUBBED_MODULES.add(sub)
+
+
+def _prestub_c_ext_fromlist(
+    name: str,
+    module: Any,
+    fromlist: tuple[str, ...],
+) -> None:
+    if not fromlist or module is None:
+        return
+    root = name.split(".")[0]
+    if root in sys.builtin_module_names:
+        return
+    mod_file = getattr(module, "__file__", None)
+    is_c_ext_or_stub = (
+        name in _STUBBED_MODULES
+        or mod_file is None
+        or (mod_file or "").endswith(".pyd")
+        or (mod_file or "").endswith(".so")
+    )
+    if not is_c_ext_or_stub:
+        return
+    for attr in fromlist:
+        if attr != "*" and not hasattr(module, attr):
+            setattr(module, attr, type(attr, (), {"__slots__": ()}))
+
+
 def _import_with_auto_install(
     importer: Callable[..., Any],
     name: str,
@@ -525,14 +579,35 @@ def _import_with_auto_install(
     level: int = 0,
 ):
     try:
-        return importer(name, globals, locals, fromlist, level)
+        result = importer(name, globals, locals, fromlist, level)
+        _prestub_c_ext_fromlist(name, result, fromlist)
+        return result
     except (ImportError, ModuleNotFoundError) as error:
         if level != 0 or _install_active() or not auto_install_enabled():
             raise
+        parts = name.split(".")
+        parent_is_stub = (
+            len(parts) > 1 and ".".join(parts[:-1]) in _STUBBED_MODULES
+        )
+        if "is not a package" in str(error) or parent_is_stub:
+            _resolve_c_extension_attr_path(name)
+            _prestub_c_ext_fromlist(name, sys.modules.get(name), fromlist)
+            result = importer(name, globals, locals, fromlist, level)
+            _prestub_c_ext_fromlist(name, result, fromlist)
+            return result
         for candidate_name in _candidate_module_names(name, error):
             if ensure_module_runtime(candidate_name):
-                return importer(name, globals, locals, fromlist, level)
+                result = importer(name, globals, locals, fromlist, level)
+                _prestub_c_ext_fromlist(name, result, fromlist)
+                return result
         raise
+    except ValueError as error:
+        if "__spec__ is None" not in str(error):
+            raise
+        _purge_broken_spec_modules()
+        result = importer(name, globals, locals, fromlist, level)
+        _prestub_c_ext_fromlist(name, result, fromlist)
+        return result
 
 
 def _auto_install_import(

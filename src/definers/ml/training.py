@@ -92,6 +92,30 @@ def _normalize_training_store(value: Any) -> Any | None:
     return value
 
 
+def _pad_trailing_dims(accumulated: Any, new_value: Any) -> tuple[Any, Any]:
+    a_shape = getattr(accumulated, "shape", None)
+    n_shape = getattr(new_value, "shape", None)
+    if (
+        a_shape is None
+        or n_shape is None
+        or len(a_shape) != len(n_shape)
+        or len(a_shape) < 2
+        or a_shape[1:] == n_shape[1:]
+    ):
+        return accumulated, new_value
+    target = tuple(max(a_shape[i], n_shape[i]) for i in range(1, len(a_shape)))
+
+    def _pad(arr, arr_shape):
+        pad_widths = [(0, 0)] + [
+            (0, target[i] - arr_shape[i + 1]) for i in range(len(target))
+        ]
+        if all(w[1] == 0 for w in pad_widths):
+            return arr
+        return np.pad(arr, pad_widths)
+
+    return _pad(accumulated, a_shape), _pad(new_value, n_shape)
+
+
 def _accumulate_training_rows(
     current_value: Any | None,
     new_value: Any,
@@ -105,7 +129,7 @@ def _accumulate_training_rows(
             tile_repetitions = (epochs,) + (1,) * max(new_value.ndim - 1, 0)
             return np.tile(new_value, tile_repetitions)
         return [new_value for _ in range(epochs)]
-    accumulated = current_value
+    accumulated, new_value = _pad_trailing_dims(current_value, new_value)
     for _ in range(epochs):
         accumulated = concatenate((accumulated, new_value), axis=0)
     return accumulated
@@ -236,37 +260,66 @@ class HybridModel:
     def __init__(self):
         self.model = None
 
-    def fit(self, X, y=None):
-        if y is not None:
+    def _make_supervised_model(self, multi_output=False):
+        try:
             import importlib
 
-            CuLinearRegression = importlib.import_module(
+            return importlib.import_module(
                 "cuml.linear_model"
-            ).LinearRegression
+            ).LinearRegression()
+        except (ImportError, ModuleNotFoundError):
+            from sklearn.linear_model import SGDRegressor
 
+            base = SGDRegressor(max_iter=1000, tol=1e-3)
+            if multi_output:
+                from sklearn.multioutput import MultiOutputRegressor
+
+                return MultiOutputRegressor(base)
+            return base
+
+    def _make_unsupervised_model(self):
+        try:
+            import importlib
+
+            return importlib.import_module("cuml.cluster").KMeans(
+                n_clusters=32768
+            )
+        except (ImportError, ModuleNotFoundError):
+            from sklearn.cluster import MiniBatchKMeans
+
+            return MiniBatchKMeans(n_clusters=min(32768, 256))
+
+    def fit(self, X, y=None):
+        from definers.data.arrays import cupy_to_numpy as _ctn
+
+        X_fit = _ctn(X)
+        if X_fit.ndim > 2:
+            X_fit = X_fit.reshape(X_fit.shape[0], -1)
+        if y is not None:
+            y_fit = _ctn(y)
+            if y_fit.ndim > 1:
+                y_fit = y_fit.reshape(y_fit.shape[0], -1)
+                if y_fit.shape[1] == 1:
+                    y_fit = y_fit.ravel()
             if self.model is None:
-                self.model = CuLinearRegression()
+                self.model = self._make_supervised_model(
+                    multi_output=y_fit.ndim > 1
+                )
             start_train = time()
-            self.model.fit(X, y)
+            self.model.fit(X_fit, y_fit)
             if hasattr(np, "cuda"):
                 np.cuda.runtime.deviceSynchronize()
             end_train = time()
-            train_time = end_train - start_train
-            _log(f"Train Time: {train_time:.4f} seconds")
+            _log(f"Train Time: {end_train - start_train:.4f} seconds")
             return
-        import importlib
-
-        CuKMeans = importlib.import_module("cuml.cluster").KMeans
-
         if self.model is None:
-            self.model = CuKMeans(n_clusters=32768)
+            self.model = self._make_unsupervised_model()
         start_train = time()
-        self.model.fit(X)
+        self.model.fit(X_fit)
         if hasattr(np, "cuda"):
             np.cuda.runtime.deviceSynchronize()
         end_train = time()
-        train_time = end_train - start_train
-        _log(f"Train Time: {train_time:.4f} seconds")
+        _log(f"Train Time: {end_train - start_train:.4f} seconds")
 
     def predict(self, X):
         from definers.data.arrays import cupy_to_numpy
@@ -282,6 +335,13 @@ class HybridModel:
         predictions = cupy_to_numpy(predictions)
         _log(f"Predict Time: {predict_time:.4f} seconds")
         return predictions
+
+    def strip(self):
+        for attr in ("X_all", "y_all"):
+            try:
+                delattr(self, attr)
+            except AttributeError:
+                pass
 
 
 def LinearRegressionTorch(input_dim: int):

@@ -261,7 +261,6 @@ def build_train_coach_state(
     *,
     requested_intent,
     uploaded_files=None,
-    local_collection_path=None,
     remote_src=None,
     resume_artifact=None,
     revision=None,
@@ -272,21 +271,13 @@ def build_train_coach_state(
 ) -> TrainCoachState:
     normalized_intent = _normalize_requested_intent(requested_intent)
     normalized_remote = _normalize_optional_text(remote_src)
-    normalized_revision = _normalize_optional_text(revision)
-    normalized_save_as = _normalize_optional_text(save_as)
+    normalized_revision = _normalize_optional_text(revision or "main")
+    normalized_save_as = _normalize_optional_text(
+        save_as or "guided-model.joblib"
+    )
     normalized_choice = _normalize_optional_text(resolving_choice)
     hosted_runtime = _detect_hosted_runtime()
     normalized_files = _normalize_uploaded_files(uploaded_files)
-    normalized_collection_path = _safe_local_path(local_collection_path)
-    if normalized_collection_path is not None:
-        normalized_files = tuple(
-            dict.fromkeys(
-                (
-                    *normalized_files,
-                    *_expand_local_input_path(normalized_collection_path),
-                )
-            )
-        )
     source_files, inferred_resume, file_warnings = _extract_resume_candidates(
         normalized_files
     )
@@ -334,10 +325,6 @@ def build_train_coach_state(
     notes: list[str] = []
     source_mode = "empty"
 
-    if normalized_collection_path is not None:
-        notes.append(
-            f"Guided mode expanded the local collection path {normalized_collection_path}."
-        )
     if hosted_runtime != "local":
         notes.append(
             f"Guided mode is running inside {_hosted_runtime_label(hosted_runtime)} and will keep preview and retention inside hosted-safe budgets."
@@ -1611,7 +1598,7 @@ def _split_tabular_files(
                 "unresolved_questions": tuple(unresolved_questions),
             }
     if len(paths) > 1:
-        if len(paths) == 2 and resolving_choice != "review-manually":
+        if resolving_choice != "review-manually" and len(paths) == 2:
             resolving_question = _build_tabular_label_resolving_question(paths)
             unresolved_questions.append(resolving_question.prompt)
         else:
@@ -1683,30 +1670,87 @@ def _inspect_tabular_file(path: str):
 
 
 def _dataframe_label_candidates(dataframe) -> tuple[str, ...]:
-    candidates = []
-    for column in dataframe.columns:
+    columns = list(dataframe.columns)
+    if not columns:
+        return ()
+
+    profiles: list[dict] = []
+    for idx, column in enumerate(columns):
+        normalized_name = str(column).strip()
         series = dataframe[column]
         if series.empty:
+            profiles.append(
+                {
+                    "idx": idx,
+                    "name": normalized_name,
+                    "n_samples": 0,
+                    "n_unique": 0,
+                    "avg_len": 0.0,
+                    "dtype_kind": "O",
+                }
+            )
             continue
-        normalized_name = str(column).strip()
-        sampled_values = [
-            value for value in series.head(128).tolist() if value == value
-        ]
-        unique_values = []
+        sampled_values = [v for v in series.head(128).tolist() if v == v]
+        unique_texts: list[str] = []
         for value in sampled_values:
             text = str(value).strip()
-            if text and text not in unique_values:
-                unique_values.append(text)
-        if _LABEL_NAME_PATTERN.search(normalized_name.lower()):
-            candidates.append(normalized_name)
+            if text and text not in unique_texts:
+                unique_texts.append(text)
+        avg_len = (
+            sum(len(t) for t in unique_texts) / len(unique_texts)
+            if unique_texts
+            else 0.0
+        )
+        profiles.append(
+            {
+                "idx": idx,
+                "name": normalized_name,
+                "n_samples": len(sampled_values),
+                "n_unique": len(unique_texts),
+                "avg_len": avg_len,
+                "dtype_kind": series.dtype.kind,
+            }
+        )
+
+    candidates: list[str] = []
+    for p in profiles:
+        n_unique = p["n_unique"]
+        n_samples = p["n_samples"]
+        if n_samples == 0 or n_unique <= 1 or n_unique > 20:
             continue
-        if len(unique_values) <= 1 or len(unique_values) > 20:
+        if n_unique >= max(2, min(8, n_samples)):
             continue
-        if len(unique_values) >= max(2, min(8, len(sampled_values))):
-            continue
-        if series.dtype.kind in {"b", "i", "u", "O"}:
-            candidates.append(normalized_name)
-    return tuple(candidates)
+        if p["dtype_kind"] in {"b", "i", "u", "O"}:
+            candidates.append(p["name"])
+    if candidates:
+        return tuple(candidates)
+
+    n_cols = len(profiles)
+    max_avg_len = max((p["avg_len"] for p in profiles), default=0.0)
+    scored: list[tuple[int, int, str]] = []
+    for p in profiles:
+        score = 0
+        n_samples = p["n_samples"]
+        if n_samples > 0:
+            if p["idx"] == n_cols - 1:
+                score += 2
+            unique_ratio = p["n_unique"] / n_samples
+            if unique_ratio < 0.9:
+                score += 1
+            if unique_ratio < 0.5:
+                score += 1
+            if max_avg_len > 0 and p["avg_len"] < max_avg_len * 0.8:
+                score += 1
+
+            if p["dtype_kind"] in {"i", "u", "f"}:
+                score += 1
+        scored.append((score, p["idx"], p["name"]))
+
+    scored.sort(key=lambda x: (-x[0], x[1]))
+    if scored and scored[0][0] > 0:
+        best_score = scored[0][0]
+        return tuple(col for score, _, col in scored if score == best_score)
+    return ()
 
 
 def _dataframe_drop_candidates(dataframe) -> tuple[str, ...]:
@@ -1787,31 +1831,78 @@ def _dataset_column_values(
 def _dataset_label_candidates(
     dataset, column_names: tuple[str, ...]
 ) -> tuple[str, ...]:
-    candidates = []
-    for column_name in column_names:
+    if not column_names:
+        return ()
+
+    profiles: list[dict] = []
+    for idx, column_name in enumerate(column_names):
         sampled_values = [
             value
             for value in _dataset_column_values(dataset, column_name)
             if value == value
         ]
-        unique_values = []
+        unique_texts: list[str] = []
         for value in sampled_values:
             text = str(value).strip()
-            if text and text not in unique_values:
-                unique_values.append(text)
-        if _LABEL_NAME_PATTERN.search(column_name.lower()):
-            candidates.append(column_name)
+            if text and text not in unique_texts:
+                unique_texts.append(text)
+        avg_len = (
+            sum(len(t) for t in unique_texts) / len(unique_texts)
+            if unique_texts
+            else 0.0
+        )
+        profiles.append(
+            {
+                "idx": idx,
+                "name": column_name,
+                "n_samples": len(sampled_values),
+                "n_unique": len(unique_texts),
+                "avg_len": avg_len,
+                "values": sampled_values,
+            }
+        )
+
+    candidates: list[str] = []
+    for p in profiles:
+        n_unique = p["n_unique"]
+        n_samples = p["n_samples"]
+        if n_samples == 0 or n_unique <= 1 or n_unique > 20:
             continue
-        if len(unique_values) <= 1 or len(unique_values) > 20:
-            continue
-        if len(unique_values) >= max(2, min(8, len(sampled_values))):
+        if n_unique >= max(2, min(8, n_samples)):
             continue
         if all(
-            isinstance(value, (str, int, bool)) and not isinstance(value, bytes)
-            for value in sampled_values
+            isinstance(v, (str, int, bool)) and not isinstance(v, bytes)
+            for v in p["values"]
         ):
-            candidates.append(column_name)
-    return tuple(candidates)
+            candidates.append(p["name"])
+    if candidates:
+        return tuple(candidates)
+
+    n_cols = len(profiles)
+    max_avg_len = max((p["avg_len"] for p in profiles), default=0.0)
+    scored: list[tuple[int, int, str]] = []
+    for p in profiles:
+        score = 0
+        n_samples = p["n_samples"]
+        if n_samples > 0:
+            if p["idx"] == n_cols - 1:
+                score += 2
+
+            unique_ratio = p["n_unique"] / n_samples
+            if unique_ratio < 0.9:
+                score += 1
+            if unique_ratio < 0.5:
+                score += 1
+
+            if max_avg_len > 0 and p["avg_len"] < max_avg_len * 0.8:
+                score += 1
+        scored.append((score, p["idx"], p["name"]))
+
+    scored.sort(key=lambda x: (-x[0], x[1]))
+    if scored and scored[0][0] > 0:
+        best_score = scored[0][0]
+        return tuple(col for score, _, col in scored if score == best_score)
+    return ()
 
 
 def _dataset_drop_candidates(
