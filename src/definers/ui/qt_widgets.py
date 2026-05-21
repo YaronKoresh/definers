@@ -605,7 +605,7 @@ class FilePicker(LabeledWidget):
         self._file_filter = file_filter
         self._max_files = max_files
 
-        self._paths: list[str] = []
+        self._paths: str | list[str] = []
 
     def _open_dialog(self) -> None:
         if self._max_files == 1:
@@ -615,7 +615,7 @@ class FilePicker(LabeledWidget):
                 "",
                 self._file_filter,
             )
-            paths = [path] if path else []
+            paths = path
         else:
             paths, _ = QFileDialog.getOpenFileNames(
                 self,
@@ -624,21 +624,25 @@ class FilePicker(LabeledWidget):
                 self._file_filter,
             )
 
-        if self._max_files is not None and len(paths) > self._max_files:
-            paths = paths[: self._max_files]
+            if self._max_files is not None and len(paths) > self._max_files:
+                paths = paths[: self._max_files]
 
         if paths:
             self._set_paths(paths)
             self.selected.emit(paths)
 
-    def _set_paths(self, paths: list[str]) -> None:
+    def _set_paths(self, paths: str | list[str]) -> None:
         self._paths = paths
         if paths:
-            if len(paths) == 1:
+            if self._max_files == 1:
+                self._path_label.setText(Path(paths).name)
+                self._path_label.setToolTip(paths)
+            elif len(paths) == 1:
                 self._path_label.setText(Path(paths[0]).name)
+                self._path_label.setToolTip(paths[0])
             else:
                 self._path_label.setText(f"{len(paths)} files selected")
-            self._path_label.setToolTip("\n".join(paths))
+                self._path_label.setToolTip("\n".join(paths))
         else:
             self._path_label.setText(
                 "No file selected."
@@ -647,7 +651,7 @@ class FilePicker(LabeledWidget):
             )
             self._path_label.setToolTip("")
 
-    def value(self) -> list[str]:
+    def value(self) -> str | list[str]:
         return self._paths
 
     def set_value(self, value: Any) -> None:
