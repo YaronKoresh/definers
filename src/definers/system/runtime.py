@@ -2,11 +2,11 @@ import ctypes
 import importlib.util
 import platform
 import re
+import shlex
 import shutil
 import subprocess
 import sys
 import os
-import shlex
 
 
 def get_os_name() -> str:
