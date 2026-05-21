@@ -2328,10 +2328,8 @@ def launch_audio_app(
             left.addWidget(widget)
         right = Section()
         preview_output = AudioOutput("Preview")
-        preview_status = MarkdownLabel("## Preview & Split\n- Status: idle")
         split_output = FileOutput("Split Archive")
         right.addWidget(preview_output)
-        right.addWidget(preview_status)
         right.addWidget(split_output)
         row.addWidget(left)
         row.addWidget(right)
@@ -2341,7 +2339,7 @@ def launch_audio_app(
             preview_btn,
             run_audio_preview_tool,
             inputs=[preview_input, preview_duration, preview_format],
-            outputs=[preview_output, preview_status],
+            outputs=[preview_output],
             action_label="Create Preview",
             steps=("Validate source", "Build preview clip", "Publish output"),
             running_detail="Building the preview clip.",
@@ -2351,7 +2349,7 @@ def launch_audio_app(
             split_btn,
             run_split_audio_tool,
             inputs=[preview_input, split_chunks, preview_format],
-            outputs=[split_output, preview_status],
+            outputs=[split_output],
             action_label="Split Audio",
             steps=("Validate source", "Split audio", "Publish archive"),
             running_detail="Splitting the audio into chunks.",
@@ -2374,10 +2372,8 @@ def launch_audio_app(
         right = Section()
         a2m_output = FileOutput("MIDI Output")
         m2a_output = AudioOutput("Audio Output")
-        midi_status = MarkdownLabel("## MIDI Tools\n- Status: idle")
         right.addWidget(a2m_output)
         right.addWidget(m2a_output)
-        right.addWidget(midi_status)
         row.addWidget(left)
         row.addWidget(right)
         panel.addWidget(row)
@@ -2386,7 +2382,7 @@ def launch_audio_app(
             a2m_btn,
             audio_to_midi,
             inputs=[a2m_input],
-            outputs=[a2m_output, midi_status],
+            outputs=[a2m_output],
             action_label="Audio To MIDI",
             steps=("Validate source", "Transcribe MIDI", "Publish output"),
         )
@@ -2394,7 +2390,7 @@ def launch_audio_app(
             m2a_btn,
             midi_to_audio,
             inputs=[m2a_input, m2a_format],
-            outputs=[m2a_output, midi_status],
+            outputs=[m2a_output],
             action_label="MIDI To Audio",
             steps=("Validate MIDI", "Synthesize audio", "Publish output"),
         )
@@ -2430,9 +2426,7 @@ def launch_audio_app(
         left.addWidget(stem_mixer_btn)
         right = Section()
         stem_mixer_output = AudioOutput("Mix")
-        stem_mixer_status = MarkdownLabel("## Stem Mixer\n- Status: idle")
         right.addWidget(stem_mixer_output)
-        right.addWidget(stem_mixer_status)
         row.addWidget(left)
         row.addWidget(right)
         panel.addWidget(row)
@@ -2441,7 +2435,7 @@ def launch_audio_app(
             stem_mixer_btn,
             stem_mixer,
             inputs=[stem_mixer_files, stem_mixer_format],
-            outputs=[stem_mixer_output, stem_mixer_status],
+            outputs=[stem_mixer_output],
             action_label="Mix Stems",
             steps=("Validate stems", "Mix stems", "Publish output"),
         )
@@ -2509,9 +2503,7 @@ def launch_audio_app(
         left.addWidget(clip_btn)
         right = Section()
         clip_output = VideoOutput("Video")
-        clip_status = MarkdownLabel("## Music Clip\n- Status: idle")
         right.addWidget(clip_output)
-        right.addWidget(clip_status)
         row.addWidget(left)
         row.addWidget(right)
         panel.addWidget(row)
@@ -2520,7 +2512,7 @@ def launch_audio_app(
             clip_btn,
             music_video,
             inputs=[clip_audio, clip_image],
-            outputs=[clip_output, clip_status],
+            outputs=[clip_output],
             action_label="Build Music Video",
             steps=("Validate inputs", "Render video", "Publish output"),
         )
@@ -2546,9 +2538,7 @@ def launch_audio_app(
             left.addWidget(widget)
         right = Section()
         speed_output = AudioOutput("Output")
-        speed_status = MarkdownLabel("## Speed & Pitch\n- Status: idle")
         right.addWidget(speed_output)
-        right.addWidget(speed_status)
         row.addWidget(left)
         row.addWidget(right)
         panel.addWidget(row)
@@ -2557,7 +2547,7 @@ def launch_audio_app(
             speed_btn,
             change_audio_speed,
             inputs=[speed_input, speed_value, speed_format],
-            outputs=[speed_output, speed_status],
+            outputs=[speed_output],
             action_label="Change Speed",
             steps=("Validate source", "Resample", "Publish output"),
         )
@@ -2591,9 +2581,7 @@ def launch_audio_app(
             left.addWidget(widget)
         right = Section()
         vps_output = AudioOutput("Output")
-        vps_status = MarkdownLabel("## Vocal Pitch Shifter\n- Status: idle")
         right.addWidget(vps_output)
-        right.addWidget(vps_status)
         row.addWidget(left)
         row.addWidget(right)
         panel.addWidget(row)
@@ -2602,7 +2590,7 @@ def launch_audio_app(
             vps_btn,
             pitch_shift_vocals,
             inputs=[vps_input, vps_semitones, vps_format],
-            outputs=[vps_output, vps_status],
+            outputs=[vps_output],
             action_label="Shift Pitch",
             steps=("Validate source", "Shift pitch", "Publish output"),
         )
@@ -2610,7 +2598,7 @@ def launch_audio_app(
     if "voice_lab" in tool_map.values():
         panel = Section()
         row = Row()
-        left = Section()
+        sec = Section()
         vlab_dataset = FilePicker("Voice Dataset Archive")
         vlab_model = LabeledLineEdit(
             "Model Name", placeholder="custom_voice_model"
@@ -2618,19 +2606,15 @@ def launch_audio_app(
         vlab_btn = QPushButton("Train Voice Lab Model")
         vlab_btn.setProperty("definersPrimary", True)
         for widget in (vlab_dataset, vlab_model, vlab_btn):
-            left.addWidget(widget)
-        right = Section()
-        vlab_status = MarkdownLabel("## Voice Lab\n- Status: idle")
-        right.addWidget(vlab_status)
-        row.addWidget(left)
-        row.addWidget(right)
+            sec.addWidget(widget)
+        row.addWidget(sec)
         panel.addWidget(row)
         _add_tab(panel, "voice_lab")
         _bind(
             vlab_btn,
             train_voice_lab_model,
             inputs=[vlab_dataset, vlab_model],
-            outputs=[vlab_status],
+            outputs=[],
             action_label="Train Voice Lab Model",
             steps=("Validate dataset", "Train model", "Publish artifact"),
         )
@@ -2649,9 +2633,7 @@ def launch_audio_app(
             left.addWidget(widget)
         right = Section()
         dj_output = AudioOutput("Mix")
-        dj_status = MarkdownLabel("## DJ AutoMix\n- Status: idle")
         right.addWidget(dj_output)
-        right.addWidget(dj_status)
         row.addWidget(left)
         row.addWidget(right)
         panel.addWidget(row)
@@ -2660,7 +2642,7 @@ def launch_audio_app(
             dj_btn,
             dj_mix,
             inputs=[dj_files, dj_format],
-            outputs=[dj_output, dj_status],
+            outputs=[dj_output],
             action_label="Build DJ Mix",
             steps=("Validate tracks", "Mix", "Publish output"),
         )
@@ -2682,9 +2664,7 @@ def launch_audio_app(
             left.addWidget(widget)
         right = Section()
         mg_output = AudioOutput("Music")
-        mg_status = MarkdownLabel("## Music Gen\n- Status: idle")
         right.addWidget(mg_output)
-        right.addWidget(mg_status)
         row.addWidget(left)
         row.addWidget(right)
         panel.addWidget(row)
@@ -2693,7 +2673,7 @@ def launch_audio_app(
             mg_btn,
             generate_music,
             inputs=[mg_prompt, mg_duration, mg_format],
-            outputs=[mg_output, mg_status],
+            outputs=[mg_output],
             action_label="Generate Music",
             steps=("Validate prompt", "Generate", "Publish output"),
         )
@@ -2716,9 +2696,7 @@ def launch_audio_app(
             left.addWidget(widget)
         right = Section()
         vg_output = AudioOutput("Voice")
-        vg_status = MarkdownLabel("## Voice Gen\n- Status: idle")
         right.addWidget(vg_output)
-        right.addWidget(vg_status)
         row.addWidget(left)
         row.addWidget(right)
         panel.addWidget(row)
@@ -2727,7 +2705,7 @@ def launch_audio_app(
             vg_btn,
             generate_voice,
             inputs=[vg_text, vg_language, vg_format],
-            outputs=[vg_output, vg_status],
+            outputs=[vg_output],
             action_label="Generate Voice",
             steps=("Validate text", "Synthesize", "Publish output"),
         )
@@ -2803,9 +2781,7 @@ def launch_audio_app(
         left.addWidget(spec_btn)
         right = Section()
         spec_output = VideoOutput("Spectrum")
-        spec_status = MarkdownLabel("## Spectrum\n- Status: idle")
         right.addWidget(spec_output)
-        right.addWidget(spec_status)
         row.addWidget(left)
         row.addWidget(right)
         panel.addWidget(row)
@@ -2814,7 +2790,7 @@ def launch_audio_app(
             spec_btn,
             create_spectrum_visualization,
             inputs=[spec_input],
-            outputs=[spec_output, spec_status],
+            outputs=[spec_output],
             action_label="Render Spectrum",
             steps=("Validate source", "Render spectrum", "Publish output"),
         )
@@ -2831,9 +2807,7 @@ def launch_audio_app(
             left.addWidget(widget)
         right = Section()
         vis_output = VideoOutput("Visualizer")
-        vis_status = MarkdownLabel("## Beat Visualizer\n- Status: idle")
         right.addWidget(vis_output)
-        right.addWidget(vis_status)
         row.addWidget(left)
         row.addWidget(right)
         panel.addWidget(row)
@@ -2842,7 +2816,7 @@ def launch_audio_app(
             vis_btn,
             beat_visualizer,
             inputs=[vis_image_input, vis_audio_input],
-            outputs=[vis_output, vis_status],
+            outputs=[vis_output],
             action_label="Render Beat Visualizer",
             steps=("Validate inputs", "Render video", "Publish output"),
         )
@@ -2872,9 +2846,7 @@ def launch_audio_app(
             left.addWidget(widget)
         right = Section()
         lyric_output = VideoOutput("Lyric Video")
-        lyric_status = MarkdownLabel("## Lyric Video\n- Status: idle")
         right.addWidget(lyric_output)
-        right.addWidget(lyric_status)
         row.addWidget(left)
         row.addWidget(right)
         panel.addWidget(row)
@@ -2891,7 +2863,7 @@ def launch_audio_app(
             lyric_btn,
             lyric_video,
             inputs=[lyric_audio, lyric_bg, lyric_text, lyric_language],
-            outputs=[lyric_output, lyric_status],
+            outputs=[lyric_output],
             action_label="Build Lyric Video",
             steps=("Validate inputs", "Render lyric video", "Publish output"),
         )
