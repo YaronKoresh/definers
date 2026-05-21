@@ -464,27 +464,30 @@ def install_audio_effects(*, fluidsynth=True, rubberband=True):
         if not system_module.runnable("rubberband") and rubberband:
             rubberband_url = "https://breakfastquay.com/files/releases/rubberband-4.0.0-gpl-executable-windows.zip"
             rubberband_extract_path = os.path.join(install_dir, "rubberband")
-            if "rubberband" not in os.environ.get(
-                "PATH", ""
-            ) or not system_module.exist(rubberband_extract_path):
-                if download_and_unzip(rubberband_url, rubberband_extract_path):
-                    extracted_dirs = os.listdir(rubberband_extract_path)
-                    if extracted_dirs:
-                        rubberband_bin_path = os.path.join(
-                            rubberband_extract_path,
-                            extracted_dirs[0],
-                        )
-                        add_to_path_windows(rubberband_bin_path)
+            if system_module.exist(rubberband_extract_path) or (
+                download_and_unzip(rubberband_url, rubberband_extract_path)
+            ):
+                extracted_dirs = os.listdir(rubberband_extract_path)
+                if extracted_dirs and (
+                    "rubberband" not in os.environ.get("PATH", "")
+                ):
+                    rubberband_bin_path = os.path.join(
+                        rubberband_extract_path,
+                        extracted_dirs[0],
+                    )
+                    add_to_path_windows(rubberband_bin_path)
 
         if not system_module.runnable("fluidsynth") and fluidsynth:
             fluidsynth_url = "https://github.com/FluidSynth/fluidsynth/releases/download/v2.5.2/fluidsynth-v2.5.2-win10-x64-glib.zip"
             soundfont_url = "https://raw.githubusercontent.com/FluidSynth/fluidsynth/master/sf2/VintageDreamsWaves-v2.sf3"
 
             fluidsynth_extract_path = os.path.join(install_dir, "fluidsynth")
-            if "fluidsynth" not in os.environ.get(
-                "PATH", ""
-            ) or not system_module.exist(fluidsynth_extract_path):
-                if download_and_unzip(fluidsynth_url, fluidsynth_extract_path):
+            if system_module.exist(fluidsynth_extract_path) or (
+                download_and_unzip(fluidsynth_url, fluidsynth_extract_path)
+            ):
+                if "fluidsynth" not in os.environ.get(
+                    "PATH", ""
+                ):
                     fluidsynth_bin_path = os.path.join(
                         fluidsynth_extract_path,
                         "bin",
