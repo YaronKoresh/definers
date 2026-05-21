@@ -2,6 +2,8 @@ services:
   image:
     container_name: image
     image: yaronkoresh/image:latest
+    ports:
+      - "6080:6080"
     build:
       context: .
       dockerfile: Dockerfile

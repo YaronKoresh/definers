@@ -2,6 +2,8 @@ services:
   translate:
     container_name: translate
     image: yaronkoresh/translate:latest
+    ports:
+      - "6080:6080"
     build:
       context: .
       dockerfile: Dockerfile
