@@ -588,6 +588,7 @@ def _import_with_auto_install(
         _enforce_linux_gui_environment()
     except:
         print("Linux GUI environment enforcement failed")
+
     try:
         result = importer(name, globals, locals, fromlist, level)
         _prestub_c_ext_fromlist(name, result, fromlist)
@@ -667,14 +668,16 @@ def install_import_hook() -> None:
 def _enforce_linux_gui_environment():
     if not sys.platform.startswith("linux"):
         return
+
     if not auto_install_enabled():
         return
 
-    result = subprocess.run(
-        ["dpkg", "-s"] + GUI_PACKAGES,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
+    if os.environ.get("GUI_ENV_CHECKED", "0") == "1":
+        return
+    else:
+        os.environ["GUI_ENV_CHECKED"] = "1"
+
+    result = subprocess.run(["dpkg", "-s", *GUI_PACKAGES])
 
     if result.returncode != 0:
         print(
@@ -684,9 +687,9 @@ def _enforce_linux_gui_environment():
             env = os.environ.copy()
             env["DEBIAN_FRONTEND"] = "noninteractive"
 
-            subprocess.check_call(["apt-get", "update", "-qq"], env=env)
-            subprocess.check_call(
-                ["apt-get", "install", "-y", "-qq"] + GUI_PACKAGES, env=env
+            subprocess.run(["apt-get", "update"], env=env, check=True)
+            subprocess.run(
+                ["apt-get", "install", "-y", *GUI_PACKAGES], env=env, check=True
             )
             print("[definers] System GUI dependencies installed successfully.")
         except (subprocess.CalledProcessError, PermissionError):
