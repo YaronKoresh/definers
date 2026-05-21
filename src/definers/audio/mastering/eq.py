@@ -110,7 +110,7 @@ def _moving_average(values: np.ndarray, window_size: int) -> np.ndarray:
     if window_size <= 1:
         return samples.astype(np.float32, copy=True)
 
-    cumulative = np.cumsum(samples, dtype=np.float64)
+    cumulative = np.cumsum(samples, dtype=np.float32)
     smoothed = np.empty_like(samples)
     for index in range(samples.size):
         start = max(0, index - window_size + 1)

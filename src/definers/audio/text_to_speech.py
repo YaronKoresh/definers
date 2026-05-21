@@ -43,7 +43,7 @@ def _normalize_peak(
 
 
 def _rms(audio_signal: np.ndarray) -> float:
-    normalized_signal = _to_mono_audio(audio_signal).astype(np.float64)
+    normalized_signal = _to_mono_audio(audio_signal).astype(np.float32)
     if normalized_signal.size == 0:
         return 0.0
     return float(np.sqrt(np.mean(normalized_signal**2)))

@@ -104,7 +104,7 @@ def _moving_average_last_axis(
     pad_width = [(0, 0)] * working.ndim
     pad_width[-1] = (pad_left, pad_right)
     padded = np.pad(working, pad_width, mode="edge")
-    cumulative = np.cumsum(padded, axis=-1, dtype=np.float64)
+    cumulative = np.cumsum(padded, axis=-1, dtype=np.float32)
     cumulative = np.concatenate(
         [np.zeros_like(cumulative[..., :1]), cumulative], axis=-1
     )
@@ -700,7 +700,7 @@ def _apply_exciter_core(
             / max(analysis.cutoff_hz * 1.8, 2500.0)
         )
         fitted_power = np.power(
-            10.0, predicted_db.astype(np.float64) / 10.0
+            10.0, predicted_db.astype(np.float32) / 10.0
         ) * (0.6 + 0.4 * air_decay)
         fitted_power = np.nan_to_num(
             fitted_power,
