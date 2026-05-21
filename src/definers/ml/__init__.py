@@ -753,9 +753,7 @@ def init_model_repo(task: str, turbo: bool = True):
                 )
                 patched_code = "\n".join(original_code_lines)
                 target_file.write_text(patched_code)
-                print(
-                    "SUCCESS: Method injected directly into source code."
-                )
+                print("SUCCESS: Method injected directly into source code.")
             except ValueError:
                 print(
                     "Could not find the target class declaration line. Aborting patch."
