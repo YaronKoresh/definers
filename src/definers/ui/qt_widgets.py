@@ -574,7 +574,7 @@ class LabeledCheckboxGroup(LabeledWidget):
 
 
 class FilePicker(LabeledWidget):
-    selected = Signal(list) 
+    selected = Signal(list)
 
     def __init__(
         self,
@@ -588,23 +588,23 @@ class FilePicker(LabeledWidget):
         super().__init__(label, parent=parent)
         row = QHBoxLayout()
         row.setContentsMargins(0, 0, 0, 0)
-        
+
         self._button = QPushButton(button_text, self)
         self._button.clicked.connect(self._open_dialog)
-        
+
         self._path_label = QLabel("No file selected.", self)
         self._path_label.setWordWrap(True)
         self._path_label.setStyleSheet(
             "color: #4e6278; font-size: 13px; background: transparent;"
         )
-        
+
         row.addWidget(self._button, 0)
         row.addWidget(self._path_label, 1)
         self._outer.addLayout(row)
-        
+
         self._file_filter = file_filter
         self._max_files = max_files
-        
+
         self._paths: list[str] = []
 
     def _open_dialog(self) -> None:
