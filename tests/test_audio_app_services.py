@@ -158,6 +158,69 @@ def test_run_mastering_tool_collects_stems_for_gui_preview(monkeypatch):
     ]
 
 
+def test_run_mastering_tool_ui_maps_outputs_for_widgets(monkeypatch):
+    monkeypatch.setattr(
+        services,
+        "run_mastering_tool",
+        lambda *args, **kwargs: (
+            "mastered.wav",
+            "report.md",
+            "Summary",
+            ["C:/tmp/mastered_stems/vocals_mastered.wav"],
+        ),
+    )
+
+    mastered_path, summary_text, stems_folder = services.run_mastering_tool_ui(
+        "song.wav",
+        "WAV",
+        "Balanced",
+        0.5,
+        0.5,
+        0.5,
+        True,
+        "mastering",
+        1,
+        0.0,
+        False,
+    )
+
+    assert mastered_path == "mastered.wav"
+    assert "Summary" in summary_text
+    assert "**Report File:** report.md" in summary_text
+    assert Path(str(stems_folder)).as_posix() == "C:/tmp/mastered_stems"
+
+
+def test_run_mastering_tool_ui_handles_missing_stems(monkeypatch):
+    monkeypatch.setattr(
+        services,
+        "run_mastering_tool",
+        lambda *args, **kwargs: (
+            "mastered.wav",
+            None,
+            "Summary",
+            [],
+        ),
+    )
+
+    mastered_path, summary_text, stems_folder = services.run_mastering_tool_ui(
+        "song.wav",
+        "WAV",
+        "Balanced",
+        0.5,
+        0.5,
+        0.5,
+        False,
+        "mastering",
+        1,
+        0.0,
+        False,
+    )
+
+    assert mastered_path == "mastered.wav"
+    assert summary_text == "Summary"
+    assert stems_folder is None
+
+
 def test_run_mastering_tool_clamps_stem_final_pass_controls(monkeypatch):
     captured = {}
     fake_report = types.SimpleNamespace(

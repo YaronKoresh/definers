@@ -1489,6 +1489,48 @@ def run_mastering_tool(
     )
 
 
+def run_mastering_tool_ui(
+    audio_path: str,
+    format_choice: str,
+    profile_name: str,
+    bass: float,
+    volume: float,
+    effects: float,
+    stem_mastering: bool,
+    stem_model_name: str,
+    stem_shifts: int,
+    stem_mix_headroom_db: float,
+    save_mastered_stems: bool,
+    stem_model_override: str | None = None,
+    stem_glue_reverb_amount: float = STEM_GLUE_REVERB_DEFAULT,
+    stem_drum_edge_amount: float = STEM_DRUM_EDGE_DEFAULT,
+    stem_vocal_pullback_db: float = STEM_VOCAL_PULLBACK_DB_DEFAULT,
+) -> tuple[str, str, str | None]:
+    mastered_path, report_path, summary_text, stem_files = run_mastering_tool(
+        audio_path,
+        format_choice,
+        profile_name,
+        bass,
+        volume,
+        effects,
+        stem_mastering,
+        stem_model_name,
+        stem_shifts,
+        stem_mix_headroom_db,
+        save_mastered_stems,
+        stem_model_override,
+        stem_glue_reverb_amount,
+        stem_drum_edge_amount,
+        stem_vocal_pullback_db,
+    )
+    stem_output_target = None
+    if stem_files:
+        stem_output_target = str(Path(stem_files[0]).parent)
+    if report_path:
+        summary_text = f"{summary_text}\n\n**Report File:** {report_path}"
+    return mastered_path, summary_text, stem_output_target
+
+
 def run_stem_separation_tool(
     audio_path: str,
     separation_mode: str,
@@ -2112,7 +2154,7 @@ def launch_audio_app(
         right = Section()
         enhancer_output = AudioOutput("Mastered Audio")
         enhancer_report = MarkdownLabel("## Mastering\n- Status: idle")
-        enhancer_stems_output = FileOutput("Mastered Stems Archive")
+        enhancer_stems_output = FileOutput("Mastered Stems Folder")
         right.addWidget(enhancer_output)
         right.addWidget(enhancer_report)
         right.addWidget(enhancer_stems_output)
@@ -2124,7 +2166,7 @@ def launch_audio_app(
 
         _bind(
             enhancer_btn,
-            run_mastering_tool,
+            run_mastering_tool_ui,
             inputs=[
                 enhancer_input,
                 enhancer_format,

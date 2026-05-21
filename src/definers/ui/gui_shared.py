@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import traceback
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from html import escape
@@ -1143,9 +1144,20 @@ def _coerce_result_values(result: Any, output_count: int) -> tuple[Any, ...]:
     if output_count == 1:
         return (result,)
     if not isinstance(result, (list, tuple)):
-        raise TypeError("Expected a list or tuple of outputs")
-    if len(result) != output_count:
-        raise ValueError("Unexpected number of outputs returned")
+        raise TypeError(
+            "Expected "
+            + str(output_count)
+            + " outputs but handler returned "
+            + type(result).__name__
+        )
+    result_count = len(result)
+    if result_count != output_count:
+        raise ValueError(
+            "Expected "
+            + str(output_count)
+            + " outputs but handler returned "
+            + str(result_count)
+        )
     return tuple(result)
 
 
@@ -1416,26 +1428,43 @@ def bind_progress_click(
     output_count = len(resolved_outputs)
     binding: dict[str, _ActiveBinding | None] = {"current": None}
 
-    def _on_progress(payload: dict[str, Any]) -> None:
-        if progress_output is not None:
-            progress_output.apply_update(payload)
+    class _BindingCallbacks(QObject):
+        def __init__(self) -> None:
+            super().__init__(button)
 
-    def _on_result(values: tuple[Any, ...]) -> None:
-        for widget, value in zip(resolved_outputs, values):
-            write_widget_value(widget, value)
+        @Slot(dict)
+        def on_progress(self, payload: dict[str, Any]) -> None:
+            if progress_output is not None:
+                progress_output.apply_update(payload)
 
-    def _on_error(exc: BaseException) -> None:
-        return
+        @Slot(tuple)
+        def on_result(self, values: tuple[Any, ...]) -> None:
+            for widget, value in zip(resolved_outputs, values):
+                write_widget_value(widget, value)
 
-    def _on_finished() -> None:
-        button.setEnabled(True)
-        active = binding["current"]
-        if active is not None:
-            active.thread.quit()
-            active.thread.wait()
-            active.worker.deleteLater()
-            active.thread.deleteLater()
-        binding["current"] = None
+        @Slot(object)
+        def on_error(self, exc: BaseException) -> None:
+            try:
+                print(
+                    "[Definers UI] " + action_label + " failed: " + str(exc),
+                    file=sys.stderr,
+                    flush=True,
+                )
+                traceback.print_exception(
+                    type(exc),
+                    exc,
+                    exc.__traceback__,
+                    file=sys.stderr,
+                )
+            except Exception:
+                return
+
+        @Slot()
+        def on_thread_finished(self) -> None:
+            button.setEnabled(True)
+            binding["current"] = None
+
+    callbacks = _BindingCallbacks()
 
     def _trigger() -> None:
         if binding["current"] is not None:
@@ -1453,10 +1482,13 @@ def bind_progress_click(
         )
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
-        worker.progress.connect(_on_progress)
-        worker.result.connect(_on_result)
-        worker.error.connect(_on_error)
-        worker.finished.connect(_on_finished)
+        worker.progress.connect(callbacks.on_progress)
+        worker.result.connect(callbacks.on_result)
+        worker.error.connect(callbacks.on_error)
+        worker.finished.connect(worker.deleteLater)
+        worker.finished.connect(thread.quit)
+        thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(callbacks.on_thread_finished)
         binding["current"] = _ActiveBinding(thread=thread, worker=worker)
         button.setEnabled(False)
         thread.start()
@@ -1634,7 +1666,10 @@ class ChatPanel(QFrame):
         thread.started.connect(worker.run)
         worker.chunk.connect(self._on_chunk)
         worker.failed.connect(self._on_failure)
-        worker.finished.connect(self._on_stream_finished)
+        worker.finished.connect(worker.deleteLater)
+        worker.finished.connect(thread.quit)
+        thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(self._on_stream_finished)
         self._active_thread = thread
         self._active_worker = worker
         thread.start()
@@ -1650,13 +1685,6 @@ class ChatPanel(QFrame):
 
     @Slot()
     def _on_stream_finished(self) -> None:
-        if self._active_thread is not None:
-            self._active_thread.quit()
-            self._active_thread.wait()
-        if self._active_worker is not None:
-            self._active_worker.deleteLater()
-        if self._active_thread is not None:
-            self._active_thread.deleteLater()
         self._active_thread = None
         self._active_worker = None
         self._send_button.setEnabled(True)
