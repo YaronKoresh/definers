@@ -203,7 +203,7 @@ SMART_LINK_SCENARIO_COUNT = "8"
 UNIFIED_AUTOMATION_SCENARIO_COUNT = "8"
 
 [tool.poe.tasks._test-py]
-cmd = "python -m pytest tests/"
+cmd = "python -m pytest -s tests/"
 
 [tool.poe.tasks._coverage-run]
 cmd = "python -m pytest -q --cov=src/definers --cov-branch --cov-report=term-missing:skip-covered tests/"
@@ -212,7 +212,7 @@ cmd = "python -m pytest -q --cov=src/definers --cov-branch --cov-report=term-mis
 COVERAGE_FILE = ".coverage.poe"
 
 [tool.poe.tasks._coverage-clean]
-cmd = "python -c \"from pathlib import Path; Path('.coverage.poe').unlink(missing_ok=True);  Path('.coverage').unlink(missing_ok=True)\""
+cmd = "python -c \"from pathlib import Path; Path('.coverage.poe').unlink(missing_ok=True); Path('.coverage').unlink(missing_ok=True)\""
 
 [tool.poe.tasks.compile]
 cmd = "python -m compileall -q ."
