@@ -38,7 +38,7 @@ def _moving_average(signal: np.ndarray, window_size: int) -> np.ndarray:
             mode="edge",
         )
         cumulative = np.cumsum(
-            np.insert(padded.astype(np.float64, copy=False), 0, 0.0)
+            np.insert(padded.astype(np.float32, copy=False), 0, 0.0)
         )
         averaged = (
             cumulative[resolved_window:] - cumulative[:-resolved_window]
@@ -465,8 +465,8 @@ def _measure_active_stem_level_dbfs(signal: np.ndarray) -> float:
     rms_level = float(
         np.sqrt(
             np.mean(
-                np.square(np.asarray(active_signal, dtype=np.float64)),
-                dtype=np.float64,
+                np.square(np.asarray(active_signal, dtype=np.float32)),
+                dtype=np.float32,
             )
         )
     )

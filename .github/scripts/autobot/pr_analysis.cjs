@@ -564,13 +564,8 @@ function matchesUiPath(normalizedPath) {
     || /\.(css|scss|sass|less|tsx|jsx|vue|svelte|html)$/.test(normalizedPath);
 }
 
-const GRADIO_UI_COMPONENT_PATTERN = /\bgr\.(blocks|interface|chatinterface|chatbot|state|row|column|tabs?|tab|accordion|html|markdown|button|textbox|dropdown|slider|checkbox|radio|number|file|audio|video|image|gallery|dataframe|plot)\b/;
-const GRADIO_IMPORT_PATTERN = /\bimport\s+gradio\b|\bfrom\s+gradio\b/;
-
 function countUiEvidenceHits(text) {
   const uiPatterns = [
-    GRADIO_UI_COMPONENT_PATTERN,
-    GRADIO_IMPORT_PATTERN,
     /<(button|form|input|select|dialog|label)\b/,
     /\bclass(name)?=|styles?\.|theme|tokens?\b/
   ];
@@ -583,9 +578,6 @@ function hasUiTextEvidence(normalizedPath, text) {
     return false;
   }
   if (matchesUiPath(normalizedPath)) {
-    return true;
-  }
-  if (GRADIO_UI_COMPONENT_PATTERN.test(text) || GRADIO_IMPORT_PATTERN.test(text)) {
     return true;
   }
   return hitCount >= 2;
@@ -800,7 +792,7 @@ function deriveTitleSignals(prSignalText) {
   const enhancement = !bug && /(^|\s)(feat|feature|enhancement)(:|\b)/.test(prSignalText);
   const documentation = /\b(doc|docs|documentation|readme)\b/.test(prSignalText);
   const security = /\b(security|vulnerab\w*|advisory|cve-\d{4}-\d+|ghsa-[a-z0-9-]+)\b/.test(prSignalText);
-  const ui = /\b(ui|ux|gradio|frontend)\b/.test(prSignalText);
+  const ui = /\b(ui|ux|frontend)\b/.test(prSignalText);
   return {
     bug,
     enhancement,

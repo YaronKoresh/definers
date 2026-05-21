@@ -1,28 +1,40 @@
-class ChatApp:
-    @staticmethod
-    def launch_chat_app():
-        import gradio as gr
+from __future__ import annotations
 
-        from definers.ui.chat_handlers import get_chat_response_stream
-        from definers.ui.gradio_shared import (
-            init_chat,
-            init_output_folder_controls,
-            init_progress_tracker,
-            launch_blocks,
+
+def launch_chat_app():
+    from definers.ui.chat_handlers import get_chat_response_stream
+    from definers.ui.gui_shared import (
+        init_chat,
+        init_output_folder_controls,
+        init_progress_tracker,
+        launch_blocks,
+        qt_app,
+    )
+    from definers.ui.qt_widgets import (
+        MarkdownLabel,
+        Section,
+        build_main_window,
+    )
+
+    qt_app()
+    body = Section()
+    body.addWidget(MarkdownLabel("# Definers Chat"))
+    body.addWidget(
+        MarkdownLabel(
+            "Production-grade assistant for generation, analysis,"
+            " debugging, and delivery decisions."
         )
+    )
+    body.addWidget(
+        init_progress_tracker(
+            "Assistant ready",
+            "Describe the task, attach context if needed, and send the"
+            " request.",
+        )
+    )
+    _, output_toolbar = init_output_folder_controls(section="chat")
+    body.addWidget(output_toolbar)
+    body.addWidget(init_chat("Definers Chat", get_chat_response_stream))
 
-        with gr.Blocks(title="Definers Chat") as app:
-            gr.Markdown("# Definers Chat")
-            gr.Markdown(
-                "Production-grade assistant for generation, analysis, debugging, and delivery decisions."
-            )
-            init_progress_tracker(
-                "Assistant ready",
-                "Describe the task, attach context if needed, and send the request.",
-            )
-            init_output_folder_controls(section="chat")
-            init_chat("Definers Chat", get_chat_response_stream)
-        launch_blocks(app)
-
-
-launch_chat_app = ChatApp.launch_chat_app
+    window = build_main_window("Definers Chat", body)
+    launch_blocks(window)

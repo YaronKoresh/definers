@@ -129,6 +129,11 @@ def catch_exception(
     message: str | None = None,
     reraise: bool = False,
 ) -> None:
+    if isinstance(error, ImportError):
+        active_logger.debug(str(error))
+        if reraise and isinstance(error, BaseException):
+            raise error
+        return
 
     print("   \n" + "-" * 30 + "\n")
 

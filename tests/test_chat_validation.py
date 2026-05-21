@@ -1,5 +1,3 @@
-import sys
-import types
 import unittest
 from unittest.mock import patch
 
@@ -15,12 +13,6 @@ from definers.ui.chat_handlers import (
 
 class TestChatValidation(unittest.TestCase):
     def setUp(self):
-        self.gradio_patcher = patch.dict(
-            sys.modules,
-            {"gradio": types.SimpleNamespace(Error=TextValidationError)},
-        )
-        self.gradio_patcher.start()
-        self.addCleanup(self.gradio_patcher.stop)
         patchers = [
             patch.object(text, "language", return_value="en"),
             patch.object(

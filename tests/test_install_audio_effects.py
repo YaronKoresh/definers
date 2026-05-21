@@ -70,10 +70,11 @@ class TestInstallAudioEffects(unittest.TestCase):
 
     @patch("definers.system.get_os_name", return_value="windows")
     @patch("definers.system.exist", return_value=True)
+    @patch("definers.system.runnable", return_value=True)
     @patch.dict(os.environ, {"PATH": "C:\\rubberband;C:\\fluidsynth"})
     @patch("builtins.print")
     def test_install_on_windows_already_installed(
-        self, mock_print, mock_exists, mock_get_os
+        self, mock_print, mock_runnable, mock_exists, mock_get_os
     ):
         install_audio_effects()
         mock_print.assert_any_call("\nInstalling Python packages with pip...")

@@ -986,7 +986,7 @@ class SmartMasteringConfig:
             if alias_name in legacy_overrides
         ]
         if alias_values:
-            return float(np.mean(alias_values, dtype=np.float64))
+            return float(np.mean(alias_values, dtype=np.float32))
         return default_value
 
     def _macro_vector(self) -> tuple[float, float, float]:

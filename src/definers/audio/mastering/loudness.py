@@ -301,7 +301,7 @@ def _block_powers(
     signal_module: Any,
 ) -> np.ndarray:
     if y.size == 0 or not np.isfinite(sr) or sr <= 0:
-        return np.zeros(1, dtype=np.float64)
+        return np.zeros(1, dtype=np.float32)
 
     y_square = _weighted_power_series(y, sr, signal_module=signal_module)
 
@@ -370,21 +370,21 @@ def _gated_integrated_lufs(block_powers: np.ndarray) -> float:
 
 def _loudness_series(block_powers: np.ndarray) -> np.ndarray:
     if block_powers.size == 0:
-        return np.full(1, _ABSOLUTE_GATE_LUFS, dtype=np.float64)
+        return np.full(1, _ABSOLUTE_GATE_LUFS, dtype=np.float32)
     return np.array(
         [_loudness_from_power(float(value)) for value in block_powers],
-        dtype=np.float64,
+        dtype=np.float32,
     )
 
 
 def _loudness_range(short_term_lufs: np.ndarray) -> float:
-    valid = np.asarray(short_term_lufs, dtype=np.float64)
+    valid = np.asarray(short_term_lufs, dtype=np.float32)
     valid = valid[np.isfinite(valid)]
     valid = valid[valid >= _ABSOLUTE_GATE_LUFS]
     if valid.size == 0:
         return 0.0
 
-    valid_power = float(np.mean(np.power(10.0, valid / 10.0), dtype=np.float64))
+    valid_power = float(np.mean(np.power(10.0, valid / 10.0), dtype=np.float32))
     if not np.isfinite(valid_power) or valid_power <= 0.0:
         return 0.0
 

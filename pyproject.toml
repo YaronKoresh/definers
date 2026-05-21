@@ -31,6 +31,7 @@ dependencies = [
     "pandas>=1.5.0",
     "pillow>=9.1.0",
     "scipy>=1.10.0,<2",
+    "PySide6>=6.5.0,<7",
 ]
 
 [project.license]
@@ -93,7 +94,6 @@ web = [
     "cssselect>=1.2.0",
     "fastapi>=0.100.0",
     "googledrivedownloader>=1.1.0",
-    "gradio>=6.9.0",
     "httpx[http2]>=0.28.0",
     "aioquic>=1.2.0",
     "lxml[html_clean]>=5.2.0",
@@ -203,7 +203,7 @@ SMART_LINK_SCENARIO_COUNT = "8"
 UNIFIED_AUTOMATION_SCENARIO_COUNT = "8"
 
 [tool.poe.tasks._test-py]
-cmd = "python -m pytest tests/"
+cmd = "python -m pytest -s -vv tests/"
 
 [tool.poe.tasks._coverage-run]
 cmd = "python -m pytest -q --cov=src/definers --cov-branch --cov-report=term-missing:skip-covered tests/"
@@ -212,7 +212,7 @@ cmd = "python -m pytest -q --cov=src/definers --cov-branch --cov-report=term-mis
 COVERAGE_FILE = ".coverage.poe"
 
 [tool.poe.tasks._coverage-clean]
-cmd = "python -c \"from pathlib import Path; Path('.coverage.poe').unlink(missing_ok=True);  Path('.coverage').unlink(missing_ok=True)\""
+cmd = "python -c \"from pathlib import Path; Path('.coverage.poe').unlink(missing_ok=True); Path('.coverage').unlink(missing_ok=True)\""
 
 [tool.poe.tasks.compile]
 cmd = "python -m compileall -q ."

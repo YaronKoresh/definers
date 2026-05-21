@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+
 def title_image(image_path, top, middle, bottom):
     from definers.image import write_on_image
     from definers.system.download_activity import create_activity_reporter
@@ -195,295 +198,354 @@ def launch_image_app(
     *,
     app_title="Definers Image Studio",
     hero_eyebrow="Definers Image",
-    hero_description="Generate a new image, upscale an existing result, or add simple titles without leaving the surface.",
+    hero_description=(
+        "Generate a new image, upscale an existing result, or add simple"
+        " titles without leaving the surface."
+    ),
 ):
     from html import escape
 
-    import gradio as gr
+    from PySide6.QtWidgets import QPushButton
 
     from definers.constants import MAX_INPUT_LENGTH
-    from definers.ui.gradio_shared import (
+    from definers.ui.gui_shared import (
         bind_progress_click,
         init_output_folder_controls,
         init_progress_tracker,
         init_status_card,
         launch_blocks,
+        qt_app,
     )
+    from definers.ui.qt_widgets import (
+        Accordion,
+        HeroCard,
+        ImageInput,
+        ImageOutput,
+        LabeledLineEdit,
+        LabeledSlider,
+        LabeledTextbox,
+        MarkdownLabel,
+        Row,
+        Section,
+        build_main_window,
+    )
+
+    qt_app()
 
     enabled_steps = set(steps or ("generate", "upscale", "title"))
 
-    with gr.Blocks(title=app_title) as app:
-        gr.HTML(
-            f"""<div class=\"audio-hero\"><p class=\"eyebrow\">{escape(hero_eyebrow)}</p><h1>{escape(app_title)}</h1><p>{escape(hero_description)}</p></div>"""
+    body = Section()
+    body.addWidget(
+        HeroCard(
+            f"<div>"
+            f'<p style="color:#bdf6ff;font-size:11px;font-weight:700;'
+            f'letter-spacing:3px;margin:0 0 10px 0;">'
+            f"{escape(hero_eyebrow)}</p>"
+            f'<div style="color:#f9fcff;font-size:24px;font-weight:700;'
+            f'margin:0 0 8px 0;">{escape(app_title)}</div>'
+            f'<p style="color:#c8d3e2;font-size:14px;line-height:1.55;'
+            f'margin:0;">{escape(hero_description)}</p>'
+            f"</div>"
         )
-        progress_status = init_progress_tracker(
-            "Image studio ready",
-            "Choose an image action and run it.",
+    )
+    progress_status = init_progress_tracker(
+        "Image studio ready",
+        "Choose an image action and run it.",
+    )
+    body.addWidget(progress_status)
+    _, output_toolbar = init_output_folder_controls(section="image")
+    body.addWidget(output_toolbar)
+
+    main_row = Row()
+    left = Section()
+    width_input = None
+    height_input = None
+    prompt_input = None
+    top = None
+    middle = None
+    bottom = None
+
+    if "generate" in enabled_steps:
+        width_input = LabeledSlider(
+            "Width",
+            minimum=1,
+            maximum=16,
+            step=1,
+            value=4,
         )
-        init_output_folder_controls(section="image")
-        with gr.Row():
-            with gr.Column(scale=1):
-                if "generate" in enabled_steps:
-                    width_input = gr.Slider(
-                        minimum=1,
-                        maximum=16,
-                        step=1,
-                        label="Width",
-                    )
-                    height_input = gr.Slider(
-                        minimum=1,
-                        maximum=16,
-                        step=1,
-                        label="Height",
-                    )
-                    prompt_input = gr.Textbox(
-                        placeholder="Input data",
-                        value="",
-                        max_length=MAX_INPUT_LENGTH,
-                        lines=4,
-                        label="Prompt",
-                        container=True,
-                    )
-                if "title" in enabled_steps:
-                    top = gr.Textbox(
-                        placeholder="Top title",
-                        value="",
-                        max_lines=1,
-                        label="Top Title",
-                    )
-                    middle = gr.Textbox(
-                        placeholder="Middle title",
-                        value="",
-                        max_lines=1,
-                        label="Middle Title",
-                    )
-                    bottom = gr.Textbox(
-                        placeholder="Bottom title",
-                        value="",
-                        max_lines=1,
-                        label="Bottom Title",
-                    )
-            with gr.Column(scale=1):
-                cover = gr.Image(
-                    interactive=True,
-                    label="Image",
-                    type="filepath",
-                    buttons=["download"],
-                    container=True,
-                )
-                if "generate" in enabled_steps:
-                    generate_button = gr.Button("Generate")
-                if "upscale" in enabled_steps:
-                    upscale_button = gr.Button("Upscale")
-                if "title" in enabled_steps:
-                    title_button = gr.Button("Add title(s)")
-        if "generate" in enabled_steps:
-            with gr.Accordion("Run In Stages Or Resume", open=False):
-                gr.Markdown(
-                    "Use the current generation settings to prepare a resumable job, run one stage at a time, or execute the full generation, upscale, and title flow in one pass."
-                )
-                job_status = init_status_card(
-                    "Staged image job ready",
-                    "Prepare a job to enable resumable generation stages.",
-                )
-                job_dir = gr.Textbox(
-                    label="Job Folder",
-                    placeholder="Filled after Prepare Staged Job or paste an existing job folder to resume.",
-                    interactive=True,
-                )
-                with gr.Accordion("Optional Job Titles", open=False):
-                    job_top = gr.Textbox(label="Job Top Title")
-                    job_middle = gr.Textbox(label="Job Middle Title")
-                    job_bottom = gr.Textbox(label="Job Bottom Title")
-                with gr.Row():
-                    prepare_job_button = gr.Button("Prepare Staged Job")
-                    run_full_job_button = gr.Button(
-                        "Run Full Job",
-                        variant="primary",
-                    )
-                    generate_job_button = gr.Button("Generate Image")
-                    upscale_job_button = gr.Button("Upscale Result")
-                    title_job_button = gr.Button("Add Titles")
-                    refresh_job_button = gr.Button("Refresh Job")
-                with gr.Row():
-                    generated_job_image = gr.Image(
-                        label="Generated Image",
-                        interactive=False,
-                        type="filepath",
-                        buttons=["download"],
-                    )
-                    upscaled_job_image = gr.Image(
-                        label="Upscaled Image",
-                        interactive=False,
-                        type="filepath",
-                        buttons=["download"],
-                    )
-                    titled_job_image = gr.Image(
-                        label="Titled Image",
-                        interactive=False,
-                        type="filepath",
-                        buttons=["download"],
-                    )
-                with gr.Accordion("Advanced Job Details", open=False):
-                    job_manifest = gr.Markdown()
-            bind_progress_click(
-                generate_button,
-                generate_image,
-                progress_output=progress_status,
-                inputs=[prompt_input, width_input, height_input],
-                outputs=[cover],
-                action_label="Generate Image",
-                steps=(
-                    "Validate prompt",
-                    "Generate image",
-                    "Publish result",
-                ),
-                running_detail="Generating the image.",
-                success_detail="Generated image is ready.",
+        height_input = LabeledSlider(
+            "Height",
+            minimum=1,
+            maximum=16,
+            step=1,
+            value=4,
+        )
+        prompt_input = LabeledTextbox(
+            "Prompt",
+            placeholder="Input data",
+            lines=4,
+            max_length=MAX_INPUT_LENGTH,
+        )
+        left.addWidget(width_input)
+        left.addWidget(height_input)
+        left.addWidget(prompt_input)
+
+    if "title" in enabled_steps:
+        top = LabeledLineEdit("Top Title", placeholder="Top title")
+        middle = LabeledLineEdit("Middle Title", placeholder="Middle title")
+        bottom = LabeledLineEdit("Bottom Title", placeholder="Bottom title")
+        left.addWidget(top)
+        left.addWidget(middle)
+        left.addWidget(bottom)
+
+    right = Section()
+    cover = ImageInput("Image", height=360)
+    right.addWidget(cover)
+    generate_button = upscale_button = title_button = None
+    if "generate" in enabled_steps:
+        generate_button = QPushButton("Generate")
+        generate_button.setProperty("definersPrimary", True)
+        right.addWidget(generate_button)
+    if "upscale" in enabled_steps:
+        upscale_button = QPushButton("Upscale")
+        right.addWidget(upscale_button)
+    if "title" in enabled_steps:
+        title_button = QPushButton("Add title(s)")
+        right.addWidget(title_button)
+
+    main_row.addWidget(left)
+    main_row.addWidget(right)
+    body.addWidget(main_row)
+
+    if "generate" in enabled_steps:
+        stages = Accordion("Run In Stages Or Resume", open=False)
+        stages.addWidget(
+            MarkdownLabel(
+                "Use the current generation settings to prepare a resumable"
+                " job, run one stage at a time, or execute the full"
+                " generation, upscale, and title flow in one pass."
             )
-            job_outputs = [
-                job_dir,
-                job_status,
-                generated_job_image,
-                upscaled_job_image,
-                titled_job_image,
-                job_manifest,
-            ]
-            bind_progress_click(
-                prepare_job_button,
-                prepare_image_job_view,
-                progress_output=progress_status,
-                inputs=[
-                    prompt_input,
-                    width_input,
-                    height_input,
-                    job_top,
-                    job_middle,
-                    job_bottom,
-                ],
-                outputs=job_outputs,
-                action_label="Prepare Staged Job",
-                steps=(
-                    "Validate prompt",
-                    "Write job manifest",
-                    "Publish job",
-                ),
-                running_detail="Preparing the resumable image job.",
-                success_detail="Staged image job is ready.",
-            )
-            bind_progress_click(
-                run_full_job_button,
-                run_full_image_job_view,
-                progress_output=progress_status,
-                inputs=[
-                    prompt_input,
-                    width_input,
-                    height_input,
-                    job_top,
-                    job_middle,
-                    job_bottom,
-                ],
-                outputs=job_outputs,
-                action_label="Run Full Job",
-                steps=(
-                    "Prepare job",
-                    "Generate image",
-                    "Upscale and title",
-                    "Publish artifacts",
-                ),
-                running_detail="Running the full staged image flow.",
-                success_detail="Full staged image flow is complete.",
-            )
-            bind_progress_click(
-                generate_job_button,
-                generate_image_job_view,
-                progress_output=progress_status,
-                inputs=[job_dir],
-                outputs=job_outputs,
-                action_label="Generate Image",
-                steps=(
-                    "Load job",
-                    "Generate image",
-                    "Publish artifact",
-                ),
-                running_detail="Running the staged image generation step.",
-                success_detail="Generated image is ready.",
-            )
-            bind_progress_click(
-                upscale_job_button,
-                upscale_image_job_view,
-                progress_output=progress_status,
-                inputs=[job_dir],
-                outputs=job_outputs,
-                action_label="Upscale Result",
-                steps=(
-                    "Load job",
-                    "Upscale image",
-                    "Publish artifact",
-                ),
-                running_detail="Running the staged upscale step.",
-                success_detail="Upscaled image is ready.",
-            )
-            bind_progress_click(
-                title_job_button,
-                title_image_job_view,
-                progress_output=progress_status,
-                inputs=[job_dir, job_top, job_middle, job_bottom],
-                outputs=job_outputs,
-                action_label="Add Titles",
-                steps=(
-                    "Load job",
-                    "Render title overlay",
-                    "Publish artifact",
-                ),
-                running_detail="Running the staged title step.",
-                success_detail="Titled image is ready.",
-            )
-            bind_progress_click(
-                refresh_job_button,
-                refresh_image_job_view,
-                progress_output=progress_status,
-                inputs=[job_dir],
-                outputs=job_outputs,
-                action_label="Refresh Job",
-                steps=(
-                    "Load job",
-                    "Refresh artifacts",
-                    "Publish status",
-                ),
-                running_detail="Refreshing the staged image job.",
-                success_detail="Staged image job is refreshed.",
-            )
-        if "upscale" in enabled_steps:
-            bind_progress_click(
-                upscale_button,
-                upscale_image,
-                progress_output=progress_status,
-                inputs=[cover],
-                outputs=[cover],
-                action_label="Upscale Image",
-                steps=(
-                    "Validate source image",
-                    "Upscale image",
-                    "Publish result",
-                ),
-                running_detail="Upscaling the selected image.",
-                success_detail="Upscaled image is ready.",
-            )
-        if "title" in enabled_steps:
-            bind_progress_click(
-                title_button,
-                title_image,
-                progress_output=progress_status,
-                inputs=[cover, top, middle, bottom],
-                outputs=[cover],
-                action_label="Add Titles",
-                steps=(
-                    "Validate source image",
-                    "Render title overlays",
-                    "Publish result",
-                ),
-                running_detail="Applying title overlays.",
-                success_detail="Titled image is ready.",
-            )
-    launch_blocks(app)
+        )
+        job_status = init_status_card(
+            "Staged image job ready",
+            "Prepare a job to enable resumable generation stages.",
+        )
+        stages.addWidget(job_status)
+        job_dir = LabeledLineEdit(
+            "Job Folder",
+            placeholder=(
+                "Filled after Prepare Staged Job or paste an existing job"
+                " folder to resume."
+            ),
+        )
+        stages.addWidget(job_dir)
+
+        titles_box = Accordion("Optional Job Titles", open=False)
+        job_top = LabeledLineEdit("Job Top Title")
+        job_middle = LabeledLineEdit("Job Middle Title")
+        job_bottom = LabeledLineEdit("Job Bottom Title")
+        titles_box.addWidget(job_top)
+        titles_box.addWidget(job_middle)
+        titles_box.addWidget(job_bottom)
+        stages.addWidget(titles_box)
+
+        button_row = Row()
+        prepare_job_button = QPushButton("Prepare Staged Job")
+        run_full_job_button = QPushButton("Run Full Job")
+        run_full_job_button.setProperty("definersPrimary", True)
+        generate_job_button = QPushButton("Generate Image")
+        upscale_job_button = QPushButton("Upscale Result")
+        title_job_button = QPushButton("Add Titles")
+        refresh_job_button = QPushButton("Refresh Job")
+        for button in (
+            prepare_job_button,
+            run_full_job_button,
+            generate_job_button,
+            upscale_job_button,
+            title_job_button,
+            refresh_job_button,
+        ):
+            button_row.addWidget(button)
+        stages.addWidget(button_row)
+
+        artifact_row = Row()
+        generated_job_image = ImageOutput("Generated Image", height=220)
+        upscaled_job_image = ImageOutput("Upscaled Image", height=220)
+        titled_job_image = ImageOutput("Titled Image", height=220)
+        artifact_row.addWidget(generated_job_image)
+        artifact_row.addWidget(upscaled_job_image)
+        artifact_row.addWidget(titled_job_image)
+        stages.addWidget(artifact_row)
+
+        manifest_box = Accordion("Advanced Job Details", open=False)
+        job_manifest = MarkdownLabel("")
+        manifest_box.addWidget(job_manifest)
+        stages.addWidget(manifest_box)
+        body.addWidget(stages)
+
+        bind_progress_click(
+            generate_button,
+            generate_image,
+            progress_output=progress_status,
+            inputs=[prompt_input, width_input, height_input],
+            outputs=[cover],
+            action_label="Generate Image",
+            steps=(
+                "Validate prompt",
+                "Generate image",
+                "Publish result",
+            ),
+            running_detail="Generating the image.",
+            success_detail="Generated image is ready.",
+        )
+
+        job_outputs = [
+            job_dir,
+            job_status,
+            generated_job_image,
+            upscaled_job_image,
+            titled_job_image,
+            job_manifest,
+        ]
+        bind_progress_click(
+            prepare_job_button,
+            prepare_image_job_view,
+            progress_output=progress_status,
+            inputs=[
+                prompt_input,
+                width_input,
+                height_input,
+                job_top,
+                job_middle,
+                job_bottom,
+            ],
+            outputs=job_outputs,
+            action_label="Prepare Staged Job",
+            steps=(
+                "Validate prompt",
+                "Write job manifest",
+                "Publish job",
+            ),
+            running_detail="Preparing the resumable image job.",
+            success_detail="Staged image job is ready.",
+        )
+        bind_progress_click(
+            run_full_job_button,
+            run_full_image_job_view,
+            progress_output=progress_status,
+            inputs=[
+                prompt_input,
+                width_input,
+                height_input,
+                job_top,
+                job_middle,
+                job_bottom,
+            ],
+            outputs=job_outputs,
+            action_label="Run Full Job",
+            steps=(
+                "Prepare job",
+                "Generate image",
+                "Upscale and title",
+                "Publish artifacts",
+            ),
+            running_detail="Running the full staged image flow.",
+            success_detail="Full staged image flow is complete.",
+        )
+        bind_progress_click(
+            generate_job_button,
+            generate_image_job_view,
+            progress_output=progress_status,
+            inputs=[job_dir],
+            outputs=job_outputs,
+            action_label="Generate Image",
+            steps=(
+                "Load job",
+                "Generate image",
+                "Publish artifact",
+            ),
+            running_detail="Running the staged image generation step.",
+            success_detail="Generated image is ready.",
+        )
+        bind_progress_click(
+            upscale_job_button,
+            upscale_image_job_view,
+            progress_output=progress_status,
+            inputs=[job_dir],
+            outputs=job_outputs,
+            action_label="Upscale Result",
+            steps=(
+                "Load job",
+                "Upscale image",
+                "Publish artifact",
+            ),
+            running_detail="Running the staged upscale step.",
+            success_detail="Upscaled image is ready.",
+        )
+        bind_progress_click(
+            title_job_button,
+            title_image_job_view,
+            progress_output=progress_status,
+            inputs=[job_dir, job_top, job_middle, job_bottom],
+            outputs=job_outputs,
+            action_label="Add Titles",
+            steps=(
+                "Load job",
+                "Render title overlay",
+                "Publish artifact",
+            ),
+            running_detail="Running the staged title step.",
+            success_detail="Titled image is ready.",
+        )
+        bind_progress_click(
+            refresh_job_button,
+            refresh_image_job_view,
+            progress_output=progress_status,
+            inputs=[job_dir],
+            outputs=job_outputs,
+            action_label="Refresh Job",
+            steps=(
+                "Load job",
+                "Refresh artifacts",
+                "Publish status",
+            ),
+            running_detail="Refreshing the staged image job.",
+            success_detail="Staged image job is refreshed.",
+        )
+
+    if "upscale" in enabled_steps:
+        bind_progress_click(
+            upscale_button,
+            upscale_image,
+            progress_output=progress_status,
+            inputs=[cover],
+            outputs=[cover],
+            action_label="Upscale Image",
+            steps=(
+                "Validate source image",
+                "Upscale image",
+                "Publish result",
+            ),
+            running_detail="Upscaling the selected image.",
+            success_detail="Upscaled image is ready.",
+        )
+
+    if "title" in enabled_steps:
+        bind_progress_click(
+            title_button,
+            title_image,
+            progress_output=progress_status,
+            inputs=[cover, top, middle, bottom],
+            outputs=[cover],
+            action_label="Add Titles",
+            steps=(
+                "Validate source image",
+                "Render title overlays",
+                "Publish result",
+            ),
+            running_detail="Applying title overlays.",
+            success_detail="Titled image is ready.",
+        )
+
+    window = build_main_window(app_title, body)
+    launch_blocks(window)

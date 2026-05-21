@@ -7,7 +7,7 @@ import sys
 from types import ModuleType
 from typing import Any
 
-from . import optional_dependencies
+from . import data, image, model_installation, optional_dependencies
 from .runtime_numpy import (
     bootstrap_runtime_numpy,
     get_array_module,
@@ -96,7 +96,6 @@ def has_sox() -> bool:
 __version__ = _resolve_version()
 sox = load_sox_module()
 
-from . import data, image, model_installation
 
 __all__ = [glb for glb in globals() if not glb.startswith("_")]
 

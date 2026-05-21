@@ -4,12 +4,12 @@ Definers exposes official GUI launchers as user-facing workflow surfaces. This p
 
 ## What This Area Owns
 
-- `definers.ui` owns launcher registration, focused-surface composition, shared Gradio primitives, and user-facing UI routing.
+- `definers.ui` owns launcher registration, focused-surface composition, shared PySide6 primitives, and user-facing UI routing.
 - `definers.ui.gui_entrypoints` owns the official launcher registry and the public `start(project)` entry point.
 - `definers.ui.launchers` owns launcher-name resolution and fallback behavior.
 - `definers.ui.apps.focused_surfaces` owns the split between full workbenches and narrower task surfaces.
 - `definers.ui.apps.surface_hub` owns domain landing hubs that list focused surfaces without opening a full workbench first.
-- `definers.ui.gradio_shared` owns cross-domain progress, output-folder, and shared Gradio shell primitives.
+- `definers.ui.gui_shared` owns cross-domain progress, output-folder, and shared PySide6 shell primitives.
 - `definers.ui.apps.*` owns the concrete surface implementations for each domain.
 
 ## Stable Entry Points
@@ -82,7 +82,7 @@ Guided-job behavior is not mandatory for every launcher. It is an opt-in second-
 - Register official launcher names only in `definers.ui.gui_entrypoints`.
 - Keep launcher resolution logic in `definers.ui.launchers` instead of duplicating name handling in app modules.
 - Keep focused-surface composition in `definers.ui.apps.focused_surfaces` instead of re-implementing domain routing inside each app.
-- Keep shared progress and output affordances in `definers.ui.gradio_shared`.
+- Keep shared progress and output affordances in `definers.ui.gui_shared`.
 - Keep concrete UI behavior inside the real owner app module for the domain.
 
 Do not add a second launcher registry, a second name-normalization path, or a wrapper-only UI gateway when a concrete owner module can be called directly.
@@ -91,7 +91,7 @@ Do not add a second launcher registry, a second name-normalization path, or a wr
 
 - Choose the smallest surface type that solves the UX problem: app-only launcher first, focused surface second, full workbench only when a domain truly needs the whole cockpit.
 - Keep launcher names stable unless the change also updates CLI docs, launcher docs, and tests.
-- Reuse `definers.ui.gradio_shared` for progress and output patterns instead of cloning per-domain shells.
+- Reuse `definers.ui.gui_shared` for progress and output patterns instead of cloning per-domain shells.
 - Keep imports lazy inside launcher functions and handlers so missing optional dependencies fail cleanly.
 - Keep domain-specific orchestration in the owning app or service module, not in shared UI helpers.
 - Do not mark conceptual surfaces as official until they are registered in `GUI_LAUNCHERS`.
@@ -104,7 +104,7 @@ Every official launcher, whether it is a workbench, a focused surface, or an app
 - Show a progress tracker with named user-readable stages.
 - Expose an outputs-folder affordance so users can find generated artifacts.
 - Report activity through the shared progress and download-activity path instead of emitting silent long-running work.
-- Preserve clean optional-dependency behavior when Gradio or heavier runtime packages are unavailable.
+- Preserve clean optional-dependency behavior when heavier runtime packages are unavailable.
 - Keep user-facing workflow framing clear enough that the launcher goal is obvious from the page itself.
 - Have focused structural tests that assert the launcher is bound and exposes its main actions.
 - Be documented anywhere stable launcher names or GUI contribution rules are maintained.
@@ -160,14 +160,14 @@ Do not force guided-job behavior onto simple utilities such as translation, chat
 ## Testing Rules
 
 - Launcher registration and routing changes should extend `tests/test_launchers.py`.
-- Shared progress-shell behavior should be covered in `tests/test_gradio_shared.py` and `tests/test_gui_activity_reporting.py`.
+- Shared progress-shell behavior should be covered in `tests/test_gui_shared.py` and `tests/test_gui_activity_reporting.py`.
 - Structural launcher-binding behavior should be covered in the nearest UI suite, such as `tests/test_surface_apps_ui.py`, `tests/test_audio_app.py`, `tests/test_train_ui.py`, or `tests/test_video_gui.py`.
 - Service orchestration that sits behind a GUI should be covered in the domain service suite, such as `tests/test_audio_app_services.py`.
 - Tests must not depend on optional third-party runtime packages being installed.
 
 ## Optional-Dependency Safety
 
-- Import Gradio and heavier optional stacks inside launcher functions or action handlers when possible.
+- Import PySide6 and heavier optional stacks inside launcher functions or action handlers when possible.
 - Keep missing extras as clean failures with actionable errors instead of import-time crashes from top-level module loading.
 - Prefer test doubles and module stubs over real optional runtimes in GUI tests.
 

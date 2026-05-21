@@ -1,6 +1,4 @@
-from definers.ui.gradio_shared import css as shared_css, launch_blocks
-
-from ...gradio_shared import css, theme
+from ...gui_shared import launch_blocks, qt_app, qt_stylesheet as css
 from .ui import (
     build_train_app,
 )
@@ -17,6 +15,7 @@ def launch_train_app(
         "task inference, text tooling, runtime diagnostics, and bootstrap flows."
     ),
 ):
+    qt_app()
     launch_blocks(
         build_train_app(
             visible_sections=visible_sections,
@@ -26,5 +25,4 @@ def launch_train_app(
             hero_description=hero_description,
         ),
         custom_css=css(),
-        custom_theme=theme(),
     )

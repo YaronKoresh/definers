@@ -3,6 +3,7 @@ from __future__ import annotations
 import builtins
 import importlib
 import os
+import shutil
 import subprocess
 import sys
 import threading
@@ -25,6 +26,14 @@ GITHUB_ARCHIVE_PACKAGE_SOURCES: dict[str, tuple[str, str, str]] = {
         "27f032e8947204902c675e5e341a3faf5dc86dae",
     ),
 }
+
+GUI_PACKAGES = [
+    "libegl1",
+    "libgl1",
+    "libglx-mesa0",
+    "libxkbcommon-x11-0",
+    "libxcb-cursor0",
+]
 
 
 def _github_archive_url(repository: str, commit: str) -> str:
@@ -59,7 +68,6 @@ MODULE_PACKAGE_SPECS: dict[str, tuple[str, ...]] = {
     "faiss": ("faiss-cpu>=1.7.4",),
     "fastapi": ("fastapi>=0.100.0",),
     "googledrivedownloader": ("googledrivedownloader>=1.1.0",),
-    "gradio": ("gradio>=6.9.0",),
     "huggingface_hub": ("huggingface-hub>=0.20.0",),
     "httpx": ("httpx[http2]>=0.28.0",),
     "imageio": ("imageio>=2.30.0",),
@@ -173,7 +181,6 @@ OPTIONAL_DEPENDENCY_GROUP_MODULES: dict[str, tuple[str, ...]] = {
     "web": (
         "fastapi",
         "googledrivedownloader",
-        "gradio",
         "httpx",
         "aioquic",
         "lxml",
@@ -579,6 +586,11 @@ def _import_with_auto_install(
     level: int = 0,
 ):
     try:
+        _enforce_linux_gui_environment()
+    except:
+        print("Linux GUI environment enforcement failed")
+
+    try:
         result = importer(name, globals, locals, fromlist, level)
         _prestub_c_ext_fromlist(name, result, fromlist)
         return result
@@ -645,11 +657,81 @@ def _hooked_auto_install_import(
 
 
 def install_import_hook() -> None:
-    global _HOOK_INSTALLED
-    if _HOOK_INSTALLED:
+    global _HOOK_INSTALLED, _HOOK_IMPORT
+    if builtins.__import__ is _hooked_auto_install_import:
+        _HOOK_INSTALLED = True
         return
+    _HOOK_IMPORT = builtins.__import__
     builtins.__import__ = _hooked_auto_install_import
     _HOOK_INSTALLED = True
+
+
+def _enforce_linux_gui_environment():
+    if not sys.platform.startswith("linux"):
+        return
+
+    if not auto_install_enabled():
+        return
+
+    if os.environ.get("GUI_ENV_CHECKED", "0") == "1":
+        return
+    else:
+        os.environ["GUI_ENV_CHECKED"] = "1"
+
+    result = subprocess.run(
+        ["dpkg", "-s", *GUI_PACKAGES],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+    if result.returncode != 0:
+        print(
+            "[definers] Missing system GUI dependencies. Attempting installation..."
+        )
+        try:
+            env = os.environ.copy()
+            env["DEBIAN_FRONTEND"] = "noninteractive"
+
+            subprocess.run(["sudo", "apt-get", "update"], env=env, check=True)
+            subprocess.run(
+                ["sudo", "apt-get", "install", "-y", *GUI_PACKAGES],
+                env=env,
+                check=True,
+            )
+            print("[definers] System GUI dependencies installed successfully.")
+        except (subprocess.CalledProcessError, PermissionError):
+            print("\n" + "=" * 60)
+            print(
+                "[definers] WARNING: Missing system GUI packages and process lacks root privileges."
+            )
+            print(
+                "Please run the following command manually as root to fix GUI/Qt errors:"
+            )
+            print(
+                f"sudo apt-get update && sudo apt-get install -y {' '.join(GUI_PACKAGES)}"
+            )
+            print("=" * 60 + "\n")
+        except Exception as e:
+            print(
+                f"[definers] Warning: Unexpected error while installing system dependencies: {e}"
+            )
+
+    if not os.environ.get("DISPLAY") and shutil.which("Xvfb"):
+        if not os.path.exists("/tmp/.X11-unix/X99"):
+            print(
+                "[definers] No DISPLAY found. Spawning background Xvfb virtual screen..."
+            )
+            try:
+                subprocess.Popen(
+                    ["Xvfb", ":99", "-screen", "0", "1024x768x24"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True,
+                )
+            except Exception as e:
+                print(f"[definers] Failed to initialize background Xvfb: {e}")
+
+        os.environ["DISPLAY"] = ":99"
 
 
 __all__ = [glb for glb in globals() if not glb.startswith("_")]

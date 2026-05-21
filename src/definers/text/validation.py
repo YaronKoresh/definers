@@ -24,12 +24,7 @@ class TextInputValidator:
         from definers.constants import MAX_CONSECUTIVE_SPACES, MAX_INPUT_LENGTH
         from definers.system import log
 
-        try:
-            import gradio as gr
-
-            error_factory = gr.Error
-        except Exception:
-            error_factory = TextValidationError
+        error_factory = TextValidationError
 
         return cls(
             normalize_text=text.simple_text,

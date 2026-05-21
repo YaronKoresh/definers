@@ -130,10 +130,10 @@ def mix_audio(
 
 def dj_mix(
     files: list[str],
-    mix_type: str | None = None,
-    target_bpm: float | None = None,
-    transition_sec: float = 5,
     format_choice: str = "mp3",
+    transition_sec: float = 1.5,
+    target_bpm: float | None = None,
+    beatmatched: bool = True,
 ) -> str | None:
 
     import madmom
@@ -184,11 +184,7 @@ def dj_mix(
         try:
             temp_stretched_path = None
             current_path = str(file)
-            if (
-                mix_type is not None
-                and "beatmatched" in mix_type.lower()
-                and (target_bpm is not None and target_bpm > 0)
-            ):
+            if beatmatched and target_bpm is not None and target_bpm > 0:
                 proc = madmom.features.beats.DBNBeatTrackingProcessor(fps=100)
                 act = madmom.features.beats.RNNBeatProcessor()(current_path)
                 original_bpm = np.median(60 / np.diff(proc(act)))

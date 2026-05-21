@@ -742,7 +742,7 @@ def init_model_repo(task: str, turbo: bool = True):
             for line in original_code_lines
         ):
             print(
-                "âœ… Source code appears to be already patched. Skipping injection."
+                "Source code appears to be already patched. Skipping injection."
             )
         else:
             try:
@@ -753,12 +753,10 @@ def init_model_repo(task: str, turbo: bool = True):
                 )
                 patched_code = "\n".join(original_code_lines)
                 target_file.write_text(patched_code)
-                print(
-                    "âœ…âœ…âœ… SUCCESS: Method injected directly into source code."
-                )
+                print("SUCCESS: Method injected directly into source code.")
             except ValueError:
                 print(
-                    "âš ï¸ Could not find the target class declaration line. Aborting patch."
+                    "Could not find the target class declaration line. Aborting patch."
                 )
         print("Rewriting relative imports to absolute...")
         for py_file in snapshot_dir.glob("*.py"):
@@ -797,7 +795,7 @@ def init_model_repo(task: str, turbo: bool = True):
             trust_remote_code=True,
             _attn_implementation="eager",
         ).to(device())
-        print("âœ… Phi-4 model loaded successfully!")
+        print("Phi-4 model loaded successfully!")
     elif task in ["summary"]:
         from transformers import T5ForConditionalGeneration, T5Tokenizer
 

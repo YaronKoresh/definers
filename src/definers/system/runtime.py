@@ -1,12 +1,12 @@
 import ctypes
 import importlib.util
+import os
 import platform
 import re
+import shlex
 import shutil
 import subprocess
 import sys
-import os
-import shlex
 
 
 def get_os_name() -> str:
@@ -63,7 +63,7 @@ def runnable(cmd: str) -> bool:
     if not command_name:
         return False
     search_paths = os.environ.get("PATH", "").split(os.pathsep)
-    if os.name == 'nt' and os.getcwd() not in search_paths:
+    if os.name == "nt" and os.getcwd() not in search_paths:
         search_paths.insert(0, os.getcwd())
     combined_path = os.pathsep.join(search_paths)
     return shutil.which(command_name, path=combined_path) is not None

@@ -702,7 +702,6 @@ def pre_install():
     os.environ.setdefault("HOME", home)
     os.environ["TRANSFORMERS_CACHE"] = "/opt/ml/checkpoints/"
     os.environ["HF_DATASETS_CACHE"] = "/opt/ml/checkpoints/"
-    os.environ["GRADIO_ALLOW_FLAGGING"] = "never"
     os.environ["OMP_NUM_THREADS"] = "4"
     if sys.platform == "darwin":
         os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"

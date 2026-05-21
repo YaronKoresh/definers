@@ -6,7 +6,11 @@ from definers.cuda import cuda_toolkit, free
 
 class TestCudaRunCommands(unittest.TestCase):
     @patch("definers.cuda.run")
-    def test_cuda_toolkit_runs_lists(self, mock_run):
+    @patch("definers.cuda.permit")
+    @patch("definers.cuda.directory")
+    def test_cuda_toolkit_runs_lists(
+        self, mock_directory, mock_permit, mock_run
+    ):
 
         cuda_toolkit()
 

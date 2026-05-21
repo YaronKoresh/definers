@@ -71,12 +71,7 @@ def strip_saved_model(model_path: str | None) -> str | None:
 
 
 def _interactive_update(interactive: bool):
-    try:
-        import gradio as gr
-
-        return gr.update(interactive=interactive)
-    except Exception:
-        return {"interactive": interactive}
+    return {"interactive": interactive}
 
 
 def _resolving_choice_update(question):
@@ -89,22 +84,12 @@ def _resolving_choice_update(question):
         visible = True
         label = question.prompt
         value = question.default_value
-    try:
-        import gradio as gr
-
-        return gr.update(
-            choices=choices,
-            visible=visible,
-            label=label,
-            value=value,
-        )
-    except Exception:
-        return {
-            "choices": choices,
-            "visible": visible,
-            "label": label,
-            "value": value,
-        }
+    return {
+        "choices": choices,
+        "visible": visible,
+        "label": label,
+        "value": value,
+    }
 
 
 def _resolving_question_markdown(state) -> str:

@@ -135,18 +135,14 @@ const LABEL_SUPPORT_PATTERNS = Object.freeze({
   telemetry: Object.freeze([/\b(telemetry|opentelemetry|otel|trace(?:s|d|ing)?|span(?: id)?)\b/]),
   view: Object.freeze([
     /(^|\/)(components?|ui|views?|templates|static|styles?|themes?|frontend)(\/|$)/,
-    /(^|\/)(gui_[^/]+|[^/]+_gui|app)\.py$/,
-    /\bgr\.(blocks|interface|chatinterface|chatbot|state|row|column|tabs?|tab|accordion|html|markdown|button|textbox|dropdown|slider|checkbox|radio|number|file|audio|video|image|gallery|dataframe|plot)\b/,
-    /\bimport\s+gradio\b|\bfrom\s+gradio\b/
+    /(^|\/)(gui_[^/]+|[^/]+_gui|app)\.py$/
   ]),
   template: Object.freeze([
     /\.(html|tsx|jsx|vue|svelte)$/,
-    /\bgr\.(blocks|interface|chatinterface|html|markdown|tabs?|tab|row|column|accordion)\b/,
     /<(button|form|input|select|dialog|label)\b/
   ]),
   "form control": Object.freeze([
-    /\b(button|form|input|select|dialog|label|textbox|dropdown|accordion|slider|checkbox|radio|switch|toggle|date|file)\b/,
-    /\bgr\.(button|textbox|dropdown|accordion|slider|checkbox|radio|number|file|audio|video|image|dataframe|gallery|chatbot)\b/
+    /\b(button|form|input|select|dialog|label|textbox|dropdown|accordion|slider|checkbox|radio|switch|toggle|date|file)\b/
   ]),
   "theme token": Object.freeze([
     /\b(class(name)?=|style=|styles?\.|theme|tokens?|tailwind|var\(--|color|font|spacing|margin|padding|border(?:-radius)?|box-shadow|background)\b/,

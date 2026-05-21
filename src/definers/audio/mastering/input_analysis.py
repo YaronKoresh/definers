@@ -68,11 +68,11 @@ def _measure_preset_band_profile(
 
     window = np.hanning(analyzed.size).astype(np.float32)
     spectrum = np.fft.rfft(analyzed * window)
-    power = np.square(np.abs(spectrum), dtype=np.float64)
+    power = np.square(np.abs(spectrum), dtype=np.float32)
     freqs = np.fft.rfftfreq(analyzed.size, d=1.0 / float(sample_rate))
     high_limit_hz = float(min(sample_rate / 2.0 - 1.0, 16000.0))
     valid_mask = (freqs >= 35.0) & (freqs <= high_limit_hz)
-    total_energy = float(np.sum(power[valid_mask], dtype=np.float64))
+    total_energy = float(np.sum(power[valid_mask], dtype=np.float32))
     if total_energy <= 1e-12:
         return {
             "bass_share": 0.0,
@@ -85,7 +85,7 @@ def _measure_preset_band_profile(
         mask = (freqs >= low_hz) & (freqs < min(high_hz, high_limit_hz))
         if not np.any(mask):
             return 0.0
-        return float(np.sum(power[mask], dtype=np.float64) / total_energy)
+        return float(np.sum(power[mask], dtype=np.float32) / total_energy)
 
     return {
         "bass_share": band_share(35.0, 180.0),
