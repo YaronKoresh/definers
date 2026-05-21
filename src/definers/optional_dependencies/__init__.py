@@ -677,46 +677,50 @@ def _enforce_linux_gui_environment():
     )
 
     if result.returncode != 0:
-        print("[definers] Missing system GUI dependencies. Installing...")
+        print(
+            "[definers] Missing system GUI dependencies. Attempting installation..."
+        )
         try:
-            subprocess.check_call(["sudo", "apt-get", "update", "-qq"])
+            env = os.environ.copy()
+            env["DEBIAN_FRONTEND"] = "noninteractive"
+
+            subprocess.check_call(["apt-get", "update", "-qq"], env=env)
             subprocess.check_call(
-                ["sudo", "apt-get", "install", "-y", "-qq"] + GUI_PACKAGES
+                ["apt-get", "install", "-y", "-qq"] + GUI_PACKAGES, env=env
             )
+            print("[definers] System GUI dependencies installed successfully.")
+        except (subprocess.CalledProcessError, PermissionError):
+            print("\n" + "=" * 60)
+            print(
+                "[definers] WARNING: Missing system GUI packages and process lacks root privileges."
+            )
+            print(
+                "Please run the following command manually as root to fix GUI/Qt errors:"
+            )
+            print(
+                f"apt-get update && apt-get install -y {' '.join(GUI_PACKAGES)}"
+            )
+            print("=" * 60 + "\n")
         except Exception as e:
             print(
-                f"[definers] Warning: Could not install system dependencies: {e}"
+                f"[definers] Warning: Unexpected error while installing system dependencies: {e}"
             )
-
-    if not os.environ.get("DISPLAY") and not shutil.which("Xvfb"):
-        print(
-            "[definers] Xvfb not found. Attempting to install system dependencies..."
-        )
-        try:
-            subprocess.check_call(["sudo", "apt-get", "update", "-qq"])
-            subprocess.check_call(
-                ["sudo", "apt-get", "install", "-y", "-qq", "xvfb"]
-            )
-        except Exception:
-            print("[definers] Warning: Failed to install xvfb via apt")
 
     if not os.environ.get("DISPLAY") and shutil.which("Xvfb"):
-        print(
-            "[definers] No DISPLAY found. Spawning background Xvfb virtual screen..."
-        )
-        try:
-            subprocess.Popen(
-                ["Xvfb", ":99", "-screen", "0", "1024x768x24"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+        if not os.path.exists("/tmp/.X11-unix/X99"):
+            print(
+                "[definers] No DISPLAY found. Spawning background Xvfb virtual screen..."
             )
-            os.environ["DISPLAY"] = ":99"
-        except Exception as e:
-            print(f"[definers] Failed to initialize background Xvfb: {e}")
-    else:
-        print(
-            "[definers] Warning: Headless Linux detected but Xvfb is missing from PATH."
-        )
+            try:
+                subprocess.Popen(
+                    ["Xvfb", ":99", "-screen", "0", "1024x768x24"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            except Exception as e:
+                print(f"[definers] Failed to initialize background Xvfb: {e}")
+
+        os.environ["DISPLAY"] = ":99"
 
 
 __all__ = [glb for glb in globals() if not glb.startswith("_")]
