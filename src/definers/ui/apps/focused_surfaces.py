@@ -150,7 +150,6 @@ def _launch_audio_surface(tool_names, *, app_title: str, description: str):
         app_title=app_title,
         hero_eyebrow="Audio Workflow",
         hero_description=description,
-        default_tool=tool_names[0],
         navigation_label="Choose Task",
     )
 

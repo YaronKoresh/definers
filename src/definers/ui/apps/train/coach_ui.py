@@ -9,14 +9,24 @@ from .coach import (
 
 def _render_train_coach_steps_html() -> str:
     items = "".join(
-        f"<li><span>{index}</span><strong>{step}</strong></li>"
-        for index, step in enumerate(train_coach_step_names(), start=1)
+        f"<li><strong>{step}</strong></li>" for step in train_coach_step_names()
     )
     return f'<section class="train-guided-steps"><ol>{items}</ol></section>'
 
 
-def build_train_guided_mode(*, bind_action):
-    import gradio as gr
+def build_train_guided_mode(*, container, bind_action):
+    from PySide6.QtWidgets import QPushButton
+
+    from definers.ui.qt_widgets import (
+        FilePicker,
+        HtmlLabel,
+        LabeledCombo,
+        LabeledLineEdit,
+        LabeledTextbox,
+        MarkdownLabel,
+        Row,
+        Section,
+    )
 
     from .coach_handlers import (
         _read_last_model_path,
@@ -28,97 +38,116 @@ def build_train_guided_mode(*, bind_action):
         strip_saved_model,
     )
 
-    gr.HTML(_render_train_coach_steps_html())
-    gr.Markdown(build_train_coach_contract_markdown())
+    container.addWidget(HtmlLabel(_render_train_coach_steps_html()))
+    container.addWidget(MarkdownLabel(build_train_coach_contract_markdown()))
 
-    state_payload = gr.Textbox(value="", visible=False, label="Guided State")
+    state_payload = LabeledTextbox("Guided State", value="", lines=2)
+    state_payload.setVisible(False)
+    container.addWidget(state_payload)
 
-    with gr.Row(elem_classes="studio-panel"):
-        with gr.Column(scale=1):
-            entry_intent = gr.Radio(
-                label="Start Here",
-                choices=[
-                    (entry["title"], entry["id"])
-                    for entry in train_coach_entry_intents()
-                ],
-                value="files",
-            )
-            uploaded_files = gr.File(
-                label="Files",
-                file_count="multiple",
-                type="filepath",
-            )
-            remote_src = gr.Textbox(
-                label="Remote Dataset",
-                placeholder="owner/dataset or https://...",
-            )
-            revision = gr.Textbox(
-                label="Revision",
-                placeholder="main",
-            )
-            resume_artifact = gr.File(
-                label="Previous Model Artifact",
-                type="filepath",
-                value=_read_last_model_path(),
-            )
-            save_as = gr.Textbox(
-                label="Save Artifact As",
-                placeholder="guided-model.joblib",
-            )
-            inspect_button = gr.Button(
-                "Inspect My Inputs",
-                elem_classes="btn",
-            )
-            auto_train_button = gr.Button(
-                "Train Automatically",
-                elem_classes="btn",
-            )
-            preview_button = gr.Button(
-                "Review Guided Plan",
-                interactive=False,
-            )
-            train_button = gr.Button(
-                "Train With Guided Defaults",
-                elem_classes="btn",
-                interactive=False,
-            )
-        with gr.Column(scale=1):
-            intake_summary = gr.Markdown(
-                "## Guided Intake\n- Status: waiting for inspection."
-            )
-            inspection_markdown = gr.Markdown(
-                "## Data Inspection\n- Status: add files or a dataset, then run inspection."
-            )
-            validation_markdown = gr.Markdown(
-                "## Guided Validation\n- Status: inspection pending."
-            )
-    with gr.Row(elem_classes="studio-panel"):
-        with gr.Column(scale=1):
-            training_plan = gr.Markdown(
-                "## Training Plan\n- Guided inspection will unlock the plan preview."
-            )
-        with gr.Column(scale=1):
-            training_status = gr.Markdown("## Training\n- Status: idle")
-            train_output = gr.File(label="Training Output")
-            strip_button = gr.Button(
-                "Strip Training Data",
-                elem_classes="btn",
-            )
-            use_result_markdown = gr.Markdown(
-                "## Use Result\n- Status: train a model to unlock the saved session, manifest, and next actions."
-            )
-    with gr.Row(elem_classes="studio-panel"):
-        with gr.Column(scale=1):
-            resolving_question_markdown = gr.Markdown(
-                "## Quick Decision\n- Status: no clarification is needed."
-            )
-        with gr.Column(scale=1):
-            resolving_choice = gr.Radio(
-                label="Quick Decision",
-                choices=[],
-                value=None,
-                visible=False,
-            )
+    intake_row = Row()
+    left = Section()
+    entry_intent_choices = tuple(
+        (str(entry["title"]), str(entry["id"]))
+        for entry in train_coach_entry_intents()
+    )
+    entry_intent = LabeledCombo(
+        "Start Here",
+        choices=tuple(label for label, _id in entry_intent_choices),
+        value=next(
+            (label for label, _id in entry_intent_choices if _id == "files"),
+            entry_intent_choices[0][0] if entry_intent_choices else "",
+        ),
+    )
+    uploaded_files = FilePicker("Files")
+    remote_src = LabeledLineEdit(
+        "Remote Dataset", placeholder="owner/dataset or https://..."
+    )
+    revision = LabeledLineEdit("Revision", placeholder="main")
+    resume_artifact = FilePicker("Previous Model Artifact")
+    last_model_path = _read_last_model_path()
+    if last_model_path:
+        resume_artifact.set_value(last_model_path)
+    save_as = LabeledLineEdit(
+        "Save Artifact As", placeholder="guided-model.joblib"
+    )
+    inspect_button = QPushButton("Inspect My Inputs")
+    auto_train_button = QPushButton("Train Automatically")
+    preview_button = QPushButton("Review Guided Plan")
+    preview_button.setEnabled(False)
+    train_button = QPushButton("Train With Guided Defaults")
+    train_button.setEnabled(False)
+    for widget in (
+        entry_intent,
+        uploaded_files,
+        remote_src,
+        revision,
+        resume_artifact,
+        save_as,
+        inspect_button,
+        auto_train_button,
+        preview_button,
+        train_button,
+    ):
+        left.addWidget(widget)
+
+    right = Section()
+    intake_summary = MarkdownLabel(
+        "## Guided Intake\n- Status: waiting for inspection."
+    )
+    inspection_markdown = MarkdownLabel(
+        "## Data Inspection\n- Status: add files or a dataset,"
+        " then run inspection."
+    )
+    validation_markdown = MarkdownLabel(
+        "## Guided Validation\n- Status: inspection pending."
+    )
+    right.addWidget(intake_summary)
+    right.addWidget(inspection_markdown)
+    right.addWidget(validation_markdown)
+    intake_row.addWidget(left)
+    intake_row.addWidget(right)
+    container.addWidget(intake_row)
+
+    plan_row = Row()
+
+    left = Section()
+    training_plan = MarkdownLabel(
+        "## Training Plan\n- Guided inspection will unlock the plan preview."
+    )
+    training_status = MarkdownLabel("## Training\n- Status: idle")
+    left.addWidget(training_plan)
+    left.addWidget(training_status)
+
+    right = Section()
+
+    train_output = FilePicker("Training Output")
+    strip_button = QPushButton("Strip Training Data")
+    use_result_markdown = MarkdownLabel(
+        "## Use Result\n- Status: train a model to unlock the saved session,"
+        " manifest, and next actions."
+    )
+    right.addWidget(training_status)
+    right.addWidget(train_output)
+    right.addWidget(strip_button)
+    right.addWidget(use_result_markdown)
+    plan_row.addWidget(left)
+    plan_row.addWidget(right)
+    container.addWidget(plan_row)
+
+    question_row = Row()
+    left = Section()
+    resolving_question_markdown = MarkdownLabel(
+        "## Quick Decision\n- Status: no clarification is needed."
+    )
+    left.addWidget(resolving_question_markdown)
+    right = Section()
+    resolving_choice = LabeledCombo("Quick Decision", choices=(), value=None)
+    resolving_choice.setVisible(False)
+    right.addWidget(resolving_choice)
+    question_row.addWidget(left)
+    question_row.addWidget(right)
+    container.addWidget(question_row)
 
     inspect_inputs = [
         entry_intent,
@@ -140,19 +169,46 @@ def build_train_guided_mode(*, bind_action):
         preview_button,
         train_button,
     ]
-    for component in (
-        entry_intent,
-        uploaded_files,
-        remote_src,
-        revision,
-        resume_artifact,
-        save_as,
-    ):
-        component.change(
-            fn=reset_train_coach_state,
-            outputs=reset_outputs,
-            show_progress="hidden",
+
+    def _connect_reset(component, signal_attr):
+        signal = getattr(component, signal_attr, None)
+        if signal is None:
+            return
+        signal.connect(
+            lambda *_: _apply_reset_outputs(
+                reset_outputs,
+                reset_train_coach_state(),
+            )
         )
+
+    from definers.ui.gui_shared import write_widget_value
+
+    def _apply_reset_outputs(targets, values):
+        for target, value in zip(targets, values):
+            write_widget_value(target, value)
+
+    if hasattr(entry_intent, "changed"):
+        entry_intent.changed.connect(
+            lambda *_: _apply_reset_outputs(
+                reset_outputs, reset_train_coach_state()
+            )
+        )
+    for component in (remote_src, revision, save_as):
+        editor = getattr(component, "_editor", None)
+        if editor is not None and hasattr(editor, "textChanged"):
+            editor.textChanged.connect(
+                lambda *_: _apply_reset_outputs(
+                    reset_outputs, reset_train_coach_state()
+                )
+            )
+    for picker in (uploaded_files, resume_artifact):
+        if hasattr(picker, "selected"):
+            picker.selected.connect(
+                lambda *_: _apply_reset_outputs(
+                    reset_outputs, reset_train_coach_state()
+                )
+            )
+
     bind_action(
         inspect_button,
         inspect_train_coach_request,
@@ -196,8 +252,12 @@ def build_train_guided_mode(*, bind_action):
             "Save model",
             "Suggest next steps",
         ),
-        running_detail="Inspecting the inputs and training when the guided route is ready.",
-        success_detail="Automatic guided training finished or reported the next decision.",
+        running_detail=(
+            "Inspecting the inputs and training when the guided route is ready."
+        ),
+        success_detail=(
+            "Automatic guided training finished or reported the next decision."
+        ),
     )
     bind_action(
         preview_button,
@@ -236,29 +296,11 @@ def build_train_guided_mode(*, bind_action):
         running_detail="Running the guided training workflow.",
         success_detail="Guided training is complete.",
     )
-    strip_button.click(
-        fn=strip_saved_model,
-        inputs=[train_output],
-        outputs=[train_output],
-        show_progress="hidden",
+    strip_button.clicked.connect(
+        lambda *_: write_widget_value(
+            train_output, strip_saved_model(train_output.value())
+        )
     )
-    return {
-        "state_payload": state_payload,
-        "intake_summary": intake_summary,
-        "inspection_markdown": inspection_markdown,
-        "validation_markdown": validation_markdown,
-        "training_plan": training_plan,
-        "training_status": training_status,
-        "train_output": train_output,
-        "use_result_markdown": use_result_markdown,
-        "resolving_question_markdown": resolving_question_markdown,
-        "resolving_choice": resolving_choice,
-    }
 
 
-__all__ = [
-    "build_train_coach_contract_markdown",
-    "build_train_guided_mode",
-    "train_coach_entry_intents",
-    "train_coach_step_names",
-]
+__all__ = ["build_train_guided_mode"]

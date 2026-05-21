@@ -7,12 +7,7 @@ np = get_array_module()
 
 
 def _ui_update(**kwargs):
-    try:
-        import gradio as gr
-
-        return gr.update(**kwargs)
-    except Exception:
-        return dict(kwargs)
+    return dict(kwargs)
 
 
 def _build_custom_element_config(

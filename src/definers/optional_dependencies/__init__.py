@@ -59,7 +59,6 @@ MODULE_PACKAGE_SPECS: dict[str, tuple[str, ...]] = {
     "faiss": ("faiss-cpu>=1.7.4",),
     "fastapi": ("fastapi>=0.100.0",),
     "googledrivedownloader": ("googledrivedownloader>=1.1.0",),
-    "gradio": ("gradio>=6.9.0",),
     "huggingface_hub": ("huggingface-hub>=0.20.0",),
     "httpx": ("httpx[http2]>=0.28.0",),
     "imageio": ("imageio>=2.30.0",),
@@ -173,7 +172,6 @@ OPTIONAL_DEPENDENCY_GROUP_MODULES: dict[str, tuple[str, ...]] = {
     "web": (
         "fastapi",
         "googledrivedownloader",
-        "gradio",
         "httpx",
         "aioquic",
         "lxml",
@@ -645,9 +643,11 @@ def _hooked_auto_install_import(
 
 
 def install_import_hook() -> None:
-    global _HOOK_INSTALLED
-    if _HOOK_INSTALLED:
+    global _HOOK_INSTALLED, _HOOK_IMPORT
+    if builtins.__import__ is _hooked_auto_install_import:
+        _HOOK_INSTALLED = True
         return
+    _HOOK_IMPORT = builtins.__import__
     builtins.__import__ = _hooked_auto_install_import
     _HOOK_INSTALLED = True
 

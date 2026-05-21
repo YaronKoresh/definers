@@ -1,13 +1,12 @@
 import os
 import tempfile
 from pathlib import Path
-from types import ModuleType, SimpleNamespace
+from types import SimpleNamespace
 
 from definers.ui.apps.train import (
     coach as train_coach,
     coach_handlers,
     coach_manifest,
-    coach_ui,
 )
 
 
@@ -345,9 +344,6 @@ def test_inspect_train_coach_request_enables_next_actions(monkeypatch):
         ".csv",
         "text,label\nhello,greeting\nbye,farewell\n",
     )
-    fake_gradio = ModuleType("gradio")
-    fake_gradio.update = lambda **kwargs: kwargs
-    monkeypatch.setitem(__import__("sys").modules, "gradio", fake_gradio)
     try:
         (
             state_payload,
@@ -397,9 +393,6 @@ def test_inspect_train_coach_request_exposes_quick_decision_for_ambiguous_tabula
         ".csv",
         "prompt,value\na,3\nb,4\n",
     )
-    fake_gradio = ModuleType("gradio")
-    fake_gradio.update = lambda **kwargs: kwargs
-    monkeypatch.setitem(__import__("sys").modules, "gradio", fake_gradio)
     try:
         result = coach_handlers.inspect_train_coach_request(
             "files",
@@ -657,100 +650,3 @@ def test_record_train_rollout_event_writes_scannable_metrics(
         scanned_metrics[-1]["validation_failure_category"]
         == "Guided Route Resolved"
     )
-
-
-class _FakeComponent:
-    def __init__(self, registry, kind, *args, **kwargs):
-        self.registry = registry
-        self.kind = kind
-        self.args = args
-        self.kwargs = kwargs
-        self.click_calls = []
-        self.change_calls = []
-        registry.append(self)
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc, tb):
-        return False
-
-    def click(self, fn=None, inputs=None, outputs=None, **kwargs):
-        self.click_calls.append((fn, inputs, outputs, kwargs))
-        return self
-
-    def change(self, fn=None, inputs=None, outputs=None, **kwargs):
-        self.change_calls.append((fn, inputs, outputs, kwargs))
-        return self
-
-
-def _build_fake_gradio_module(registry):
-    fake_gradio = ModuleType("gradio")
-    fake_gradio.update = lambda **kwargs: kwargs
-    component_names = [
-        "Button",
-        "Column",
-        "File",
-        "HTML",
-        "Markdown",
-        "Radio",
-        "Row",
-        "Textbox",
-    ]
-    for name in component_names:
-        setattr(
-            fake_gradio,
-            name,
-            lambda *args, _name=name, **kwargs: _FakeComponent(
-                registry,
-                _name,
-                *args,
-                **kwargs,
-            ),
-        )
-    return fake_gradio
-
-
-def test_build_train_guided_mode_constructs_expected_actions(monkeypatch):
-    registry = []
-    fake_gradio = _build_fake_gradio_module(registry)
-    monkeypatch.setitem(__import__("sys").modules, "gradio", fake_gradio)
-    bind_calls = []
-
-    coach_ui.build_train_guided_mode(
-        bind_action=lambda button, handler, **kwargs: bind_calls.append(
-            (
-                button.args[0] if button.args else None,
-                getattr(handler, "__name__", ""),
-                kwargs.get("action_label"),
-            )
-        )
-    )
-    buttons = [
-        component for component in registry if component.kind == "Button"
-    ]
-    button_labels = [
-        component.args[0] for component in buttons if component.args
-    ]
-    assert "Inspect My Inputs" in button_labels
-    assert "Train Automatically" in button_labels
-    assert "Review Guided Plan" in button_labels
-    assert "Train With Guided Defaults" in button_labels
-    assert bind_calls == [
-        ("Inspect My Inputs", "inspect_train_coach_request", "Inspect Inputs"),
-        (
-            "Train Automatically",
-            "run_train_coach_auto_workflow",
-            "Train Automatically",
-        ),
-        (
-            "Review Guided Plan",
-            "preview_train_coach_plan",
-            "Review Guided Plan",
-        ),
-        (
-            "Train With Guided Defaults",
-            "run_train_coach_workflow",
-            "Train With Guided Defaults",
-        ),
-    ]

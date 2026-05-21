@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from shutil import copy2
 
-from definers.ui.gradio_shared import status_card_markdown
+from definers.ui.gui_shared import status_card_markdown
 from definers.ui.job_state import (
     create_job_dir,
     existing_path,

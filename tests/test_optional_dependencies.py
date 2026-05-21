@@ -1,6 +1,3 @@
-import builtins
-import types
-
 from definers import optional_dependencies
 
 
@@ -84,7 +81,6 @@ def test_install_optional_target_installs_group_specs(monkeypatch):
         (
             "fastapi>=0.100.0",
             "googledrivedownloader>=1.1.0",
-            "gradio>=6.9.0",
             "httpx[http2]>=0.28.0",
             "aioquic>=1.2.0",
             "lxml[html_clean]>=5.2.0",
@@ -205,7 +201,6 @@ def test_runtime_specs_trim_redundant_web_and_ml_packages():
     assert optional_dependencies.package_specs_for_module("bs4") == ()
     assert optional_dependencies.package_specs_for_module("hydra") == ()
 
-    gradio_specs = optional_dependencies.package_specs_for_module("gradio")
     librosa_specs = optional_dependencies.package_specs_for_module("librosa")
     moviepy_specs = optional_dependencies.package_specs_for_module("moviepy")
     openpyxl_specs = optional_dependencies.package_specs_for_module("openpyxl")
@@ -213,8 +208,6 @@ def test_runtime_specs_trim_redundant_web_and_ml_packages():
         "transformers"
     )
 
-    assert gradio_specs == ("gradio>=6.9.0",)
-    assert all("gradio-client" not in spec for spec in gradio_specs)
     assert all("numba" not in spec for spec in librosa_specs)
     assert all("resampy" not in spec for spec in librosa_specs)
     assert all("imageio-ffmpeg" not in spec for spec in moviepy_specs)
@@ -230,7 +223,6 @@ def test_optional_runtime_targets_list_groups_tasks_and_modules():
     assert "tts" in targets["tasks"]
     assert "translate" in targets["tasks"]
     assert "aioquic" in targets["modules"]
-    assert "gradio" in targets["modules"]
     assert "httpx" in targets["modules"]
 
 
@@ -248,68 +240,3 @@ def test_audio_group_leaves_madmom_as_explicit_module_install():
 
     assert "madmom>=0.16.1" not in audio_specs
     assert madmom_specs == ("madmom>=0.16.1",)
-
-
-def test_auto_install_import_retries_known_module(monkeypatch):
-    sentinel = object()
-    calls = []
-
-    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
-        calls.append(name)
-        if len(calls) == 1:
-            raise ModuleNotFoundError("missing gradio", name="gradio")
-        return sentinel
-
-    installed = []
-
-    monkeypatch.setattr(optional_dependencies, "_ORIGINAL_IMPORT", fake_import)
-    monkeypatch.setattr(
-        optional_dependencies,
-        "ensure_module_runtime",
-        lambda module_name, installer=None: (
-            installed.append(module_name) or True
-        ),
-    )
-
-    result = optional_dependencies._auto_install_import(
-        "gradio",
-        globals={"__name__": "definers.ui.apps.chat_app"},
-    )
-
-    assert result is sentinel
-    assert installed == ["gradio"]
-    assert calls == ["gradio", "gradio"]
-
-
-def test_auto_install_import_patch_does_not_corrupt_global_imports(
-    monkeypatch,
-):
-    sentinel = object()
-    calls = []
-
-    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
-        calls.append(name)
-        if len(calls) == 1:
-            raise ModuleNotFoundError("missing gradio", name="gradio")
-        return sentinel
-
-    installed = []
-
-    monkeypatch.setattr(optional_dependencies, "_ORIGINAL_IMPORT", fake_import)
-    monkeypatch.setattr(
-        optional_dependencies,
-        "ensure_module_runtime",
-        lambda module_name, installer=None: (
-            installed.append(module_name) or True
-        ),
-    )
-
-    result = optional_dependencies._auto_install_import(
-        "gradio",
-        globals={"__name__": "definers.ui.apps.chat_app"},
-    )
-
-    assert result is sentinel
-    assert builtins.__import__("warnings").__name__ == "warnings"
-    assert installed == ["gradio"]
-    assert calls == ["gradio", "gradio"]

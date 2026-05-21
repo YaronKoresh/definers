@@ -27,7 +27,7 @@ The package map below is the target operating model for Definers. Package facade
 - `definers.system` owns installation, paths, process control, runtime state, threads, output paths, and download activity.
 - `definers.system.services` is the direct owner module for infrastructure override context and the injectable runtime, filesystem, and process callable ports.
 - `definers.text` owns translation, normalization, and text transformation utilities.
-- `definers.ui` owns launcher registration, focused-surface definitions, shared Gradio primitives, workbench composition, and user-facing UI routing.
+- `definers.ui` owns launcher registration, focused-surface definitions, shared PySide6 primitives, workbench composition, and user-facing UI routing.
 - `definers.ui.apps.audio` is the direct owner module for the audio workbench, staged mastering flow, workspace bootstrap, and audio tool handlers.
 - `definers.ui.apps.image` is the direct owner module for image generation, upscale and title actions, and staged image-job launcher wiring.
 - `definers.ui.apps.video` is the direct owner module for the video composer, lyric video, visualizer surfaces, and their launcher wiring.
@@ -59,6 +59,6 @@ The package map below is the target operating model for Definers. Package facade
 - `definers.cli.command_registry`, `definers.cli.parser`, `definers.cli.runtime`, and `definers.cli.dispatch` are direct owner modules for CLI assembly and execution.
 - `definers.media.web_transfer` is the owner module for transfer policy, artifact download entrypoints, and orchestration.
 - `definers.data`, `definers.chat`, `definers.text`, and `definers.media` are lazy facades over narrower owner modules.
-- `definers.ui.gui_entrypoints` is the stable launcher-registry surface, while `definers.ui.gradio_shared` owns shared cross-domain progress and outputs helpers.
+- `definers.ui.gui_entrypoints` is the stable launcher-registry surface, while `definers.ui.gui_shared` owns shared cross-domain progress and outputs helpers.
 
 Use package-level facades for discovery, then move to the concrete owner module for implementation work.

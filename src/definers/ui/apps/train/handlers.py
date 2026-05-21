@@ -6,12 +6,7 @@ import re
 
 
 def _ui_error(message: str):
-    try:
-        import gradio as gr
-
-        return gr.Error(message)
-    except Exception:
-        return ValueError(message)
+    return RuntimeError(message)
 
 
 def _create_train_activity_reporter(total_steps: int):

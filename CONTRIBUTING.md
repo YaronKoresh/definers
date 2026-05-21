@@ -49,7 +49,7 @@ pip install -e ".[dev,web]"
 - Treat `docs/capabilities/ui/launchers.md` as the owner guide for GUI contribution policy and keep it current when launcher taxonomy, registration, shared UI rules, or testing expectations change.
 - Use the existing launcher taxonomy instead of inventing a parallel surface model: workbench for the full domain cockpit, focused surface for a narrow task family, and app-only launcher for a small self-contained workflow.
 - Register official launcher names in `definers.ui.gui_entrypoints` and keep CLI docs, launcher docs, and tests aligned with those names.
-- Reuse `definers.ui.gradio_shared` for progress and outputs-folder affordances instead of duplicating per-domain UI shells.
+- Reuse `definers.ui.gui_shared` for progress and outputs-folder affordances instead of duplicating per-domain UI shells.
 - Every official GUI should expose a progress tracker, an outputs-folder affordance, named activity stages, and clean optional-dependency failure behavior.
 - Persistent job folders, resumable steps, intermediate artifact views, and manifest-based debugging are opt-in patterns for expensive or multi-step workflows, not a requirement for every launcher.
 - GUI changes need focused tests for launcher registration, UI binding, and any touched service orchestration.

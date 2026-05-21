@@ -1,4 +1,3 @@
-import sys
 import types
 
 
@@ -82,11 +81,6 @@ def test_animation_reset_state_reports_granular_activity(monkeypatch):
     monkeypatch.setattr(
         "definers.system.download_activity.report_download_activity",
         lambda item_label=None, **kwargs: activity.append(item_label),
-    )
-    monkeypatch.setitem(
-        sys.modules,
-        "gradio",
-        types.SimpleNamespace(update=lambda **kwargs: kwargs),
     )
     monkeypatch.setattr(
         "definers.system.output_paths.managed_output_session_dir",

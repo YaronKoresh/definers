@@ -16,7 +16,6 @@ class TestPreInstall(unittest.TestCase):
         self.assertEqual(
             os.environ["HF_DATASETS_CACHE"], "/opt/ml/checkpoints/"
         )
-        self.assertEqual(os.environ["GRADIO_ALLOW_FLAGGING"], "never")
         self.assertEqual(os.environ["OMP_NUM_THREADS"], "4")
         self.assertEqual(os.environ["DISPLAY"], ":0.0")
         self.assertEqual(

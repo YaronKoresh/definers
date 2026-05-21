@@ -12,148 +12,41 @@ class SurfaceCard:
     outcomes: tuple[str, ...]
 
 
-HUB_CSS = """
-.surface-hub {
-    display: grid;
-    gap: 18px;
-}
-
-.surface-hub__hero {
-    position: relative;
-    overflow: hidden;
-    padding: 30px 34px;
-    border-radius: 28px;
-    border: 1px solid rgba(23, 32, 51, 0.12);
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.94) 0%, rgba(233, 245, 243, 0.84) 52%, rgba(229, 236, 241, 0.88) 100%);
-    box-shadow: 0 18px 60px rgba(15, 23, 42, 0.12);
-}
-
-.surface-hub__hero::after {
-    content: "";
-    position: absolute;
-    inset: auto -8% -35% auto;
-    width: 260px;
-    height: 260px;
-    border-radius: 999px;
-    background: radial-gradient(circle, rgba(15, 118, 110, 0.18), rgba(21, 94, 117, 0));
-}
-
-.surface-hub__eyebrow {
-    margin: 0 0 10px 0;
-    color: #155e75;
-    font-size: 0.78rem;
-    font-weight: 700;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-}
-
-.surface-hub__hero h1 {
-    margin: 0;
-    color: #172033;
-    font-size: clamp(2.1rem, 3vw, 3.4rem);
-    line-height: 1.02;
-}
-
-.surface-hub__hero p {
-    max-width: 70ch;
-    margin: 14px 0 0 0;
-    color: #5b6679;
-    line-height: 1.6;
-}
-
-.surface-hub__grid {
-    display: grid;
-    gap: 18px;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-}
-
-.surface-card {
-    display: grid;
-    gap: 12px;
-    padding: 22px;
-    border-radius: 24px;
-    border: 1px solid rgba(23, 32, 51, 0.12);
-    background: rgba(255, 255, 255, 0.84);
-    box-shadow: 0 18px 60px rgba(15, 23, 42, 0.08);
-}
-
-.surface-card__launcher {
-    display: inline-flex;
-    width: fit-content;
-    padding: 6px 10px;
-    border-radius: 999px;
-    background: rgba(15, 118, 110, 0.12);
-    color: #0f766e;
-    font-size: 0.78rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-}
-
-.surface-card h2 {
-    margin: 0;
-    color: #172033;
-    font-size: 1.35rem;
-}
-
-.surface-card p,
-.surface-card li,
-.surface-card code {
-    color: #334155;
-}
-
-.surface-card ul {
-    margin: 0;
-    padding-left: 18px;
-}
-
-.surface-card code {
-    padding: 10px 12px;
-    border-radius: 16px;
-    background: #eef7f5;
-    font-size: 0.92rem;
-}
-
-.surface-hub__legacy {
-    margin: 0;
-    padding: 16px 18px;
-    border-radius: 20px;
-    border: 1px solid rgba(23, 32, 51, 0.12);
-    background: rgba(255, 255, 255, 0.74);
-    color: #334155;
-}
-"""
-
-
 def _render_hero_html(*, eyebrow: str, title: str, description: str) -> str:
     return (
-        '<section class="surface-hub surface-hub__hero">'
-        f'<p class="surface-hub__eyebrow">{escape(eyebrow)}</p>'
-        f"<h1>{escape(title)}</h1>"
-        f"<p>{escape(description)}</p>"
-        "</section>"
+        "<div>"
+        '<p style="color:#bdf6ff;font-size:11px;font-weight:700;'
+        'letter-spacing:3px;margin:0 0 10px 0;">' + escape(eyebrow) + "</p>"
+        '<div style="color:#f9fcff;font-size:26px;font-weight:700;margin:0 0 8px 0;">'
+        + escape(title)
+        + "</div>"
+        '<p style="color:#c8d3e2;font-size:14px;line-height:1.55;margin:0;">'
+        + escape(description)
+        + "</p></div>"
     )
 
 
-def _render_cards_html(cards: tuple[SurfaceCard, ...]) -> str:
-    card_markup = []
-    for card in cards:
-        outcomes_markup = "".join(
-            f"<li>{escape(outcome)}</li>" for outcome in card.outcomes
-        )
-        card_markup.append(
-            '<article class="surface-card">'
-            f'<div class="surface-card__launcher">{escape(card.launcher)}</div>'
-            f"<h2>{escape(card.title)}</h2>"
-            f"<p>{escape(card.description)}</p>"
-            f"<ul>{outcomes_markup}</ul>"
-            f"<code>definers start {escape(card.launcher)}</code>"
-            "</article>"
-        )
+def _render_card_html(card: SurfaceCard) -> str:
+    outcomes_markup = "".join(
+        f'<li style="color:#c2cfe0;font-size:13px;">{escape(outcome)}</li>'
+        for outcome in card.outcomes
+    )
     return (
-        '<section class="surface-hub surface-hub__grid">'
-        + "".join(card_markup)
-        + "</section>"
+        '<span style="background:rgba(39,184,234,0.18);color:#bdf6ff;'
+        "padding:3px 8px;border-radius:8px;font-size:11px;font-weight:700;"
+        'letter-spacing:1.5px;">'
+        + escape(card.launcher)
+        + "</span>"
+        + '<div style="color:#eef6ff;font-size:15px;font-weight:700;margin:8px 0 4px 0;">'
+        + escape(card.title)
+        + "</div>"
+        + '<p style="color:#c2cfe0;font-size:13px;line-height:1.5;margin:0 0 8px 0;">'
+        + escape(card.description)
+        + "</p>"
+        + f'<ul style="margin:0 0 8px 0;padding-left:18px;">{outcomes_markup}</ul>'
+        + '<div style="background:rgba(84,226,255,0.08);padding:6px 10px;'
+        "border-radius:6px;font-family:Consolas,monospace;font-size:12px;"
+        'color:#7a8fa8;">definers start ' + escape(card.launcher) + "</div>"
     )
 
 
@@ -166,32 +59,51 @@ def launch_surface_hub(
     cards: tuple[SurfaceCard, ...],
     legacy_command: str | None = None,
 ):
-    import gradio as gr
-
-    from definers.ui.gradio_shared import (
-        css as shared_css,
-        launch_blocks,
-        theme as shared_theme,
+    from definers.ui.gui_shared import launch_blocks, qt_app
+    from definers.ui.qt_widgets import (
+        CardFrame,
+        HeroCard,
+        HtmlLabel,
+        Row,
+        Section,
+        build_main_window,
     )
 
-    with gr.Blocks(title=app_title) as app:
-        gr.HTML(
+    qt_app()
+    body = Section()
+    body.addWidget(
+        HeroCard(
             _render_hero_html(
                 eyebrow=eyebrow,
                 title=title,
                 description=description,
             )
         )
-        gr.HTML(_render_cards_html(cards))
-        if legacy_command is not None:
-            gr.HTML(
-                f'<p class="surface-hub__legacy">Need the full advanced workbench? Run <strong>{escape(legacy_command)}</strong>.</p>'
-            )
-    launch_blocks(
-        app,
-        custom_css=shared_css() + "\n" + HUB_CSS,
-        custom_theme=shared_theme(),
     )
+
+    current_row: Row | None = None
+    for index, card in enumerate(cards):
+        if index % 2 == 0:
+            current_row = Row()
+            body.addWidget(current_row)
+        frame = CardFrame()
+        frame.addWidget(HtmlLabel(_render_card_html(card)))
+        assert current_row is not None
+        current_row.addWidget(frame)
+
+    if legacy_command is not None:
+        body.addWidget(
+            HtmlLabel(
+                '<p style="color:#c2cfe0;font-size:13px;">'
+                "Need the full advanced workbench? Run <strong>"
+                '<span style="color:#bdf6ff;">'
+                + escape(legacy_command)
+                + "</span></strong>.</p>"
+            )
+        )
+
+    window = build_main_window(app_title, body)
+    launch_blocks(window)
 
 
 __all__ = ["SurfaceCard", "launch_surface_hub"]

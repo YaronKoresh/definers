@@ -70,7 +70,6 @@ def test_install_list_outputs_known_targets():
     assert "audio" in out
     assert "tts" in out
     assert "translate" in out
-    assert "gradio" in out
     assert "stems" in out
     assert "fairseq" not in out
 

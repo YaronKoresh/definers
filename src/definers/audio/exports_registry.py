@@ -166,7 +166,6 @@ AUDIO_EXPORTS = {
         "spectrum_visualization",
         "create_spectrum_visualization",
     ),
-    **_module_exports("sharing", "create_share_links"),
     **_module_exports(
         "signal_effects",
         "apply_compressor",

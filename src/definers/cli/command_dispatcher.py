@@ -36,7 +36,8 @@ def dispatch_cli_command(
 ) -> int:
     install_handler = _missing_install_handler if install is None else install
     if isinstance(command, StartCommand):
-        return int(start(command.project))
+        result = start(command.project)
+        return 0 if result is None else int(result)
     if isinstance(command, MusicVideoCommand):
         output(
             music_video(

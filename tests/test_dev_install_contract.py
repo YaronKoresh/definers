@@ -9,7 +9,6 @@ FORBIDDEN_TOP_LEVEL_TEST_IMPORTS = {
     "diffusers",
     "fastapi",
     "faiss",
-    "gradio",
     "imageio",
     "librosa",
     "matplotlib",

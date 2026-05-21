@@ -23,6 +23,7 @@ EXPECTED_BASE_DEPENDENCIES = {
     "pandas>=1.5.0",
     "pillow>=9.1.0",
     "scipy>=1.10.0,<2",
+    "PySide6>=6.5.0,<7",
 }
 
 SECTION_PATTERN = re.compile(r"^\[(?P<name>[^\]]+)\]\s*$", re.MULTILINE)

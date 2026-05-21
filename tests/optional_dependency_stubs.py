@@ -6,16 +6,6 @@ from pathlib import Path
 import numpy as np
 
 
-class FakeGradioError(Exception):
-    pass
-
-
-def build_fake_gradio_module():
-    module = types.ModuleType("gradio")
-    module.Error = FakeGradioError
-    return module
-
-
 class FakeDataset:
     def __init__(self, data):
         self._data = {key: list(values) for key, values in dict(data).items()}
