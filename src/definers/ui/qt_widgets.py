@@ -582,7 +582,7 @@ class FilePicker(LabeledWidget):
         *,
         button_text: str = "Choose File...",
         file_filter: str = "All Files (*)",
-        max_files: int = 1,
+        max_files: int | None = 1,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(label, parent=parent)
@@ -624,7 +624,7 @@ class FilePicker(LabeledWidget):
                 self._file_filter,
             )
 
-        if len(paths) > self._max_files:
+        if self._max_files is not None and len(paths) > self._max_files:
             paths = paths[:self._max_files]
 
         if paths:
