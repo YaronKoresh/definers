@@ -2639,7 +2639,7 @@ def launch_audio_app(
         panel = Section()
         row = Row()
         left = Section()
-        dj_files = FilePicker("Source Tracks")
+        dj_files = FilePicker("Source Tracks", max_files=None)
         dj_format = LabeledCombo(
             "Output Format", choices=format_choices, value=format_choices[0]
         )
