@@ -574,7 +574,7 @@ class LabeledCheckboxGroup(LabeledWidget):
 
 
 class FilePicker(LabeledWidget):
-    selected = Signal(str)
+    selected = Signal(list) 
 
     def __init__(
         self,
@@ -582,49 +582,77 @@ class FilePicker(LabeledWidget):
         *,
         button_text: str = "Choose File...",
         file_filter: str = "All Files (*)",
+        max_files: int = 1,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(label, parent=parent)
         row = QHBoxLayout()
         row.setContentsMargins(0, 0, 0, 0)
+        
         self._button = QPushButton(button_text, self)
         self._button.clicked.connect(self._open_dialog)
+        
         self._path_label = QLabel("No file selected.", self)
         self._path_label.setWordWrap(True)
         self._path_label.setStyleSheet(
             "color: #4e6278; font-size: 13px; background: transparent;"
         )
+        
         row.addWidget(self._button, 0)
         row.addWidget(self._path_label, 1)
         self._outer.addLayout(row)
+        
         self._file_filter = file_filter
-        self._path: str | None = None
+        self._max_files = max_files
+        
+        self._paths: list[str] = []
 
     def _open_dialog(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(
-            self,
-            self._label_text or "Select File",
-            "",
-            self._file_filter,
-        )
-        if path:
-            self._set_path(path)
-            self.selected.emit(path)
-
-    def _set_path(self, path: str | None) -> None:
-        self._path = path
-        if path:
-            self._path_label.setText(Path(str(path)).name)
-            self._path_label.setToolTip(str(path))
+        if self._max_files == 1:
+            path, _ = QFileDialog.getOpenFileName(
+                self,
+                self._label_text or "Select File",
+                "",
+                self._file_filter,
+            )
+            paths = [path] if path else []
         else:
-            self._path_label.setText("No file selected.")
+            paths, _ = QFileDialog.getOpenFileNames(
+                self,
+                self._label_text or "Select Files",
+                "",
+                self._file_filter,
+            )
+
+        if len(paths) > self._max_files:
+            paths = paths[:self._max_files]
+
+        if paths:
+            self._set_paths(paths)
+            self.selected.emit(paths)
+
+    def _set_paths(self, paths: list[str]) -> None:
+        self._paths = paths
+        if paths:
+            if len(paths) == 1:
+                self._path_label.setText(Path(paths[0]).name)
+            else:
+                self._path_label.setText(f"{len(paths)} files selected")
+            self._path_label.setToolTip("\n".join(paths))
+        else:
+            self._path_label.setText("No file selected." if self._max_files == 1 else "No files selected.")
             self._path_label.setToolTip("")
 
-    def value(self) -> str | None:
-        return self._path
+    def value(self) -> list[str]:
+        return self._paths
 
     def set_value(self, value: Any) -> None:
-        self._set_path(None if value is None else str(value))
+        if value is None:
+            self._set_paths([])
+        elif isinstance(value, list):
+            self._set_paths([str(v) for v in value])
+        else:
+            self._set_paths([str(value)])
 
     def apply_update(self, update: dict[str, Any]) -> None:
         if "value" in update:
@@ -635,6 +663,8 @@ class FilePicker(LabeledWidget):
             self._button.setEnabled(bool(update["interactive"]))
         if "label" in update:
             self.set_label(str(update["label"]))
+        if "max_files" in update:
+            self._max_files = int(update["max_files"])
 
 
 class ImageInput(LabeledWidget):
