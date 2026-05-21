@@ -29,7 +29,8 @@ GITHUB_ARCHIVE_PACKAGE_SOURCES: dict[str, tuple[str, str, str]] = {
 
 GUI_PACKAGES = [
     "libegl1",
-    "libgl1-mesa-glx",
+    "libgl1",
+    "libglx-mesa0",
     "libxkbcommon-x11-0",
     "libxcb-cursor0",
 ]

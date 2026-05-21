@@ -74,14 +74,14 @@ def _loudness_from_power(mean_square: float) -> float:
 
 
 def _flatten_audio_channels(y: np.ndarray) -> np.ndarray:
-    y_array = np.asarray(y, dtype=np.float32)
+    y_array = np.asarray(y, dtype=np.float64)
     if y_array.ndim == 1:
         return y_array[np.newaxis, :]
     return y_array.reshape(-1, y_array.shape[-1])
 
 
 def _loudness_channel_weights(channel_count: int) -> np.ndarray:
-    weights = np.ones(max(int(channel_count), 1), dtype=np.float32)
+    weights = np.ones(max(int(channel_count), 1), dtype=np.float64)
     if channel_count == 4:
         weights[2:] = _SURROUND_CHANNEL_GAIN
     elif channel_count >= 5:
@@ -117,7 +117,7 @@ def _k_weighting_coefficients(
             )
             / high_shelf_a0,
         ],
-        dtype=np.float32,
+        dtype=np.float64,
     )
     high_shelf_a = np.array(
         [
@@ -130,14 +130,14 @@ def _k_weighting_coefficients(
             )
             / high_shelf_a0,
         ],
-        dtype=np.float32,
+        dtype=np.float64,
     )
 
     high_pass_k = np.tan(np.pi * _DEMAN_HIGH_PASS_FC_HZ / rate)
     high_pass_a0 = (
         1.0 + high_pass_k / _DEMAN_HIGH_PASS_Q + high_pass_k * high_pass_k
     )
-    high_pass_b = np.array([1.0, -2.0, 1.0], dtype=np.float32)
+    high_pass_b = np.array([1.0, -2.0, 1.0], dtype=np.float64)
     high_pass_a = np.array(
         [
             1.0,
@@ -145,7 +145,7 @@ def _k_weighting_coefficients(
             (1.0 - high_pass_k / _DEMAN_HIGH_PASS_Q + high_pass_k * high_pass_k)
             / high_pass_a0,
         ],
-        dtype=np.float32,
+        dtype=np.float64,
     )
 
     return high_shelf_b, high_shelf_a, high_pass_b, high_pass_a
@@ -158,14 +158,14 @@ def _fallback_lfilter(
     *,
     axis: int = -1,
 ) -> np.ndarray:
-    x = np.asarray(values, dtype=np.float32)
+    x = np.asarray(values, dtype=np.float64)
     if x.size == 0:
         return np.array(x, copy=True)
     normalized_axis = axis if axis >= 0 else x.ndim + axis
     if normalized_axis != x.ndim - 1:
         x = np.moveaxis(x, normalized_axis, -1)
-    b_array = np.asarray(b, dtype=np.float32)
-    a_array = np.asarray(a, dtype=np.float32)
+    b_array = np.asarray(b, dtype=np.float64)
+    a_array = np.asarray(a, dtype=np.float64)
     if b_array.size == 0 or a_array.size == 0:
         return np.array(values, copy=True)
     a0 = float(a_array[0])
@@ -182,8 +182,8 @@ def _fallback_lfilter(
         return filtered
     b_pad = np.pad(b_array, (0, order - len(b_array)))
     a_pad = np.pad(a_array, (0, order - len(a_array)))
-    state = np.zeros(x.shape[:-1] + (order - 1,), dtype=np.float32)
-    filtered = np.empty_like(x, dtype=np.float32)
+    state = np.zeros(x.shape[:-1] + (order - 1,), dtype=np.float64)
+    filtered = np.empty_like(x, dtype=np.float64)
     for sample_index in range(x.shape[-1]):
         x_n = x[..., sample_index]
         y_n = b_pad[0] * x_n + state[..., 0]
@@ -273,9 +273,9 @@ def _weighted_power_series(
         :, np.newaxis
     ]
     return np.sum(
-        channel_weights * np.square(weighted, dtype=np.float32),
+        channel_weights * np.square(weighted, dtype=np.float64),
         axis=0,
-        dtype=np.float32,
+        dtype=np.float64,
     )
 
 
@@ -320,15 +320,15 @@ def _block_powers_from_series(
     hop_seconds: float,
 ) -> np.ndarray:
     if y_square.size == 0 or not np.isfinite(sr) or sr <= 0:
-        return np.zeros(1, dtype=np.float32)
+        return np.zeros(1, dtype=np.float64)
 
     window_size = max(int(round(sr * window_seconds)), 1)
     hop_size = max(int(round(sr * hop_seconds)), 1)
 
     if y_square.shape[-1] < window_size:
         return np.array(
-            [float(np.mean(y_square, dtype=np.float32))],
-            dtype=np.float32,
+            [float(np.mean(y_square, dtype=np.float64))],
+            dtype=np.float64,
         )
 
     y_windows = np.lib.stride_tricks.sliding_window_view(y_square, window_size)[
@@ -336,16 +336,16 @@ def _block_powers_from_series(
     ]
     if y_windows.size == 0:
         return np.array(
-            [float(np.mean(y_square, dtype=np.float32))],
-            dtype=np.float32,
+            [float(np.mean(y_square, dtype=np.float64))],
+            dtype=np.float64,
         )
 
-    return np.mean(y_windows, axis=-1, dtype=np.float32)
+    return np.mean(y_windows, axis=-1, dtype=np.float64)
 
 
 def _gated_integrated_lufs(block_powers: np.ndarray) -> float:
     powers = np.nan_to_num(
-        np.asarray(block_powers, dtype=np.float32),
+        np.asarray(block_powers, dtype=np.float64),
         nan=0.0,
         posinf=0.0,
         neginf=0.0,
@@ -359,11 +359,11 @@ def _gated_integrated_lufs(block_powers: np.ndarray) -> float:
         return _ABSOLUTE_GATE_LUFS
 
     relative_gate = max(
-        0.1 * float(np.mean(gated, dtype=np.float32)), abs_threshold
+        0.1 * float(np.mean(gated, dtype=np.float64)), abs_threshold
     )
     final = gated[gated > relative_gate]
     mean_square = float(
-        np.mean(final if final.size > 0 else gated, dtype=np.float32)
+        np.mean(final if final.size > 0 else gated, dtype=np.float64)
     )
     return _loudness_from_power(mean_square)
 

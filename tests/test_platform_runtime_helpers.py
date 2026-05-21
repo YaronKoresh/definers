@@ -105,7 +105,7 @@ def test_runnable_uses_which_for_first_token(
     monkeypatch.setattr(
         runtime.shutil,
         "which",
-        lambda name: looked_up.append(name) or "/bin/python",
+        lambda name, path=None: looked_up.append(name) or "/bin/python",
     )
 
     assert runtime.runnable('"python" -V') is True
@@ -131,7 +131,7 @@ def test_runnable_falls_back_to_simple_split_when_shlex_fails(
     monkeypatch.setattr(
         runtime.shutil,
         "which",
-        lambda name: "/usr/bin/cmd" if name == "cmd" else None,
+        lambda name, path=None: "/usr/bin/cmd" if name == "cmd" else None,
     )
 
     assert runtime.runnable("cmd /c dir") is True

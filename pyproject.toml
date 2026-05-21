@@ -203,7 +203,7 @@ SMART_LINK_SCENARIO_COUNT = "8"
 UNIFIED_AUTOMATION_SCENARIO_COUNT = "8"
 
 [tool.poe.tasks._test-py]
-cmd = "python -m pytest -s tests/"
+cmd = "python -m pytest -s -vv tests/"
 
 [tool.poe.tasks._coverage-run]
 cmd = "python -m pytest -q --cov=src/definers --cov-branch --cov-report=term-missing:skip-covered tests/"
