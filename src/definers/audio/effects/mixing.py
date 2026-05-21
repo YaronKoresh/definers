@@ -130,10 +130,10 @@ def mix_audio(
 
 def dj_mix(
     files: list[str],
-    mix_type: str | None = None,
-    target_bpm: float | None = None,
-    transition_sec: float = 5,
     format_choice: str = "mp3",
+    transition_sec: float = 1.5,
+    target_bpm: float | None = None,
+    beatmatched: bool = True,
 ) -> str | None:
 
     import madmom
