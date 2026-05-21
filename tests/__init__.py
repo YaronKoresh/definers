@@ -2,6 +2,8 @@ import builtins
 import importlib
 import sys
 
+import definers.optional_dependencies
+
 _original_import_module = importlib.import_module
 _original_import = builtins.__import__
 
