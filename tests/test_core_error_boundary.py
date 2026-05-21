@@ -1,6 +1,8 @@
 import asyncio
 import logging
 
+import pytest
+
 from definers.core import CriticalSystemFailure, enforce_error_boundary
 
 
@@ -30,24 +32,20 @@ def test_enforce_error_boundary_sync_success() -> None:
     assert stable_function(4) == 8
 
 
-def test_enforce_error_boundary_sync_failure() -> None:
-    try:
-        unstable_function()
-        raise AssertionError("Expected CriticalSystemFailure")
-    except CriticalSystemFailure:
-        pass
+def test_enforce_error_boundary_sync_failure(caplog) -> None:
+    with caplog.at_level(logging.CRITICAL, logger="definers.resilience"):
+        with pytest.raises(CriticalSystemFailure):
+            unstable_function()
 
 
 def test_enforce_error_boundary_async_success() -> None:
     assert asyncio.run(stable_async_function(4)) == 5
 
 
-def test_enforce_error_boundary_async_failure() -> None:
-    try:
-        asyncio.run(unstable_async_function())
-        raise AssertionError("Expected CriticalSystemFailure")
-    except CriticalSystemFailure:
-        pass
+def test_enforce_error_boundary_async_failure(caplog) -> None:
+    with caplog.at_level(logging.CRITICAL, logger="definers.resilience"):
+        with pytest.raises(CriticalSystemFailure):
+            asyncio.run(unstable_async_function())
 
 
 def test_enforce_error_boundary_preserves_function_name() -> None:

@@ -39,5 +39,10 @@ jobs:
       - name: Format Check
         run: poe check-format
 
+      - name: Install PySide6 GUI Packages For Linux
+        run: sudo apt-get install -y libegl1 libgl1 libglx-mesa0 libxkbcommon-x11-0 libxcb-cursor0
+
       - name: Run Tests
         run: poe test
+        env:
+          GUI_ENV_CHECKED: "1"

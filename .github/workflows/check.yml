@@ -27,8 +27,13 @@ jobs:
       - name: Install Dev Tools
         run: python -m pip install -e ".[dev]"
 
+      - name: Install PySide6 GUI Packages For Linux
+        run: sudo apt-get install -y libegl1 libgl1 libglx-mesa0 libxkbcommon-x11-0 libxcb-cursor0
+
       - name: Execute Checks And Fixes
         run: python -m poethepoet check
+        env:
+          GUI_ENV_CHECKED: "1"
 
       - name: Check For Changes
         id: check_changes
