@@ -677,7 +677,11 @@ def _enforce_linux_gui_environment():
     else:
         os.environ["GUI_ENV_CHECKED"] = "1"
 
-    result = subprocess.run(["dpkg", "-s", *GUI_PACKAGES])
+    result = subprocess.run(
+        ["dpkg", "-s", *GUI_PACKAGES],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
 
     if result.returncode != 0:
         print(
@@ -687,9 +691,11 @@ def _enforce_linux_gui_environment():
             env = os.environ.copy()
             env["DEBIAN_FRONTEND"] = "noninteractive"
 
-            subprocess.run(["apt-get", "update"], env=env, check=True)
+            subprocess.run(["sudo", "apt-get", "update"], env=env, check=True)
             subprocess.run(
-                ["apt-get", "install", "-y", *GUI_PACKAGES], env=env, check=True
+                ["sudo", "apt-get", "install", "-y", *GUI_PACKAGES],
+                env=env,
+                check=True,
             )
             print("[definers] System GUI dependencies installed successfully.")
         except (subprocess.CalledProcessError, PermissionError):
@@ -701,7 +707,7 @@ def _enforce_linux_gui_environment():
                 "Please run the following command manually as root to fix GUI/Qt errors:"
             )
             print(
-                f"apt-get update && apt-get install -y {' '.join(GUI_PACKAGES)}"
+                f"sudo apt-get update && sudo apt-get install -y {' '.join(GUI_PACKAGES)}"
             )
             print("=" * 60 + "\n")
         except Exception as e:
@@ -719,6 +725,7 @@ def _enforce_linux_gui_environment():
                     ["Xvfb", ":99", "-screen", "0", "1024x768x24"],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
+                    start_new_session=True,
                 )
             except Exception as e:
                 print(f"[definers] Failed to initialize background Xvfb: {e}")
