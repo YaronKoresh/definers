@@ -2742,7 +2742,7 @@ def launch_audio_app(
         left.addWidget(analysis_input)
         left.addWidget(analysis_btn)
         right = Section()
-        analysis_bpm = LabeledLineEdit("BPM / Key", placeholder="Ã¢â‚¬â€")
+        analysis_bpm = LabeledLineEdit("BPM / Key", placeholder="Auto")
         analysis_summary = MarkdownLabel("## Analysis\n- Status: idle")
         analysis_json = FileOutput("Analysis JSON")
         right.addWidget(analysis_bpm)
