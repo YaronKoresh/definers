@@ -485,9 +485,7 @@ def install_audio_effects(*, fluidsynth=True, rubberband=True):
             if system_module.exist(fluidsynth_extract_path) or (
                 download_and_unzip(fluidsynth_url, fluidsynth_extract_path)
             ):
-                if "fluidsynth" not in os.environ.get(
-                    "PATH", ""
-                ):
+                if "fluidsynth" not in os.environ.get("PATH", ""):
                     fluidsynth_bin_path = os.path.join(
                         fluidsynth_extract_path,
                         "bin",
