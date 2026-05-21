@@ -625,7 +625,7 @@ class FilePicker(LabeledWidget):
             )
 
         if self._max_files is not None and len(paths) > self._max_files:
-            paths = paths[:self._max_files]
+            paths = paths[: self._max_files]
 
         if paths:
             self._set_paths(paths)
@@ -640,7 +640,11 @@ class FilePicker(LabeledWidget):
                 self._path_label.setText(f"{len(paths)} files selected")
             self._path_label.setToolTip("\n".join(paths))
         else:
-            self._path_label.setText("No file selected." if self._max_files == 1 else "No files selected.")
+            self._path_label.setText(
+                "No file selected."
+                if self._max_files == 1
+                else "No files selected."
+            )
             self._path_label.setToolTip("")
 
     def value(self) -> list[str]:
