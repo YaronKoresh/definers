@@ -35,64 +35,6 @@ GUI_PACKAGES = [
 ]
 
 
-def _enforce_linux_gui_environment():
-    if not sys.platform.startswith("linux"):
-        return
-    if not auto_install_enabled():
-        return
-
-    result = subprocess.run(
-        ["dpkg", "-s"] + GUI_PACKAGES,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-
-    if result.returncode != 0:
-        print("[definers] Missing system GUI dependencies. Installing...")
-        try:
-            subprocess.check_call(["sudo", "apt-get", "update", "-qq"])
-            subprocess.check_call(
-                ["sudo", "apt-get", "install", "-y", "-qq"] + GUI_PACKAGES
-            )
-        except Exception as e:
-            print(
-                f"[definers] Warning: Could not install system dependencies: {e}"
-            )
-
-    if not os.environ.get("DISPLAY") and not shutil.which("Xvfb"):
-        print(
-            "[definers] Xvfb not found. Attempting to install system dependencies..."
-        )
-        try:
-            subprocess.check_call(["sudo", "apt-get", "update", "-qq"])
-            subprocess.check_call(
-                ["sudo", "apt-get", "install", "-y", "-qq", "xvfb"]
-            )
-        except Exception:
-            print("[definers] Warning: Failed to install xvfb via apt")
-
-    if not os.environ.get("DISPLAY") and shutil.which("Xvfb"):
-        print(
-            "[definers] No DISPLAY found. Spawning background Xvfb virtual screen..."
-        )
-        try:
-            subprocess.Popen(
-                ["Xvfb", ":99", "-screen", "0", "1024x768x24"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-            os.environ["DISPLAY"] = ":99"
-        except Exception as e:
-            print(f"[definers] Failed to initialize background Xvfb: {e}")
-    else:
-        print(
-            "[definers] Warning: Headless Linux detected but Xvfb is missing from PATH."
-        )
-
-
-_enforce_linux_gui_environment()
-
-
 def _github_archive_url(repository: str, commit: str) -> str:
     return f"https://github.com/{repository}/archive/{commit}.tar.gz"
 
@@ -716,6 +658,64 @@ def install_import_hook() -> None:
     _HOOK_IMPORT = builtins.__import__
     builtins.__import__ = _hooked_auto_install_import
     _HOOK_INSTALLED = True
+
+
+def _enforce_linux_gui_environment():
+    if not sys.platform.startswith("linux"):
+        return
+    if not auto_install_enabled():
+        return
+
+    result = subprocess.run(
+        ["dpkg", "-s"] + GUI_PACKAGES,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+    if result.returncode != 0:
+        print("[definers] Missing system GUI dependencies. Installing...")
+        try:
+            subprocess.check_call(["sudo", "apt-get", "update", "-qq"])
+            subprocess.check_call(
+                ["sudo", "apt-get", "install", "-y", "-qq"] + GUI_PACKAGES
+            )
+        except Exception as e:
+            print(
+                f"[definers] Warning: Could not install system dependencies: {e}"
+            )
+
+    if not os.environ.get("DISPLAY") and not shutil.which("Xvfb"):
+        print(
+            "[definers] Xvfb not found. Attempting to install system dependencies..."
+        )
+        try:
+            subprocess.check_call(["sudo", "apt-get", "update", "-qq"])
+            subprocess.check_call(
+                ["sudo", "apt-get", "install", "-y", "-qq", "xvfb"]
+            )
+        except Exception:
+            print("[definers] Warning: Failed to install xvfb via apt")
+
+    if not os.environ.get("DISPLAY") and shutil.which("Xvfb"):
+        print(
+            "[definers] No DISPLAY found. Spawning background Xvfb virtual screen..."
+        )
+        try:
+            subprocess.Popen(
+                ["Xvfb", ":99", "-screen", "0", "1024x768x24"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            os.environ["DISPLAY"] = ":99"
+        except Exception as e:
+            print(f"[definers] Failed to initialize background Xvfb: {e}")
+    else:
+        print(
+            "[definers] Warning: Headless Linux detected but Xvfb is missing from PATH."
+        )
+
+
+_enforce_linux_gui_environment()
 
 
 __all__ = [glb for glb in globals() if not glb.startswith("_")]
