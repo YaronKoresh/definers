@@ -2623,7 +2623,12 @@ def launch_audio_app(
         panel = Section()
         row = Row()
         left = Section()
-        dj_files = FilePicker("Source Tracks", file_filter="Audio Files (*.flac *.wav *.mp3);;FLAC Audio (*.flac);;WAV Audio (*.wav);;MP3 Audio (*.mp3)", max_files=None, button_text="Select Audio Files...")
+        dj_files = FilePicker(
+            "Source Tracks",
+            file_filter="Audio Files (*.flac *.wav *.mp3);;FLAC Audio (*.flac);;WAV Audio (*.wav);;MP3 Audio (*.mp3)",
+            max_files=None,
+            button_text="Select Audio Files...",
+        )
         dj_format = LabeledCombo(
             "Output Format", choices=format_choices, value=format_choices[0]
         )
