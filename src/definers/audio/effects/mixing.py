@@ -185,9 +185,9 @@ def dj_mix(
             temp_stretched_path = None
             current_path = str(file)
             if (
-                mix_type is not None
-                and "beatmatched" in mix_type.lower()
-                and (target_bpm is not None and target_bpm > 0)
+                beatmatched
+                and target_bpm is not None
+                and target_bpm > 0
             ):
                 proc = madmom.features.beats.DBNBeatTrackingProcessor(fps=100)
                 act = madmom.features.beats.RNNBeatProcessor()(current_path)
