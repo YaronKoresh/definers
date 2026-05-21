@@ -585,6 +585,10 @@ def _import_with_auto_install(
     level: int = 0,
 ):
     try:
+        _enforce_linux_gui_environment()
+    except:
+        print("Linux GUI environment enforcement failed")
+    try:
         result = importer(name, globals, locals, fromlist, level)
         _prestub_c_ext_fromlist(name, result, fromlist)
         return result
@@ -713,9 +717,6 @@ def _enforce_linux_gui_environment():
         print(
             "[definers] Warning: Headless Linux detected but Xvfb is missing from PATH."
         )
-
-
-_enforce_linux_gui_environment()
 
 
 __all__ = [glb for glb in globals() if not glb.startswith("_")]
