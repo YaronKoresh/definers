@@ -13,6 +13,7 @@ APT_PACKAGES = (
     "wget",
     "curl",
     "libssl-dev",
+    "libglib2.0-0",
     "libgl1",
     "libegl1",
     "libxkbcommon0",
@@ -116,6 +117,17 @@ def start_virtual_display() -> None:
         if os.path.isdir(candidate):
             novnc_web = candidate
             break
+    if novnc_web:
+        index_path = os.path.join(novnc_web, "index.html")
+        vnc_path = os.path.join(novnc_web, "vnc.html")
+        if not os.path.exists(index_path) and os.path.exists(vnc_path):
+            try:
+                os.symlink(vnc_path, index_path)
+            except OSError:
+                try:
+                    shutil.copyfile(vnc_path, index_path)
+                except OSError:
+                    pass
     if shutil.which("websockify") is not None:
         websockify_args = ["websockify"]
         if novnc_web:
@@ -127,9 +139,8 @@ def start_virtual_display() -> None:
             stderr=subprocess.DEVNULL,
         )
 
-    url_suffix = "/vnc.html" if novnc_web else ""
     print(
-        f"[definers] {PROJECT} GUI ready at http://localhost:{NOVNC_PORT}{url_suffix}",
+        f"[definers] {PROJECT} GUI ready at http://localhost:{NOVNC_PORT}",
         flush=True,
     )
 
