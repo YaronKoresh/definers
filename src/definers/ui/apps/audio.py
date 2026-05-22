@@ -1400,7 +1400,12 @@ def run_mastering_tool(
     )
     output_path = _temp_audio_output_path(format_choice)
     report_path = _write_text_payload("Mastering report pending.\n")
-    should_collect_mastered_stems = bool(stem_mastering)
+
+    should_collect_mastered_stems = bool(save_mastered_stems)
+
+    effective_stem_mastering = (
+        bool(stem_mastering) or should_collect_mastered_stems
+    )
     control_mode, profile_kwargs = resolve_mastering_request(
         profile_name,
         bass,
@@ -1422,7 +1427,7 @@ def run_mastering_tool(
     )
     mastering_kwargs: dict[str, object] = {
         "report_path": report_path,
-        "stem_mastering": bool(stem_mastering),
+        "stem_mastering": effective_stem_mastering,
         "stem_model_name": resolved_stem_model_name,
         "stem_shifts": max(int(stem_shifts), 1),
         "stem_mix_headroom_db": float(stem_mix_headroom_db),

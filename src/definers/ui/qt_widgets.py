@@ -871,7 +871,187 @@ class MediaOutput(LabeledWidget):
 
 
 VideoOutput = MediaOutput
-AudioOutput = MediaOutput
+
+
+class _AudioPlayerBackend:
+    _resolved: bool = False
+    _player_cls: Any = None
+    _audio_output_cls: Any = None
+    _url_cls: Any = None
+    _state_enum: Any = None
+
+    @classmethod
+    def resolve(cls) -> bool:
+        if cls._resolved:
+            return cls._player_cls is not None
+        cls._resolved = True
+        try:
+            from PySide6.QtCore import QUrl
+            from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
+        except Exception:
+            return False
+        cls._player_cls = QMediaPlayer
+        cls._audio_output_cls = QAudioOutput
+        cls._url_cls = QUrl
+        cls._state_enum = getattr(QMediaPlayer, "PlaybackState", None)
+        return True
+
+
+def _format_ms(value_ms: int) -> str:
+    seconds_total = max(int(value_ms), 0) // 1000
+    minutes = seconds_total // 60
+    seconds = seconds_total % 60
+    return f"{minutes:d}:{seconds:02d}"
+
+
+class AudioPlayerWidget(QWidget):
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._source: str | None = None
+        self._player: Any = None
+        self._audio_output: Any = None
+        self._duration_ms = 0
+        self._suppress_seek = False
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+
+        self._play_button = QPushButton("Play", self)
+        self._play_button.setEnabled(False)
+        self._play_button.setFixedWidth(64)
+        self._play_button.clicked.connect(self._toggle_playback)
+        layout.addWidget(self._play_button, 0)
+
+        self._slider = QSlider(Qt.Horizontal, self)
+        self._slider.setEnabled(False)
+        self._slider.setRange(0, 0)
+        self._slider.sliderMoved.connect(self._on_slider_moved)
+        self._slider.sliderReleased.connect(self._on_slider_released)
+        layout.addWidget(self._slider, 1)
+
+        self._time_label = QLabel("0:00 / 0:00", self)
+        self._time_label.setStyleSheet(
+            "color: #4e6278; font-size: 12px; background: transparent;"
+        )
+        self._time_label.setFixedWidth(86)
+        layout.addWidget(self._time_label, 0)
+
+        if _AudioPlayerBackend.resolve():
+            self._player = _AudioPlayerBackend._player_cls(self)
+            self._audio_output = _AudioPlayerBackend._audio_output_cls(self)
+            self._player.setAudioOutput(self._audio_output)
+            self._player.durationChanged.connect(self._on_duration_changed)
+            self._player.positionChanged.connect(self._on_position_changed)
+            self._player.playbackStateChanged.connect(
+                self._on_playback_state_changed
+            )
+            self._player.errorOccurred.connect(self._on_error)
+        else:
+            self._play_button.setText("(no audio)")
+            self._play_button.setToolTip(
+                "Install PySide6 multimedia extras to enable inline playback."
+            )
+
+    def set_source(self, path: str | None) -> None:
+        self._source = str(path) if path else None
+        if self._player is None:
+            return
+        self._player.stop()
+        self._duration_ms = 0
+        self._slider.setRange(0, 0)
+        self._slider.setEnabled(False)
+        self._time_label.setText("0:00 / 0:00")
+        if self._source:
+            self._player.setSource(
+                _AudioPlayerBackend._url_cls.fromLocalFile(self._source)
+            )
+            self._play_button.setEnabled(True)
+            self._play_button.setText("Play")
+        else:
+            self._player.setSource(_AudioPlayerBackend._url_cls())
+            self._play_button.setEnabled(False)
+            self._play_button.setText("Play")
+
+    def clear(self) -> None:
+        self.set_source(None)
+
+    def stop(self) -> None:
+        if self._player is not None:
+            self._player.stop()
+
+    def _toggle_playback(self) -> None:
+        if self._player is None or not self._source:
+            return
+        state_enum = _AudioPlayerBackend._state_enum
+        playing_state = (
+            getattr(state_enum, "PlayingState", 1) if state_enum else 1
+        )
+        if int(self._player.playbackState()) == int(playing_state):
+            self._player.pause()
+        else:
+            self._player.play()
+
+    def _on_duration_changed(self, duration_ms: int) -> None:
+        self._duration_ms = max(int(duration_ms), 0)
+        self._slider.setRange(0, self._duration_ms)
+        self._slider.setEnabled(self._duration_ms > 0)
+        self._time_label.setText(f"0:00 / {_format_ms(self._duration_ms)}")
+
+    def _on_position_changed(self, position_ms: int) -> None:
+        if self._suppress_seek:
+            return
+        self._slider.setValue(int(position_ms))
+        self._time_label.setText(
+            f"{_format_ms(int(position_ms))} / {_format_ms(self._duration_ms)}"
+        )
+
+    def _on_slider_moved(self, value: int) -> None:
+        self._suppress_seek = True
+        self._time_label.setText(
+            f"{_format_ms(int(value))} / {_format_ms(self._duration_ms)}"
+        )
+
+    def _on_slider_released(self) -> None:
+        if self._player is not None:
+            self._player.setPosition(int(self._slider.value()))
+        self._suppress_seek = False
+
+    def _on_playback_state_changed(self, state: int) -> None:
+        state_enum = _AudioPlayerBackend._state_enum
+        playing_state = (
+            getattr(state_enum, "PlayingState", 1) if state_enum else 1
+        )
+        self._play_button.setText(
+            "Pause" if int(state) == int(playing_state) else "Play"
+        )
+
+    def _on_error(self, *_args: Any) -> None:
+        self._play_button.setText("Error")
+        self._play_button.setEnabled(False)
+
+
+class AudioOutput(MediaOutput):
+    def __init__(
+        self,
+        label: str,
+        *,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(label, parent=parent)
+        self._player = AudioPlayerWidget(self)
+
+        self._outer.insertWidget(self._outer.count() - 1, self._player)
+        self._player.setEnabled(False)
+
+    def set_value(self, value: Any) -> None:
+        super().set_value(value)
+        if value is None:
+            self._player.clear()
+            self._player.setEnabled(False)
+        else:
+            self._player.set_source(str(value))
+            self._player.setEnabled(True)
 
 
 class FileOutput(MediaOutput):

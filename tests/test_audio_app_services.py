@@ -148,7 +148,7 @@ def test_run_mastering_tool_collects_stems_for_gui_preview(monkeypatch):
             "mastering",
             2,
             6.0,
-            False,
+            True,
         )
     )
 

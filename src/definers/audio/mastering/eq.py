@@ -28,6 +28,7 @@ def audio_eq(
         fs=sample_rate,
         nperseg=nperseg,
     )
+    stft_frames = stft_frames.astype(np.complex64, copy=False)
 
     log_f = np.log10(f_axis + 1e-5)
     log_anchor_freqs = np.log10(anchor_freqs)
@@ -42,6 +43,7 @@ def audio_eq(
 
     gain_multipliers = 10 ** (interp_gains_db / 20)
     modified_frames = stft_frames * gain_multipliers[:, None]
+    del stft_frames
 
     _reconstructed_times, output_audio = signal.istft(
         modified_frames,
@@ -78,20 +80,24 @@ def smooth_curve(
     if smoothing_fraction is None:
         return curve
 
-    smoothed = np.copy(curve)
+    if f_axis.size == 0:
+        return curve
 
-    for index, frequency_hz in enumerate(f_axis):
-        bandwidth = frequency_hz * (
-            2**smoothing_fraction - 2 ** (-smoothing_fraction)
-        )
-        low_f = frequency_hz - bandwidth / 2
-        high_f = frequency_hz + bandwidth / 2
-        mask = (f_axis >= low_f) & (f_axis <= high_f)
+    bandwidth = f_axis * (2**smoothing_fraction - 2 ** (-smoothing_fraction))
+    low_f = f_axis - bandwidth / 2.0
+    high_f = f_axis + bandwidth / 2.0
 
-        if np.any(mask):
-            smoothed[index] = np.mean(curve[mask])
+    cumsum = np.concatenate([[0.0], np.cumsum(curve)])
+    low_idx = np.searchsorted(f_axis, low_f, side="left")
+    high_idx = np.searchsorted(f_axis, high_f, side="right")
 
-    return smoothed
+    counts = high_idx - low_idx
+    smoothed = np.where(
+        counts > 0,
+        (cumsum[high_idx] - cumsum[low_idx]) / np.maximum(counts, 1),
+        curve,
+    )
+    return smoothed.astype(curve.dtype)
 
 
 def _normalize_stem_role(stem_role: str | None) -> str:
@@ -110,15 +116,14 @@ def _moving_average(values: np.ndarray, window_size: int) -> np.ndarray:
     if window_size <= 1:
         return samples.astype(np.float32, copy=True)
 
-    cumulative = np.cumsum(samples, dtype=np.float32)
-    smoothed = np.empty_like(samples)
-    for index in range(samples.size):
-        start = max(0, index - window_size + 1)
-        total = cumulative[index]
-        if start > 0:
-            total -= cumulative[start - 1]
-        smoothed[index] = total / float(index - start + 1)
-    return smoothed.astype(np.float32, copy=False)
+    padded = np.empty(samples.size + 1, dtype=np.float64)
+    padded[0] = 0.0
+    padded[1:] = np.cumsum(samples, dtype=np.float64)
+    end_idx = np.arange(1, samples.size + 1, dtype=np.intp)
+    start_idx = np.maximum(0, end_idx - window_size)
+    window_sums = padded[end_idx] - padded[start_idx]
+    counts = np.minimum(end_idx, window_size).astype(np.float64)
+    return (window_sums / counts).astype(np.float32)
 
 
 def _rolling_max(values: np.ndarray, window_size: int) -> np.ndarray:
@@ -796,25 +801,45 @@ def _apply_gate_sidechain_filters(
     if int(source_channels.shape[-1]) == 0:
         return source_channels.astype(np.float32, copy=False)
 
+    dt = 1.0 / float(max(sample_rate, 1))
+    lfilter = getattr(signal, "lfilter", None)
+
+    if callable(lfilter):
+        result = source_channels.astype(np.float64)
+        if high_cut_hz > 0.0:
+            rc = 1.0 / max(2.0 * np.pi * high_cut_hz, 1e-6)
+            alpha = float(np.clip(dt / (rc + dt), 0.0, 1.0))
+            b1 = np.array([alpha], dtype=np.float64)
+            a1 = np.array([1.0, -(1.0 - alpha)], dtype=np.float64)
+            result = lfilter(
+                np.convolve(b1, b1), np.convolve(a1, a1), result, axis=-1
+            )
+        if low_cut_hz > 0.0:
+            rc = 1.0 / max(2.0 * np.pi * low_cut_hz, 1e-6)
+            alpha = float(np.clip(rc / (rc + dt), 0.0, 1.0))
+            b1 = np.array([alpha, -alpha], dtype=np.float64)
+            a1 = np.array([1.0, -alpha], dtype=np.float64)
+            b4, a4 = b1, a1
+            for _ in range(3):
+                b4 = np.convolve(b4, b1)
+                a4 = np.convolve(a4, a1)
+            result = lfilter(b4, a4, result, axis=-1)
+        return result.astype(np.float32)
+
     filtered_channels = []
     for channel in source_channels:
         filtered_channel = channel.astype(np.float32, copy=True)
         if high_cut_hz > 0.0:
             for _ in range(2):
                 filtered_channel = _apply_first_order_lowpass(
-                    filtered_channel,
-                    sample_rate,
-                    high_cut_hz,
+                    filtered_channel, sample_rate, high_cut_hz
                 )
         if low_cut_hz > 0.0:
             for _ in range(4):
                 filtered_channel = _apply_first_order_highpass(
-                    filtered_channel,
-                    sample_rate,
-                    low_cut_hz,
+                    filtered_channel, sample_rate, low_cut_hz
                 )
         filtered_channels.append(filtered_channel)
-
     return np.vstack(filtered_channels).astype(np.float32, copy=False)
 
 
@@ -823,14 +848,17 @@ def _compute_gate_rms_envelope(
     window_samples: int,
 ) -> np.ndarray:
     source_channels = _as_audio_channels(channels)
-    envelopes = []
-    for channel in source_channels:
-        channel_power = np.square(channel, dtype=np.float32)
-        smoothed_power = _moving_average(channel_power, window_samples)
-        envelopes.append(
-            np.sqrt(np.maximum(smoothed_power, 1e-12)).astype(np.float32)
-        )
-    return np.vstack(envelopes).astype(np.float32)
+    channel_power = np.square(source_channels, dtype=np.float64)
+    n = channel_power.shape[-1]
+    effective_window = max(1, min(int(window_samples), n))
+    padded = np.zeros(channel_power.shape[:-1] + (n + 1,), dtype=np.float64)
+    padded[..., 1:] = np.cumsum(channel_power, axis=-1)
+    end_idx = np.arange(1, n + 1, dtype=np.intp)
+    start_idx = np.maximum(0, end_idx - effective_window)
+    window_sums = padded[..., end_idx] - padded[..., start_idx]
+    counts = np.minimum(end_idx, effective_window).astype(np.float64)
+    smoothed_power = window_sums / counts
+    return np.sqrt(np.maximum(smoothed_power, 1e-12)).astype(np.float32)
 
 
 def _link_gate_detector_envelope(

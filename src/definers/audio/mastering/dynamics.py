@@ -245,10 +245,11 @@ def _apply_stereo_tonal_variation(
         btype="low",
         output="sos",
     )
-    left_low = signal_module.sosfiltfilt(low_sos, left)
-    right_low = signal_module.sosfiltfilt(low_sos, right)
-    left_high = signal_module.sosfiltfilt(high_sos, left)
-    right_high = signal_module.sosfiltfilt(high_sos, right)
+    _lr = np.stack([left, right])
+    _lr_low = signal_module.sosfiltfilt(low_sos, _lr, axis=-1)
+    _lr_high = signal_module.sosfiltfilt(high_sos, _lr, axis=-1)
+    left_low, right_low = _lr_low[0], _lr_low[1]
+    left_high, right_high = _lr_high[0], _lr_high[1]
     left_mid = left - left_low - left_high
     right_mid = right - right_low - right_high
 
