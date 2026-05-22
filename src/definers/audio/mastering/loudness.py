@@ -262,6 +262,7 @@ def _weighted_power_series(
         channels,
         axis=-1,
     )
+    del channels
     weighted = _safe_lfilter(
         signal_module,
         high_pass_b,
@@ -331,16 +332,17 @@ def _block_powers_from_series(
             dtype=np.float64,
         )
 
-    y_windows = np.lib.stride_tricks.sliding_window_view(y_square, window_size)[
-        ::hop_size
-    ]
-    if y_windows.size == 0:
+    n = int(y_square.shape[-1])
+    padded = np.empty(n + 1, dtype=np.float64)
+    padded[0] = 0.0
+    padded[1:] = np.cumsum(y_square, dtype=np.float64)
+    starts = np.arange(0, n - window_size + 1, hop_size, dtype=np.intp)
+    if starts.size == 0:
         return np.array(
             [float(np.mean(y_square, dtype=np.float64))],
             dtype=np.float64,
         )
-
-    return np.mean(y_windows, axis=-1, dtype=np.float64)
+    return (padded[starts + window_size] - padded[starts]) / window_size
 
 
 def _gated_integrated_lufs(block_powers: np.ndarray) -> float:
@@ -371,10 +373,14 @@ def _gated_integrated_lufs(block_powers: np.ndarray) -> float:
 def _loudness_series(block_powers: np.ndarray) -> np.ndarray:
     if block_powers.size == 0:
         return np.full(1, _ABSOLUTE_GATE_LUFS, dtype=np.float32)
-    return np.array(
-        [_loudness_from_power(float(value)) for value in block_powers],
-        dtype=np.float32,
-    )
+    powers = np.asarray(block_powers, dtype=np.float64)
+    result = np.full(powers.shape, _ABSOLUTE_GATE_LUFS, dtype=np.float32)
+    valid = np.isfinite(powers) & (powers > 0.0)
+    if valid.any():
+        result[valid] = (
+            -0.691 + 10.0 * np.log10(np.maximum(powers[valid], 1e-12))
+        ).astype(np.float32)
+    return result
 
 
 def _loudness_range(short_term_lufs: np.ndarray) -> float:

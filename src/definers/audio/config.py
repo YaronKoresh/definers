@@ -281,11 +281,11 @@ _DERIVED_FIELD_SPECS: dict[str, dict[str, Any]] = {
         "clip": (3.0, 8.0),
     },
     "spectral_rescue_strength": {
-        "base": 1.0,
+        "base": 0.75,
         "coeffs": {
             "bass": 0.05,
             "volume": -0.45,
-            "effects": -0.35,
+            "effects": -0.1,
         },
         "clip": (0.0, 1.5),
     },
@@ -320,11 +320,11 @@ _DERIVED_FIELD_SPECS: dict[str, dict[str, Any]] = {
     },
     "exciter_cutoff_hz": {"base": None},
     "exciter_max_drive": {
-        "base": 3.4,
+        "base": 3.2,
         "coeffs": {
             "bass": -0.15,
             "volume": 0.45,
-            "effects": -0.1,
+            "effects": 0.1,
         },
         "clip": (0.5, 5.0),
     },
@@ -505,7 +505,7 @@ _DERIVED_FIELD_SPECS: dict[str, dict[str, Any]] = {
         "base": None,
     },
     "stem_noise_gate_hysteresis_db": {
-        "base": 4.5,
+        "base": 5.5,
         "clip": (0.0, 24.0),
     },
     "stem_noise_gate_reduction_range_db": {
@@ -523,7 +523,7 @@ _DERIVED_FIELD_SPECS: dict[str, dict[str, Any]] = {
         "clip": (0.0, 500.0),
     },
     "stem_noise_gate_release_ms": {
-        "base": 42.0,
+        "base": 46.0,
         "coeffs": {"effects": 4.0},
         "clip": (1.0, 500.0),
     },

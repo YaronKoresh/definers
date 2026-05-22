@@ -107,16 +107,14 @@ def _interp_last_axis(
     if values.ndim == 1:
         return np.interp(full_index, decimated_index, values)
 
-    interpolated = np.empty(
-        values.shape[:-1] + (output_length,), dtype=values.dtype
-    )
-    flat_values = values.reshape(-1, values.shape[-1])
-    flat_output = interpolated.reshape(-1, output_length)
-    for row_index in range(flat_values.shape[0]):
-        flat_output[row_index] = np.interp(
-            full_index, decimated_index, flat_values[row_index]
-        )
-    return interpolated
+    n = values.shape[-1]
+    pos = np.clip(full_index / float(hop), 0.0, n - 1.0)
+    lo = np.floor(pos).astype(np.intp)
+    hi = np.minimum(lo + 1, n - 1)
+    frac = (pos - lo).astype(values.dtype)
+    flat = values.reshape(-1, n)
+    out = flat[:, lo] + frac * (flat[:, hi] - flat[:, lo])
+    return out.reshape(values.shape[:-1] + (output_length,))
 
 
 def _windowed_median_and_mad(

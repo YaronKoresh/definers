@@ -703,7 +703,10 @@ def _run_separator_stage(
                 )
             )
             separator.load_model(model_filename=model_candidate)
-            output_files = separator.separate(input_path)
+            from definers.system import cwd as _cwd
+
+            with _cwd(output_dir):
+                output_files = separator.separate(input_path)
             resolved_output_files = _resolve_output_paths(
                 output_files, output_dir
             )
@@ -771,17 +774,20 @@ def _run_separator_stage_batch(
                 batch_input = [
                     str(input_path) for input_path in batched_input_paths
                 ]
-            try:
-                output_files = separator.separate(batch_input)
-            except Exception as error:
-                if len(batched_input_paths) <= 1:
-                    raise
-                if not _separator_requires_single_input(error):
-                    raise
-                output_files = _run_loaded_separator_for_each_input(
-                    separator,
-                    batched_input_paths,
-                )
+            from definers.system import cwd as _cwd
+
+            with _cwd(output_dir):
+                try:
+                    output_files = separator.separate(batch_input)
+                except Exception as error:
+                    if len(batched_input_paths) <= 1:
+                        raise
+                    if not _separator_requires_single_input(error):
+                        raise
+                    output_files = _run_loaded_separator_for_each_input(
+                        separator,
+                        batched_input_paths,
+                    )
             resolved_output_files = _resolve_output_paths(
                 output_files, output_dir
             )

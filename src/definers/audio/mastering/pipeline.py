@@ -38,6 +38,45 @@ def _prepare_processing_signal(
     )
 
 
+def _estimate_idempotency_factor(
+    self,
+    y: np.ndarray,
+) -> float:
+
+    if y.size == 0:
+        return 0.0
+
+    flat = y if y.ndim == 1 else y.reshape(-1)
+    peak = float(np.max(np.abs(flat))) if flat.size else 0.0
+    rms = float(np.sqrt(np.mean(np.square(flat, dtype=np.float64))))
+    if not np.isfinite(peak) or peak < 0.5 or rms < 1e-4:
+        return 0.0
+
+    peak_factor = float(np.clip((peak - 0.5) / 0.45, 0.0, 1.0))
+
+    score = 0.0
+
+    score += float(np.clip((peak - 0.7) / 0.25, 0.0, 1.0)) * 0.45
+
+    if rms > 0.0:
+        crest_db = 20.0 * np.log10(max(peak / rms, 1e-6))
+        if np.isfinite(crest_db):
+            score += float(np.clip((10.0 - crest_db) / 4.0, 0.0, 1.0)) * 0.35
+
+    if y.ndim == 2 and y.shape[0] == 2 and y.shape[-1] > 16:
+        mid = 0.5 * (y[0] + y[1])
+        side = 0.5 * (y[0] - y[1])
+        mid_rms = float(np.sqrt(np.mean(np.square(mid, dtype=np.float64))))
+        side_rms = float(np.sqrt(np.mean(np.square(side, dtype=np.float64))))
+        if mid_rms > 1e-6:
+            width_ratio = side_rms / mid_rms
+            score += (
+                float(np.clip((width_ratio - 0.25) / 0.20, 0.0, 1.0)) * 0.20
+            )
+
+    return float(np.clip(score * peak_factor, 0.0, 1.0))
+
+
 def _apply_exciter_stage(
     self,
     y: np.ndarray,
@@ -240,6 +279,15 @@ def _apply_exciter_stage(
             )
         )
 
+    _idempotency = float(getattr(self, "last_idempotency_factor", 0.0))
+    if _idempotency > 0.0:
+        _exciter_gate = float(np.clip(1.0 - _idempotency * 0.85, 0.0, 1.0))
+        effective_exciter_mix = float(effective_exciter_mix * _exciter_gate)
+
+        effective_exciter_max_drive = float(
+            1.0 + (effective_exciter_max_drive - 1.0) * _exciter_gate
+        )
+
     y = apply_exciter_fn(
         y,
         self.resampling_target,
@@ -282,7 +330,7 @@ def process_stem(
 
     log_fn("Mastering", "Applying equalizer...")
     y = self.apply_eq(y)
-    stage_signals["post_eq"] = np.array(y, dtype=np.float32, copy=True)
+    stage_signals["post_eq"] = y.astype(np.float32, copy=False)
 
     log_fn("Mastering", "Applying stem cleanup...")
     y = self.apply_stem_cleanup(y, stem_role=stem_role)
@@ -296,7 +344,7 @@ def process_stem(
     )
     y = np.nan_to_num(y, nan=0.0, posinf=0.0, neginf=0.0)
 
-    stage_signals["final_in_memory"] = np.array(y, dtype=np.float32, copy=True)
+    stage_signals["final_in_memory"] = y.astype(np.float32, copy=False)
     self.last_stage_signals = stage_signals
     self.last_finalization_actions = ()
     self.last_mastering_contract = None
@@ -347,6 +395,9 @@ def process(
         stereo_fn=stereo_fn,
     )
 
+    idempotency_factor = _estimate_idempotency_factor(self, y)
+    self.last_idempotency_factor = float(idempotency_factor)
+
     log_fn("Mastering", "Applying filtering...")
     y = freq_cut_fn(
         y,
@@ -360,7 +411,7 @@ def process(
     else:
         log_fn("Mastering", "Applying equalizer...")
         y = self.apply_eq(y)
-    stage_signals["post_eq"] = np.array(y, dtype=np.float32, copy=True)
+    stage_signals["post_eq"] = y.astype(np.float32, copy=False)
 
     if not stem_mastered_input:
         log_fn("Mastering", "Applying multiband compression...")
@@ -384,8 +435,18 @@ def process(
     )
 
     log_fn("Mastering", "Applying stereo enhancement...")
-    y = self.apply_spatial_enhancement(y)
-    stage_signals["post_spatial"] = np.array(y, dtype=np.float32, copy=True)
+
+    _idempotency = float(getattr(self, "last_idempotency_factor", 0.0))
+    _original_width = float(getattr(self, "stereo_width", 1.0))
+    if _idempotency > 0.0 and _original_width > 1.0:
+        self.stereo_width = float(
+            1.0 + (_original_width - 1.0) * max(1.0 - _idempotency, 0.0)
+        )
+    try:
+        y = self.apply_spatial_enhancement(y)
+    finally:
+        self.stereo_width = _original_width
+    stage_signals["post_spatial"] = y.astype(np.float32, copy=False)
 
     log_fn("Mastering", "Applying low-end mono tightening...")
     y = self.apply_low_end_mono_tightening(y)
@@ -513,13 +574,13 @@ def process(
             low_end_mono_cutoff_hz=contract.low_end_mono_cutoff_hz,
         )
 
-    stage_signals["post_limiter"] = np.array(y, dtype=np.float32, copy=True)
+    stage_signals["post_limiter"] = y.astype(np.float32, copy=False)
 
     final_ceiling_db = self.resolve_final_true_peak_target()
     self.last_resolved_final_true_peak_target_dbfs = float(final_ceiling_db)
 
     log_fn("Mastering", "Applying micro-dynamics finish...")
-    character_source = np.array(y, dtype=np.float32, copy=True)
+    character_source = y
     character_reasons: list[str] = []
     character_applied = (
         not stem_mastered_input
@@ -633,7 +694,7 @@ def process(
             )
         ),
     )
-    stage_signals["post_character"] = np.array(y, dtype=np.float32, copy=True)
+    stage_signals["post_character"] = y.astype(np.float32, copy=False)
 
     peak_catch_events: list[PeakCatchEvent] = []
     peak_catch_metrics = character_metrics
@@ -722,18 +783,16 @@ def process(
             true_peak_oversample_factor=self.true_peak_oversample_factor,
             low_end_mono_cutoff_hz=contract.low_end_mono_cutoff_hz,
         )
-    stage_signals["post_peak_catch"] = np.array(y, dtype=np.float32, copy=True)
+    stage_signals["post_peak_catch"] = y.astype(np.float32, copy=False)
     self.last_peak_catch_events = tuple(peak_catch_events)
 
     log_fn("Mastering", "Applying delivery trim...")
     y = self.apply_delivery_trim(y)
-    stage_signals["post_delivery_trim"] = np.array(
-        y, dtype=np.float32, copy=True
-    )
+    stage_signals["post_delivery_trim"] = y.astype(np.float32, copy=False)
 
     log_fn("Mastering", "Applying hard clipping...")
     y = self.apply_safety_clamp(y, ceil_db=final_ceiling_db)
-    stage_signals["post_clamp"] = np.array(y, dtype=np.float32, copy=True)
+    stage_signals["post_clamp"] = y.astype(np.float32, copy=False)
     self.last_post_clamp_metrics = measure_mastering_loudness_fn(
         y,
         self.resampling_target,
@@ -766,7 +825,7 @@ def process(
 
     y = np.nan_to_num(y, nan=0.0, posinf=0.0, neginf=0.0)
 
-    stage_signals["final_in_memory"] = np.array(y, dtype=np.float32, copy=True)
+    stage_signals["final_in_memory"] = y.astype(np.float32, copy=False)
     self.last_stage_signals = stage_signals
     self.last_finalization_actions = tuple(finalization_actions)
 
