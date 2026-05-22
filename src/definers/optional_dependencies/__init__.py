@@ -28,11 +28,29 @@ GITHUB_ARCHIVE_PACKAGE_SOURCES: dict[str, tuple[str, str, str]] = {
 }
 
 GUI_PACKAGES = [
-    "libegl1",
+    "libglib2.0-0",
     "libgl1",
+    "libegl1",
     "libglx-mesa0",
+    "libdbus-1-3",
+    "libfontconfig1",
+    "libxkbcommon0",
     "libxkbcommon-x11-0",
+    "libxrender1",
+    "libxext6",
+    "libx11-6",
+    "libx11-xcb1",
     "libxcb-cursor0",
+    "libxcb-icccm4",
+    "libxcb-image0",
+    "libxcb-keysyms1",
+    "libxcb-randr0",
+    "libxcb-render-util0",
+    "libxcb-shape0",
+    "libxcb-sync1",
+    "libxcb-xfixes0",
+    "libxcb-xinerama0",
+    "libxcb-xkb1",
 ]
 
 
