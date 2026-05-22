@@ -2,6 +2,8 @@ services:
   animation:
     container_name: animation
     image: yaronkoresh/animation:latest
+    ports:
+      - "6080:6080"
     build:
       context: .
       dockerfile: Dockerfile

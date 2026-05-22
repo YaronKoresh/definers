@@ -2,6 +2,8 @@ services:
   chat:
     container_name: chat
     image: yaronkoresh/chat:latest
+    ports:
+      - "6080:6080"
     build:
       context: .
       dockerfile: Dockerfile

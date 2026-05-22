@@ -2,6 +2,8 @@ services:
   audio:
     container_name: audio
     image: yaronkoresh/audio:latest
+    ports:
+      - "6080:6080"
     build:
       context: .
       dockerfile: Dockerfile

@@ -1548,6 +1548,17 @@ def _split_tabular_files(
     resolving_question = None
     label_files = [path for path in paths if _looks_like_label_file(path)]
     if label_files:
+        feature_files_candidate = tuple(
+            path for path in paths if path not in label_files
+        )
+        if len(label_files) == 1 and len(feature_files_candidate) == 1:
+            label_preview = _inspect_tabular_file(label_files[0])
+            feature_preview = _inspect_tabular_file(feature_files_candidate[0])
+            label_width = len(label_preview["column_names"])
+            feature_width = len(feature_preview["column_names"])
+            if label_width > 0 and label_width >= feature_width:
+                label_files = []
+    if label_files:
         feature_files = tuple(path for path in paths if path not in label_files)
         if not feature_files:
             unresolved_questions.append(
