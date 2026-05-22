@@ -407,6 +407,8 @@ def analyze_exciter(
     cutoff_hz: float | None = None,
     mix: float = 1.0,
     config: ExciterConfig = _DEFAULT_CONFIG,
+    *,
+    _presampled: np.ndarray | None = None,
 ) -> ExciterAnalysis:
     sanitized = _sanitize_audio_array(signal)
     samples_last, _ = _move_samples_to_last(sanitized)
@@ -431,13 +433,14 @@ def analyze_exciter(
     )
     oversampled_rate = sample_rate * oversample_factor
     oversampled_signal = (
-        samples_last
-        if oversample_factor == 1
-        else resample(
-            samples_last, sample_rate, target_sr=oversampled_rate
-        ).astype(
-            np.float32,
-            copy=False,
+        _presampled
+        if _presampled is not None
+        else (
+            samples_last
+            if oversample_factor == 1
+            else resample(
+                samples_last, sample_rate, target_sr=oversampled_rate
+            ).astype(np.float32, copy=False)
         )
     )
 
@@ -533,17 +536,17 @@ def analyze_exciter(
         )
     )
     transient_guard = float(
-        np.clip(1.02 - max(crest_factor - 2.6, 0.0) * 0.08, 0.38, 1.0)
+        np.clip(1.02 - max(crest_factor - 2.6, 0.0) * 0.08, 0.0, 1.0)
     )
     brightness_guard = float(
         np.clip(
             1.15 - 1.8 * high_frequency_ratio - 0.12 * spectral_flatness,
-            0.22,
+            0.0,
             1.0,
         )
     )
     density_guard = float(
-        np.clip(1.04 - max(transient_density - 0.1, 0.0) * 1.15, 0.55, 1.0)
+        np.clip(1.04 - max(transient_density - 0.1, 0.0) * 1.15, 0.0, 1.0)
     )
     requested_mix = float(np.clip(mix, 0.0, 1.0))
     adaptive_mix = float(
@@ -591,11 +594,45 @@ def analyze_exciter(
     )
 
 
+def _generate_per_band_harmonic_residual(
+    high_band: np.ndarray,
+    oversampled_rate: int,
+    cutoff_hz: float,
+    drive: float,
+    drive_normalizer: float,
+) -> np.ndarray:
+    nyquist = oversampled_rate / 2.0 - 1.0
+    upper = min(nyquist * 0.96, 20000.0 * (oversampled_rate / 44100.0))
+    n_bands = 4
+    band_edges = np.logspace(
+        np.log10(max(cutoff_hz, 20.0)),
+        np.log10(max(upper, cutoff_hz * 2.0)),
+        n_bands + 1,
+    )
+    harmonic_residual = np.zeros_like(high_band)
+    for low, high in zip(band_edges[:-1], band_edges[1:]):
+        low = float(low)
+        high = min(float(high), nyquist * 0.96)
+        if low >= high or low >= nyquist:
+            continue
+        sos = butter(
+            4, [low, high], btype="bandpass", fs=oversampled_rate, output="sos"
+        )
+        band = sosfiltfilt(sos, high_band, axis=-1)
+        scaled = band * (drive * 0.18)
+        second_harmonic = 0.35 * np.square(scaled)
+        third_harmonic = 0.05 * scaled * np.square(scaled)
+        harmonic_residual += second_harmonic + third_harmonic
+    return harmonic_residual
+
+
 def _apply_exciter_core(
     samples_last: np.ndarray,
     sample_rate: int,
     analysis: ExciterAnalysis,
     config: ExciterConfig = _DEFAULT_CONFIG,
+    *,
+    _presampled: np.ndarray | None = None,
 ) -> np.ndarray:
     if (
         sample_rate <= 0
@@ -606,13 +643,14 @@ def _apply_exciter_core(
 
     oversampled_rate = sample_rate * analysis.oversample_factor
     oversampled_signal = (
-        samples_last
-        if analysis.oversample_factor == 1
-        else resample(
-            samples_last, sample_rate, target_sr=oversampled_rate
-        ).astype(
-            np.float32,
-            copy=False,
+        _presampled
+        if _presampled is not None
+        else (
+            samples_last
+            if analysis.oversample_factor == 1
+            else resample(
+                samples_last, sample_rate, target_sr=oversampled_rate
+            ).astype(np.float32, copy=False)
         )
     )
 
@@ -630,14 +668,13 @@ def _apply_exciter_core(
     if abs(drive_normalizer) <= config.amplitude_floor:
         drive_normalizer = 1.0
 
-    symmetric_harmonics = np.tanh(high_band * analysis.drive) / drive_normalizer
-    asymmetric_input = high_band + 0.225 * np.square(high_band)
-    asymmetric_harmonics = (
-        np.tanh(asymmetric_input * analysis.drive) / drive_normalizer
+    harmonic_residual = _generate_per_band_harmonic_residual(
+        high_band,
+        oversampled_rate,
+        analysis.cutoff_hz,
+        analysis.drive,
+        drive_normalizer,
     )
-    harmonic_residual = (
-        symmetric_harmonics * 0.58 + asymmetric_harmonics * 0.42
-    ) - high_band
     harmonic_residual = sosfiltfilt(highpass, harmonic_residual, axis=-1)
 
     sample_count = harmonic_residual.shape[-1]
@@ -742,6 +779,9 @@ def _apply_exciter_core(
         copy=False,
     )
 
+    boost_active = (desired_wet_power > 0.0).reshape(
+        (1,) * (residual_power.ndim - 1) + (-1,)
+    )
     desired_shape = desired_wet_power.reshape(
         (1,) * (residual_power.ndim - 1) + (-1,)
     )
@@ -750,6 +790,7 @@ def _apply_exciter_core(
     )
     spectral_gain = _moving_average_last_axis(spectral_gain, smoothing_bins)
     spectral_gain = np.clip(spectral_gain, 0.0, config.max_spectral_gain)
+    spectral_gain = spectral_gain * boost_active
     spectral_gain = remove_spectral_spikes(spectral_gain)
 
     residual_spectrum *= spectral_gain
@@ -809,19 +850,34 @@ def apply_exciter(
     samples_last, restore_layout = _move_samples_to_last(sanitized)
 
     try:
+        _oversample_factor = (
+            config.oversample_low_sr_factor
+            if sample_rate <= config.oversample_low_sr_threshold
+            else config.oversample_default_factor
+        )
+        _presampled = (
+            samples_last
+            if _oversample_factor == 1
+            else resample(
+                samples_last,
+                sample_rate,
+                target_sr=sample_rate * _oversample_factor,
+            ).astype(np.float32, copy=False)
+        )
         analysis = analyze_exciter(
             samples_last,
             sample_rate,
             cutoff_hz=cutoff_hz,
             mix=mix,
             config=config,
+            _presampled=_presampled,
         )
         log(
             "Exciter",
             f"Adaptive cutoff={analysis.cutoff_hz:.2f}Hz drive={analysis.drive:.2f}dB requested_mix={float(np.clip(mix, 0.0, 1.0)):.2f} adaptive_mix={analysis.adaptive_mix:.2f} top_repair={analysis.closed_top_end_factor:.2f} rolloff={analysis.spectral_rolloff_hz:.2f}Hz oversample=x{analysis.oversample_factor}",
         )
         processed = _apply_exciter_core(
-            samples_last, sample_rate, analysis, config
+            samples_last, sample_rate, analysis, config, _presampled=_presampled
         )
     except Exception as e:
         catch(
@@ -856,8 +912,29 @@ def apply_exciter_with_analysis(
             ),
         )
     samples_last, restore_layout = _move_samples_to_last(sanitized)
-    analysis = analyze_exciter(
-        samples_last, sample_rate, cutoff_hz=cutoff_hz, mix=mix, config=config
+    _oversample_factor = (
+        config.oversample_low_sr_factor
+        if sample_rate <= config.oversample_low_sr_threshold
+        else config.oversample_default_factor
     )
-    processed = _apply_exciter_core(samples_last, sample_rate, analysis, config)
+    _presampled = (
+        samples_last
+        if _oversample_factor == 1
+        else resample(
+            samples_last,
+            sample_rate,
+            target_sr=sample_rate * _oversample_factor,
+        ).astype(np.float32, copy=False)
+    )
+    analysis = analyze_exciter(
+        samples_last,
+        sample_rate,
+        cutoff_hz=cutoff_hz,
+        mix=mix,
+        config=config,
+        _presampled=_presampled,
+    )
+    processed = _apply_exciter_core(
+        samples_last, sample_rate, analysis, config, _presampled=_presampled
+    )
     return restore_layout(_sanitize_audio_array(processed)), analysis
