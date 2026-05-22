@@ -50,9 +50,9 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and push
-        uses: docker/build-push-action@v7
+        uses: docker/bake-action@v7
         with:
-          file: ./docker/${{ matrix.docker-image }}/Dockerfile
-          context: ./docker/${{ matrix.docker-image }}/
+          files: ./docker/${{ matrix.docker-image }}/docker-compose.yml
           push: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'false') }}
-          tags: yaronkoresh/${{ matrix.docker-image }}:${{ github.event.inputs.image_tag || 'latest' }}
+          set: |
+            *.tags=yaronkoresh/${{ matrix.docker-image }}:${{ github.event.inputs.image_tag || 'latest' }}
