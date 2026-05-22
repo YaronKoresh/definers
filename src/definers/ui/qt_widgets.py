@@ -921,6 +921,7 @@ class AudioPlayerWidget(QWidget):
         self._play_button.setEnabled(False)
         self._play_button.setFixedWidth(64)
         self._play_button.clicked.connect(self._toggle_playback)
+        self._play_button.setStyleSheet("padding: 0px;")
         layout.addWidget(self._play_button, 0)
 
         self._slider = QSlider(Qt.Horizontal, self)
