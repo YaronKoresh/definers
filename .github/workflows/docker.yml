@@ -55,4 +55,5 @@ jobs:
           files: ./docker/${{ matrix.docker-image }}/docker-compose.yml
           push: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'false') }}
           set: |
+            *.context=./docker/${{ matrix.docker-image }}
             *.tags=yaronkoresh/${{ matrix.docker-image }}:${{ github.event.inputs.image_tag || 'latest' }}
