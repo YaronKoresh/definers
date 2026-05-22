@@ -988,7 +988,7 @@ class AudioPlayerWidget(QWidget):
         playing_state = (
             getattr(state_enum, "PlayingState", 1) if state_enum else 1
         )
-        if int(self._player.playbackState()) == int(playing_state):
+        if self._player.playbackState() == playing_state:
             self._player.pause()
         else:
             self._player.play()
@@ -1023,9 +1023,7 @@ class AudioPlayerWidget(QWidget):
         playing_state = (
             getattr(state_enum, "PlayingState", 1) if state_enum else 1
         )
-        self._play_button.setText(
-            "Pause" if int(state) == int(playing_state) else "Play"
-        )
+        self._play_button.setText("Pause" if state == playing_state else "Play")
 
     def _on_error(self, *_args: Any) -> None:
         self._play_button.setText("Error")
