@@ -12,7 +12,7 @@ jobs:
   stale:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/stale@v10
+    - uses: actions/stale@v11
       with:
         stale-message: "This thread is stale because it has been open 30 days with no activity. Remove stale label or comment or this thread will be closed in 5 days."
         days-before-stale: 60
